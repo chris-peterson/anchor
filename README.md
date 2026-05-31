@@ -1,1 +1,60 @@
 # anchor
+
+Git/forge skills that drive reviewed work into the permanent record.
+
+End-user docs: https://chris-peterson.github.io/anchor
+
+An anchor holds a vessel fast against drift. Here it holds *work* fast: it takes
+work-in-progress (tracked by [tack](https://github.com/chris-peterson/tack)),
+runs it through review ([moor](https://github.com/chris-peterson/moor)), and
+sets it down in the permanent record — committed, described, and opened for
+review on the forge.
+
+## Repo layout
+
+```text
+.claude-plugin/plugin.json   plugin manifest
+skills/commit/               /anchor:commit — stage, test, review, write the commit message
+skills/prepare-review/       /anchor:prepare-review — rebase, draft the CR description, open/update the CR
+skills/preview/              /anchor:preview — stage and open the visual diff (no commit)
+scripts/moor-review.sh       launch moor with a MOOR_CONTEXT sidecar; read the review verdict
+scripts/ahead-count.sh       unpushed-commit count (bash-analyzer-safe helper)
+guides/forge-cookbook.md     portable gh/glab invocations + forge etiquette
+guides/moor-sidecar-protocol.md   moor's review-feedback contract
+guides/target-repo.md        which-repo resolution shared by the skills
+docs/                        end-user docs site (docsify, GitHub Pages)
+```
+
+## Optional integrations
+
+The skills work standalone and light up further when these siblings are
+installed (each degrades gracefully when absent):
+
+- **[moor](https://github.com/chris-peterson/moor)** — the visual diff viewer the
+  `commit` and `preview` skills launch. Absent → the visual-review step is skipped
+  and the commit still lands.
+- **[tack](https://github.com/chris-peterson/tack)** — the WIP route tracker. Absent
+  → CR-to-tack linking is skipped silently.
+
+## Try the plugin locally
+
+```bash
+claude --plugin-dir .
+```
+
+Launches Claude Code with the working tree mounted as a plugin, so
+`/anchor:commit`, `/anchor:prepare-review`, and `/anchor:preview` resolve.
+
+## Docs
+
+```bash
+just docs
+```
+
+Runs `scripts/copy-skill-docs.sh` (syncs each `SKILL.md` and guide into `docs/`)
+and serves the docsify site locally. Deployed to GitHub Pages on push to `main`
+via `.github/workflows/deploy-docs.yml`.
+
+## License
+
+MIT

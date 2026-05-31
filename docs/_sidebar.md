@@ -1,0 +1,9 @@
+- [Home](/)
+- Skills
+  - [commit](/skills/commit)
+  - [prepare-review](/skills/prepare-review)
+  - [preview](/skills/preview)
+- Guides
+  - [Forge cookbook](/guides/forge-cookbook)
+  - [moor protocol](/guides/moor-sidecar-protocol)
+  - [Target-repo resolution](/guides/target-repo)

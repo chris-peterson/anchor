@@ -1,0 +1,12 @@
+{
+  "name": "anchor",
+  "version": "0.1.0",
+  "description": "Git/forge skills that drive reviewed work into the permanent record — commit, prepare-review, preview.",
+  "author": {
+    "name": "chris-peterson"
+  },
+  "repository": "https://github.com/chris-peterson/anchor",
+  "icon": "docs/favicon.svg",
+  "keywords": ["git", "forge", "commit", "review", "pull-request", "merge-request", "ai", "claude-code"],
+  "license": "MIT"
+}
