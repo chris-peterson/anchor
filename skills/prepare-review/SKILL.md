@@ -14,6 +14,35 @@ Draft a description whose job is to convey *why* the change exists and *how* it 
 CR = change request: a pull request on GitHub, a merge request on GitLab. Pick the
 forge tool by the `origin` remote.
 
+```mermaid
+%%{ init: { 'look': 'handDrawn' } }%%
+flowchart TD
+    Start(["/prepare-review"]) --> CR{Open CR?}
+
+    subgraph "Step 1: Gather the changeset"
+        CR -->|No| MakeCR["Open draft CR"]
+        CR -->|Yes| Behind
+        MakeCR --> Tack["Link to tack (optional)"]
+        Tack --> Behind{Behind main?}
+        Behind -->|Yes| DoRebase["Rebase + force-with-lease"]
+        Behind -->|No| StateCheck
+        DoRebase --> StateCheck["Sanity-check vs CR head"]
+    end
+
+    subgraph "Step 2: Resolve questions"
+        StateCheck --> Why["Ask the WHY + open decisions"]
+    end
+
+    subgraph "Step 3-4: Draft & write"
+        Why --> Recency["Anti-recency check"]
+        Recency --> Draft["Draft Context + Review guide"]
+        Draft --> Out{Disposition?}
+        Out -->|Write| Forge(["Push to CR"])
+        Out -->|Copy| CopyOnly(["Print for paste"])
+        Out -->|Edit| Recency
+    end
+```
+
 ## Step 1: Gather the changeset
 
 Determine the default branch (typically `main`; sometimes `master` or another name). If the symbolic ref is wrong or missing, fall back to `main`, then `master`:
