@@ -29,8 +29,9 @@ The skills work standalone and light up further when these siblings are
 installed (each degrades gracefully when absent):
 
 - **[moor](https://github.com/chris-peterson/moor)** — the visual diff viewer the
-  `commit` and `preview` skills launch. Absent → the visual-review step is skipped
-  and the commit still lands.
+  `commit` and `preview` skills launch. Absent → they fall back to `git difftool
+  --dir-diff` with your configured difftool, asking whether to revise or proceed
+  in place of moor's rejected-hunk feedback.
 - **[tack](https://github.com/chris-peterson/tack)** — the WIP route tracker. Absent
   → CR-to-tack linking is skipped silently.
 

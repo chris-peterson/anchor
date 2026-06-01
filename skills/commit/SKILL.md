@@ -222,17 +222,7 @@ If a commit attempt is rejected by a `PreToolUse` hook citing a substring that's
 
 ## Step 4: Launch visual diff
 
-After committing, launch [moor](https://github.com/chris-peterson/moor) for a
-visual review. moor is **optional** — check it's installed first:
-
-```bash
-command -v moor
-```
-
-If `moor` isn't on PATH, skip this step: report `Committed [short-sha] — moor not
-installed, skipped visual review` and stop. The commit has already landed.
-
-If moor is present, launch the difftool via the wrapper — **not** raw `git difftool`. The wrapper sets `MOOR_CONTEXT`, pre-populates the commit subject / body / author / hash in the file's `input` section so moor displays them in a header above the diff, and echoes `MOOR_CONTEXT=<path>` so you can locate the file. Running `git difftool` directly bypasses both and leaves you with no way to read the review outcome — and no header context.
+After committing, launch a visual review.
 
 **Determine the diff range from unpushed commit count:**
 
@@ -245,6 +235,22 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/ahead-count.sh"
 - **No upstream tracking branch** (empty output) — fall back to `origin/main...HEAD`, then `origin/master...HEAD`.
 
 If none of these produce a valid diff range, tell the user you couldn't determine the comparison target.
+
+[moor](https://github.com/chris-peterson/moor) is the preferred reviewer but **optional** — check it's installed:
+
+```bash
+command -v moor
+```
+
+**If `moor` isn't on PATH**, delegate to git's configured difftool in directory mode. There's no `MOOR_CONTEXT` sidecar this way, so the rejected-hunk feedback loop isn't available — stand in for it by asking the user after the difftool closes (the commit has already landed):
+
+```bash
+git difftool --no-prompt --dir-diff <diff-range>
+```
+
+Then ask `Anything to change, or proceed? [describe changes / proceed]`. If the user names changes, apply them, re-stage, amend the commit (it's unpushed), and re-open the difftool. Otherwise report `Committed [short-sha] — reviewed via git difftool (moor not installed)`.
+
+**If moor is present**, launch the difftool via the wrapper — **not** raw `git difftool`. The wrapper sets `MOOR_CONTEXT`, pre-populates the commit subject / body / author / hash in the file's `input` section so moor displays them in a header above the diff, and echoes `MOOR_CONTEXT=<path>` so you can locate the file. Running `git difftool` directly bypasses both and leaves you with no way to read the review outcome — and no header context.
 
 **Launch via the wrapper:**
 

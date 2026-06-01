@@ -30,7 +30,15 @@ flowchart LR
    claude plugin install anchor@chris-peterson
    ```
 
-2. **Make some changes**, then commit them with a reviewed, *why*-first message:
+2. **Make some changes**, then:
+
+   2a. *(optional)* Preview the working tree before committing:
+
+   ```text
+   /anchor:preview
+   ```
+
+   2b. Commit with a reviewed, *why*-first message:
 
    ```text
    /anchor:commit
@@ -68,7 +76,10 @@ degrades gracefully when absent.
   viewer `commit` and `preview` launch for review. Its `MOOR_CONTEXT` sidecar
   contract (the review-feedback channel) is defined in
   [moor's `SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md).
-  Without moor, the visual step is skipped and the commit still lands.
+  Without moor, `commit` and `preview` fall back to `git difftool --dir-diff`
+  with your configured difftool — you still get a visual review, and the skill
+  asks whether to revise or proceed in place of moor's structured rejected-hunk
+  feedback.
 - **[tack](https://github.com/chris-peterson/tack)** — the work-in-progress route
   tracker. When present, `prepare-review` records the CR as the active tack's
   deliverable and offers to mark the work done. Without tack, that linking is

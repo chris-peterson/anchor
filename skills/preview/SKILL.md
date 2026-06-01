@@ -65,9 +65,15 @@ moor is **optional** — check it's installed first:
 command -v moor
 ```
 
-If `moor` isn't on PATH, there's nothing to preview visually: report `moor not installed — staged changes are ready; run /commit when you're set` and stop.
+**If `moor` isn't on PATH**, delegate to git's configured difftool in directory mode. There's no `MOOR_CONTEXT` sidecar this way, so the rejected-hunk feedback loop isn't available — stand in for it by asking the user after the difftool closes:
 
-If moor is present, launch the difftool (passing `HEAD` as the diff range), then read the context file: parse the `MOOR_CONTEXT=<path>` line and use the **Read tool** on it for `output.exitCode` / `output.rejections` — moor's sidecar contract is defined in its [`SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md) (`IM.OUT-*`):
+```bash
+git difftool --no-prompt --dir-diff HEAD
+```
+
+Then ask `Anything to change, or run /commit? [describe changes / commit]`. If the user names changes, apply them, re-stage, and re-open the difftool. Otherwise report `Previewed via git difftool — moor not installed; staged changes are ready, run /commit when you're set`.
+
+**If moor is present**, launch the difftool (passing `HEAD` as the diff range), then read the context file: parse the `MOOR_CONTEXT=<path>` line and use the **Read tool** on it for `output.exitCode` / `output.rejections` — moor's sidecar contract is defined in its [`SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md) (`IM.OUT-*`):
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/moor-review.sh" HEAD
