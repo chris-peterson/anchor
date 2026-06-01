@@ -19,9 +19,7 @@ skills/prepare-review/       /anchor:prepare-review — rebase, draft the CR des
 skills/preview/              /anchor:preview — stage and open the visual diff (no commit)
 scripts/moor-review.sh       launch moor with a MOOR_CONTEXT sidecar; read the review verdict
 scripts/ahead-count.sh       unpushed-commit count (bash-analyzer-safe helper)
-guides/forge-cookbook.md     portable gh/glab invocations + forge etiquette
-guides/moor-sidecar-protocol.md   moor's review-feedback contract
-guides/target-repo.md        which-repo resolution shared by the skills
+docs/forge-cookbook.md       portable gh/glab invocations + forge etiquette (reference)
 docs/                        end-user docs site (docsify, GitHub Pages)
 ```
 

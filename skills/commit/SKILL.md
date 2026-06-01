@@ -63,12 +63,12 @@ rather than leaving them pending.
 
 ## Target repo
 
-Before anything else, resolve the target repo per
-[`guides/target-repo`](../../guides/target-repo.md) (at runtime,
-`${CLAUDE_PLUGIN_ROOT}/guides/target-repo.md`). Re-run this on every /commit
-invocation — when shipping multiple changes in succession, do not assume the
-previous target carries forward. The test runner in Step 0 and every git command
-below operate on the resolved repo.
+Before anything else, resolve which repo this operates on — the working directory isn't a reliable proxy (edits may have landed in a sibling repo). Re-resolve on every invocation; don't assume the previous target carries forward.
+
+- **With an argument** (`/anchor:commit <name>`): case-insensitive substring-match `<name>` against the basename of every git repo the session has touched. One match → use it (confirm in one line). Zero or multiple → list the candidates and ask.
+- **No argument**: run `git rev-parse --show-toplevel` from the working directory. If the session touched more than one repo, or edits landed outside it, state the resolved path and ask which to target.
+
+Run git with `-C <repo>` when the working directory isn't the target, rather than `cd`. The test runner in Step 0 and every git command below operate on the resolved repo.
 
 ## Step 0: Run tests
 
@@ -165,7 +165,7 @@ Squashing into a pushed commit requires force push, so the squash option must ne
 git log -1 --format=%s HEAD
 ```
 
-**Then check whether a review is open on this branch.** Once anyone has opened an MR/PR, **force-pushing over commits the reviewer has already seen is off the table** — they should see each iteration as its own commit (see the "don't amend after review starts" section of [`guides/forge-cookbook`](../../guides/forge-cookbook.md)). But this rule only protects *pushed* commits. If the squash target (HEAD) is itself unpushed, the reviewer has never seen it, and amending into it doesn't disturb the review at all.
+**Then check whether a review is open on this branch.** Once anyone has opened an MR/PR, **force-pushing over commits the reviewer has already seen is off the table** — they should see each iteration as its own commit. But this rule only protects *pushed* commits. If the squash target (HEAD) is itself unpushed, the reviewer has never seen it, and amending into it doesn't disturb the review at all.
 
 At this point in the flow, HEAD is unpushed by definition — we only reach the squash-vs-new-commit decision when the earlier ahead-count probe (or the `origin/main..HEAD` fallback for local-only branches) reported a positive count, meaning HEAD has at least one commit (including itself) not on upstream. So the squash target is always safe to amend. An open review still informs the option text — surfacing context — but does not flip the recommendation away from amend.
 
@@ -252,7 +252,7 @@ If none of these produce a valid diff range, tell the user you couldn't determin
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/moor-review.sh" <diff-range>
 ```
 
-Then read the context file per [`guides/moor-sidecar-protocol`](../../guides/moor-sidecar-protocol.md) (at runtime, `${CLAUDE_PLUGIN_ROOT}/guides/moor-sidecar-protocol.md`): parse the `MOOR_CONTEXT=<path>` line from the wrapper's stdout and use the **Read tool** on that path. Read `output.exitCode` from the parsed JSON. /commit-specific phrasing:
+Then read the context file: parse the `MOOR_CONTEXT=<path>` line from the wrapper's stdout and use the **Read tool** on that path. From the JSON, read `output.exitCode` (the verdict) and `output.rejections` (each `{file, hunk, line, reason}`) — moor writes these per its `MOOR_CONTEXT` sidecar contract, defined normatively in moor's [`SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md) (`IM.OUT-*`). Leave the context file in place; moor recycles it. /commit-specific phrasing:
 
 - **`output.exitCode` `0`** → `Committed [short-sha]`. No other summary text.
 - **`output.exitCode` `1`** → `Committed [short-sha] — rejected hunks detected`, list `output.rejections`, then loop back to Step 0 (re-run tests after the fix). **If the rejection text is short** (e.g. "I don't get what this flag means") **and the cited hunk contains more than one distinct change** (e.g. two flag additions in a usage block, two unrelated lines in the same hunk), ask the user to identify which token the note refers to before fixing — a one-second clarification beats several minutes of guessing wrong and re-amending.

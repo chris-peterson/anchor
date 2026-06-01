@@ -75,7 +75,7 @@ If no CR is open, **offer to create a draft** before drafting — the deep links
 
 - `yes` — create a **draft**, **assigned to you**, set to **delete the source branch on merge**:
   - **GitHub:** `gh pr create --draft --fill --assignee @me`. (Branch deletion on merge is a repo setting; if it's off, pass `--delete-branch` to `gh pr merge` at merge time.)
-  - **GitLab:** capture your username once (`glab api user | jq -r '.username'`), then `glab mr create --draft --fill --target-branch main --remove-source-branch --assignee <username>`. See [`guides/forge-cookbook`](../../guides/forge-cookbook.md) for the `assignee_ids[]` API alternative.
+  - **GitLab:** capture your username once (`glab api user | jq -r '.username'`), then `glab mr create --draft --fill --target-branch main --remove-source-branch --assignee <username>`. See the [forge cookbook](https://chris-peterson.github.io/anchor/#/forge-cookbook) for the `assignee_ids[]` API alternative.
 
   Then resolve the URL.
 - `web` — pause; the user opens a draft in the web UI and confirms when ready.
@@ -125,7 +125,7 @@ Then ask:
 - `yes` — run `git rebase origin/main`. On conflict, resolve in place: read both sides of each conflicted region, pick the resolution that preserves the intent of *both* changes (not just one side), `git add` the resolved files, then `git rebase --continue`. Loop until the rebase completes. Surface to the user when intent is genuinely ambiguous — two competing changes to the same logic, semantic conflicts the textual markers don't show, a rename colliding with an edit. Don't guess in those cases; show the conflict and ask. If a hook fails mid-rebase, surface the failure rather than retrying with `--no-verify`.
 - `skip` — proceed with the current branch state. Note that deep links may render against lines that have shifted by merge time.
 
-A rebase rewrites history, so the push that follows is a force-push. That's fine *before* review starts — reconciliation onto `main` is the blessed pre-review case (see the "don't amend after review starts" section of [`guides/forge-cookbook`](../../guides/forge-cookbook.md)). But if the CR already has **review activity** (assigned reviewers, comments/discussions, or approvals), force-pushing over commits the reviewer has seen destroys their "changes since you last looked" diff and marks inline threads outdated. Check before force-pushing:
+A rebase rewrites history, so the push that follows is a force-push. That's fine *before* review starts — reconciliation onto `main` is the blessed pre-review case. But if the CR already has **review activity** (assigned reviewers, comments/discussions, or approvals), force-pushing over commits the reviewer has seen destroys their "changes since you last looked" diff and marks inline threads outdated. Check before force-pushing:
 
 ```bash
 # GitLab — reviewers / discussion count
@@ -399,7 +399,7 @@ Map the user's selection to the actions below:
 1. **Yes (write)** *(default)* — push the description to the open CR. Editing a description is reversible, so this is the low-friction default. On 401/403 or similar auth failure, surface the error and ask the user to refresh credentials — do not silently fall back to copy-only.
 
    - **GitHub:** `gh pr edit <num> --body-file -`, piping the drafted body in.
-   - **GitLab:** use the API form `glab api -X PUT projects/:fullpath/merge_requests/<iid> -F "description=@<body-path>"` — `glab mr update -d` doesn't accept a file. Pick `<body-path>` with `mktemp -u /tmp/cr-body.XXXXXX.md` (the `-u` prints a unique name without creating the file, so a peer session can't clobber it); see [`guides/forge-cookbook`](../../guides/forge-cookbook.md) for the full canonical invocation.
+   - **GitLab:** use the API form `glab api -X PUT projects/:fullpath/merge_requests/<iid> -F "description=@<body-path>"` — `glab mr update -d` doesn't accept a file. Pick `<body-path>` with `mktemp -u /tmp/cr-body.XXXXXX.md` (the `-u` prints a unique name without creating the file, so a peer session can't clobber it); see the [forge cookbook](https://chris-peterson.github.io/anchor/#/forge-cookbook) for the full canonical invocation.
 2. **No (copy only)** — print the description for the user to paste into the web UI themselves. Useful when the user wants to hand-edit before pasting, or when the CLI's default forge instance is wrong for this repo.
 3. **Edit** — the user wants to adjust something; loop back through the draft.
 

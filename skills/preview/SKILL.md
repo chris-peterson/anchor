@@ -30,7 +30,12 @@ flowchart TD
 
 ## Target repo
 
-Before anything else, resolve the target repo per [`guides/target-repo`](../../guides/target-repo.md) (at runtime, `${CLAUDE_PLUGIN_ROOT}/guides/target-repo.md`). Re-run this on every /preview invocation — when reviewing changes across multiple repos in succession, do not assume the previous target carries forward.
+Before anything else, resolve which repo this operates on — the working directory isn't a reliable proxy (edits may have landed in a sibling repo). Re-resolve on every invocation; don't assume the previous target carries forward.
+
+- **With an argument** (`/anchor:preview <name>`): case-insensitive substring-match `<name>` against the basename of every git repo the session has touched. One match → use it (confirm in one line). Zero or multiple → list the candidates and ask.
+- **No argument**: run `git rev-parse --show-toplevel` from the working directory. If the session touched more than one repo, or edits landed outside it, state the resolved path and ask which to target.
+
+Run git with `-C <repo>` when the working directory isn't the target, rather than `cd`.
 
 ## Step 1: Stage all changes
 
@@ -62,7 +67,7 @@ command -v moor
 
 If `moor` isn't on PATH, there's nothing to preview visually: report `moor not installed — staged changes are ready; run /commit when you're set` and stop.
 
-If moor is present, launch the difftool and read the context file per [`guides/moor-sidecar-protocol`](../../guides/moor-sidecar-protocol.md) (at runtime, `${CLAUDE_PLUGIN_ROOT}/guides/moor-sidecar-protocol.md`), passing `HEAD` as the diff range:
+If moor is present, launch the difftool (passing `HEAD` as the diff range), then read the context file: parse the `MOOR_CONTEXT=<path>` line and use the **Read tool** on it for `output.exitCode` / `output.rejections` — moor's sidecar contract is defined in its [`SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md) (`IM.OUT-*`):
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/moor-review.sh" HEAD

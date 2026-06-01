@@ -64,8 +64,9 @@ anchor stands alone and reaches further when its siblings are installed; each
 degrades gracefully when absent.
 
 - **[moor](https://github.com/chris-peterson/moor)** — the keyboard-driven diff
-  viewer `commit` and `preview` launch for review. See the
-  [moor protocol](/guides/moor-sidecar-protocol) for the review-feedback contract.
+  viewer `commit` and `preview` launch for review. Its `MOOR_CONTEXT` sidecar
+  contract (the review-feedback channel) is defined in
+  [moor's `SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md).
   Without moor, the visual step is skipped and the commit still lands.
 - **[tack](https://github.com/chris-peterson/tack)** — the work-in-progress route
   tracker. When present, `prepare-review` records the CR as the active tack's
@@ -76,5 +77,5 @@ degrades gracefully when absent.
 
 - **Skills** — per-skill pages in the sidebar, sourced directly from each
   `SKILL.md`
-- [Forge cookbook](/guides/forge-cookbook) — the `gh` / `glab` invocations and
+- [Forge cookbook](/forge-cookbook) — the `gh` / `glab` invocations and
   etiquette the skills follow
