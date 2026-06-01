@@ -25,8 +25,9 @@ flowchart LR
 
 1. **Install the plugin.**
 
-   ```text
-   /plugin install anchor
+   ```bash
+   claude plugin marketplace add chris-peterson/claude-marketplace
+   claude plugin install anchor@chris-peterson
    ```
 
 2. **Make some changes**, then commit them with a reviewed, *why*-first message:
