@@ -222,61 +222,27 @@ A concise imperative phrase (under 72 characters) that captures the change. Same
 
 ### Body structure
 
-1. **Context** *(first heading — target a 30-60 second read)*
-   - What system/feature does this touch, and what does it do today?
-   - What problem or need drove this change? Use the user's "why" from Step 2.
-   - Link any ticket, incident, or design doc.
+Draft the description following the section template in [`cr-description-template.md`](cr-description-template.md): **Context**, **Review guide**, **Approach & trade-offs** *(rare)*, **Testing** *(rare)*, and **Validation** *(shared components only)*. The template owns the *shape* — which sections, in what order, and what each is for; the guidance below owns the *technique* for realizing it.
 
-   Context's job is to orient. If the diff plus a one-line *why* gets the reviewer there, write that and stop. Padding Context to feel substantive is a failure mode, not thoroughness.
+**Deep-link construction (Review guide).** Always deep-link to the actual line, not just the file — reviewers should be one click away from the hunk you're pointing them at. Construction differs by forge:
 
-2. **Review guide** — Route reviewer attention by criticality, from highest-value-per-minute to lowest. Assume reviewers will skim from the top and stop when they run out of time; your job is to make sure the most important files are at the top. Pick tiers that actually fit the changeset (skip tiers when there isn't meaningful additional material). Don't put explicit time budgets in the headers — let the ordering speak for itself.
+- **GitLab:** `<CR_URL>/diffs#<file-anchor>_<old-line>_<new-line>` where `<file-anchor>` is `sha1(<repo-relative-file-path>)`. Compute it with:
 
-   ```markdown
-   **Critical path**
-   - [`path/to/most-critical-file.ext:42`](<CR_URL>/diffs#<file-anchor>_41_42) — the core change; everything else supports this
+  ```bash
+  printf "%s" "path/to/file.ext" | sha1sum | cut -d' ' -f1
+  ```
 
-   **Integration points**
-   - [`path/to/caller.ext:18`](<CR_URL>/diffs#<file-anchor>_17_18) — how the core change is wired in
-   - [`path/to/config.ext:5`](<CR_URL>/diffs#<file-anchor>_4_5) — new flag/setting
+  For a file-level link (no specific line), just use `<CR_URL>/diffs#<file-anchor>`. For pure additions, use the new line number for both `<old-line>` and `<new-line>` — the link still resolves.
 
-   **Ancillary**
-   - [`path/to/tests.ext`](<CR_URL>/diffs#<file-anchor>) — coverage for the new behavior
-   - [`path/to/docs.md`](<CR_URL>/diffs#<file-anchor>) — updated docs
+- **GitHub:** `<CR_URL>/files#diff-<file-anchor>R<new-line>` (or `L<new-line>` for the left/old side). The `<file-anchor>` for GitHub is `sha256(<file-path>)` — `gh` doesn't expose it directly, so fall back to opening the CR's "Files changed" tab and copying the link from the line-number gutter when in doubt.
 
-   **Mechanical** — renames, formatting, generated files. Skim only.
-   ```
+**Validation — ask, don't guess (shared components).** The Validation section applies when the change is to a shared component consumed by other repos. Detect it from these signals: shared-component repo path (`terraform-modules/`, `libraries/`, `base-configs/`), no direct deploy pipeline of its own, version exposed as a git ref or semver tag pinned by other repos. **Skip** when the change is to a deployable service or UI app — it ships its own production validation.
 
-   Use whatever tier labels best fit the changeset (e.g. *Core logic / Glue / Tests / Mechanical*, or *Security-sensitive / Refactor / Cleanup*). The headers should describe the **kind** of change, not the time it takes. "Critical" means: where a bug would hurt most, where a reviewer's judgment adds the most value, or where the core design decision lives.
+When the signals fire, **ask the author what validation looks like** rather than emitting a guessed checklist row:
 
-   **Always deep-link to the actual line, not just the file.** Reviewers should be one click away from the hunk you're pointing them at. Construction differs by forge:
+> What does validation look like for this change? Which downstream consumer (or representative sandbox) did you exercise it against, and what did you observe?
 
-   - **GitLab:** `<CR_URL>/diffs#<file-anchor>_<old-line>_<new-line>` where `<file-anchor>` is `sha1(<repo-relative-file-path>)`. Compute it with:
-
-     ```bash
-     printf "%s" "path/to/file.ext" | sha1sum | cut -d' ' -f1
-     ```
-
-     For a file-level link (no specific line), just use `<CR_URL>/diffs#<file-anchor>`. For pure additions, use the new line number for both `<old-line>` and `<new-line>` — the link still resolves.
-
-   - **GitHub:** `<CR_URL>/files#diff-<file-anchor>R<new-line>` (or `L<new-line>` for the left/old side). The `<file-anchor>` for GitHub is `sha256(<file-path>)` — `gh` doesn't expose it directly, so fall back to opening the CR's "Files changed" tab and copying the link from the line-number gutter when in doubt.
-
-   For trivial changesets (a single file, a one-line fix), skip the tiered guide and just link the file and say what to look for.
-
-3. **Approach & trade-offs** *(rare — include only when a reviewer would otherwise question the choice)* — Key decisions and the alternatives you rejected: "I chose X over Y because Z." If you're defending against an objection no one raised, cut the section.
-
-4. **Testing** *(rare — include only when CI doesn't cover it and the reviewer needs to know)* — Mention testing only when it's *unusually* relevant to the reviewer's assessment: hard-to-test code paths, environments tested against beyond CI, or coverage decisions the reviewer might push back on. If `npm test` / `dotnet test` / `pytest` runs in CI, reviewers already assume it ran — don't repeat.
-
-5. **Chase-through** *(shared components only)* — When the change is to a shared component (terraform module, library, base config consumed by N other repos by semver or git ref), the diff and rendered artifact aren't enough on their own. Subtle issues (plan-diff churn, `set`-vs-`list` ordering, missed `for_each` rekeys, library semver compat) only surface when the change *composes* with a real downstream consumer. Stopping verification at the component's own tests lets unvetted changes accumulate in lower environments and those environments drift away from production-like.
-
-   Emit a single checklist row prompting the author to exercise the change against a real consumer (or representative sandbox) and record what they saw:
-
-   ```markdown
-   - [ ] **Chased through to production** — consumer: `<downstream-repo or sandbox>` — observed: `<one-line summary>`
-   ```
-
-   **Detection signals.** Shared-component repo path (`terraform-modules/`, `libraries/`, `base-configs/`), no direct deploy pipeline of its own, version exposed as a git ref or semver tag pinned by other repos. **Skip** when the change is to a deployable service or UI app — it ships its own production validation.
-
-   The diff shows what the change *says*; the rendered artifact shows what it *renders*; chase-through evidence tells the reviewer what the change *does* in composition with the consumers that actually exercise it.
+Record their answer as the evidence row shown in the template's Validation section. The diff shows what the change *says*; the rendered artifact shows what it *renders*; the author's validation evidence tells the reviewer what the change *does* in composition with the consumers that actually exercise it.
 
 ### Tone
 
@@ -371,7 +337,7 @@ Categories of cruft. If something fits one of these, it doesn't belong in the de
 - **Step-2 leftovers** — hedges, offers, or open questions ("happy to / open to / let me know if"); unsubstantiated verification claims ("verified" / "tested" / "confirmed" for things you didn't actually exercise). If ambiguity is still in flux, defer drafting; don't park it in the description.
 - **Boilerplate** — generic openings ("This change updates…"); assuming domain knowledge the reviewer doesn't have.
 
-The single exception to "no verification content in the description body" is the **Chased through to production** row for shared components — see Body structure §5. That row records *evidence*, not a todo.
+The single exception to "no verification content in the description body" is the **Validation** evidence row for shared components — see the Validation section in [`cr-description-template.md`](cr-description-template.md). That row records *evidence*, not a todo.
 
 ## Step 4: Output
 
