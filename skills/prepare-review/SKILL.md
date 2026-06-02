@@ -125,21 +125,23 @@ Then ask:
 - `yes` — run `git rebase origin/main`. On conflict, resolve in place: read both sides of each conflicted region, pick the resolution that preserves the intent of *both* changes (not just one side), `git add` the resolved files, then `git rebase --continue`. Loop until the rebase completes. Surface to the user when intent is genuinely ambiguous — two competing changes to the same logic, semantic conflicts the textual markers don't show, a rename colliding with an edit. Don't guess in those cases; show the conflict and ask. If a hook fails mid-rebase, surface the failure rather than retrying with `--no-verify`.
 - `skip` — proceed with the current branch state. Note that deep links may render against lines that have shifted by merge time.
 
-A rebase rewrites history, so the push that follows is a force-push. That's fine *before* review starts — reconciliation onto `main` is the blessed pre-review case. But if the CR already has **review activity** (assigned reviewers, comments/discussions, or approvals), force-pushing over commits the reviewer has seen destroys their "changes since you last looked" diff and marks inline threads outdated. Check before force-pushing:
+A rebase rewrites history, so the push that follows is a force-push. Gate it on the CR's **draft flag** — the author's declared review state, which is reliable in a way that inferred engagement signals (note counts, reviewer lists) are not:
 
 ```bash
-# GitLab — reviewers / discussion count
-glab api projects/:fullpath/merge_requests/<iid> | jq '{reviewers, user_notes_count}'
+# GitLab
+glab mr view --output json | jq '.draft'
 ```
 
 ```bash
-# GitHub — reviews / review requests / comments
-gh pr view --json reviews,reviewRequests,comments
+# GitHub
+gh pr view --json isDraft --jq '.isDraft'
 ```
 
-If review has already started, surface it and ask before proceeding — the reviewer pays the cost of the rebase, so it's their call:
+**Draft CR** — mutable history is the norm (anchor creates CRs as drafts for exactly this reason). Rebase and force-push with lease without further ceremony.
 
-> This CR already has review activity. Rebasing now force-pushes over commits the reviewer has seen, which resets their incremental diff. Rebase anyway? `[yes / skip]`
+**Ready (non-draft) CR** — a reviewer may already be looking, and there's no reliable signal for whether they have. Force-pushing over commits they've seen destroys their "changes since you last looked" diff and marks inline threads outdated. Engagement signals are advisory context for the prompt (reviewers / discussion count via `glab api projects/:fullpath/merge_requests/<iid> | jq '{reviewers, user_notes_count}'` or `gh pr view --json reviews,reviewRequests,comments`), but the decision is the user's — ask before proceeding:
+
+> This CR is marked ready. Rebasing now force-pushes over commits a reviewer may have seen, which resets their incremental diff. Rebase anyway? `[yes / skip]`
 
 After a successful rebase (and the review-activity check above), force-push with lease so the open CR updates to the rewritten history:
 

@@ -165,22 +165,22 @@ Squashing into a pushed commit requires force push, so the squash option must ne
 git log -1 --format=%s HEAD
 ```
 
-**Then check whether a review is open on this branch.** Once anyone has opened an MR/PR, **force-pushing over commits the reviewer has already seen is off the table** — they should see each iteration as its own commit. But this rule only protects *pushed* commits. If the squash target (HEAD) is itself unpushed, the reviewer has never seen it, and amending into it doesn't disturb the review at all.
+**Then check whether a CR is open on this branch, and whether it's still a draft.** Once a CR is marked **ready** (non-draft), **force-pushing over commits a reviewer may have seen is off the table** — they should see each iteration as its own commit. While the CR is still a **draft**, mutable history remains the norm (anchor creates CRs as drafts for exactly this reason). Either way, this only protects *pushed* commits. If the squash target (HEAD) is itself unpushed, the reviewer has never seen it, and amending into it doesn't disturb the review at all.
 
 At this point in the flow, HEAD is unpushed by definition — we only reach the squash-vs-new-commit decision when the earlier ahead-count probe (or the `origin/main..HEAD` fallback for local-only branches) reported a positive count, meaning HEAD has at least one commit (including itself) not on upstream. So the squash target is always safe to amend. An open review still informs the option text — surfacing context — but does not flip the recommendation away from amend.
 
 **Narrow exception — message-only amend on a pushed commit no reviewer has engaged with yet.** This applies in a different code path (when HEAD itself is pushed, so the squash decision below doesn't fire). The rule's motivation is protecting reviewers from re-reviewing the same code; that motivation doesn't apply when the *diff is unchanged*. If the user reports the commit message is demonstrably wrong (e.g., pasted from a different repo, references identifiers that don't exist in this codebase, doesn't match what the diff actually does), the right action is `git commit --amend -F <msg-file>` to fix the message, then surface "force-push to overwrite the wrong message" as an explicit choice. The tree stays identical; only the message changes. Still surface the trade-off — "force-push affects only the message; the tree is unchanged" — and let the user decide. Do not extend this exception to content rewrites; the moment any file content moves, the standard rule applies again.
 
-Detect open reviews with the matching forge tool (pick by the `origin` remote URL):
+Detect the branch's open CR and its draft status with the matching forge tool (pick by the `origin` remote URL; empty output = no open CR):
 
 ```bash
 # GitLab origin
-glab mr list --source-branch "$(git rev-parse --abbrev-ref HEAD)" 2>/dev/null | grep -q '^![0-9]'
+glab mr view --output json 2>/dev/null | jq -r '.draft'
 ```
 
 ```bash
 # GitHub origin
-gh pr list --head "$(git rev-parse --abbrev-ref HEAD)" --json number --jq 'length>0' 2>/dev/null
+gh pr view --json isDraft --jq '.isDraft' 2>/dev/null
 ```
 
 Use the relatedness heuristic regardless of review status. Decide whether the staged changes are **related** to the prior commit (continuation, fix, or refinement of the same work) or **unrelated** (different topic, different files, new task). Mark the recommended option with `(* recommended)` based on this judgment:
@@ -188,7 +188,7 @@ Use the relatedness heuristic regardless of review status. Decide whether the st
 - **Related** → recommend squash
 - **Unrelated** → recommend new commit
 
-If a review is open, annotate the squash option so the user knows the context (e.g., `_(amending the unpushed commit on top of the reviewed work — reviewer hasn't seen it)_`). Do not flip the recommendation; the reviewer has only seen the pushed commits below HEAD, not HEAD itself.
+If a **ready** CR is open, annotate the squash option so the user knows the context (e.g., `_(amending the unpushed commit on top of the reviewed work — reviewer hasn't seen it)_`). If the open CR is still a **draft**, the annotation is lighter: `_(CR is draft — mutable history is the norm)_`. Do not flip the recommendation either way; the reviewer has only seen the pushed commits below HEAD, not HEAD itself.
 
 Present options in recommended-first order:
 

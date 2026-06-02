@@ -17,11 +17,26 @@ CACHE_DIR=~/.cache/moor
 mkdir -p "$CACHE_DIR"
 context_path="$CACHE_DIR/context-$$.json"
 
+repo=$(basename "$(git rev-parse --show-toplevel)")
+branch=$(git rev-parse --abbrev-ref HEAD)
+
 if [[ "$diff_range" == "HEAD" ]]; then
-  # Preview: working tree vs HEAD, no specific commit
+  # Preview: working tree vs HEAD, no specific commit. "on top of" names the
+  # commit the working tree sits on, so "vs HEAD" is concrete.
   stat=$(git diff --cached --stat HEAD | tail -1 | sed 's/^[[:space:]]*//')
+  base=$(git log -1 --format='%h %s' HEAD)
   title="Local changes vs HEAD"
-  details_json=$(jq -n --arg s "$stat" '[{label:"summary", value:$s}]')
+  details_json=$(jq -n \
+    --arg repo "$repo" \
+    --arg br "$branch" \
+    --arg base "$base" \
+    --arg s "$stat" \
+    '[
+      {label:"repo",      value:$repo},
+      {label:"branch",    value:$br},
+      {label:"on top of", value:$base},
+      {label:"summary",   value:$s}
+    ]')
 else
   # Commit review: HEAD is the target commit
   subject=$(git log -1 --format=%s HEAD)
@@ -30,11 +45,15 @@ else
   author=$(git log -1 --format='%an <%ae>' HEAD)
   title="$subject"
   details_json=$(jq -n \
+    --arg repo "$repo" \
+    --arg br "$branch" \
     --arg c "$hash" \
     --arg a "$author" \
     --arg b "$body" \
     --arg r "$diff_range" \
     '[
+      {label:"repo",   value:$repo},
+      {label:"branch", value:$br},
       {label:"commit", value:$c},
       {label:"author", value:$a},
       {label:"range",  value:$r}

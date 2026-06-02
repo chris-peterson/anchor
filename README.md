@@ -17,6 +17,8 @@ review on the forge.
 skills/commit/               /anchor:commit — stage, test, review, write the commit message
 skills/prepare-review/       /anchor:prepare-review — rebase, draft the CR description, open/update the CR
 skills/preview/              /anchor:preview — stage and open the visual diff (no commit)
+rules/                       ambient rules a SessionStart hook injects into every session
+hooks/emit-rules.sh          the injecting hook (registered in hooks/hooks.json)
 scripts/moor-review.sh       launch moor with a MOOR_CONTEXT sidecar; read the review verdict
 scripts/ahead-count.sh       unpushed-commit count (bash-analyzer-safe helper)
 docs/forge-cookbook.md       portable gh/glab invocations + forge etiquette (reference)

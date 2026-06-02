@@ -3,4 +3,5 @@
   - [commit](/skills/commit)
   - [prepare-review](/skills/prepare-review)
   - [preview](/skills/preview)
+- [Ambient rules](/ambient-rules)
 - [Forge cookbook](/forge-cookbook)

@@ -1,6 +1,6 @@
 {
   "name": "anchor",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Git/forge skills that drive reviewed work into the permanent record — commit, prepare-review, preview.",
   "author": {
     "name": "chris-peterson"
