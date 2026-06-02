@@ -18,17 +18,25 @@ needed.
 | Default | GitHub | GitLab |
 |---|---|---|
 | **Create CRs as draft** | `gh pr create --draft` | `glab mr create --draft` |
-| **Assign to yourself** | `--assignee @me` | `assignee_ids[]=<your-id>` (see below) |
+| **Assign to yourself** | `--assignee @me` | `--assignee <username>` (see below) |
 | **Delete source branch after merge** | repo auto-delete setting, or `--delete-branch` at merge | `glab mr create --remove-source-branch` |
-| **Assign issues to yourself** | `gh issue create --assignee @me` | `assignee_ids[]=<your-id>` |
+| **Assign issues to yourself** | `gh issue create --assignee @me` | `glab issue update <iid> --assignee <username>` after an API-form create |
 
-GitLab has no `@me` shorthand. Capture your numeric user id once and reuse it
+GitLab has no `@me` shorthand. Capture your username once and reuse it
 (`glab` has no `--jq` flag, so pipe to `jq`):
 
 ```bash
-glab api user | jq -r '.id'
-# → 122
+glab api user | jq -r '.username'
+# → chris
 ```
+
+**`glab api` has no `key[]=value` array syntax** (unlike `gh api`): a flat
+`-F "assignee_ids[]=122"` goes up as a literal key GitLab silently ignores —
+no error, the MR or issue just lands unassigned. For array-valued fields,
+either run a follow-up command that takes usernames (`glab mr update <iid>
+--assignee <username>`, `glab issue update <iid> --assignee <username>`) or
+pass a JSON body via `--input` (the same trap exists for nested objects —
+see the line-anchored discussion section).
 
 ## Multi-line bodies: write a file, pass it with -F / --body-file
 
@@ -69,19 +77,23 @@ GitHub branch deletion on merge is a repo setting; if it's off, pass
 undriveable from an agent), so use the API form for a file-sourced body:
 
 ```bash
-# 1. Capture your user id and the current branch.
-glab api user | jq -r '.id'          # → 122
+# 1. Capture your username and the current branch.
+glab api user | jq -r '.username'    # → chris
 git branch --show-current            # → my-feature-branch
 
 # 2. Write the body to a unique temp path, then POST the MR.
+#    (No assignee here — glab api can't encode array fields; see the note
+#    under "Defaults anchor applies".)
 glab api -X POST projects/:fullpath/merge_requests \
   -F title="MR title" \
   -F "description=@/tmp/cr-body.aB3xKp.md" \
   -F source_branch="my-feature-branch" \
   -F target_branch="main" \
-  -F "assignee_ids[]=122" \
   -F remove_source_branch=true \
   -F draft=true
+
+# 3. Assign it to yourself (capture <iid> from step 2's response).
+glab mr update <iid> --assignee chris
 ```
 
 ## MR / PR description update from a file
@@ -106,11 +118,13 @@ gh issue create \
   --body-file /tmp/issue-body.aB3xKp.md \
   --assignee @me
 
-# GitLab (API form so the body can come from a file, assigned to you)
+# GitLab (API form so the body can come from a file; assignee is a
+# follow-up — glab api can't encode array fields)
 glab api -X POST projects/:fullpath/issues \
   -F title="Issue title" \
-  -F "description=@/tmp/issue-body.aB3xKp.md" \
-  -F "assignee_ids[]=122"
+  -F "description=@/tmp/issue-body.aB3xKp.md"
+
+glab issue update <iid> --assignee <username>
 ```
 
 ## Issue / MR comment from a file

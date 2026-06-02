@@ -34,6 +34,17 @@
   rebases and force-pushes with lease without ceremony; a ready CR asks
   first, with engagement signals as advisory context.
 
+### Fixes
+
+- GitLab assignment in the cookbook and `prepare-review` used
+  `-F "assignee_ids[]=<id>"`, which `glab api` silently drops (no
+  `key[]=value` array syntax, unlike `gh api`) — creates landed unassigned
+  with no error. API-form creates now assign via a follow-up
+  `glab mr/issue update --assignee <username>`, and the cookbook documents
+  the array-encoding trap alongside the nested-object one.
+- `prepare-review`'s canonical `glab mr create` gains `--yes`; without it
+  the command stalls on an interactive submission prompt.
+
 ## 0.2.0
 
 ### Features

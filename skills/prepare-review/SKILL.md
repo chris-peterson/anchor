@@ -75,7 +75,7 @@ If no CR is open, **offer to create a draft** before drafting — the deep links
 
 - `yes` — create a **draft**, **assigned to you**, set to **delete the source branch on merge**:
   - **GitHub:** `gh pr create --draft --fill --assignee @me`. (Branch deletion on merge is a repo setting; if it's off, pass `--delete-branch` to `gh pr merge` at merge time.)
-  - **GitLab:** capture your username once (`glab api user | jq -r '.username'`), then `glab mr create --draft --fill --target-branch main --remove-source-branch --assignee <username>`. See the [forge cookbook](https://chris-peterson.github.io/anchor/#/forge-cookbook) for the `assignee_ids[]` API alternative.
+  - **GitLab:** capture your username once (`glab api user | jq -r '.username'`), then `glab mr create --draft --fill --yes --target-branch main --remove-source-branch --assignee <username>` — `--yes` matters: without it the command stalls on an interactive submission prompt. For a file-sourced description, use the API form in the bundled forge cookbook (`docs/forge-cookbook.md`), which assigns via a follow-up `glab mr update`.
 
   Then resolve the URL.
 - `web` — pause; the user opens a draft in the web UI and confirms when ready.
