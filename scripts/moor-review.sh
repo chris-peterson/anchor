@@ -5,7 +5,7 @@
 # from the same file after git difftool returns.
 #
 # Usage: bash moor-review.sh <diff-range>
-#   e.g. bash moor-review.sh @{upstream}...HEAD     # commit review (single commit at HEAD)
+#   e.g. bash moor-review.sh '@{upstream}...HEAD'   # commit review (single commit at HEAD)
 #   e.g. bash moor-review.sh HEAD~1...HEAD          # commit review (single commit at HEAD)
 #   e.g. bash moor-review.sh HEAD                   # preview (working tree vs HEAD)
 
