@@ -73,7 +73,7 @@ git difftool --no-prompt --dir-diff HEAD
 
 Then ask `Anything to change, or run /commit? [describe changes / commit]`. If the user names changes, apply them, re-stage, and re-open the difftool. Otherwise report `Previewed via git difftool — moor not installed; staged changes are ready, run /commit when you're set`.
 
-**If moor is present**, launch the difftool (passing `HEAD` as the diff range), then read the context file: parse the `MOOR_CONTEXT=<path>` line and use the **Read tool** on it for `output.exitCode` / `output.rejections` — moor's sidecar contract is defined in its [`SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md) (`IM.OUT-*`):
+**If moor is present**, launch the wrapper (passing `HEAD` as the diff range). `git difftool` inside the wrapper blocks until you close moor, so run it as a **background** Bash call (`run_in_background: true`) — a foreground call holds the turn open until the Bash timeout. Read the wrapper's stdout with the **BashOutput tool**, not `tail` / `$(...)` on the task output file (which trips the command-substitution permission gate). Poll until the `MOOR_CONTEXT=<path>` line appears — the wrapper echoes it once moor closes — then use the **Read tool** on that path for `output.exitCode` / `output.rejections`. moor's sidecar contract is defined in its [`SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md) (`IM.OUT-*`):
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/moor-review.sh" HEAD

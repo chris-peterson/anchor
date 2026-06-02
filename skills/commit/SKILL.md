@@ -252,13 +252,13 @@ Then ask `Anything to change, or proceed? [describe changes / proceed]`. If the 
 
 **If moor is present**, launch the difftool via the wrapper — **not** raw `git difftool`. The wrapper sets `MOOR_CONTEXT`, pre-populates the commit subject / body / author / hash in the file's `input` section so moor displays them in a header above the diff, and echoes `MOOR_CONTEXT=<path>` so you can locate the file. Running `git difftool` directly bypasses both and leaves you with no way to read the review outcome — and no header context.
 
-**Launch via the wrapper:**
+**Launch via the wrapper — as a background call.** `git difftool` inside the wrapper blocks until you close moor, so launch with `run_in_background: true`; a foreground call holds the turn open until the Bash timeout.
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/moor-review.sh" <diff-range>
 ```
 
-Then read the context file: parse the `MOOR_CONTEXT=<path>` line from the wrapper's stdout and use the **Read tool** on that path. From the JSON, read `output.exitCode` (the verdict) and `output.rejections` (each `{file, hunk, line, reason}`) — moor writes these per its `MOOR_CONTEXT` sidecar contract, defined normatively in moor's [`SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md) (`IM.OUT-*`). Leave the context file in place; moor recycles it. /commit-specific phrasing:
+Then read the wrapper's stdout with the **BashOutput tool** — not `tail` / `$(...)` on the task output file, which trips the command-substitution permission gate. Poll until the `MOOR_CONTEXT=<path>` line appears (the wrapper echoes it once moor closes), then use the **Read tool** on that path. From the JSON, read `output.exitCode` (the verdict) and `output.rejections` (each `{file, hunk, line, reason}`) — moor writes these per its `MOOR_CONTEXT` sidecar contract, defined normatively in moor's [`SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md) (`IM.OUT-*`). Leave the context file in place; moor recycles it. /commit-specific phrasing:
 
 - **`output.exitCode` `0`** → `Committed [short-sha]`. No other summary text.
 - **`output.exitCode` `1`** → `Committed [short-sha] — rejected hunks detected`, list `output.rejections`, then loop back to Step 0 (re-run tests after the fix). **If the rejection text is short** (e.g. "I don't get what this flag means") **and the cited hunk contains more than one distinct change** (e.g. two flag additions in a usage block, two unrelated lines in the same hunk), ask the user to identify which token the note refers to before fixing — a one-second clarification beats several minutes of guessing wrong and re-amending.
