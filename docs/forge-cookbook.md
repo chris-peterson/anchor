@@ -162,6 +162,56 @@ Verify the returned note is `"type": "DiffNote"` with a populated `position` —
 a `DiscussionNote` with `position: null` means the position was dropped and the
 comment landed unanchored.
 
+## List unresolved review threads
+
+```bash
+# GitLab — unresolved, human-authored discussions with their notes
+glab api "projects/:fullpath/merge_requests/<iid>/discussions?per_page=100" \
+  | jq '[.[] | select(.notes[0].system == false)
+             | select([.notes[] | .resolvable and (.resolved | not)] | any)]'
+```
+
+Each discussion carries `id` (needed for replies/resolution), `notes[]`
+(`author.username`, `body`), and — for line-anchored `DiffNote`s — a
+`position` (`new_path`, `new_line`, `old_line`).
+
+```bash
+# GitHub — review threads with resolution state (REST doesn't expose it; use GraphQL)
+gh api graphql -f query='query($owner:String!,$repo:String!,$pr:Int!){
+  repository(owner:$owner,name:$repo){pullRequest(number:$pr){
+    reviewThreads(first:100){nodes{id isResolved path line
+      comments(first:50){nodes{author{login} body databaseId}}}}}}}' \
+  -f owner=<owner> -f repo=<repo> -F pr=<num> \
+  | jq '.data.repository.pullRequest.reviewThreads.nodes | map(select(.isResolved | not))'
+```
+
+## Reply to a review thread
+
+```bash
+# GitLab — POST a note into the existing discussion (body from a file)
+glab api -X POST \
+  "projects/:fullpath/merge_requests/<iid>/discussions/<discussion-id>/notes" \
+  -F "body=@/tmp/reply.aB3xKp.md"
+
+# GitHub — reply to a review comment by its databaseId
+gh api -X POST "repos/<owner>/<repo>/pulls/<num>/comments/<comment-id>/replies" \
+  -F "body=@/tmp/reply.aB3xKp.md"
+```
+
+## Resolve / unresolve a review thread
+
+```bash
+# GitLab
+glab api -X PUT \
+  "projects/:fullpath/merge_requests/<iid>/discussions/<discussion-id>" \
+  -F resolved=true        # false to unresolve
+
+# GitHub — GraphQL mutation on the thread id from the listing query
+gh api graphql -f query='mutation($id:ID!){
+  resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}' \
+  -f id=<thread-id>
+```
+
 ## Binary upload (image attachments, GitLab)
 
 `glab api ... -F "file=@image.png"` returns HTTP 400 for binary multipart
@@ -180,28 +230,36 @@ curl -sS -X POST "<gitlab-host>/api/v4/projects/<id>/uploads" \
 
 The returned `markdown` field embeds directly into an MR description.
 
-## Etiquette: don't amend after review starts
+## Etiquette: history is mutable until the CR is marked ready
 
-Once a CR has **review activity** — assigned reviewers, comments/discussions, or
-approvals — make follow-up changes as **new commits**. Don't amend and
-force-push over commits the reviewer has already seen: a new commit preserves
-the "changes since you last looked" diff, and force-pushing collapses that
-incremental view and marks inline threads outdated.
+Gate history rewrites (amend, squash, rebase, force-push) on push state and
+the CR's **draft flag** — declared author intent, which is reliable in a way
+inferred engagement signals (note counts, reviewer lists) are not:
 
-The constraint protects *pushed* commits a reviewer has seen. Amending is the
-right default when no review has started, no reviewers are assigned, or the
-commit you're amending is still unpushed. A pre-review rebase onto `main` (so the
-branch can merge) is the blessed exception — do it before review begins.
+- **Unpushed commits** — yours; amend, squash, and rebase freely.
+- **Pushed, CR still a draft** — mutable history is still the norm (anchor
+  creates CRs as drafts for exactly this reason); amend and force-push with
+  lease until it's marked ready.
+- **Pushed, CR marked ready** — follow-up changes land as **new commits**.
+  A new commit preserves the reviewer's "changes since you last looked"
+  diff; force-pushing collapses that incremental view and marks inline
+  threads outdated — and there is no reliable signal for whether someone
+  has already looked.
 
-Detect review activity with the matching forge tool:
+Check the draft flag:
 
 ```bash
-# GitLab — reviewers / discussion count
-glab api projects/:fullpath/merge_requests/<iid> | jq '{reviewers, user_notes_count}'
+# GitLab
+glab mr view --output json | jq '.draft'
 
-# GitHub — reviews / review requests / comments
-gh pr view --json reviews,reviewRequests,comments
+# GitHub
+gh pr view --json isDraft --jq '.isDraft'
 ```
+
+Engagement signals (`glab api projects/:fullpath/merge_requests/<iid> | jq
+'{reviewers, user_notes_count}'`, `gh pr view --json
+reviews,reviewRequests,comments`) are advisory context for a prompt — they
+never silently permit a force-push on a ready CR.
 
 ## Etiquette: fail fast on auth
 

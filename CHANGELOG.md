@@ -4,6 +4,16 @@
 
 ### Features
 
+- New skill `/anchor:address-feedback` — fetch the unresolved review threads
+  on an open CR, triage each with the author (fix / reply / resolve / defer /
+  skip), then apply: follow-up commits citing the thread, terse replies into
+  the existing threads, resolution only where the disposition called for it.
+  The forge cookbook gains the thread operations (list unresolved, reply,
+  resolve) for both forges.
+- New bundled guide `docs/description-vs-docs.md` — when CR-description
+  content earns promotion to repo docs (author-flagged, very high bar) and
+  how to adapt it for a long-lived home. Referenced just-in-time from
+  `prepare-review` and `address-feedback`.
 - The plugin ships its ambient rules: a SessionStart hook injects `rules/*.md`
   into the session context (re-injected after compaction), so anchor's routing
   holds even when no skill is invoked:

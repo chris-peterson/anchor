@@ -2,6 +2,8 @@
 - Skills
   - [commit](/skills/commit)
   - [prepare-review](/skills/prepare-review)
+  - [address-feedback](/skills/address-feedback)
   - [preview](/skills/preview)
 - [Ambient rules](/ambient-rules)
 - [Forge cookbook](/forge-cookbook)
+- [Description vs docs](/description-vs-docs)

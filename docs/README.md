@@ -19,6 +19,7 @@ flowchart LR
 |---|---|
 | [`/anchor:commit`](/skills/commit) | Confirm the repo, run tests, stage everything, write a *why*-focused commit message, then open the change in [moor](https://github.com/chris-peterson/moor) for a hunk-level review |
 | [`/anchor:prepare-review`](/skills/prepare-review) | Rebase on `main`, open a draft change request (assigned to you, source branch set to delete on merge), and draft a description that routes reviewer attention to where their judgment matters most |
+| [`/anchor:address-feedback`](/skills/address-feedback) | Fetch the unresolved review threads on an open CR, triage each with you, then fix / reply / resolve |
 | [`/anchor:preview`](/skills/preview) | Stage all local changes and open them in moor — review in-flight work before you commit |
 | [Ambient rules](/ambient-rules) | A SessionStart hook injects anchor's domain invariants — post-review commit etiquette, forge-CLI routing — so they hold even when no skill is invoked |
 
