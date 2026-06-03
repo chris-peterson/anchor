@@ -7,6 +7,8 @@ description: Stage all changes and prepare a commit message. Triggers on 'commit
 
 Confirm the target repo, run tests, stage all changes, and generate a commit message.
 
+**Don't narrate your work.** Every step below is an operating instruction, not a script to read aloud. Don't announce what you're about to do (*"/commit is the entry point; let me set up the tasks, confirm the repo, and run tests"*), don't report the plumbing of each command (ahead-counts, sidecar paths, *"launching in the background"*, *"let me read its stdout"*, *"confirming it's running"*), and don't restate the same status twice. Speak only when the user must act or decide: the resolved repo in one line, a failing test, the drafted message with its options, and the final review verdict. Where a step prescribes exact output (e.g. `Committed [short-sha]`), emit that and nothing more.
+
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
 flowchart TD
@@ -101,7 +103,7 @@ git diff --cached
 If nothing is staged after `git add -A`, fall back to describing the most recent commit. But first, verify HEAD hasn't already been pushed — otherwise you'd just be describing an already-published commit:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/ahead-count.sh"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/look-ahead.sh"
 ```
 
 The helper prints the ahead-count (unpushed commits) or empty if no upstream is configured. If the count is `0`, HEAD equals the remote tracking branch — warn the user that there are no local changes (staged or committed) and stop.
@@ -147,7 +149,7 @@ obvious from the diff.
 Before presenting options, check whether HEAD is ahead of the upstream (i.e., there is at least one unpushed commit):
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/ahead-count.sh"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/look-ahead.sh"
 ```
 
 **If output is empty (no upstream configured — common on freshly-created local branches that haven't been `push -u`'d yet):** fall back to the same `origin/main..HEAD` range Step 4 uses for the difftool — substitute the symbolic origin HEAD (`git symbolic-ref refs/remotes/origin/HEAD`) or `master` if `main` doesn't exist. A local-only branch with unpushed commits should still get the squash option; otherwise the heuristic silently misroutes the most common "I just made the first commit on a new branch" case.
@@ -222,45 +224,24 @@ If a commit attempt is rejected by a `PreToolUse` hook citing a substring that's
 
 ## Step 4: Launch visual diff
 
-After committing, launch a visual review.
+After committing, open the change in a visual review. Launch the wrapper in `--commit` mode — **not** raw `git difftool`. The wrapper determines the diff range from the unpushed-commit count (`@{upstream}...HEAD` for the first commit, `HEAD~1...HEAD` when earlier commits were already reviewed, an `origin/...` fallback when there's no upstream), pre-populates the commit subject / body / author / hash as a header, drives git's configured difftool, and — once it closes — prints the verdict on its own stdout. Raw `git difftool` bypasses the header and the verdict.
 
-**Determine the diff range from unpushed commit count:**
-
-```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/ahead-count.sh"
-```
-
-- **1 unpushed commit** (this is the first) — diff against upstream. Range: `@{upstream}...HEAD` (pass single-quoted to the wrapper).
-- **2+ unpushed commits** — diff only the latest commit. Prior commits were already reviewed; avoid requiring re-review. Range: `HEAD~1...HEAD`.
-- **No upstream tracking branch** (empty output) — fall back to `origin/main...HEAD`, then `origin/master...HEAD`.
-
-If none of these produce a valid diff range, tell the user you couldn't determine the comparison target.
-
-[moor](https://github.com/chris-peterson/moor) is the preferred reviewer but **optional** — check it's installed:
+**Launch as a background call** (`run_in_background: true`): the wrapper blocks until the difftool closes, so a foreground call would hold the turn open until the Bash timeout.
 
 ```bash
-command -v moor
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --commit
 ```
 
-**If `moor` isn't on PATH**, delegate to git's configured difftool in directory mode. There's no `MOOR_CONTEXT` sidecar this way, so the rejected-hunk feedback loop isn't available — stand in for it by asking the user after the difftool closes (the commit has already landed):
+When the background command completes, read its stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trip the command-substitution gate. The last lines carry the verdict (no separate file read):
 
-```bash
-git difftool --no-prompt --dir-diff <diff-range>
-```
+- `REVIEW_VERDICT` — `0` clean · `1` rejections · `2` unreviewed · `3` closed early · `absent` (the difftool wrote no verdict — e.g. the configured tool doesn't report one)
+- `REVIEW_OUTPUT` — compact JSON; when the verdict is `1`, read `.rejections` (each `{file, hunk, line, reason}`) from here. The verdict and rejections come from the difftool's sidecar contract, defined normatively in [moor's `SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md) (`IM.OUT-*`).
 
-Then ask `Anything to change, or proceed? [describe changes / proceed]`. If the user names changes, apply them, re-stage, amend the commit (it's unpushed), and re-open the difftool. Otherwise report `Committed [short-sha] — reviewed via git difftool (moor not installed)`.
+Map the verdict to exactly this output and nothing more:
 
-**If moor is present**, launch the difftool via the wrapper — **not** raw `git difftool`. The wrapper sets `MOOR_CONTEXT`, pre-populates the commit subject / body / author / hash in the file's `input` section so moor displays them in a header above the diff, and echoes `MOOR_CONTEXT=<path>` so you can locate the file. Running `git difftool` directly bypasses both and leaves you with no way to read the review outcome — and no header context.
+- **`0`** → `Committed [short-sha]`.
+- **`1`** → `Committed [short-sha] — rejected hunks detected`, list the rejections, then loop back to Step 0 (re-run tests after the fix). **If a rejection's text is short** (e.g. "I don't get what this flag means") **and the cited hunk contains more than one distinct change** (e.g. two flag additions in a usage block, two unrelated lines in the same hunk), ask the user which token the note refers to before fixing — a one-second clarification beats several minutes of guessing wrong and re-amending.
+- **`2`** → `Committed [short-sha] — unreviewed hunks, what do you want to change?`
+- **`3` or `absent`** → `Committed [short-sha] — review closed without a verdict, what do you want to change?`
 
-**Launch via the wrapper — as a background call.** `git difftool` inside the wrapper blocks until you close moor, so launch with `run_in_background: true`; a foreground call holds the turn open until the Bash timeout.
-
-```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/moor-review.sh" <diff-range>
-```
-
-Then read the wrapper's stdout with the **BashOutput tool** — not `tail` / `$(...)` on the task output file, which trips the command-substitution permission gate. Poll until the `MOOR_CONTEXT=<path>` line appears (the wrapper echoes it once moor closes), then use the **Read tool** on that path. From the JSON, read `output.exitCode` (the verdict) and `output.rejections` (each `{file, hunk, line, reason}`) — moor writes these per its `MOOR_CONTEXT` sidecar contract, defined normatively in moor's [`SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md) (`IM.OUT-*`). Leave the context file in place; moor recycles it. /commit-specific phrasing:
-
-- **`output.exitCode` `0`** → `Committed [short-sha]`. No other summary text.
-- **`output.exitCode` `1`** → `Committed [short-sha] — rejected hunks detected`, list `output.rejections`, then loop back to Step 0 (re-run tests after the fix). **If the rejection text is short** (e.g. "I don't get what this flag means") **and the cited hunk contains more than one distinct change** (e.g. two flag additions in a usage block, two unrelated lines in the same hunk), ask the user to identify which token the note refers to before fixing — a one-second clarification beats several minutes of guessing wrong and re-amending.
-- **`output.exitCode` `2`** → `Committed [short-sha] — unreviewed hunks, what do you want to change?`
-- **`output.exitCode` `3` or absent** → `Committed [short-sha] — difftool closed without review, what do you want to change?`
+A difftool that speaks the sidecar contract (moor) returns the `0/1/2/3` verdict and the rejected-hunk feedback; any other configured difftool yields `absent` and you ask the user directly. Either way the commit has already landed — apply any requested changes, re-stage, amend the commit (it's unpushed), and re-launch.

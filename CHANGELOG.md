@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.5.0
+
+### Features
+
+- The `commit` and `preview` skills run their visual-diff review in a single
+  launch-and-read. `scripts/review-diff.sh` gains a `--commit` mode that works
+  out the review range from the unpushed-commit count itself and prints the
+  verdict (`REVIEW_VERDICT`, plus `REVIEW_OUTPUT` carrying any rejected hunks)
+  on its own stdout — so the skill no longer runs a separate range probe and
+  then opens and parses a sidecar file.
+
+### Changed
+
+- The `commit`, `preview`, and `address-feedback` skills no longer narrate
+  their internal setup and orchestration back to you — range probes, "launching
+  in the background", sidecar reads. They run those steps quietly and surface
+  only what you act on: the resolved repo, test results, the drafted message,
+  and the review verdict.
+- Renamed `scripts/moor-review.sh` → `scripts/review-diff.sh`. It drives
+  whatever difftool git is configured with — moor when installed, any other
+  difftool otherwise — so the name no longer implies moor. The verdict it prints
+  uses `REVIEW_VERDICT` / `REVIEW_OUTPUT`; the `MOOR_CONTEXT` sidecar env var
+  keeps its name, since that's the contract moor reads.
+- Renamed `scripts/ahead-count.sh` → `scripts/look-ahead.sh` (verb-noun, matching
+  `review-diff.sh`). It still prints the unpushed-commit count and stays the
+  bash-analyzer-safe helper for the `@{u}` range that `commit` uses to decide
+  the no-changes stop and the squash-vs-new-commit option.
+
 ## 0.4.0
 
 ### Features

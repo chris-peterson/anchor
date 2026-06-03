@@ -20,8 +20,8 @@ skills/address-feedback/     /anchor:address-feedback — fetch CR feedback; fix
 skills/preview/              /anchor:preview — stage and open the visual diff (no commit)
 rules/                       ambient rules a SessionStart hook injects into every session
 hooks/emit-rules.sh          the injecting hook (registered in hooks/hooks.json)
-scripts/moor-review.sh       launch moor with a MOOR_CONTEXT sidecar; read the review verdict
-scripts/ahead-count.sh       unpushed-commit count (bash-analyzer-safe helper)
+scripts/review-diff.sh       launch the configured difftool through its review sidecar; print the verdict on stdout
+scripts/look-ahead.sh        unpushed-commit count (bash-analyzer-safe helper)
 docs/forge-cookbook.md       portable gh/glab invocations + forge etiquette (reference)
 docs/description-vs-docs.md  when CR-description content earns promotion to repo docs (reference)
 docs/                        end-user docs site (docsify, GitHub Pages)

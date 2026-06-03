@@ -14,6 +14,8 @@ address-feedback brings their findings back into the branch.
 CR = change request: a pull request on GitHub, a merge request on GitLab.
 Pick the forge tool by the `origin` remote.
 
+**Don't narrate your work.** Every step below is an operating instruction, not a script to read aloud. Don't announce what you're about to do, don't report the plumbing of each command (resolution probes, API calls, *"let me fetch the threads"*), and don't restate the same status twice. Speak only when the user must act or decide: the resolved repo and CR in one line, each thread's triage, and what changed on it.
+
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
 flowchart TD

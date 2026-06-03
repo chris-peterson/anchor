@@ -402,23 +402,23 @@ Map the user's selection to the actions below:
    command -v moor
    ```
 
-   **If `moor` is present**, open a one-off review of the current description vs. the draft so the user can reject specific hunks and attach a reason to each — directed, line-anchored feedback instead of a prose back-and-forth. Launch via the wrapper (**not** `moor` directly — the wrapper writes the `MOOR_CONTEXT` input header and echoes the context path so you can read the verdict back). The viewer blocks until closed, so launch as a **background** Bash call (`run_in_background: true`); a foreground call holds the turn open until the Bash timeout:
+   **If `moor` is present**, open a one-off review of the current description vs. the draft so the user can reject specific hunks and attach a reason to each — directed, line-anchored feedback instead of a prose back-and-forth. Launch via the wrapper (**not** `moor` directly — the wrapper writes the `MOOR_CONTEXT` input header and prints the verdict on its stdout). The viewer blocks until closed, so launch as a **background** Bash call (`run_in_background: true`); a foreground call holds the turn open until the Bash timeout:
 
    ```bash
-   bash "${CLAUDE_PLUGIN_ROOT}/scripts/moor-review.sh" --files \
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --files \
      <current-desc-path> <draft-path> \
      --title 'CR description — proposed edits' \
      --detail repo=<repo> --detail branch=<branch> --detail CR=<CR_URL>
    ```
 
-   Read the wrapper's stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trips the command-substitution gate. Poll until the `MOOR_CONTEXT=<path>` line appears (echoed once moor closes), then **Read** that path. **Don't read silence as success** — only `output.exitCode` `0` is approval; every other outcome either carries feedback to fold in or means the review never happened, so never write the description off the back of one.
+   When the background command completes, read its stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trips the command-substitution gate. The last lines carry the verdict: `REVIEW_VERDICT` (`0`/`1`/`2`/`3`/`absent`) and `REVIEW_OUTPUT` (compact JSON, with `.rejections` when the verdict is `1`). **Don't read silence as success** — only `REVIEW_VERDICT` `0` is approval; every other outcome either carries feedback to fold in or means the review never happened, so never write the description off the back of one.
 
-   - **`exitCode` 0** — reviewed clean, nothing rejected: treat as approval and write the draft to the CR (the **Yes** action above).
-   - **`exitCode` 1** — rejected hunks exist: each entry in `output.rejections` is `{file, hunk, line, reason}`, where `reason` is the user's inline feedback on that hunk. Fold every reason into a revised draft, then loop back to **Present the change**.
-   - **`exitCode` 2** — the user closed with hunks still unreviewed: a partial pass, not approval. Ask what they want to change, then re-present.
-   - **`exitCode` 3, or no `output` section / no `exitCode` was written, or the `MOOR_CONTEXT=<path>` line never appeared** — the review **did not complete**: moor closed before counting any hunks, crashed, or failed to launch. Do **not** treat this as approval and do **not** write the description. Surface what happened to the user — name the exit code, or that no verdict was written — then fall back to a path that works: re-present the chat `diff` from **Present the change** and ask what to change (the moor-absent path below). If the user has a non-moor difftool configured, offer to open the two files in it (`git difftool --no-index <current-desc-path> <draft-path>`) as an alternative; don't silently retry moor, since the same failure will recur.
+   - **`0`** — reviewed clean, nothing rejected: treat as approval and write the draft to the CR (the **Yes** action above).
+   - **`1`** — rejected hunks exist: each entry in `REVIEW_OUTPUT`'s `.rejections` is `{file, hunk, line, reason}`, where `reason` is the user's inline feedback on that hunk. Fold every reason into a revised draft, then loop back to **Present the change**.
+   - **`2`** — the user closed with hunks still unreviewed: a partial pass, not approval. Ask what they want to change, then re-present.
+   - **`3` or `absent`, or no `REVIEW_VERDICT` line appeared** — the review **did not complete**: moor closed before counting any hunks, crashed, or failed to launch. Do **not** treat this as approval and do **not** write the description. Surface what happened to the user — name the verdict, or that none was written — then fall back to a path that works: re-present the chat `diff` from **Present the change** and ask what to change (the moor-absent path below). If the user has a non-moor difftool configured, offer to open the two files in it (`git difftool --no-index <current-desc-path> <draft-path>`) as an alternative; don't silently retry moor, since the same failure will recur.
 
-   Leave the context file in place; moor recycles it.
+   The wrapper leaves the context file in place; moor recycles it.
 
    **If `moor` isn't on PATH**, fall back to chat: ask what to change, revise the draft, and re-present (loop back to **Present the change**).
 

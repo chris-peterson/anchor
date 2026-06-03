@@ -7,6 +7,8 @@ description: Stage all local changes and open them in the visual difftool for re
 
 Stage all local changes (staged + unstaged) and launch [moor](https://github.com/chris-peterson/moor) against `HEAD` so the user can review the in-flight work before committing. Reuses the same moor sidecar protocol as `/commit` so directed feedback (rejected hunks with reasons) flows back as actionable edits.
 
+**Don't narrate your work.** Every step below is an operating instruction, not a script to read aloud. Don't announce what you're about to do, don't report the plumbing of each command (ahead-counts, sidecar paths, *"launching in the background"*, *"let me read its stdout"*, *"confirming it's running"*), and don't restate the same status twice. Speak only when the user must act or decide: the resolved repo in one line and the review verdict.
+
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
 flowchart TD
@@ -57,31 +59,24 @@ Otherwise, display the `--stat` summary so the user can see what's about to open
 
 ## Step 2: Launch visual diff
 
-Compare the working tree (now identical to the index after `git add -A`) against `HEAD`. This is the full surface of local changes — staged and previously-unstaged together.
+Compare the working tree (now identical to the index after `git add -A`) against `HEAD` — the full surface of local changes, staged and previously-unstaged together. Launch the wrapper with `HEAD` as the range; it drives git's configured difftool and prints the verdict on its own stdout.
 
-moor is **optional** — check it's installed first:
-
-```bash
-command -v moor
-```
-
-**If `moor` isn't on PATH**, delegate to git's configured difftool in directory mode. There's no `MOOR_CONTEXT` sidecar this way, so the rejected-hunk feedback loop isn't available — stand in for it by asking the user after the difftool closes:
+**Launch as a background call** (`run_in_background: true`): the wrapper blocks until the difftool closes, so a foreground call would hold the turn open until the Bash timeout.
 
 ```bash
-git difftool --no-prompt --dir-diff HEAD
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" HEAD
 ```
 
-Then ask `Anything to change, or run /commit? [describe changes / commit]`. If the user names changes, apply them, re-stage, and re-open the difftool. Otherwise report `Previewed via git difftool — moor not installed; staged changes are ready, run /commit when you're set`.
+When the background command completes, read its stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trip the command-substitution gate. The last lines carry the verdict (no separate file read):
 
-**If moor is present**, launch the wrapper (passing `HEAD` as the diff range). `git difftool` inside the wrapper blocks until you close moor, so run it as a **background** Bash call (`run_in_background: true`) — a foreground call holds the turn open until the Bash timeout. Read the wrapper's stdout with the **BashOutput tool**, not `tail` / `$(...)` on the task output file (which trips the command-substitution permission gate). Poll until the `MOOR_CONTEXT=<path>` line appears — the wrapper echoes it once moor closes — then use the **Read tool** on that path for `output.exitCode` / `output.rejections`. moor's sidecar contract is defined in its [`SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md) (`IM.OUT-*`):
+- `REVIEW_VERDICT` — `0` clean · `1` rejections · `2` unreviewed · `3` closed early · `absent` (the difftool wrote no verdict — e.g. the configured tool doesn't report one)
+- `REVIEW_OUTPUT` — compact JSON; when the verdict is `1`, read `.rejections` from here. The verdict and rejections come from the difftool's sidecar contract, defined in [moor's `SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md) (`IM.OUT-*`).
 
-```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/moor-review.sh" HEAD
-```
+Map the verdict to exactly this output and nothing more:
 
-/preview-specific phrasing:
+- **`0`** → `Previewed — no rejections`.
+- **`1`** → `Previewed — rejected hunks detected`, list the rejections, then loop back to Step 1 (re-stage and re-preview after the fix).
+- **`2`** → `Previewed — unreviewed hunks, what do you want to change?`
+- **`3` or `absent`** → `Previewed — review closed without a verdict, what do you want to change?`
 
-- **`output.exitCode` `0`** → `Previewed — no rejections`. No other summary text.
-- **`output.exitCode` `1`** → `Previewed — rejected hunks detected`, list `output.rejections`, then loop back to Step 1 (re-stage and re-preview after the fix).
-- **`output.exitCode` `2`** → `Previewed — unreviewed hunks, what do you want to change?`
-- **`output.exitCode` `3` or absent** → `Previewed — difftool closed without review, what do you want to change?`
+A difftool that speaks the sidecar contract (moor) returns the `0/1/2/3` verdict and the rejected-hunk feedback; any other configured difftool yields `absent` and you ask the user directly.
