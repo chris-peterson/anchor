@@ -39,7 +39,10 @@ flowchart TD
         Draft --> Out{Disposition?}
         Out -->|Write| Forge(["Push to CR"])
         Out -->|Copy| CopyOnly(["Print for paste"])
-        Out -->|Edit| Recency
+        Out -->|Edit| EditCh{moor?}
+        EditCh -->|Yes| Moor["One-off moor review"]
+        EditCh -->|No| Recency
+        Moor --> Recency
     end
 ```
 
@@ -82,6 +85,22 @@ If no CR is open, **offer to create a draft** before drafting — the deep links
 - `skip-deep-links` — proceed with a URL-free description (same shape used when the project pushes direct to main and never opens CRs).
 
 If the create call fails with 401/403 or a similar auth error, surface it and ask the user to refresh credentials — do not silently fall back to the URL-free path.
+
+### Capture the current description (baseline for the diff)
+
+Editing an open CR's description is a *revision*: the reviewer — and you — want to see what changed, not re-read the whole body. When a CR already existed, pull its current description to a temp file now; Step 4 diffs the draft against it. Pick the path with `mktemp -u /tmp/cr-desc-current.XXXXXX.md`, then write the body to it:
+
+```bash
+# GitHub
+gh pr view --json body --jq '.body' > <current-desc-path>
+```
+
+```bash
+# GitLab
+glab mr view --output json | jq -r '.description' > <current-desc-path>
+```
+
+A draft you just created (the `yes` path above) carries only a `--fill` body or none; that auto/empty baseline is fine — the Step 4 diff renders the draft as all-additions. Skip this only on `skip-deep-links`, where no CR exists to diff against.
 
 ### Link the CR to tack (optional)
 
@@ -343,7 +362,15 @@ The single exception to "no verification content in the description body" is the
 
 ## Step 4: Output
 
-Display the description in a fenced code block. Use markdown formatting appropriate for the platform (GitHub, GitLab, etc.). After presenting, offer to write the description back to the forge — see the final prompt below.
+Write the drafted description to a temp file (`mktemp -u /tmp/cr-desc-draft.XXXXXX.md`) — both the diff presentation here and the moor edit loop below read it.
+
+**Present the change.** When you captured a current description in Step 1, show what changed rather than the whole body — diff the draft against the baseline and present it in a fenced `diff` block:
+
+```bash
+git --no-pager diff --no-index <current-desc-path> <draft-path>
+```
+
+When there's no baseline (a brand-new CR, or the `skip-deep-links` path), display the full description in a fenced code block instead. Use markdown formatting appropriate for the platform (GitHub, GitLab, etc.). After presenting, offer to write the description back to the forge — see the final prompt below.
 
 ### Output checklist (verify before presenting)
 
@@ -360,15 +387,39 @@ Then ask the user how to proceed using the `AskUserQuestion` tool — an arrow-k
 
 - **Yes (write)** — push the description to the open CR.
 - **No (copy only)** — print the description for the user to paste themselves.
-- **Edit** — revise the draft and re-present.
+- **Edit** — mark up the change inline (moor) or in chat, then re-present.
 
 Map the user's selection to the actions below:
 
-1. **Yes (write)** *(default)* — push the description to the open CR. Editing a description is reversible, so this is the low-friction default. On 401/403 or similar auth failure, surface the error and ask the user to refresh credentials — do not silently fall back to copy-only.
+1. **Yes (write)** *(default)* — push the description to the open CR. Editing a description is reversible, so this is the low-friction default. On 401/403 or similar auth failure, surface the error and ask the user to refresh credentials — do not silently fall back to copy-only. The `<draft-path>` is the temp file you wrote at the top of Step 4.
 
-   - **GitHub:** `gh pr edit <num> --body-file -`, piping the drafted body in.
-   - **GitLab:** use the API form `glab api -X PUT projects/:fullpath/merge_requests/<iid> -F "description=@<body-path>"` — `glab mr update -d` doesn't accept a file. Pick `<body-path>` with `mktemp -u /tmp/cr-body.XXXXXX.md` (the `-u` prints a unique name without creating the file, so a peer session can't clobber it); see the [forge cookbook](https://chris-peterson.github.io/anchor/#/forge-cookbook) for the full canonical invocation.
+   - **GitHub:** `gh pr edit --body-file <draft-path>`.
+   - **GitLab:** use the API form `glab api -X PUT projects/:fullpath/merge_requests/<iid> -F "description=@<draft-path>"` — `glab mr update -d` doesn't accept a file. See the [forge cookbook](https://chris-peterson.github.io/anchor/#/forge-cookbook) for the full canonical invocation.
 2. **No (copy only)** — print the description for the user to paste into the web UI themselves. Useful when the user wants to hand-edit before pasting, or when the CLI's default forge instance is wrong for this repo.
-3. **Edit** — the user wants to adjust something; loop back through the draft.
+3. **Edit** — the user wants to adjust something. [moor](https://github.com/chris-peterson/moor) is the preferred surface for this but **optional** — check it's installed:
+
+   ```bash
+   command -v moor
+   ```
+
+   **If `moor` is present**, open a one-off review of the current description vs. the draft so the user can reject specific hunks and attach a reason to each — directed, line-anchored feedback instead of a prose back-and-forth. Launch via the wrapper (**not** `moor` directly — the wrapper writes the `MOOR_CONTEXT` input header and echoes the context path so you can read the verdict back). The viewer blocks until closed, so launch as a **background** Bash call (`run_in_background: true`); a foreground call holds the turn open until the Bash timeout:
+
+   ```bash
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/moor-review.sh" --files \
+     <current-desc-path> <draft-path> \
+     --title 'CR description — proposed edits' \
+     --detail repo=<repo> --detail branch=<branch> --detail CR=<CR_URL>
+   ```
+
+   Read the wrapper's stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trips the command-substitution gate. Poll until the `MOOR_CONTEXT=<path>` line appears (echoed once moor closes), then **Read** that path. **Don't read silence as success** — only `output.exitCode` `0` is approval; every other outcome either carries feedback to fold in or means the review never happened, so never write the description off the back of one.
+
+   - **`exitCode` 0** — reviewed clean, nothing rejected: treat as approval and write the draft to the CR (the **Yes** action above).
+   - **`exitCode` 1** — rejected hunks exist: each entry in `output.rejections` is `{file, hunk, line, reason}`, where `reason` is the user's inline feedback on that hunk. Fold every reason into a revised draft, then loop back to **Present the change**.
+   - **`exitCode` 2** — the user closed with hunks still unreviewed: a partial pass, not approval. Ask what they want to change, then re-present.
+   - **`exitCode` 3, or no `output` section / no `exitCode` was written, or the `MOOR_CONTEXT=<path>` line never appeared** — the review **did not complete**: moor closed before counting any hunks, crashed, or failed to launch. Do **not** treat this as approval and do **not** write the description. Surface what happened to the user — name the exit code, or that no verdict was written — then fall back to a path that works: re-present the chat `diff` from **Present the change** and ask what to change (the moor-absent path below). If the user has a non-moor difftool configured, offer to open the two files in it (`git difftool --no-index <current-desc-path> <draft-path>`) as an alternative; don't silently retry moor, since the same failure will recur.
+
+   Leave the context file in place; moor recycles it.
+
+   **If `moor` isn't on PATH**, fall back to chat: ask what to change, revise the draft, and re-present (loop back to **Present the change**).
 
 > **One web-UI step remains regardless of choice:** screenshots embedded in the description must be dragged into the forge editor (`gh` / `glab` don't expose a clean upload path). After **Yes (write)** lands the body, open the CR in the browser, drop each PNG, and re-save — the forge rewrites the local paths to hosted URLs.

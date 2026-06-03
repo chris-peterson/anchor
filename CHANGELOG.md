@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.4.0
+
+### Features
+
+- `prepare-review` treats editing an open CR's description as a revision: it
+  pulls the current description to a temp file, presents the draft as a `diff`
+  against that baseline (rather than re-printing the whole body), and on the
+  **Edit** disposition opens a one-off moor review of current vs. draft so the
+  user rejects specific hunks with a reason on each. The reasons come back
+  through the `MOOR_CONTEXT` sidecar (`output.rejections`) and fold into the
+  next revision. When `moor` isn't installed, Edit falls back to a chat
+  exchange.
+- `scripts/moor-review.sh` gains a domain-agnostic `--files <left> <right>
+  [--title <t>] [--detail label=value]...` mode for reviewing two arbitrary
+  paths instead of a git range, so any flow can route directed feedback
+  (rejected hunks with reasons) through moor's sidecar contract.
+
 ## 0.3.0
 
 ### Features
