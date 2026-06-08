@@ -91,5 +91,5 @@ degrades gracefully when absent.
 
 - **Skills** — per-skill pages in the sidebar, sourced directly from each
   `SKILL.md`
-- [Forge cookbook](/forge-cookbook) — the `gh` / `glab` invocations and
+- [Forge cookbook](/guides/forge-cookbook) — the `gh` / `glab` invocations and
   etiquette the skills follow

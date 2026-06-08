@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.6.0
+
+### Features
+
+- `/anchor:preview` gains three named review modes, picked by a chain of
+  responsibility so it always has something useful to open: **local changes**
+  (working tree vs the last commit — the default when the tree is dirty),
+  **previous changeset** (the last commit vs its parent — the fallback when the
+  tree is clean), and **full diff** (the whole branch vs the default branch,
+  the way a reviewer sees a CR — pass `cr` / `mr` / `pr`). `scripts/review-diff.sh`
+  grows matching `--local` / `--previous` / `--full` flags, each with a
+  mode-specific moor header.
+- New bundled guide `guides/changeset-scope.md` — once a change enters review,
+  keep edits within the changeset's existing scope and be surgical; the review
+  phase wants minimal churn, down to individual lines. Don't pull unrelated
+  pre-existing code into the diff even when a rejected hunk or a direct ask seems
+  to point at it — surface the scope expansion and confirm (fold in, or separate
+  change?) first. Referenced just-in-time from `address-feedback` (fixing
+  rejected hunks, "while you're in there" asks) and `commit` (the rejected-hunk
+  fix loop).
+
+### Changed
+
+- Load-bearing guides move out of `docs/` into a top-level `guides/` directory
+  (`forge-cookbook.md`, `description-vs-docs.md`, `changeset-scope.md`). Skills
+  and rules read them at runtime via `${CLAUDE_PLUGIN_ROOT}/guides/<name>.md`,
+  so they belong with the source — not in the rendered docs site.
+  `copy-skill-docs.sh` renders them into `docs/guides/` (gitignored) alongside
+  the skill and rule pages, leaving `docs/` a pure render target.
+
 ## 0.5.0
 
 ### Features

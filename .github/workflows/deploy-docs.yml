@@ -3,11 +3,6 @@ name: Deploy docs
 on:
   push:
     branches: [main]
-    paths:
-      - 'docs/**'
-      - 'skills/**'
-      - 'rules/**'
-      - 'scripts/copy-skill-docs.sh'
   workflow_dispatch:
 
 permissions:

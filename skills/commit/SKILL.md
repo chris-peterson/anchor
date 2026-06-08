@@ -240,7 +240,7 @@ When the background command completes, read its stdout with the **BashOutput too
 Map the verdict to exactly this output and nothing more:
 
 - **`0`** → `Committed [short-sha]`.
-- **`1`** → `Committed [short-sha] — rejected hunks detected`, list the rejections, then loop back to Step 0 (re-run tests after the fix). **If a rejection's text is short** (e.g. "I don't get what this flag means") **and the cited hunk contains more than one distinct change** (e.g. two flag additions in a usage block, two unrelated lines in the same hunk), ask the user which token the note refers to before fixing — a one-second clarification beats several minutes of guessing wrong and re-amending.
+- **`1`** → `Committed [short-sha] — rejected hunks detected`, list the rejections, then loop back to Step 0 (re-run tests after the fix). **If a rejection's text is short** (e.g. "I don't get what this flag means") **and the cited hunk contains more than one distinct change** (e.g. two flag additions in a usage block, two unrelated lines in the same hunk), ask the user which token the note refers to before fixing — a one-second clarification beats several minutes of guessing wrong and re-amending. Fix the rejected hunk itself; don't expand into adjacent pre-existing code (`guides/changeset-scope.md`).
 - **`2`** → `Committed [short-sha] — unreviewed hunks, what do you want to change?`
 - **`3` or `absent`** → `Committed [short-sha] — review closed without a verdict, what do you want to change?`
 

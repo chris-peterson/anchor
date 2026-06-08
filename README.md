@@ -17,14 +17,13 @@ review on the forge.
 skills/commit/               /anchor:commit — stage, test, review, write the commit message
 skills/prepare-review/       /anchor:prepare-review — rebase, draft the CR description, open/update the CR
 skills/address-feedback/     /anchor:address-feedback — fetch CR feedback; fix / reply / resolve per thread
-skills/preview/              /anchor:preview — stage and open the visual diff (no commit)
+skills/preview/              /anchor:preview — open the in-flight diff for review (local / previous / full modes)
 rules/                       ambient rules a SessionStart hook injects into every session
 hooks/emit-rules.sh          the injecting hook (registered in hooks/hooks.json)
 scripts/review-diff.sh       launch the configured difftool through its review sidecar; print the verdict on stdout
 scripts/look-ahead.sh        unpushed-commit count (bash-analyzer-safe helper)
-docs/forge-cookbook.md       portable gh/glab invocations + forge etiquette (reference)
-docs/description-vs-docs.md  when CR-description content earns promotion to repo docs (reference)
-docs/                        end-user docs site (docsify, GitHub Pages)
+guides/                      load-bearing reference the skills/rules read at runtime (forge cookbook, description-vs-docs, changeset-scope)
+docs/                        end-user docs site (docsify, GitHub Pages); skills/, rules/, guides/ are rendered in
 ```
 
 ## Optional integrations

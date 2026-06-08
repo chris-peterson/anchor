@@ -12,6 +12,16 @@
 #   REVIEW_OUTPUT=<json>    the compact output object (present when a verdict exists);
 #                           read output.rejections from here on a 1 verdict
 #
+# Three review modes, each named for what it shows:
+#   --local      local changes — working tree vs the last commit (stages first):
+#     bash review-diff.sh --local       -> HEAD
+#   --previous   previous changeset — the last commit vs its parent:
+#     bash review-diff.sh --previous    -> HEAD~1...HEAD
+#   --full       full diff — the whole branch vs the default branch, the way a
+#                reviewer sees a CR/MR/PR:
+#     bash review-diff.sh --full        -> origin/HEAD (symbolic), else
+#                                          origin/main, else origin/master ...HEAD
+#
 # Commit mode — review the just-made commit; the range is determined here:
 #   bash review-diff.sh --commit
 #     1 unpushed commit         -> @{upstream}...HEAD
@@ -20,7 +30,7 @@
 #
 # Range mode — review an explicit git range through git difftool (--dir-diff):
 #   bash review-diff.sh <diff-range>
-#     e.g. bash review-diff.sh HEAD                   # preview (working tree vs HEAD)
+#     e.g. bash review-diff.sh HEAD                   # working tree vs HEAD
 #     e.g. bash review-diff.sh HEAD~1...HEAD          # explicit commit range
 #
 # Files mode — review two arbitrary paths (no git range required), e.g. an old
@@ -49,24 +59,31 @@ emit_verdict() {
   echo "REVIEW_OUTPUT=$output"
 }
 
+# Resolve "the whole branch vs the default branch" range. Tries the symbolic
+# origin/HEAD first, then the conventional origin/main and origin/master.
+# Pure git plumbing — kept here (not in the skill prose) so the brace tokens
+# stay inside a script, where Claude Code's bash safety analyzer doesn't fire.
+determine_default_branch_range() {
+  local origin_head
+  origin_head=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true)
+  if [[ -n "$origin_head" ]] && git rev-parse --verify --quiet "$origin_head" >/dev/null; then
+    echo "${origin_head}...HEAD"
+  elif git rev-parse --verify --quiet origin/main >/dev/null; then
+    echo "origin/main...HEAD"
+  elif git rev-parse --verify --quiet origin/master >/dev/null; then
+    echo "origin/master...HEAD"
+  else
+    return 1
+  fi
+}
+
 # Determine the diff range for a commit review from the unpushed commit count.
-# Pure git plumbing — kept here (not in the skill prose) so the @{u} brace token
-# stays inside a script, where Claude Code's bash safety analyzer doesn't fire.
 determine_commit_range() {
   local count
   count=$(git rev-list --count '@{u}..HEAD' 2>/dev/null || true)
   if [[ -z "$count" ]]; then
-    local origin_head
-    origin_head=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true)
-    if [[ -n "$origin_head" ]] && git rev-parse --verify --quiet "$origin_head" >/dev/null; then
-      echo "${origin_head}...HEAD"
-    elif git rev-parse --verify --quiet origin/main >/dev/null; then
-      echo "origin/main...HEAD"
-    elif git rev-parse --verify --quiet origin/master >/dev/null; then
-      echo "origin/master...HEAD"
-    else
-      return 1
-    fi
+    # No upstream tracking -> fall back to the branch-vs-default-branch range.
+    determine_default_branch_range
   elif [[ "$count" -eq 1 ]]; then
     # 1 unpushed commit -> compare against upstream.
     echo '@{upstream}...HEAD'
@@ -112,21 +129,47 @@ if [[ "${1:-}" == "--files" ]]; then
   exit 0
 fi
 
+# Resolve the diff range and the header style. header_mode is one of:
+#   local — working tree vs HEAD              full — whole branch vs default branch
+#   commit — a specific commit vs its parent / upstream
 if [[ "${1:-}" == "--commit" ]]; then
   diff_range=$(determine_commit_range) || {
     echo "review-diff.sh: could not determine a diff range (no upstream tracking branch and no origin/main or origin/master)" >&2
     exit 65
   }
+  header_mode="commit"
+elif [[ "${1:-}" == "--local" ]]; then
+  # Local changes: stage everything so the index equals the working tree, then
+  # show it against the last commit.
+  git add -A
+  diff_range="HEAD"
+  header_mode="local"
+elif [[ "${1:-}" == "--previous" ]]; then
+  # Previous changeset: the last commit vs its parent.
+  git rev-parse --verify --quiet HEAD~1 >/dev/null || {
+    echo "review-diff.sh: HEAD has no parent commit to compare against" >&2
+    exit 65
+  }
+  diff_range="HEAD~1...HEAD"
+  header_mode="commit"
+elif [[ "${1:-}" == "--full" ]]; then
+  # Full diff: the whole branch vs the default branch.
+  diff_range=$(determine_default_branch_range) || {
+    echo "review-diff.sh: could not resolve a default branch (no origin/HEAD, origin/main, or origin/master)" >&2
+    exit 65
+  }
+  header_mode="full"
 else
-  diff_range="${1:?Usage: review-diff.sh --commit | <diff-range> | --files <left> <right> ...}"
+  diff_range="${1:?Usage: review-diff.sh --local | --previous | --full | --commit | <diff-range> | --files <left> <right> ...}"
+  if [[ "$diff_range" == "HEAD" ]]; then header_mode="local"; else header_mode="commit"; fi
 fi
 
 repo=$(basename "$(git rev-parse --show-toplevel)")
 branch=$(git rev-parse --abbrev-ref HEAD)
 
-if [[ "$diff_range" == "HEAD" ]]; then
-  # Preview: working tree vs HEAD, no specific commit. "on top of" names the
-  # commit the working tree sits on, so "vs HEAD" is concrete.
+if [[ "$header_mode" == "local" ]]; then
+  # Local changes: working tree vs HEAD, no specific commit. "on top of" names
+  # the commit the working tree sits on, so "vs HEAD" is concrete.
   stat=$(git diff --cached --stat HEAD | tail -1 | sed 's/^[[:space:]]*//')
   base=$(git log -1 --format='%h %s' HEAD)
   title="Local changes vs HEAD"
@@ -140,6 +183,26 @@ if [[ "$diff_range" == "HEAD" ]]; then
       {label:"branch",    value:$br},
       {label:"on top of", value:$base},
       {label:"summary",   value:$s}
+    ]')
+elif [[ "$header_mode" == "full" ]]; then
+  # Full diff: the whole branch as a reviewer sees it, against the base.
+  base_ref="${diff_range%%...*}"
+  # Count what the branch adds (two-dot), not the symmetric difference the
+  # three-dot diff_range would give — base_ref is usually ahead of the fork point.
+  count=$(git rev-list --count "${base_ref}..HEAD" 2>/dev/null || echo "?")
+  title="Full diff vs ${base_ref}"
+  details_json=$(jq -n \
+    --arg repo "$repo" \
+    --arg br "$branch" \
+    --arg base "$base_ref" \
+    --arg r "$diff_range" \
+    --arg n "$count" \
+    '[
+      {label:"repo",    value:$repo},
+      {label:"branch",  value:$br},
+      {label:"base",    value:$base},
+      {label:"range",   value:$r},
+      {label:"commits", value:$n}
     ]')
 else
   # Commit review: HEAD is the target commit

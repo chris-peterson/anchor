@@ -13,4 +13,4 @@ bodies, comments — write the body to a unique temp file
 For anything beyond these basics — creation defaults, line-anchored
 discussions, the known CLI gaps and their workarounds — read the bundled
 forge cookbook before re-deriving an invocation:
-`${CLAUDE_PLUGIN_ROOT}/docs/forge-cookbook.md`
+`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`
