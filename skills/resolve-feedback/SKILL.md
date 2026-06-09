@@ -1,15 +1,17 @@
 ---
-name: address-feedback
-description: Fetch an open CR's review feedback and drive each thread to done — fix, reply, resolve. Triggers on 'address feedback', 'review feedback', 'incorporate feedback', 'respond to review', or a pasted CR URL with review comments.
+name: resolve-feedback
+description: Fetch an open CR's review feedback and drive each thread to resolution — fix, reply, resolve. Triggers on 'resolve feedback', 'address feedback', 'review feedback', 'incorporate feedback', 'respond to review', or a pasted CR URL with review comments.
 ---
 
-# Address Review Feedback
+# Resolve Review Feedback
 
 Fetch the unresolved review threads on an open change request, triage each
 one with the author, then act: change the code, reply on the thread, resolve
-it — in whatever combination each thread calls for. This closes the loop that
-`/anchor:prepare-review` opens: prepare-review routes reviewer attention out;
-address-feedback brings their findings back into the branch.
+it — in whatever combination each thread calls for. The goal is **resolution**:
+every thread ends fixed, answered, or resolved, not merely acknowledged. This
+closes the loop that `/anchor:prepare-review` opens: prepare-review routes
+reviewer attention out; resolve-feedback brings their findings back into the
+branch and drives each one to done.
 
 CR = change request: a pull request on GitHub, a merge request on GitLab.
 Pick the forge tool by the `origin` remote.
@@ -19,7 +21,7 @@ Pick the forge tool by the `origin` remote.
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
 flowchart TD
-    Start(["/address-feedback"]) --> Repo["Resolve repo + CR"]
+    Start(["/resolve-feedback"]) --> Repo["Resolve repo + CR"]
 
     subgraph "Step 1: Fetch"
         Repo --> Fetch["Fetch unresolved threads"]
@@ -203,5 +205,5 @@ identical to a forgotten one.
 
 Report one line per thread: `#N <file:line> — <disposition> — <commit sha /
 reply posted / resolved>`, plus anything deferred and where it went. If any
-thread was skipped, say so — the next `/anchor:address-feedback` run picks it
+thread was skipped, say so — the next `/anchor:resolve-feedback` run picks it
 up.

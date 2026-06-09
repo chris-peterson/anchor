@@ -226,6 +226,52 @@ gh api graphql -f query='mutation($id:ID!){
   -f id=<thread-id>
 ```
 
+## CI / pipelines
+
+A commit's CI run goes by different names per forge: GitHub calls it a
+**workflow run** (the *Actions* tab), GitLab a **pipeline**. anchor uses
+**pipeline** as the generic term for both — pick `gh run` on a GitHub origin,
+`glab` (the pipelines API) on a GitLab one. The `/anchor:pipeline` skill and its
+`scripts/pipeline-status.sh` helper wrap the invocations below; reach for them
+directly when scripting a one-off.
+
+**Find the pipeline for a commit.** Resolve by branch, then pin to the exact
+commit SHA — the latest run on a branch isn't always the one you pushed.
+
+```bash
+# GitHub — list recent runs and pick the one whose headSha matches.
+gh run list --branch <branch> --limit 25 \
+  --json databaseId,status,conclusion,headSha,url \
+  | jq -c --arg sha "<sha>" '[ .[] | select(.headSha == $sha) ] | .[0]'
+
+# GitLab — the pipelines API filters by ref + sha directly.
+glab api "projects/:fullpath/pipelines?ref=<branch>&sha=<sha>&per_page=1" \
+  | jq '.[0]'   # → {id, status, web_url, sha, ...}
+```
+
+**State vocabularies differ.** GitLab's pipeline `status` is a single field
+(`success` / `failed` / `canceled` / `skipped` / `manual` are terminal;
+`running` / `pending` / `created` / etc. are in flight). GitHub splits it: a run
+is in flight until `status == "completed"`, then `conclusion` carries the
+outcome (`success`, `failure`, `cancelled`, `timed_out`, `skipped`,
+`action_required`, …). Normalize before comparing across forges.
+
+**Failed jobs in a pipeline.**
+
+```bash
+# GitHub
+gh run view <run-id> --json jobs \
+  | jq -c '[ .jobs[] | select(.conclusion == "failure") | {name, url} ]'
+
+# GitLab
+glab api "projects/:fullpath/pipelines/<pipeline-id>/jobs?per_page=100" \
+  | jq -c '[ .[] | select(.status == "failed") | {name, stage, url: .web_url} ]'
+```
+
+`glab ci status` / `glab ci get` and `gh run watch` exist for interactive use,
+but the JSON-returning `gh run` / `glab api` forms above are what reason reliably
+from a script.
+
 ## Binary upload (image attachments, GitLab)
 
 `glab api ... -F "file=@image.png"` returns HTTP 400 for binary multipart

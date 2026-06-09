@@ -1,9 +1,10 @@
 - [Home](/)
 - Skills
+  - [preview](/skills/preview)
   - [commit](/skills/commit)
   - [prepare-review](/skills/prepare-review)
-  - [address-feedback](/skills/address-feedback)
-  - [preview](/skills/preview)
+  - [resolve-feedback](/skills/resolve-feedback)
+  - [pipeline](/skills/pipeline)
 - [Ambient rules](/ambient-rules)
 - Guides
   - [Forge cookbook](/guides/forge-cookbook)

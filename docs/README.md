@@ -1,6 +1,6 @@
 # <img src="favicon.svg" alt="anchor" width="64" height="64" style="vertical-align: middle"> anchor
 
-Git/forge skills that drive reviewed work into the permanent record.
+Git/forge skills for consistent and effective source control.
 
 An anchor holds a vessel fast against drift. Here it holds *work* fast: work
 moves from in-progress → reviewed → committed and opened for review on the
@@ -17,10 +17,11 @@ flowchart LR
 
 | Surface | What it does |
 |---|---|
+| [`/anchor:preview`](/skills/preview) | Stage all local changes and open them in moor — review in-flight work before you commit |
 | [`/anchor:commit`](/skills/commit) | Confirm the repo, run tests, stage everything, write a *why*-focused commit message, then open the change in [moor](https://github.com/chris-peterson/moor) for a hunk-level review |
 | [`/anchor:prepare-review`](/skills/prepare-review) | Rebase on `main`, open a draft change request (assigned to you, source branch set to delete on merge), and draft a description that routes reviewer attention to where their judgment matters most |
-| [`/anchor:address-feedback`](/skills/address-feedback) | Fetch the unresolved review threads on an open CR, triage each with you, then fix / reply / resolve |
-| [`/anchor:preview`](/skills/preview) | Stage all local changes and open them in moor — review in-flight work before you commit |
+| [`/anchor:resolve-feedback`](/skills/resolve-feedback) | Fetch the unresolved review threads on an open CR, triage each with you, then drive each to resolution — fix / reply / resolve |
+| [`/anchor:pipeline`](/skills/pipeline) | Work with a commit's forge pipeline — report its latest state, or watch until it settles (passed, failed with the failed jobs, or no pipeline) |
 | [Ambient rules](/ambient-rules) | A SessionStart hook injects anchor's domain invariants — post-review commit etiquette, forge-CLI routing — so they hold even when no skill is invoked |
 
 ## Quickstart

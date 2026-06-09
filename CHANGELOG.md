@@ -1,9 +1,32 @@
 # Changelog
 
-## Unreleased
+## 0.7.0
+
+### Features
+
+- New skill `/anchor:pipeline` — work with the forge pipeline for a commit.
+  By default a one-shot read of its latest state; ask to watch and it polls until
+  the pipeline settles, then reports passed (with the pipeline URL), failed (with
+  the list of failed jobs, each linked), or no pipeline for the commit. Backs both
+  *"what's the pipeline doing right now"* and *"I pushed, tell me when it's done"*
+  with one callable unit, so a release workflow no longer hand-rolls the poll loop.
+  New `scripts/pipeline-status.sh` does the forge-agnostic work — picks `gh`/GitHub
+  or `glab`/GitLab by the `origin` remote, resolves the pipeline for the current
+  branch at HEAD's commit, and either reports once (default) or watches (background
+  `until` loop, `--watch`) to a terminal state. The GitLab path reads pipeline and
+  job status through `glab api projects/:fullpath/...` (the forge cookbook's idiom);
+  the GitHub path uses `gh run list` / `gh run view`. Pass `--branch` / `--sha` to
+  target an explicit ref, `--interval` / `--timeout` to tune the watch cadence and
+  ceiling.
 
 ### Changed
 
+- Renamed the `/anchor:address-feedback` skill to `/anchor:resolve-feedback`.
+  The name now states the goal — every review thread ends *resolved* (fixed,
+  answered, or marked resolved), not merely addressed. Behavior is unchanged;
+  the old triggers (`address feedback`, `respond to review`, a pasted CR URL)
+  still match, alongside the new `resolve feedback`. Update any saved references
+  to the old command name.
 - `/anchor:prepare-review` auto-opens the draft CR when none is open, instead of
   prompting `[yes / web / skip-deep-links]` first. A draft CR is non-disruptive
   — it requests no review, the branch push already triggered any branch-level
@@ -15,6 +38,17 @@
   paths remain as non-default escapes the user can invoke rather than an up-front
   prompt. This makes `prepare-review` the single home for CR creation now that
   the ai-sdlc ship-it skill delegates all CR creation to it.
+
+### Other
+
+- Reworded the plugin description and tagline to "Git/forge skills for
+  consistent and effective source control" (across `plugin.json`, both READMEs,
+  and the docs-site meta tag).
+- The forge cookbook gains a **CI / pipelines** section — the pipeline vs
+  workflow-run/Actions terminology, the canonical `gh run` / `glab api
+  .../pipelines` invocations for resolving a commit's pipeline and its failed
+  jobs, and the GitHub-vs-GitLab status-vocabulary difference. The `/anchor:pipeline`
+  skill references it for the forge calls its helper makes.
 
 ## 0.6.0
 
