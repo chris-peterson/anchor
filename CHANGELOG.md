@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- `/anchor:prepare-review` auto-opens the draft CR when none is open, instead of
+  prompting `[yes / web / skip-deep-links]` first. A draft CR is non-disruptive
+  — it requests no review, the branch push already triggered any branch-level
+  CI, and self-assign notifies only the author — so the common case (no CR yet →
+  open one) just happens, and drafting proceeds against the freshly-opened CR.
+  The creation defaults are unchanged (draft, self-assigned, delete-source-branch).
+  Auth failures at create still fail fast (surface 401/403, ask to refresh — no
+  silent URL-free fallback), and the URL-free (`skip-deep-links`) and open-in-web
+  paths remain as non-default escapes the user can invoke rather than an up-front
+  prompt. This makes `prepare-review` the single home for CR creation now that
+  the ai-sdlc ship-it skill delegates all CR creation to it.
+
 ## 0.6.0
 
 ### Features

@@ -72,19 +72,19 @@ gh pr view --json url --jq '.url' 2>/dev/null
 
 Use the resolved URL in place of `<CR_URL>` when constructing deep links in Step 3.
 
-If no CR is open, **offer to create a draft** before drafting — the deep links are the load-bearing part of the description and a placeholder-only draft is broken on arrival. Ask once:
+If no CR is open, **auto-open a draft** — no prompt. A draft CR is non-disruptive: it requests no review, the branch push already triggered any branch-level CI, and self-assign notifies only you. So the common case (no CR yet → open one) just happens, and drafting proceeds against the freshly-opened CR. The deep links are the load-bearing part of the description and a placeholder-only draft is broken on arrival, so opening the real CR first is what makes the description useful. A draft is also reversible — close it if it turns out you didn't want it.
 
-> No open CR for this branch. Open one now? `[yes / web / skip-deep-links]`
+Create a **draft**, **assigned to you**, set to **delete the source branch on merge**, then resolve the URL:
 
-- `yes` — create a **draft**, **assigned to you**, set to **delete the source branch on merge**:
-  - **GitHub:** `gh pr create --draft --fill --assignee @me`. (Branch deletion on merge is a repo setting; if it's off, pass `--delete-branch` to `gh pr merge` at merge time.)
-  - **GitLab:** capture your username once (`glab api user | jq -r '.username'`), then `glab mr create --draft --fill --yes --target-branch main --remove-source-branch --assignee <username>` — `--yes` matters: without it the command stalls on an interactive submission prompt. For a file-sourced description, use the API form in the bundled forge cookbook (`guides/forge-cookbook.md`), which assigns via a follow-up `glab mr update`.
+- **GitHub:** `gh pr create --draft --fill --assignee @me`. (Branch deletion on merge is a repo setting; if it's off, pass `--delete-branch` to `gh pr merge` at merge time.)
+- **GitLab:** capture your username once (`glab api user | jq -r '.username'`), then `glab mr create --draft --fill --yes --target-branch main --remove-source-branch --assignee <username>` — `--yes` matters: without it the command stalls on an interactive submission prompt. For a file-sourced description, use the API form in the bundled forge cookbook (`guides/forge-cookbook.md`), which assigns via a follow-up `glab mr update`.
 
-  Then resolve the URL.
-- `web` — pause; the user opens a draft in the web UI and confirms when ready.
-- `skip-deep-links` — proceed with a URL-free description (same shape used when the project pushes direct to main and never opens CRs).
+**On 401/403 or a similar auth error at create:** surface it and ask the user to refresh credentials — do not silently fall back to the URL-free path (per the fail-fast-on-auth rule).
 
-If the create call fails with 401/403 or a similar auth error, surface it and ask the user to refresh credentials — do not silently fall back to the URL-free path.
+**Non-default escapes.** Auto-open is unconditional — the skill does **not** try to sniff out whether a project uses CRs, because there's no reliable signal for a "merges direct to `main`, never opens CRs" team convention. Auto-open stays the default precisely because a draft is cheap and reversible: a mis-fired one costs a `close`, not a disrupted review. Two cases give way to a URL-free description (the deep-link-free shape the rest of the skill calls the `skip-deep-links` path):
+
+- **HEAD is the default branch itself** — the one no-CR case detectable with confidence. There's no feature branch to open a CR *from* (source would equal target and the create call fails), so skip auto-open and proceed URL-free. (The "no commits ahead of `main`" check later in Step 1 stops the run anyway; this just avoids a confusing create failure first.)
+- **User asks not to open one** — the repo merges direct to `main` without CRs, or the CLI's default forge instance is wrong for this repo. Proceed URL-free, or — if they'd rather open the draft themselves — pause until they open one in the web UI and confirm, then resolve the URL.
 
 ### Capture the current description (baseline for the diff)
 
@@ -100,7 +100,7 @@ gh pr view --json body --jq '.body' > <current-desc-path>
 glab mr view --output json | jq -r '.description' > <current-desc-path>
 ```
 
-A draft you just created (the `yes` path above) carries only a `--fill` body or none; that auto/empty baseline is fine — the Step 4 diff renders the draft as all-additions. Skip this only on `skip-deep-links`, where no CR exists to diff against.
+A draft you just auto-opened carries only a `--fill` body or none; that auto/empty baseline is fine — the Step 4 diff renders the draft as all-additions. Skip this only on the `skip-deep-links` path, where no CR exists to diff against.
 
 ### Link the CR to tack (optional)
 
