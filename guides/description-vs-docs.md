@@ -11,7 +11,7 @@ while drafting a description, prepping a commit, or addressing feedback.
 Review guides, validation evidence, context framing, before/after
 comparisons of the change under review — these exist to route reviewer
 attention and earn approval. They are review artifacts. Leaving them in the
-description is correct, not a loss.
+description is the right call.
 
 ## Promotion is the exception, with a very high bar
 

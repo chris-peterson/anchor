@@ -15,7 +15,7 @@ operations; today it reports status and watches. Two needs, one skill:
   in the background until the pipeline reaches a terminal state, then report.
 
 GitHub calls a pipeline a *workflow run* and GitLab calls it a *pipeline*; this
-skill uses **pipeline** for both, and `glab ci` / `gh run` for the forge calls.
+skill uses **pipeline** for both, and `glab api` / `gh run` for the forge calls.
 
 **Don't narrate your work.** Every step below is an operating instruction, not a
 script to read aloud. Don't announce the repo resolution, the forge detection,

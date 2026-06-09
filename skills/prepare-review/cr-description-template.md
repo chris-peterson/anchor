@@ -42,6 +42,20 @@ no meaningful material. Don't put time budgets in headers — let ordering speak
 **Mechanical** — renames, formatting, generated files. Skim only.
 ```
 
+**Each bullet is a pointer, not a paragraph.** A bullet is a deep link plus *at
+most* a one-line trailing clause — and that clause earns its place only by
+routing the reviewer: *what to look for*, or *why this hunk matters*. If the
+only thing it would say is *what changed*, drop the clause and leave the bare
+link. The reviewer is one click from the hunk; restating it is the "described
+the *what*" failure. Never expand a bullet into numbered prose steps that walk
+the edits ("remove the X block", "drop the Y key") — the deep-linked hunk
+already shows them.
+
+The Review guide routes attention; it is not where author-homework lands. A
+"confirm the plan shows only the destroy of X, Y, Z" line is a check *you* run
+before requesting review — it belongs in a personal checklist, not the guide
+(see `SKILL.md` Step 3 "What to avoid").
+
 Use whatever tier labels fit the changeset (e.g. *Core logic / Glue / Tests /
 Mechanical*, or *Security-sensitive / Refactor / Cleanup*). Headers describe the
 **kind** of change, not the time it takes. "Critical" means: where a bug would
