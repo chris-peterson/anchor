@@ -295,6 +295,19 @@ After visualization choice, lean into markdown for the surrounding prose:
 - Fenced code blocks with a language tag for multi-line snippets, sample output, configs, or schemas.
 - Headings (`##`, `###`) to chunk the description so reviewers can jump straight to "Approach" or "Testing".
 
+**Collapsible sections — fold heavy detail away to keep the outline brief.** Brevity is the default, but some changes genuinely carry detail a reviewer occasionally wants and shouldn't have to scroll past to skip: a full `terraform plan`, a long log excerpt, an exhaustive flag-by-flag table, a verbose config sample. Wrap that detail in a `<details><summary>…</summary>` block. The summary line keeps the outline scannable; the detail is one click away when a reviewer wants it. This is the escape valve that lets the description stay terse *and* complete — reach for it instead of either inlining a wall of output or dropping the detail entirely. Both GitHub and GitLab render the HTML; [GitLab's markdown reference](https://docs.gitlab.com/user/markdown/#collapsible-section) documents the syntax. The one gotcha: markdown inside the block renders only with a blank line after `</summary>` and before `</details>` — without it, tables and code fences show as raw text.
+
+````markdown
+<details>
+<summary><strong>Full <code>terraform plan</code> output</strong></summary>
+
+```text
+# ~200 lines of plan output the reviewer can expand if they want it
+```
+
+</details>
+````
+
 **Mermaid diagrams.** A small mermaid diagram earns its keep when the change has shape that prose hides — a state machine, a sequence between services, a before/after architecture, a decision flow. **A picture lands faster than two paragraphs of prose.** Pick the type that matches the content:
 
 - `stateDiagram-v2` for state transitions
@@ -379,6 +392,7 @@ The description gets pasted into a markdown renderer, so rendering bugs are user
 - **Outer fence has 4+ backticks when the description contains any 3-backtick blocks.** Mermaid blocks, code samples, and inline `\`\`\`text` fences inside the description will close a 3-backtick wrapper early. Use ` ```` ` (4 backticks) for the outer fence whenever the inner content has triple-backtick fences — otherwise the second half of the description renders as raw text.
 - **Mermaid `%%{ init }%%` directive is the first line *inside* the fenced block, not before it.** A bare `%%{ init }%%` line outside ` ```mermaid ` shows up as raw text and the diagram loses its theme. The block must look like ` ```mermaid ` → `%%{ init: { 'look': 'handDrawn' } }%%` → diagram → ` ``` `.
 - **All mermaid blocks have a closing fence.** Easy to drop when the diagram is the last thing before a section break.
+- **Collapsible `<details>` blocks have blank lines around their inner markdown.** A `<details>`/`<summary>` wrapper renders the markdown inside it only with a blank line after `</summary>` and before `</details>` — otherwise tables, code fences, and lists inside show as raw text.
 - **Backtick coverage is generous — except for forge-autolink tokens.** Re-scan the description for grep-bait: env vars (`$FAMILY`, `$CI_PIPELINE_CREATED_AT`), config keywords (`extends:`, `needs:`, `on_success`, `manual`, `allow_failure`), job/product/feature suffixes that match identifiers in the diff, CLI flags, file paths. The "if a reader might paste it into a terminal" test is more permissive than "code identifier only" — err generous. **But** scan separately for CR/issue refs (`!148`, `#42`), commit SHAs, and user @mentions — these must be **bare text** to autolink; backticks render them as inert code spans.
 - **Inline single quotes around `'all'` / `'true'` style values** read fine in prose but lose their distinguishing weight in scan-mode. Convert literal dropdown/enum values to backticks.
 - **Escape literal `$` in prose.** GitHub and GitLab markdown renderers interpret `$...$` as inline KaTeX/math mode and silently swallow the content between the delimiters — a description that mentions two shell variables in the same paragraph (e.g. `$FAMILY` and `$REGION`) renders as a blank gap. Inside fenced code blocks and inline backticks, `$` is safe; outside them, use `\$` for the literal sign. The same applies to bare `_underscores_` around identifiers (read as italics) and `*asterisks*` inside flag names — backtick them or escape them.
