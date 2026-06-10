@@ -9,6 +9,13 @@ guessing, so prefer these forms over re-deriving them.
 Pick the CLI by the `origin` remote: a GitHub remote → `gh`; a GitLab remote →
 `glab`. Both must be authenticated with read+write scope.
 
+When you run `glab` from **outside** a GitLab checkout — no `origin` to infer the
+host from — target the host explicitly with `--hostname <host>`. That flag is
+valid on **`glab api`** only; porcelain subcommands (`glab mr view`, `glab issue
+view`, …) reject it with *"Unknown flag"*. So when you need to name the host,
+reach for the `glab api` form of the operation rather than its porcelain
+shorthand.
+
 ## Defaults anchor applies
 
 When anchor creates a CR or an issue on your behalf, it applies these defaults.
