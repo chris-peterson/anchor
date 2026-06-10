@@ -13,7 +13,7 @@ Open the in-flight work in [moor](https://github.com/chris-peterson/moor) for re
 | **Previous changeset** | the last commit vs its parent | `--previous` |
 | **Full diff** | the whole branch vs the default branch | `--full` |
 
-By default, `/preview` shows **local changes** when the working tree is dirty, and falls back to the **previous changeset** when it's clean. Pass `cr` (or `mr` / `pr`) to instead review the **full diff**, the way a reviewer sees a change request. Reuses the same moor sidecar protocol as `/commit`, so directed feedback (rejected hunks with reasons) flows back as actionable edits.
+By default, `/preview` shows **local changes** when the working tree is dirty, and falls back to the **previous changeset** when it's clean. Pass `cr` (or `mr` / `pr`) to instead review the **full diff**, the way a reviewer sees a change request. Reuses the same moor sidecar protocol as `/commit`, so directed feedback (fix-now comments with reasons) flows back as actionable edits.
 
 **Don't narrate your work.** Every step below is an operating instruction, not a script to read aloud. Don't announce what you're about to do, don't report the plumbing of each command (the dirty check, sidecar paths, *"launching in the background"*, *"let me read its stdout"*, *"confirming it's running"*), and don't restate the same status twice. Speak only when the user must act or decide: the resolved repo and mode in one line, and the review verdict.
 
@@ -33,7 +33,7 @@ flowchart TD
 
     DiffTool["Launch moor, read verdict"] --> Review{Verdict?}
     Review -->|Accepted| Done([Done])
-    Review -->|Rejected| Fix["Fix rejection reasons"] --> Mode
+    Review -->|fix-now comments| Fix["Address fix-now comments"] --> Mode
     Review -->|Unreviewed / Closed| Ask([Ask user what to change])
 ```
 
@@ -84,14 +84,14 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --local
 
 When the background command completes, read its stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trip the command-substitution gate. The last lines carry the verdict (no separate file read):
 
-- `REVIEW_VERDICT` — `0` clean · `1` rejections · `2` unreviewed · `3` closed early · `absent` (the difftool wrote no verdict — e.g. the configured tool doesn't report one)
-- `REVIEW_OUTPUT` — compact JSON; when the verdict is `1`, read `.rejections` from here. The verdict and rejections come from the difftool's sidecar contract, defined in [moor's `SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md) (`IM.OUT-*`).
+- `REVIEW_VERDICT` — `0` clean · `1` one-or-more fix-now · `2` unreviewed · `3` closed early · `absent` (the difftool wrote no verdict — e.g. the configured tool doesn't report one)
+- `REVIEW_OUTPUT` — compact JSON; when the verdict is `1`, read `.comments` from here. Each comment is `{body, action, file?, startLine?, endLine?}`: `action` is `fix-now` (the blocker), `fix-later`, or `consider`; `body` is the reviewer's inline feedback; the optional `file` / `startLine` / `endLine` anchor it to a line range (a comment may target a file, a line range, or the whole changeset with no line). The verdict and comments come from the difftool's sidecar contract, defined in [moor's `SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md) (`IM.OUT-*`).
 
 Map the verdict to exactly this output and nothing more:
 
-- **`0`** → `Previewed — no rejections`.
-- **`1`** → `Previewed — rejected hunks detected`, list the rejections, then fix and re-preview after the fix.
+- **`0`** → `Previewed — clean`. If `.comments` carries advisory comments (`action` `fix-later` or `consider`), surface them — they don't gate, but the user may want to act on them.
+- **`1`** → `Previewed — fix-now comments`, list the `fix-now` comments (the `.comments` entries where `action == "fix-now"`), then fix and re-preview after the fix. Surface any advisory (`fix-later` / `consider`) comments too.
 - **`2`** → `Previewed — unreviewed hunks, what do you want to change?`
 - **`3` or `absent`** → `Previewed — review closed without a verdict, what do you want to change?`
 
-A difftool that speaks the sidecar contract (moor) returns the `0/1/2/3` verdict and the rejected-hunk feedback; any other configured difftool yields `absent` and you ask the user directly.
+A difftool that speaks the sidecar contract (moor) returns the `0/1/2/3` verdict and the review comments; any other configured difftool yields `absent` and you ask the user directly.

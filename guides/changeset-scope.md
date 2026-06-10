@@ -11,9 +11,9 @@ this guide whenever feedback would touch code the diff doesn't already own.
 
 ## Feedback invites overreach two ways
 
-- **Rejected hunks with reasons** — moor's sidecar, fed back through
-  `/anchor:resolve-feedback`. Fix the hunk that was rejected, not the adjacent
-  pre-existing code it happens to sit next to.
+- **Fix-now comments with reasons** — moor's sidecar, fed back through
+  `/anchor:resolve-feedback`. Fix the lines the comment targets, not the adjacent
+  pre-existing code they happen to sit next to.
 - **A direct ask while iterating** — "while you're in there, also change X." If
   X is pre-existing code the diff doesn't otherwise touch, that's a scope
   expansion, not a fix.

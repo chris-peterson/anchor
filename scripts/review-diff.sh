@@ -5,12 +5,13 @@
 #
 # The review feedback travels through a sidecar file named by the MOOR_CONTEXT
 # env var — moor's contract: it reads input.{title,details} on launch (rendered
-# as a header above the diff) and writes output.{exitCode,reviewer,rejections}
+# as a header above the diff) and writes output.{exitCode,reviewer,comments}
 # on exit. This script pre-populates the input section, then prints:
-#   REVIEW_VERDICT=<code>   output.exitCode — 0 clean / 1 rejections / 2 unreviewed
+#   REVIEW_VERDICT=<code>   output.exitCode — 0 clean / 1 one-or-more fix-now / 2 unreviewed
 #                           / 3 closed early / "absent" if no output was written
 #   REVIEW_OUTPUT=<json>    the compact output object (present when a verdict exists);
-#                           read output.rejections from here on a 1 verdict
+#                           read output.comments from here on a 1 verdict (filter
+#                           action=="fix-now" for the blockers)
 #
 # Three review modes, each named for what it shows:
 #   --local      local changes — working tree vs the last commit (stages first):
@@ -118,7 +119,7 @@ if [[ "${1:-}" == "--files" ]]; then
     '{input: {title:$t, details:$d}}' > "$context_path"
 
   # Two-file mode invokes moor directly (it isn't a git range, so git difftool
-  # doesn't apply). moor exits 0/1/2/3 to signal the outcome (clean / rejections
+  # doesn't apply). moor exits 0/1/2/3 to signal the outcome (clean / fix-now
   # / unreviewed / closed early); the verdict the caller acts on lives in the
   # sidecar's output section, so don't let a non-zero exit abort here. Requires
   # moor >= 0.6.1, where two-file mode runs the full review (earlier versions

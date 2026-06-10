@@ -42,7 +42,7 @@ flowchart TD
         Amend --> DiffTool
         DiffTool --> Review{Review result?}
         Review -->|Accepted| Done([Done])
-        Review -->|Rejected| Fix["Fix rejection reasons"] --> Tests
+        Review -->|fix-now comments| Fix["Address fix-now comments"] --> Tests
     end
 ```
 
@@ -234,14 +234,14 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --commit
 
 When the background command completes, read its stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trip the command-substitution gate. The last lines carry the verdict (no separate file read):
 
-- `REVIEW_VERDICT` — `0` clean · `1` rejections · `2` unreviewed · `3` closed early · `absent` (the difftool wrote no verdict — e.g. the configured tool doesn't report one)
-- `REVIEW_OUTPUT` — compact JSON; when the verdict is `1`, read `.rejections` (each `{file, hunk, line, reason}`) from here. The verdict and rejections come from the difftool's sidecar contract, defined normatively in [moor's `SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md) (`IM.OUT-*`).
+- `REVIEW_VERDICT` — `0` clean · `1` one-or-more fix-now · `2` unreviewed · `3` closed early · `absent` (the difftool wrote no verdict — e.g. the configured tool doesn't report one)
+- `REVIEW_OUTPUT` — compact JSON; when the verdict is `1`, read `.comments` from here. Each comment is `{body, action, file?, startLine?, endLine?}`: `action` is `fix-now` (the blocker), `fix-later`, or `consider`; `body` is the reviewer's inline feedback; the optional `file` / `startLine` / `endLine` anchor it to a line range (a comment may target a file, a line range, or the whole changeset with no line). The verdict and comments come from the difftool's sidecar contract, defined normatively in [moor's `SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md) (`IM.OUT-*`).
 
 Map the verdict to exactly this output and nothing more:
 
-- **`0`** → `Committed [short-sha]`.
-- **`1`** → `Committed [short-sha] — rejected hunks detected`, list the rejections, then loop back to Step 0 (re-run tests after the fix). **If a rejection's text is short** (e.g. "I don't get what this flag means") **and the cited hunk contains more than one distinct change** (e.g. two flag additions in a usage block, two unrelated lines in the same hunk), ask the user which token the note refers to before fixing — a one-second clarification beats several minutes of guessing wrong and re-amending. Fix the rejected hunk itself; don't expand into adjacent pre-existing code (`guides/changeset-scope.md`).
+- **`0`** → `Committed [short-sha]`. If `.comments` carries advisory comments (`action` `fix-later` or `consider`), surface them — they don't gate the commit, but the user may want to act on them.
+- **`1`** → `Committed [short-sha] — fix-now comments`, list the `fix-now` comments (the `.comments` entries where `action == "fix-now"`), then loop back to Step 0 (re-run tests after the fix). Surface any advisory (`fix-later` / `consider`) comments too. **If a comment's `body` is short** (e.g. "I don't get what this flag means") **and the cited line range contains more than one distinct change** (e.g. two flag additions in a usage block, two unrelated lines in the same range), ask the user which token the comment refers to before fixing — a one-second clarification beats several minutes of guessing wrong and re-amending. Fix the commented lines themselves; don't expand into adjacent pre-existing code (`guides/changeset-scope.md`).
 - **`2`** → `Committed [short-sha] — unreviewed hunks, what do you want to change?`
 - **`3` or `absent`** → `Committed [short-sha] — review closed without a verdict, what do you want to change?`
 
-A difftool that speaks the sidecar contract (moor) returns the `0/1/2/3` verdict and the rejected-hunk feedback; any other configured difftool yields `absent` and you ask the user directly. Either way the commit has already landed — apply any requested changes, re-stage, amend the commit (it's unpushed), and re-launch.
+A difftool that speaks the sidecar contract (moor) returns the `0/1/2/3` verdict and the review comments; any other configured difftool yields `absent` and you ask the user directly. Either way the commit has already landed — apply any requested changes, re-stage, amend the commit (it's unpushed), and re-launch.

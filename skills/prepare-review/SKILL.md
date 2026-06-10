@@ -416,7 +416,7 @@ Map the user's selection to the actions below:
    command -v moor
    ```
 
-   **If `moor` is present**, open a one-off review of the current description vs. the draft so the user can reject specific hunks and attach a reason to each — directed, line-anchored feedback instead of a prose back-and-forth. Launch via the wrapper (**not** `moor` directly — the wrapper writes the `MOOR_CONTEXT` input header and prints the verdict on its stdout). The viewer blocks until closed, so launch as a **background** Bash call (`run_in_background: true`); a foreground call holds the turn open until the Bash timeout:
+   **If `moor` is present**, open a one-off review of the current description vs. the draft so the user can comment on specific lines with a reason — directed, line-anchored feedback instead of a prose back-and-forth. Launch via the wrapper (**not** `moor` directly — the wrapper writes the `MOOR_CONTEXT` input header and prints the verdict on its stdout). The viewer blocks until closed, so launch as a **background** Bash call (`run_in_background: true`); a foreground call holds the turn open until the Bash timeout:
 
    ```bash
    bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --files \
@@ -425,10 +425,10 @@ Map the user's selection to the actions below:
      --detail repo=<repo> --detail branch=<branch> --detail CR=<CR_URL>
    ```
 
-   When the background command completes, read its stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trips the command-substitution gate. The last lines carry the verdict: `REVIEW_VERDICT` (`0`/`1`/`2`/`3`/`absent`) and `REVIEW_OUTPUT` (compact JSON, with `.rejections` when the verdict is `1`). **Don't read silence as success** — only `REVIEW_VERDICT` `0` is approval; every other outcome either carries feedback to fold in or means the review never happened, so never write the description off the back of one.
+   When the background command completes, read its stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trips the command-substitution gate. The last lines carry the verdict: `REVIEW_VERDICT` (`0`/`1`/`2`/`3`/`absent`) and `REVIEW_OUTPUT` (compact JSON, with `.comments` when the verdict is `1`). **Don't read silence as success** — only `REVIEW_VERDICT` `0` is approval; every other outcome either carries feedback to fold in or means the review never happened, so never write the description off the back of one.
 
-   - **`0`** — reviewed clean, nothing rejected: treat as approval and write the draft to the CR (the **Yes** action above).
-   - **`1`** — rejected hunks exist: each entry in `REVIEW_OUTPUT`'s `.rejections` is `{file, hunk, line, reason}`, where `reason` is the user's inline feedback on that hunk. Fold every reason into a revised draft, then loop back to **Present the change**.
+   - **`0`** — reviewed clean, nothing blocking: treat as approval and write the draft to the CR (the **Yes** action above).
+   - **`1`** — fix-now comments exist: each entry in `REVIEW_OUTPUT`'s `.comments` is `{body, action, file?, startLine?, endLine?}`, where `body` is the user's inline feedback and `action` is `fix-now` (blocker), `fix-later`, or `consider`. Fold every `fix-now` comment into a revised draft — along with any advisory `fix-later` / `consider` comments worth incorporating — then loop back to **Present the change**.
    - **`2`** — the user closed with hunks still unreviewed: a partial pass, not approval. Ask what they want to change, then re-present.
    - **`3` or `absent`, or no `REVIEW_VERDICT` line appeared** — the review **did not complete**: moor closed before counting any hunks, crashed, or failed to launch. Do **not** treat this as approval and do **not** write the description. Surface what happened to the user — name the verdict, or that none was written — then fall back to a path that works: re-present the chat `diff` from **Present the change** and ask what to change (the moor-absent path below). If the user has a non-moor difftool configured, offer to open the two files in it (`git difftool --no-index <current-desc-path> <draft-path>`) as an alternative; don't silently retry moor, since the same failure will recur.
 
