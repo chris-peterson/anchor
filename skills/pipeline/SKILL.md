@@ -112,6 +112,20 @@ that pushed `main` directly), pass `--branch <b>` and/or `--sha <sha>`. In watch
 mode, poll cadence and the watch ceiling default to 15s / 30min and can be tuned
 with `--interval <s>` / `--timeout <s>`.
 
+**Track one named job** — when the ask is about a *specific* job rather than the
+whole pipeline (*"wait for the `cand-usw2-plan` job,"* *"did the plan job
+pass?"*), add `--job <name>`. It resolves the same pipeline, then reports or
+watches just that job — so a one-off `glab api .../jobs | filter-by-name | poll`
+loop becomes the same launch-and-read. `--watch` polls the job until it settles;
+the match is the exact job name (retried jobs resolve to the latest attempt).
+When you already have a pipeline id (e.g. from a URL the user pasted), pass
+`--pipeline <id>` to skip commit→pipeline resolution:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --job cand-usw2-plan --watch
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --pipeline 3435505 --job cand-usw2-plan
+```
+
 The output is `KEY=value` lines:
 
 - `PIPELINE_STATE` — `success` · `failed` · `canceled` · `skipped` · `manual` ·
@@ -121,6 +135,14 @@ The output is `KEY=value` lines:
 - `PIPELINE_URL` — the pipeline's web page (link it).
 - `PIPELINE_FAILED_JOBS` — present only when `PIPELINE_STATE=failed`: a JSON
   array of `{name, url}` (GitHub) or `{name, stage, url}` (GitLab).
+
+In `--job` mode the `PIPELINE_STATE`/`PIPELINE_URL` lines describe the parent
+pipeline for context, and three more lines carry the tracked job:
+
+- `PIPELINE_JOB_NAME` — the job name tracked.
+- `PIPELINE_JOB_STATE` — normalized like `PIPELINE_STATE`; `none` means no job by
+  that name exists in the pipeline yet (earlier stages may still be running).
+- `PIPELINE_JOB_URL` — the job's web page (link it).
 
 ## Report
 
@@ -144,6 +166,14 @@ Map `PIPELINE_STATE` to exactly this and nothing more:
 - **`PIPELINE_TIMEOUT=1`** → the watch ceiling elapsed before a terminal state;
   report the last state and offer to keep watching (re-launch with a longer
   `--timeout`).
+
+In `--job` mode, report `PIPELINE_JOB_STATE` for the named job with the same
+mapping (link `PIPELINE_JOB_URL`). A `none` here means no job by that name in the
+pipeline yet — in one-shot that's "not created yet, earlier stages may still be
+running"; in watch it means the appearance window elapsed without the job ever
+showing (check the name, or the stage is gated). Mention the parent
+`PIPELINE_STATE` only when it adds context (e.g. the pipeline failed elsewhere
+while this job passed).
 
 In watch mode the report *is* the notification — the harness surfaces it when
 the background watch completes, so there's nothing to schedule or poll.

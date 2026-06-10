@@ -268,6 +268,22 @@ glab api "projects/:fullpath/pipelines/<pipeline-id>/jobs?per_page=100" \
   | jq -c '[ .[] | select(.status == "failed") | {name, stage, url: .web_url} ]'
 ```
 
+**One named job in a pipeline.** To poll a single gating job (a Terraform plan
+job that the rest of the pipeline waits on, say) rather than the whole pipeline,
+filter the same jobs list by name. Don't hand-write the `until … sleep` loop —
+`pipeline-status.sh --job <name> [--watch]` wraps exactly this, resolving the
+pipeline for the commit (or `--pipeline <id>` to pin it). The underlying calls:
+
+```bash
+# GitHub — jobs in a run, filtered by name (latest attempt if retried).
+gh run view <run-id> --json jobs \
+  | jq -c '[ .jobs[] | select(.name == "<job>") ] | sort_by(.databaseId) | last'
+
+# GitLab — jobs in a pipeline, filtered by name.
+glab api "projects/:fullpath/pipelines/<pipeline-id>/jobs?per_page=100" \
+  | jq -c '[ .[] | select(.name == "<job>") ] | sort_by(.id) | last'
+```
+
 `glab ci status` / `glab ci get` and `gh run watch` exist for interactive use,
 but the JSON-returning `gh run` / `glab api` forms above are what reason reliably
 from a script.

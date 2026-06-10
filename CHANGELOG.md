@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+- `/anchor:pipeline` can now track a single named job, not just the whole
+  pipeline. Pass `--job <name>` to `scripts/pipeline-status.sh` (with `--watch`
+  to poll until that job settles) and it resolves the commit's pipeline, finds
+  the job by name — latest attempt if retried — and reports its state via
+  `PIPELINE_JOB_STATE` / `PIPELINE_JOB_URL`, with the parent pipeline as context.
+  Pass `--pipeline <id>` to target a pipeline directly (e.g. from a pasted URL)
+  and skip commit→pipeline resolution. This replaces the hand-written
+  `glab api .../jobs | filter-by-name | until … sleep` loop that watching one
+  gating job (a Terraform plan, say) otherwise required.
+
 ## 0.7.0
 
 ### Features
