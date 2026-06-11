@@ -4,8 +4,9 @@
 #   skills/*/SKILL.md -> docs/skills/<name>.md  (YAML frontmatter stripped)
 #   rules/*.md        -> docs/rules/<name>.md
 #   guides/*.md       -> docs/guides/<name>.md
-# The guides/ files are load-bearing — skills and rules read them at runtime via
-# ${CLAUDE_PLUGIN_ROOT}/guides/<name>.md — so docs/ stays a pure render target.
+#   templates/*.md    -> docs/templates/<name>.md
+# The guides/ and templates/ files are load-bearing — skills read them at runtime
+# via ${CLAUDE_PLUGIN_ROOT}/<dir>/<name>.md — so docs/ stays a pure render target.
 # Used by `just docs` and the GitHub Pages deploy workflow.
 
 set -euo pipefail
@@ -23,3 +24,6 @@ cp rules/*.md docs/rules/
 
 mkdir -p docs/guides
 cp guides/*.md docs/guides/
+
+mkdir -p docs/templates
+cp templates/*.md docs/templates/

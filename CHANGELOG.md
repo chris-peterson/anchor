@@ -1,5 +1,37 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+- anchor is now configurable without committing an anchor-specific file to your
+  repo. The base — tone, why-not-what discipline, criticality ordering — stays
+  baked in; you extend *around* it through two surfaces:
+  - **`git config anchor.*` keys** — `commit` and `prepare-review` read
+    `anchor.workTrackerBaseUri` (turns a mentioned ticket — a full URL, or a
+    bare id expanded against the base — into a `Refs:` trailer / CR link),
+    `anchor.reviewBudgetMins` (the reviewer focus time you expect, steering
+    brevity and depth), and `anchor.commitRules` / `anchor.crRules` for extra
+    rules layered onto the defaults (`mrRules` / `prRules` override `crRules` per
+    forge). Project-local lives in `.git/config` (untracked); `--global` spans
+    repos.
+  - **Forge-native CR templates** — `prepare-review` detects
+    `.gitlab/merge_request_templates/*.md` / `.github/pull_request_template.md`
+    and composes anchor's prose into the team's scaffolding instead of replacing
+    it.
+
+  New guide [`configuring.md`](https://chris-peterson.github.io/anchor/#/guides/configuring)
+  documents the key set and the extension model.
+
+- The output shapes the skills produce are now documented artifacts under a new
+  `templates/` tree, rendered into the docs site and cross-linked to the
+  configurable items: [commit message](https://chris-peterson.github.io/anchor/#/templates/commit-message)
+  (the cbea.ms rules + the `Refs:` trailer) and
+  [CR description](https://chris-peterson.github.io/anchor/#/templates/cr-description)
+  (the section shape + the forge-template probing rules). The CR template moved
+  out of `skills/prepare-review/` into `templates/`; both skills now read their
+  shape from `templates/`.
+
 ## 0.8.0
 
 ### Features

@@ -6,7 +6,11 @@
   - [resolve-feedback](/skills/resolve-feedback)
   - [pipeline](/skills/pipeline)
 - [Ambient rules](/ambient-rules)
+- Templates
+  - [Commit message](/templates/commit-message)
+  - [CR description](/templates/cr-description)
 - Guides
+  - [Configuring anchor](/guides/configuring)
   - [Forge cookbook](/guides/forge-cookbook)
   - [Description vs docs](/guides/description-vs-docs)
   - [Staying in changeset scope](/guides/changeset-scope)

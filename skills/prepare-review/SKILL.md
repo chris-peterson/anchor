@@ -227,6 +227,31 @@ If the only open item is the WHY, ask:
 
 ## Step 3: Draft the description
 
+### Honor an existing forge template
+
+Before drafting, check whether the project already ships a CR template:
+
+- **GitLab:** `.gitlab/merge_request_templates/*.md` (respect the configured default if more than one)
+- **GitHub:** `.github/pull_request_template.md` or `.github/PULL_REQUEST_TEMPLATE/*.md`
+
+If one exists, it's the team's required scaffolding — **compose into it, don't replace it.** Fill the sections it defines, preserve its checklists and headings verbatim, and supply anchor's prose where it leaves prose to the author; on a structure conflict the team template wins. The composition rules are documented in the "Honoring a project's forge template" section of `templates/cr-description.md`.
+
+### Honor `anchor.*` config
+
+Read the project + global anchor keys once:
+
+```bash
+git config --get-regexp '^anchor\.' 2>/dev/null
+```
+
+`--get-regexp` returns the names lowercased (`anchor.reviewbudgetmins`); match them case-insensitively. Apply the keys relevant to a CR description; absent keys keep anchor's defaults — never invent a value:
+
+- **`anchor.reviewBudgetMins`** — the minutes of focused review you expect this CR to get (an *input*, not a length cap; unset behaves like ≈10). A tight budget (≈5) leads with the essentials and cuts asides hard; a generous one (≈30) keeps more supporting context and depth. This steers how aggressively the anti-recency and "What to avoid" passes cut.
+- **`anchor.workTrackerBaseUri`** — when the user mentions a ticket (a full tracker URL, or a bare id), link it in the description: use a full URL as-is, or build `<base-uri><id>` from a bare id. No mention, no link — don't scrape the branch or prompt.
+- **`anchor.crRules`**, with forge overrides **`anchor.mrRules`** (GitLab) / **`anchor.prRules`** (GitHub) — an extra rule layered onto the default CR-description rules. Pick the forge by the `origin` remote: use `mrRules` / `prRules` when set, else fall back to `crRules`.
+
+See `guides/configuring.md` for the full key set.
+
 ### Anti-recency-bias check (do this *before* drafting Context)
 
 Recency bias is the dominant failure mode here: detail you spent the last hour polishing carries disproportionate weight in working memory and anchors the Context section even when the CR is about something much larger. **The headline is what the *branch* was for — usually the first commit, not the last.** Mechanical fix:
@@ -243,7 +268,7 @@ A concise imperative phrase (under 72 characters) that captures the change. Same
 
 ### Body structure
 
-Draft the description following the section template in [`cr-description-template.md`](cr-description-template.md): **Context**, **Review guide**, **Approach & trade-offs** *(rare)*, **Testing** *(rare)*, and **Validation** *(shared components only)*. The template owns the *shape* — which sections, in what order, and what each is for; the guidance below owns the *technique* for realizing it.
+Draft the description following the section template in `templates/cr-description.md`: **Context**, **Review guide**, **Approach & trade-offs** *(rare)*, **Testing** *(rare)*, and **Validation** *(shared components only)*. The template owns the *shape* — which sections, in what order, and what each is for; the guidance below owns the *technique* for realizing it.
 
 **Deep-link construction (Review guide).** Always deep-link to the actual line, not just the file — reviewers should be one click away from the hunk you're pointing them at. Construction differs by forge:
 
@@ -366,12 +391,12 @@ Categories of cruft. If something fits one of these, it doesn't belong in the de
 
 - **Drift artifacts** — recency-polish bullets (run the anti-recency check above; cut anything dispositioned "Footnote" or "Cut"); implementation-history phrasing that frames the change by what it *replaces* (`now-deprecated`, `previously`, `formerly`, `the old`, `we used to`, `used to be`); past-or-future speculation ("this was originally X", "will eventually become Y", "could one day be extended to Z"); invented incidents, audiences, or current state. Every factual claim about prior workflow or current state needs a citable source — something the user said, the diff shows, or a doc establishes. (Exception: a deprecation CR whose entire purpose is announcing the deprecation — there, naming the deprecated thing is the point.)
 - **Loaded framing** — temporal/historical blame ("have always omitted", "has never worked"); minimizing qualifiers about size, whether adjectives ("one short block", "a tiny fix", "trivial change") or counts used as a framing device ("one line, in …", "just a one-liner", "only N lines") — even on a genuinely small diff, lead with *where* the change is, not *how little* it is; self-congratulatory adverbs ("correctly omits", "properly handles"); defensive softeners on technical claims ("purely additive", "completely backward-compatible"). The factual claim almost always survives the trim — and reads cleaner for it.
-- **Things the diff already shows** — flat lists of files changed without criticality ordering; re-stated commit messages; implementation details obvious from reading the code; dead-end approaches you tried and abandoned; anything a reviewer could derive from one click on a deep link; Review-guide bullets that narrate a hunk in prose instead of pointing at it (the point-of-generation rule lives in the Review guide section of `cr-description-template.md`).
+- **Things the diff already shows** — flat lists of files changed without criticality ordering; re-stated commit messages; implementation details obvious from reading the code; dead-end approaches you tried and abandoned; anything a reviewer could derive from one click on a deep link; Review-guide bullets that narrate a hunk in prose instead of pointing at it (the point-of-generation rule lives in the Review guide section of `templates/cr-description.md`).
 - **Things that belong elsewhere** — author-only checklists (eyeball staging, fill a spot-check matrix, confirm rendering, drive a fixture table — these live in a personal task list, a self-review pass, or CR comments, not the description body); changelog content the CR already ships; decisions a reviewer wouldn't have questioned (Approach & trade-offs is for *contested* choices); testing claims CI already provides; reference-grade explanation of standing behavior that grew while drafting — with the author's sign-off, split it into the repo docs and link it from the description (high bar; see the bundled `guides/description-vs-docs.md`).
 - **Step-2 leftovers** — hedges, offers, or open questions ("happy to / open to / let me know if"); unsubstantiated verification claims ("verified" / "tested" / "confirmed" for things you didn't actually exercise). If ambiguity is still in flux, defer drafting; don't park it in the description.
 - **Boilerplate** — generic openings ("This change updates…"); assuming domain knowledge the reviewer doesn't have.
 
-The single exception to "no verification content in the description body" is the **Validation** evidence row for shared components — see the Validation section in [`cr-description-template.md`](cr-description-template.md). That row records *evidence*, not a todo.
+The single exception to "no verification content in the description body" is the **Validation** evidence row for shared components — see the Validation section in `templates/cr-description.md`. That row records *evidence*, not a todo.
 
 ## Step 4: Output
 

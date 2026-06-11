@@ -92,5 +92,10 @@ degrades gracefully when absent.
 
 - **Skills** — per-skill pages in the sidebar, sourced directly from each
   `SKILL.md`
+- [Configuring anchor](/guides/configuring) — extend the commit and CR output
+  with `git config anchor.*` keys and your forge's own MR/PR template
 - [Forge cookbook](/guides/forge-cookbook) — the `gh` / `glab` invocations and
   etiquette the skills follow
+- **Templates** — the output shapes the skills produce:
+  [commit message](/templates/commit-message) and
+  [CR description](/templates/cr-description)

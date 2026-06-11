@@ -122,17 +122,22 @@ If both staged and `HEAD~1` are empty, say so and stop.
 
 ## Step 2: Write the commit message
 
-Follow the seven rules from https://cbea.ms/git-commit/:
+Write the message following the format in `templates/commit-message.md` — it owns the *shape* (the [cbea.ms](https://cbea.ms/git-commit/) rules and the trailer). Spend your effort on the *why*; the code already shows the *how*. If the change is trivial (typo fix, one-liner), a subject-only message is fine.
 
-1. **Separate subject from body with a blank line**
-2. **Limit the subject line to 50 characters** — hard limit 72
-3. **Capitalize the subject line**
-4. **Do not end the subject line with a period**
-5. **Use the imperative mood** — "Add feature" not "Added feature". Test: "If applied, this commit will _[subject line]_"
-6. **Wrap the body at 72 characters**
-7. **Use the body to explain what and why, not how**
+### Honor `anchor.*` config
 
-Focus on the *why* — the code already shows the *how*. If the change is trivial (typo fix, one-liner), a subject-only message is fine.
+Read the project + global anchor keys once:
+
+```bash
+git config --get-regexp '^anchor\.' 2>/dev/null
+```
+
+`--get-regexp` returns the names lowercased (`anchor.worktrackerbaseuri`); match them case-insensitively. Apply the keys relevant to a commit; absent keys keep anchor's defaults — never invent a value:
+
+- **`anchor.workTrackerBaseUri`** — when the user mentions a ticket (a full tracker URL, or a bare id), append a `Refs:` trailer (a footer line after a blank line, below the body): use a full URL as-is, or build `<base-uri><id>` from a bare id. Don't scrape the branch or prompt for a ticket — no mention, no trailer. Skip it for a trivial subject-only commit unless the user asks.
+- **`anchor.commitRules`** — an extra rule layered onto the default commit-message rules for this message (the escape hatch for anything without a dedicated key).
+
+See `guides/configuring.md` for the full key set.
 
 ## Step 3: Output
 

@@ -24,8 +24,9 @@ hooks/emit-rules.sh          the injecting hook (registered in hooks/hooks.json)
 scripts/review-diff.sh       launch the configured difftool through its review sidecar; print the verdict on stdout
 scripts/pipeline-status.sh   resolve / watch a commit's pipeline on the forge; print a normalized verdict on stdout
 scripts/look-ahead.sh        unpushed-commit count (bash-analyzer-safe helper)
-guides/                      load-bearing reference the skills/rules read at runtime (forge cookbook, description-vs-docs, changeset-scope)
-docs/                        end-user docs site (docsify, GitHub Pages); skills/, rules/, guides/ are rendered in
+guides/                      load-bearing reference the skills/rules read at runtime (configuring, forge cookbook, description-vs-docs, changeset-scope)
+templates/                   the output shapes the skills produce (commit-message, cr-description), read at runtime
+docs/                        end-user docs site (docsify, GitHub Pages); skills/, rules/, guides/, templates/ are rendered in
 ```
 
 ## Optional integrations
