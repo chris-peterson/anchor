@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.0
 
 ### Features
 
@@ -31,6 +31,19 @@
   (the section shape + the forge-template probing rules). The CR template moved
   out of `skills/prepare-review/` into `templates/`; both skills now read their
   shape from `templates/`.
+
+### Fixes
+
+- Review feedback from moor surfaces correctly again. moor consolidated its
+  sidecar output into a single `comments[]` array (each `fix-now` / `fix-later`
+  / `consider`); `commit`, `preview`, and `prepare-review` now read it, so a
+  fix-now review shows the actual comments and line ranges instead of a bare
+  "rejected hunks detected" with no detail.
+
+### Other
+
+- The forge cookbook clarifies that `--hostname` is a `glab api`-only flag —
+  porcelain subcommands like `glab mr view` reject it.
 
 ## 0.8.0
 
