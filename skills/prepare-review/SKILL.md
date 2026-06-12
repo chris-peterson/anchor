@@ -46,61 +46,58 @@ flowchart TD
     end
 ```
 
+## Execute quietly — do the thinking, don't show it
+
+**The reviewer reviews A → B — the net change from base to final state — not the path you took to get there.** The minor pivots, dead ends, and intermediate iterations of this session are development *process*, not the change under review. This skill's recurring failure is narrating that process — to the user, or into the description — instead of just producing the artifact that describes A → B.
+
+Step 1's recon and Step 4's diff/moor review each fold into one call precisely so there is nothing to narrate between them: run the call, read the result, move on.
+
+**The entire visible output of a run is:**
+
+1. a decision the script flagged that needs the user (`BEHIND`, a `STATE` mismatch, a `CR_CREATE_ERROR`);
+2. the resolved CR URL, once;
+3. the Step 2 questions;
+4. the drafted description, the Step 4 options, and the final verdict.
+
+**Everything else is internal — keep it out of the visible output:**
+
+- **Per-step plumbing** — "origin is GitLab, 1 ahead, no template, anchors computed, tree clean." The user doesn't act on recon, and the script already ran it.
+- **The anti-recency disposition** (Step 3) — the Centerpiece / Footnote / Cut rundown is scratch that *shapes* the draft; it is not output.
+- **Session-internal history** — the path from A to B: "here's what I just did / iterated on / cleaned up." Process, not the change. It belongs nowhere the reviewer reads — not the chat, and not the description, where it's the "Drift artifacts" Step 3 tells you to cut.
+
+Reserve prose for the steps that need *your* judgment or the *user's* input — the prompts in Step 2, drafting in Step 3, presenting options in Step 4. Those produce the artifact; narration *about* producing it does not.
+
 ## Step 1: Gather the changeset
 
-Determine the default branch (typically `main`; sometimes `master` or another name). If the symbolic ref is wrong or missing, fall back to `main`, then `master`:
+Run the gather script once. It performs Step 1's deterministic recon and the safe default-path setup — detect the forge, resolve or auto-open the draft CR, count the gap to the default branch, capture the current description as the Step 4 diff baseline, check local state against the CR head, read the project template and `anchor.*` config — then prints one `KEY=value` block on stdout:
 
 ```bash
-git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@'
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh"
 ```
 
-The commands below say `main` literally — substitute the detected name when running them.
+Read the block and act only on what it surfaces; don't re-run the individual probes. The keys:
 
-### Resolve the CR URL
+| Key | What to do with it |
+|-----|--------------------|
+| `FORGE` | `github` / `gitlab` picks the CLI for the rest of the skill; `none` → the URL-free `skip-deep-links` path |
+| `DEFAULT_BRANCH` | substitute for `main` in the diff/log commands below |
+| `ON_DEFAULT_BRANCH=1` | HEAD is the default branch — no CR; the no-commits-ahead check below stops the run |
+| `AHEAD=0` | nothing ahead of the default branch — say so and stop |
+| `BEHIND=<n>` | `>0` → run the rebase dialog below |
+| `CR_URL` / `CR_IID` | the resolved or freshly-opened draft — deep-link target and write target (empty on `skip-deep-links`) |
+| `CR_DRAFT` | gates the post-rebase force-push (see below) |
+| `STATE` | `match` → proceed; anything else → surface and stop (see "Act on `STATE`") |
+| `CURRENT_DESC_PATH` | baseline the Step 4 diff reads (empty on `skip-deep-links`) |
+| `TEMPLATE_PATH` | project CR template to compose into (Step 3) |
+| `ANCHOR_CONFIG` | `anchor.*` keys to apply (Step 3), as JSON |
+| `FILE_ANCHORS` | precomputed `sha1(path)` per changed file for GitLab deep links (Step 3), as JSON |
 
-Deep links in the review guide require a real CR URL. **The expected workflow is that the branch is already pushed and a draft CR is already open before `/prepare-review` runs** — that way the description's deep links resolve to the actual review on the actual forge. Resolve the URL by detecting the forge from the `origin` remote and querying for an open CR on the current branch:
+If the block carries a `CR_CREATE_ERROR=…` line, the draft-open hit an auth or push failure — surface it and ask the user to refresh credentials; do **not** fall back to the URL-free path (the fail-fast-on-auth rule).
 
-```bash
-# GitLab origin
-glab mr view --output json 2>/dev/null | jq -r '.web_url'
-```
+**Why auto-open is the default.** A draft CR is cheap and reversible: it requests no review, the push already triggered any branch-level CI, and self-assign notifies only you. The deep links are the load-bearing part of the description, and a placeholder-only draft is broken on arrival — opening the real CR first is what makes the description useful. The script does **not** sniff for a "merges direct to `main`, never opens CRs" convention, because there's no reliable signal for it. Two cases give way to the `skip-deep-links` path:
 
-```bash
-# GitHub origin
-gh pr view --json url --jq '.url' 2>/dev/null
-```
-
-Use the resolved URL in place of `<CR_URL>` when constructing deep links in Step 3.
-
-If no CR is open, **auto-open a draft** — no prompt. A draft CR is non-disruptive: it requests no review, the branch push already triggered any branch-level CI, and self-assign notifies only you. So the common case (no CR yet → open one) just happens, and drafting proceeds against the freshly-opened CR. The deep links are the load-bearing part of the description and a placeholder-only draft is broken on arrival, so opening the real CR first is what makes the description useful. A draft is also reversible — close it if it turns out you didn't want it.
-
-Create a **draft**, **assigned to you**, set to **delete the source branch on merge**, then resolve the URL:
-
-- **GitHub:** `gh pr create --draft --fill --assignee @me`. (Branch deletion on merge is a repo setting; if it's off, pass `--delete-branch` to `gh pr merge` at merge time.)
-- **GitLab:** capture your username once (`glab api user | jq -r '.username'`), then `glab mr create --draft --fill --yes --target-branch main --remove-source-branch --assignee <username>` — `--yes` matters: without it the command stalls on an interactive submission prompt. For a file-sourced description, use the API form in the bundled forge cookbook (`guides/forge-cookbook.md`), which assigns via a follow-up `glab mr update`.
-
-**On 401/403 or a similar auth error at create:** surface it and ask the user to refresh credentials — do not silently fall back to the URL-free path (per the fail-fast-on-auth rule).
-
-**Non-default escapes.** Auto-open is the default — the skill does **not** try to sniff out whether a project uses CRs, because there's no reliable signal for a "merges direct to `main`, never opens CRs" team convention. It stays the default precisely because a draft is cheap and reversible: a mis-fired one costs a `close`, not a disrupted review. Two cases give way to a URL-free description (the deep-link-free shape the rest of the skill calls the `skip-deep-links` path):
-
-- **HEAD is the default branch itself** — the one no-CR case detectable with confidence. There's no feature branch to open a CR *from* (source would equal target and the create call fails), so skip auto-open and proceed URL-free. (The "no commits ahead of `main`" check later in Step 1 stops the run anyway; this just avoids a confusing create failure first.)
-- **User asks not to open one** — the repo merges direct to `main` without CRs, or the CLI's default forge instance is wrong for this repo. Proceed URL-free, or — if they'd rather open the draft themselves — pause until they open one in the web UI and confirm, then resolve the URL.
-
-### Capture the current description (baseline for the diff)
-
-Editing an open CR's description is a *revision*: the reviewer — and you — want to see what changed, not re-read the whole body. When a CR already existed, pull its current description to a temp file now; Step 4 diffs the draft against it. Pick the path with `mktemp -u /tmp/cr-desc-current.XXXXXX.md`, then write the body to it:
-
-```bash
-# GitHub
-gh pr view --json body --jq '.body' > <current-desc-path>
-```
-
-```bash
-# GitLab
-glab mr view --output json | jq -r '.description' > <current-desc-path>
-```
-
-A draft you just auto-opened carries only a `--fill` body or none; that auto/empty baseline is fine — the Step 4 diff renders the draft as all-additions. Skip this only on the `skip-deep-links` path, where no CR exists to diff against.
+- **`ON_DEFAULT_BRANCH=1`** — HEAD is the default branch, so there's no feature branch to open a CR *from*; the script skips auto-open.
+- **User asks not to open one** — the repo merges direct to `main` without CRs, or the CLI's default forge instance is wrong for this repo. Re-run with `--no-open` to proceed URL-free; or, if they'd rather open the draft themselves, pause until they confirm one is open, then re-run so the script resolves its URL.
 
 ### Link the CR to tack (optional)
 
@@ -122,43 +119,20 @@ tack done:
 On `yes`, run `tack done <slug> <tack-id>`. Leave it open if more work on the
 tack is expected after review.
 
-### Rebase on main
+### Rebase on main when `BEHIND > 0`
 
-Bring the branch up to date with `origin/main` before drafting. The primary reason is reconciliation: a branch that doesn't contain `origin/main` can't merge — every conflict with intervening commits has to be resolved before the CR can land, and doing it now (while the change is fresh) is cheaper than doing it after review when context has gone cold. Secondary: deep links anchor to lines in the *current* diff, so a behind-main branch ships a description pointing at content that won't compose cleanly at merge time.
+`BEHIND=0` → skip this section. Otherwise the branch needs `origin/<default>` before it can merge — every conflict with intervening commits has to be resolved before the CR can land, and doing it now (while the change is fresh) is cheaper than after review when context has gone cold. Secondary: deep links anchor to lines in the *current* diff, so a behind-default branch points at content that won't compose cleanly at merge time. Ask:
 
-```bash
-git fetch origin main
-git merge-base --is-ancestor origin/main HEAD
-```
+> Branch is `<BEHIND>` commits behind `origin/<default>`. Rebase now? `[yes / skip]`
 
-If the second command exits 0, the branch already contains `origin/main` — skip this section. Otherwise count the gap:
-
-```bash
-git rev-list --count HEAD..origin/main
-```
-
-Then ask:
-
-> Branch is `<N>` commits behind `origin/main`. Rebase now? `[yes / skip]`
-
-- `yes` — run `git rebase origin/main`. On conflict, resolve in place: read both sides of each conflicted region, pick the resolution that preserves the intent of *both* changes (not just one side), `git add` the resolved files, then `git rebase --continue`. Loop until the rebase completes. Surface to the user when intent is genuinely ambiguous — two competing changes to the same logic, semantic conflicts the textual markers don't show, a rename colliding with an edit. Don't guess in those cases; show the conflict and ask. If a hook fails mid-rebase, surface the failure rather than retrying with `--no-verify`.
+- `yes` — run `git rebase origin/<default>`. On conflict, resolve in place: read both sides of each conflicted region, pick the resolution that preserves the intent of *both* changes (not just one side), `git add` the resolved files, then `git rebase --continue`. Loop until the rebase completes. Surface to the user when intent is genuinely ambiguous — two competing changes to the same logic, semantic conflicts the textual markers don't show, a rename colliding with an edit. Don't guess in those cases; show the conflict and ask. If a hook fails mid-rebase, surface the failure rather than retrying with `--no-verify`.
 - `skip` — proceed with the current branch state. Note that deep links may render against lines that have shifted by merge time.
 
-A rebase rewrites history, so the push that follows is a force-push. Gate it on the CR's **draft flag** — the author's declared review state, which is reliable in a way that inferred engagement signals (note counts, reviewer lists) are not:
+A rebase rewrites history, so the push that follows is a force-push. Gate it on `CR_DRAFT` — the author's declared review state, which is reliable in a way that inferred engagement signals (note counts, reviewer lists) are not:
 
-```bash
-# GitLab
-glab mr view --output json | jq '.draft'
-```
+**`CR_DRAFT=true`** — mutable history is the norm (anchor opens CRs as drafts for exactly this reason). Rebase and force-push with lease without further ceremony.
 
-```bash
-# GitHub
-gh pr view --json isDraft --jq '.isDraft'
-```
-
-**Draft CR** — mutable history is the norm (anchor creates CRs as drafts for exactly this reason). Rebase and force-push with lease without further ceremony.
-
-**Ready (non-draft) CR** — a reviewer may already be looking, and there's no reliable signal for whether they have. Force-pushing over commits they've seen destroys their "changes since you last looked" diff and marks inline threads outdated. Engagement signals are advisory context for the prompt (reviewers / discussion count via `glab api projects/:fullpath/merge_requests/<iid> | jq '{reviewers, user_notes_count}'` or `gh pr view --json reviews,reviewRequests,comments`), but the decision is the user's — ask before proceeding:
+**`CR_DRAFT=false`** (ready) — a reviewer may already be looking, and there's no reliable signal for whether they have. Force-pushing over commits they've seen destroys their "changes since you last looked" diff and marks inline threads outdated. Engagement signals are advisory context for the prompt (reviewers / discussion count via `glab api projects/:fullpath/merge_requests/<CR_IID> | jq '{reviewers, user_notes_count}'` or `gh pr view --json reviews,reviewRequests,comments`), but the decision is the user's — ask before proceeding:
 
 > This CR is marked ready. Rebasing now force-pushes over commits a reviewer may have seen, which resets their incremental diff. Rebase anyway? `[yes / skip]`
 
@@ -172,6 +146,8 @@ git push --force-with-lease
 
 ### Read the diff and commit history
 
+Substitute `DEFAULT_BRANCH` from the block for `main`:
+
 ```bash
 git log main..HEAD --oneline
 ```
@@ -184,23 +160,17 @@ git diff main...HEAD --stat
 git diff main...HEAD
 ```
 
-If there are no commits ahead of `main`, say so and stop.
+(`AHEAD=0` already told you to stop if nothing is ahead.)
 
-### Sanity-check local state against the CR head
+### Act on `STATE`
 
-Before drafting, confirm the local state matches what reviewers will see. The deep links you'll generate point at specific lines of the *current* CR diff — drafting against stale state ships a description that renders against content the reviewer can't see. Two checks:
+The deep links you'll generate point at specific lines of the *current* CR diff, so drafting against stale state ships a description that renders against content the reviewer can't see. `STATE=match` → proceed. Otherwise stop and surface — *do not* draft:
 
-```bash
-git status --porcelain        # any uncommitted changes?
-git rev-parse HEAD            # local HEAD
-```
+- **`dirty`** — uncommitted changes in the working tree. Common cause: a multi-step cleanup whose steps were each confirmed in conversation but never committed. Ask the user whether to amend (or new-commit) and push before drafting.
+- **`head-mismatch`** — local HEAD ≠ CR head: the user's expected push hasn't landed, or you're on the wrong branch. Common cause: a force-push blocked by a hook, or a no-op push because the working tree was never committed. Surface the SHA mismatch (`LOCAL_HEAD_SHA` vs `CR_HEAD_SHA`) and ask.
+- **`dirty+head-mismatch`** — both of the above.
 
-Compare to the CR head SHA from the resolved URL (the `sha` field in `glab mr view --output json` or `gh pr view --json headRefOid`). If either check disagrees with the CR head, stop and surface the mismatch — *do not* draft:
-
-- **Uncommitted changes in the working tree** — edits exist that haven't been folded into a commit. Common cause: a multi-step cleanup whose steps were each confirmed in conversation but never committed. Ask the user whether to amend (or new-commit) and push before drafting.
-- **Local HEAD ≠ CR head** — the user's expected push hasn't actually landed, or you're on the wrong branch. Common cause: a force-push attempt that was blocked by a hook, or a no-op push because the working tree was never committed. Surface the SHA mismatch and ask.
-
-State drift between conversation belief and repo reality is silent and expensive. Catching it costs one `git rev-parse`; missing it ships a broken description.
+State drift between conversation belief and repo reality is silent and expensive. The script's read-only state check catches it; missing it ships a broken description.
 
 ## Step 2: Resolve open questions before drafting
 
@@ -229,22 +199,11 @@ If the only open item is the WHY, ask:
 
 ### Honor an existing forge template
 
-Before drafting, check whether the project already ships a CR template:
-
-- **GitLab:** `.gitlab/merge_request_templates/*.md` (respect the configured default if more than one)
-- **GitHub:** `.github/pull_request_template.md` or `.github/PULL_REQUEST_TEMPLATE/*.md`
-
-If one exists, it's the team's required scaffolding — **compose into it, don't replace it.** Fill the sections it defines, preserve its checklists and headings verbatim, and supply anchor's prose where it leaves prose to the author; on a structure conflict the team template wins. The composition rules are documented in the "Honoring a project's forge template" section of `templates/cr-description.md`.
+`TEMPLATE_PATH` from Step 1's block names the project's CR template (`.gitlab/merge_request_templates/*.md` or `.github/pull_request_template.md`); empty means none. When set, it's the team's required scaffolding — **compose into it, don't replace it.** Fill the sections it defines, preserve its checklists and headings verbatim, and supply anchor's prose where it leaves prose to the author; on a structure conflict the team template wins. The composition rules are documented in the "Honoring a project's forge template" section of `templates/cr-description.md`.
 
 ### Honor `anchor.*` config
 
-Read the project + global anchor keys once:
-
-```bash
-git config --get-regexp '^anchor\.' 2>/dev/null
-```
-
-`--get-regexp` returns the names lowercased (`anchor.reviewbudgetmins`); match them case-insensitively. Apply the keys relevant to a CR description; absent keys keep anchor's defaults — never invent a value:
+`ANCHOR_CONFIG` from Step 1's block holds the project + global `anchor.*` keys as JSON (`{}` when none). The keys come back lowercased (`anchor.reviewbudgetmins`); match them case-insensitively. Apply the keys relevant to a CR description; absent keys keep anchor's defaults — never invent a value:
 
 - **`anchor.reviewBudgetMins`** — the minutes of focused review you expect this CR to get (an *input*, not a length cap; unset behaves like ≈10). A tight budget (≈5) leads with the essentials and cuts asides hard; a generous one (≈30) keeps more supporting context and depth. This steers how aggressively the anti-recency and "What to avoid" passes cut.
 - **`anchor.workTrackerBaseUri`** — when the user mentions a ticket (a full tracker URL, or a bare id), link it in the description: use a full URL as-is, or build `<base-uri><id>` from a bare id. No mention, no link — don't scrape the branch or prompt.
@@ -260,7 +219,7 @@ Recency bias is the dominant failure mode here: detail you spent the last hour p
 2. **Write a disposition for each** against *would a fresh reviewer consider this central?* — **Centerpiece** (lead Context), **Footnote** (one bullet in Review guide), or **Cut**.
 3. **If everything came out "centerpiece", redo it.** Follow-up commits are footnotes. If a follow-up deserves co-headline status, it's actually a separate CR.
 
-Write the list out in the conversation before drafting. A check you didn't write down is a check you didn't run.
+Run this check **internally** — it shapes what you draft, but the disposition list itself is session-internal scratch, not output. Do **not** print the "Centerpiece / Footnote / Cut" rundown to the user; the only thing they see from this step is the resulting draft. (See **Execute quietly** at the top.)
 
 ### Title
 
@@ -272,13 +231,7 @@ Draft the description following the section template in `templates/cr-descriptio
 
 **Deep-link construction (Review guide).** Always deep-link to the actual line, not just the file — reviewers should be one click away from the hunk you're pointing them at. Construction differs by forge:
 
-- **GitLab:** `<CR_URL>/diffs#<file-anchor>_<old-line>_<new-line>` where `<file-anchor>` is `sha1(<repo-relative-file-path>)`. Compute it with:
-
-  ```bash
-  printf "%s" "path/to/file.ext" | sha1sum | cut -d' ' -f1
-  ```
-
-  For a file-level link (no specific line), just use `<CR_URL>/diffs#<file-anchor>`. For pure additions, use the new line number for both `<old-line>` and `<new-line>` — the link still resolves.
+- **GitLab:** `<CR_URL>/diffs#<file-anchor>_<old-line>_<new-line>` where `<file-anchor>` is `sha1(<repo-relative-file-path>)` — already computed per changed file in `FILE_ANCHORS` from Step 1's block. (You still pick the line numbers; only the path-hash is precomputed.) For a file-level link (no specific line), just use `<CR_URL>/diffs#<file-anchor>`. For pure additions, use the new line number for both `<old-line>` and `<new-line>` — the link still resolves.
 
 - **GitHub:** `<CR_URL>/files#diff-<file-anchor>R<new-line>` (or `L<new-line>` for the left/old side). The `<file-anchor>` for GitHub is `sha256(<file-path>)` — `gh` doesn't expose it directly, so fall back to opening the CR's "Files changed" tab and copying the link from the line-number gutter when in doubt.
 
@@ -402,13 +355,13 @@ The single exception to "no verification content in the description body" is the
 
 Write the drafted description to a temp file (`mktemp -u /tmp/cr-desc-draft.XXXXXX.md`) — both the diff presentation here and the moor edit loop below read it.
 
-**Present the change.** When you captured a current description in Step 1, show what changed rather than the whole body — diff the draft against the baseline and present it in a fenced `diff` block:
+**Present the change.** When `CURRENT_DESC_PATH` from Step 1's block is non-empty (any CR exists — including a freshly-opened draft, whose `--fill` baseline makes the draft render as all-additions), show what changed rather than the whole body — diff the draft against that baseline and present it in a fenced `diff` block:
 
 ```bash
-git --no-pager diff --no-index <current-desc-path> <draft-path>
+git --no-pager diff --no-index <CURRENT_DESC_PATH> <draft-path>
 ```
 
-When there's no baseline (a brand-new CR, or the `skip-deep-links` path), display the full description in a fenced code block instead. Use markdown formatting appropriate for the platform (GitHub, GitLab, etc.). After presenting, offer to write the description back to the forge — see the final prompt below.
+When `CURRENT_DESC_PATH` is empty (the `skip-deep-links` path, where no CR exists), display the full description in a fenced code block instead. Use markdown formatting appropriate for the platform (GitHub, GitLab, etc.). After presenting, offer to write the description back to the forge — see the final prompt below.
 
 ### Output checklist (verify before presenting)
 
@@ -433,7 +386,7 @@ Map the user's selection to the actions below:
 1. **Yes (write)** *(default)* — push the description to the open CR. Editing a description is reversible, so this is the low-friction default. On 401/403 or similar auth failure, surface the error and ask the user to refresh credentials — do not silently fall back to copy-only. The `<draft-path>` is the temp file you wrote at the top of Step 4.
 
    - **GitHub:** `gh pr edit --body-file <draft-path>`.
-   - **GitLab:** use the API form `glab api -X PUT projects/:fullpath/merge_requests/<iid> -F "description=@<draft-path>"` — `glab mr update -d` doesn't accept a file. See the [forge cookbook](https://chris-peterson.github.io/anchor/#/guides/forge-cookbook) for the full canonical invocation.
+   - **GitLab:** use the API form `glab api -X PUT projects/:fullpath/merge_requests/<CR_IID> -F "description=@<draft-path>"` — `glab mr update -d` doesn't accept a file. See the [forge cookbook](https://chris-peterson.github.io/anchor/#/guides/forge-cookbook) for the full canonical invocation.
 2. **No (copy only)** — print the description for the user to paste into the web UI themselves. Useful when the user wants to hand-edit before pasting, or when the CLI's default forge instance is wrong for this repo.
 3. **Edit** — the user wants to adjust something. [moor](https://github.com/chris-peterson/moor) is the preferred surface for this but **optional** — check it's installed:
 
@@ -445,9 +398,9 @@ Map the user's selection to the actions below:
 
    ```bash
    bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --files \
-     <current-desc-path> <draft-path> \
+     <CURRENT_DESC_PATH> <draft-path> \
      --title 'CR description — proposed edits' \
-     --detail repo=<repo> --detail branch=<branch> --detail CR=<CR_URL>
+     --detail branch=<BRANCH> --detail CR=<CR_URL>
    ```
 
    When the background command completes, read its stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trips the command-substitution gate. The last lines carry the verdict: `REVIEW_VERDICT` (`0`/`1`/`2`/`3`/`absent`) and `REVIEW_OUTPUT` (compact JSON, with `.comments` when the verdict is `1`). **Don't read silence as success** — only `REVIEW_VERDICT` `0` is approval; every other outcome either carries feedback to fold in or means the review never happened, so never write the description off the back of one.
@@ -455,7 +408,7 @@ Map the user's selection to the actions below:
    - **`0`** — reviewed clean, nothing blocking: treat as approval and write the draft to the CR (the **Yes** action above).
    - **`1`** — fix-now comments exist: each entry in `REVIEW_OUTPUT`'s `.comments` is `{body, action, file?, startLine?, endLine?}`, where `body` is the user's inline feedback and `action` is `fix-now` (blocker), `fix-later`, or `consider`. Fold every `fix-now` comment into a revised draft — along with any advisory `fix-later` / `consider` comments worth incorporating — then loop back to **Present the change**.
    - **`2`** — the user closed with hunks still unreviewed: a partial pass, not approval. Ask what they want to change, then re-present.
-   - **`3` or `absent`, or no `REVIEW_VERDICT` line appeared** — the review **did not complete**: moor closed before counting any hunks, crashed, or failed to launch. Do **not** treat this as approval and do **not** write the description. Surface what happened to the user — name the verdict, or that none was written — then fall back to a path that works: re-present the chat `diff` from **Present the change** and ask what to change (the moor-absent path below). If the user has a non-moor difftool configured, offer to open the two files in it (`git difftool --no-index <current-desc-path> <draft-path>`) as an alternative; don't silently retry moor, since the same failure will recur.
+   - **`3` or `absent`, or no `REVIEW_VERDICT` line appeared** — the review **did not complete**: moor closed before counting any hunks, crashed, or failed to launch. Do **not** treat this as approval and do **not** write the description. Surface what happened to the user — name the verdict, or that none was written — then fall back to a path that works: re-present the chat `diff` from **Present the change** and ask what to change (the moor-absent path below). If the user has a non-moor difftool configured, offer to open the two files in it (`git difftool --no-index <CURRENT_DESC_PATH> <draft-path>`) as an alternative; don't silently retry moor, since the same failure will recur.
 
    The wrapper leaves the context file in place; moor recycles it.
 
