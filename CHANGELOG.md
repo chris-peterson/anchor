@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.10.1
+
+### Fixes
+
+- `/anchor:prepare-review` now fails loudly if it opens a draft change
+  request but can't read it back from the forge, instead of silently
+  continuing without the review deep links.
+
+### Other
+
+- `/anchor:prepare-review` is quieter: it no longer narrates its internal
+  steps — forge detection, ahead/behind counts, the anti-recency
+  disposition, "here's what I just did" recaps — while preparing a review.
+  Setting up the change request (detecting the forge, opening the draft CR,
+  checking branch state, reading the template and config) now runs as one
+  step rather than a play-by-play.
+
 ## 0.10.0
 
 ### Features
