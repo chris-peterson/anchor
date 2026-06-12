@@ -22,6 +22,7 @@ flowchart LR
 | [`/anchor:prepare-review`](/skills/prepare-review) | Rebase on `main`, open a draft change request (assigned to you, source branch set to delete on merge), and draft a description that routes reviewer attention to where their judgment matters most |
 | [`/anchor:resolve-feedback`](/skills/resolve-feedback) | Fetch the unresolved review threads on an open CR, triage each with you, then drive each to resolution — fix / reply / resolve |
 | [`/anchor:pipeline`](/skills/pipeline) | Work with a commit's forge pipeline — report its latest state, or watch until it settles (passed, failed with the failed jobs, or no pipeline) |
+| [`/anchor:issue`](/skills/issue) | Gather the *why*, the consumer, and acceptance criteria, then draft and file (or update) a forge issue — composing into the project's issue template when one exists |
 | [Ambient rules](/ambient-rules) | A SessionStart hook injects anchor's domain invariants — post-review commit etiquette, forge-CLI routing — so they hold even when no skill is invoked |
 
 ## Quickstart
@@ -97,5 +98,6 @@ degrades gracefully when absent.
 - [Forge cookbook](/guides/forge-cookbook) — the `gh` / `glab` invocations and
   etiquette the skills follow
 - **Templates** — the output shapes the skills produce:
-  [commit message](/templates/commit-message) and
-  [CR description](/templates/cr-description)
+  [commit message](/templates/commit-message),
+  [CR description](/templates/cr-description), and
+  [issue description](/templates/issue-description)

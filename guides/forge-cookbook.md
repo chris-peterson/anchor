@@ -134,6 +134,21 @@ glab api -X POST projects/:fullpath/issues \
 glab issue update <iid> --assignee <username>
 ```
 
+## Issue description update from a file
+
+Editing the body of an existing issue. To diff a new draft against what's live,
+fetch the current body first (`gh issue view <num> --json body --jq '.body'`;
+`glab issue view <iid> --output json | jq -r '.description'`).
+
+```bash
+# GitHub
+gh issue edit <num> --body-file /tmp/issue-body.aB3xKp.md
+
+# GitLab — the API form takes a file (the porcelain `glab issue update` does not).
+glab api -X PUT projects/:fullpath/issues/<iid> \
+  -F "description=@/tmp/issue-body.aB3xKp.md"
+```
+
 ## Issue / MR comment from a file
 
 `glab issue note` / `glab mr note` only accept `-m <string>` or open an editor.

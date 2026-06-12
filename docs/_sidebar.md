@@ -5,10 +5,12 @@
   - [prepare-review](/skills/prepare-review)
   - [resolve-feedback](/skills/resolve-feedback)
   - [pipeline](/skills/pipeline)
+  - [issue](/skills/issue)
 - [Ambient rules](/ambient-rules)
 - Templates
   - [Commit message](/templates/commit-message)
   - [CR description](/templates/cr-description)
+  - [Issue description](/templates/issue-description)
 - Guides
   - [Configuring anchor](/guides/configuring)
   - [Forge cookbook](/guides/forge-cookbook)

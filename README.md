@@ -19,13 +19,14 @@ skills/commit/               /anchor:commit — stage, test, review, write the c
 skills/prepare-review/       /anchor:prepare-review — rebase, draft the CR description, open/update the CR
 skills/resolve-feedback/     /anchor:resolve-feedback — fetch CR feedback; fix / reply / resolve each thread to resolution
 skills/pipeline/             /anchor:pipeline — work with a commit's forge pipeline; report state or watch until it settles
+skills/issue/                /anchor:issue — gather the why/consumer/acceptance; draft and file (or update) a forge issue
 rules/                       ambient rules a SessionStart hook injects into every session
 hooks/emit-rules.sh          the injecting hook (registered in hooks/hooks.json)
 scripts/review-diff.sh       launch the configured difftool through its review sidecar; print the verdict on stdout
 scripts/pipeline-status.sh   resolve / watch a commit's pipeline on the forge; print a normalized verdict on stdout
 scripts/look-ahead.sh        unpushed-commit count (bash-analyzer-safe helper)
 guides/                      load-bearing reference the skills/rules read at runtime (configuring, forge cookbook, description-vs-docs, changeset-scope)
-templates/                   the output shapes the skills produce (commit-message, cr-description), read at runtime
+templates/                   the output shapes the skills produce (commit-message, cr-description, issue-description), read at runtime
 docs/                        end-user docs site (docsify, GitHub Pages); skills/, rules/, guides/, templates/ are rendered in
 ```
 

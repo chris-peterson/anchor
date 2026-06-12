@@ -7,6 +7,6 @@
   },
   "repository": "https://github.com/chris-peterson/anchor",
   "icon": "docs/favicon.svg",
-  "keywords": ["git", "forge", "commit", "review", "pull-request", "merge-request", "ai", "claude-code"],
+  "keywords": ["commit", "issue", "pull-request", "merge-request", "review", "git", "forge", "ai", "claude-code"],
   "license": "MIT"
 }

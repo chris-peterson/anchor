@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+- New [`/anchor:issue`](https://chris-peterson.github.io/anchor/#/skills/issue)
+  skill drafts and files (or updates) a forge issue. Since an issue describes
+  work *to be done* rather than a diff, it gathers the *why*, the consumer, and
+  the acceptance criteria up front, then writes for a reader unfamiliar with the
+  area. Issue conventions vary more between teams than commits or CRs, so
+  anchor's default shape stays basic and the skill composes into a project's own
+  template when one exists — `.gitlab/issue_templates/*.md` or
+  `.github/ISSUE_TEMPLATE/*.md`. A new
+  [`issue-description`](https://chris-peterson.github.io/anchor/#/templates/issue-description)
+  template documents the shape, and `anchor.issueRules` layers a standing rule
+  onto every issue (see the
+  [configuring guide](https://chris-peterson.github.io/anchor/#/guides/configuring)).
+
 ## 0.9.0
 
 ### Features
