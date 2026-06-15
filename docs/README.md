@@ -13,6 +13,13 @@ flowchart LR
     Review -->|prepare-review| Forge["committed + CR on the forge"]
 ```
 
+## In action
+
+Validation passes, and `/anchor:commit` carries the change the rest of the
+way — a hunk-level review, a why-first message, and a draft change request:
+
+<div class="cw-session" data-cw-session="session"></div>
+
 ## Interface
 
 | Surface | What it does |
@@ -24,6 +31,10 @@ flowchart LR
 | [`/anchor:pipeline`](/skills/pipeline) | Work with a commit's forge pipeline — report its latest state, or watch until it settles (passed, failed with the failed jobs, or no pipeline) |
 | [`/anchor:issue`](/skills/issue) | Gather the *why*, the consumer, and acceptance criteria, then draft and file (or update) a forge issue — composing into the project's issue template when one exists |
 | [Ambient rules](/ambient-rules) | A SessionStart hook injects anchor's domain invariants — post-review commit etiquette, forge-CLI routing — so they hold even when no skill is invoked |
+
+The two skills you reach for most, in motion:
+
+<div class="cw-session" data-cw-session="examples"></div>
 
 ## Quickstart
 

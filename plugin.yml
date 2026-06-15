@@ -1,0 +1,52 @@
+# Canonical descriptor for the anchor plugin — edit here, never plugin.json.
+# Projects into .claude-plugin/plugin.json (via scripts/gen-plugin-json.py) and
+# the marketplace SPA (the suite: block).
+
+name: anchor
+version: 0.10.1
+description: Git/forge skills for consistent and effective source control.
+author: chris-peterson
+repository: https://github.com/chris-peterson/anchor
+icon: docs/favicon.svg
+license: MIT
+keywords: [commit, issue, pull-request, merge-request, review, git, forge, ai, claude-code]
+
+# → marketplace.json entry
+marketplace:
+  category: development
+  homepage: https://chris-peterson.github.io/anchor/#/
+
+# → marketplace SPA; keys mirror the SPA's PLUGINS object.
+suite:
+  ac: "--ship"
+  group: create checkpoints
+  # The plugin's docs site renders the live session preview, so the hub hands
+  # its drill-in off to the spoke rather than showing the in-hub detail view.
+  spoke: true
+  gloss: An anchor holds a boat in place. This holds your work in place.
+  pitch: "Nervous about keeping code you didn't write? It walks you through the diff first, then commits with a why-first message and opens the change request."
+  what: "Keeps your commits, change requests, and review cycles consistent — the same quality, formatting, and content every time. It walks you through the diff, then commits with a why-first message and opens the change request."
+  cmds:
+    - ["/anchor:preview", "Review the working tree before you commit"]
+    - ["/anchor:commit", "Commit with a why-first message, with a diff review"]
+    - ["/anchor:prepare-review", "Rebase on main and open a draft change request"]
+    - ["/anchor:resolve-feedback", "Work a CR's review threads to done, one by one"]
+  # Skill-anchored previews of the two flagship skills, shown live on the docs
+  # site; the session: below is the at-a-glance flow the hub also reads.
+  examples:
+    - label: "/anchor:commit"
+      ac: "--ship"
+      frames:
+        - { t: you, text: "/anchor:commit" }
+        - { t: claude, text: "Tests pass. I'll stage everything and open the diff in moor for a hunk-level review before writing the message." }
+        - { t: status, text: "drafts a why-first commit message from the reviewed diff" }
+    - label: "/anchor:prepare-review"
+      ac: "--purple"
+      frames:
+        - { t: you, text: "/anchor:prepare-review" }
+        - { t: claude, text: "Rebased on main, no conflicts. I'll open a draft CR assigned to you and deep-link the critical path for the reviewer." }
+        - { t: status, text: "writes the CR description and sets the source branch to delete on merge" }
+  session:
+    - { t: claude, text: "Validation and tests are in." }
+    - { t: thought, text: "time to land this" }
+    - { t: cmd, cmd: "/anchor:commit", out: "Walks you through the diff, commits with a why-first message, and opens a draft change request." }

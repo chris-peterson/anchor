@@ -27,3 +27,6 @@ cp guides/*.md docs/guides/
 
 mkdir -p docs/templates
 cp templates/*.md docs/templates/
+
+# Render the suite: block to docs/suite.json for the live session preview.
+python3 scripts/gen-suite-json.py
