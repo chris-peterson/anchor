@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.11.0
+
+Build and release plumbing for the plugin — no skill behavior changes.
+
+- **Canonical `plugin.yml` descriptor.** Plugin metadata lives in `plugin.yml` and is projected into `.claude-plugin/plugin.json` and the marketplace SPA by generation scripts, so there's a single source to edit instead of hand-synced JSON.
+- **Hub/spoke marketplace model.** anchor ships as a spoke: its docs site renders the live session preview, and the marketplace hub links into the spoke for the detail view.
+- **Release-on-publish workflow.** Publishing a GitHub Release (`vX.Y.Z`) bumps the version, regenerates `plugin.json`, prepends the release notes to `CHANGELOG.md`, and notifies the marketplace.
+
 ## 0.10.1
 
 ### Fixes

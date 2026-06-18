@@ -1,6 +1,6 @@
 {
   "name": "anchor",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "description": "Git/forge skills for consistent and effective source control.",
   "author": {
     "name": "chris-peterson"
