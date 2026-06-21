@@ -29,7 +29,6 @@ suite:
   # Activated by user-invoked skills (commit, prepare-review) and by ambient
   # rules injected at session start.
   activations: [user, session]
-  spoke: true
   gloss: An anchor holds a boat in place. This holds your work in place.
   pitch: "Nervous about keeping code you didn't write? It walks you through the diff first, then commits with a why-first message and opens the change request."
   what: "Keeps your commits, change requests, and review cycles consistent — the same quality, formatting, and content every time, not reinvented per change."
