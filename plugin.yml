@@ -18,14 +18,23 @@ marketplace:
 
 # → marketplace SPA; keys mirror the SPA's PLUGINS object.
 suite:
-  ac: "--ship"
-  group: create checkpoints
+  group: waypoints
+  dependencies:
+    - name: moor
+      required: false
+      reason: launches moor for diff review
+    - name: tack
+      required: false
+      reason: records the CR as the matching route's deliverable
+  # Activated by user-invoked skills (commit, prepare-review) and by ambient
+  # rules injected at session start.
+  activations: [user, session]
   # The plugin's docs site renders the live session preview, so the hub hands
   # its drill-in off to the spoke rather than showing the in-hub detail view.
   spoke: true
   gloss: An anchor holds a boat in place. This holds your work in place.
   pitch: "Nervous about keeping code you didn't write? It walks you through the diff first, then commits with a why-first message and opens the change request."
-  what: "Keeps your commits, change requests, and review cycles consistent — the same quality, formatting, and content every time. It walks you through the diff, then commits with a why-first message and opens the change request."
+  what: "Keeps your commits, change requests, and review cycles consistent — the same quality, formatting, and content every time, not reinvented per change."
   cmds:
     - ["/anchor:preview", "Review the working tree before you commit"]
     - ["/anchor:commit", "Commit with a why-first message, with a diff review"]
