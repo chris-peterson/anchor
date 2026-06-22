@@ -26,12 +26,23 @@ flowchart TD
         Create --> Why
     end
 
-    subgraph "Step 3: Draft"
-        Why --> Tmpl["Honor forge template + anchor.* config"]
+    subgraph "Step 3: Check for duplicates"
+        Why --> FromCreate{Creating a new issue?}
+        FromCreate -->|Yes| Search["Search forge: open + closed"]
+        Search --> Match{Author picks a match?}
+        Match -->|Yes| Reuse["Switch to update: fetch its body as baseline"]
+    end
+
+    subgraph "Step 4: Draft"
+        Tmpl["Honor forge template + anchor.* config"]
         Tmpl --> Draft["Draft title + body"]
     end
 
-    subgraph "Step 4: Output"
+    FromCreate -->|No, updating| Tmpl
+    Match -->|No, file new| Tmpl
+    Reuse --> Tmpl
+
+    subgraph "Step 5: Output"
         Draft --> Out{Disposition?}
         Out -->|Write| Forge(["Create / update issue"])
         Out -->|Copy| CopyOnly(["Print for paste"])
@@ -43,7 +54,7 @@ flowchart TD
 
 Pick the forge from the `origin` remote (`gh` for GitHub, `glab` for GitLab).
 
-- **An issue URL or number was provided** → **update** that issue. Pull its current body to a temp file now (`mktemp -u /tmp/issue-current.XXXXXX.md`); Step 4 diffs the draft against it:
+- **An issue URL or number was provided** → **update** that issue. Pull its current body to a temp file now (`mktemp -u /tmp/issue-current.XXXXXX.md`); Step 5 diffs the draft against it:
 
   ```bash
   # GitHub
@@ -70,7 +81,29 @@ Wait for answers before drafting. If the only open item is the WHY, ask:
 
 > **What problem does this solve, and why does it matter?** A sentence or two is enough — and who's the primary consumer of the change?
 
-## Step 3: Draft the issue
+## Step 3: Check for similar issues
+
+This step runs only on the **create** path — skip it when updating a known issue. A new issue that duplicates an existing one splits the discussion and wastes the reader's time, so before drafting search the forge for issues that already cover this need: **open** ones (filing would duplicate active work) and **closed** ones (the work may already be done, or have been declined).
+
+Distill two to four search keywords from the intent gathered in Step 2 — the subject of the work, not the WHY prose. Then search, picking the forge by the `origin` remote:
+
+```bash
+# GitHub — open + closed, most-recently-updated first
+gh issue list --search "<keywords> sort:updated-desc" --state all --limit 10 \
+  --json number,title,url,state,updatedAt
+```
+
+```bash
+# GitLab — open + closed (--all), matching title and description
+glab issue list --search "<keywords>" --in title,description --all --output json
+```
+
+Judge the results — a keyword hit on an unrelated issue is noise, not a match. If nothing genuinely overlaps, continue to Step 4 without comment. If one or more issues plausibly cover this need, present them with the `AskUserQuestion` tool (header `Similar issues`):
+
+- One option per plausible candidate, labeled `#<num> <title>` and tagged by state (`[open]` / `[closed]`). Picking one means *this is the issue* → switch to the update path: fetch its current body as the baseline with the Step 1 body-fetch for the forge, then draft against it. Step 5 will diff the draft against that baseline.
+- **None of these — file new** (default) — proceed to Step 4 as a create.
+
+## Step 4: Draft the issue
 
 ### Honor an existing forge template
 
@@ -106,7 +139,7 @@ Draft a concise imperative **title** (under 72 characters), then the body follow
 - **Diagram only when it carries shape prose hides** — anchor's mermaid conventions (hand-drawn look, no `\n`/`<br>` in labels).
 - **Same "what to avoid" discipline as a CR description** — no loaded framing, no drift artifacts, no leaked deliberation, nothing the reader can already see.
 
-## Step 4: Output
+## Step 5: Output
 
 Write the drafted body to a temp file (`mktemp -u /tmp/issue-draft.XXXXXX.md`).
 
