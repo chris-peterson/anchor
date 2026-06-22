@@ -33,8 +33,7 @@ suite:
   pitch: "Nervous about keeping code you didn't write? It walks you through the diff first, then commits with a why-first message and opens the change request."
   what: "Keeps your commits, change requests, and review cycles consistent — the same quality, formatting, and content every time, not reinvented per change."
   cmds:
-    - ["/anchor:preview", "Review the working tree before you commit"]
-    - ["/anchor:commit", "Commit with a why-first message, with a diff review"]
+    - ["/anchor:commit", "Commit with a why-first message; --preview reviews the working tree first"]
     - ["/anchor:prepare-review", "Rebase on main and open a draft change request"]
     - ["/anchor:resolve-feedback", "Work a CR's review threads to done, one by one"]
   # Skill-anchored previews of the two flagship skills, shown live on the docs

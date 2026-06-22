@@ -1,6 +1,6 @@
 ---
 name: commit
-description: Stage all changes and prepare a commit message. Triggers on 'commit', 'commit message', 'ready to commit'.
+description: Stage all changes and prepare a commit message. Run with `--preview` to open the working-tree diff in the difftool without committing, or `--preview cr` to review the whole branch the way a reviewer sees the change request. Triggers on 'commit', 'commit message', 'ready to commit', 'commit --preview'.
 ---
 
 # Prepare Commit Message
@@ -12,7 +12,10 @@ Confirm the target repo, run tests, stage all changes, and generate a commit mes
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
 flowchart TD
-    Start(["/commit"]) --> Repo["Confirm target repo"] --> Tests
+    Start(["/commit"]) --> Preview{"--preview flag?"}
+    Preview -->|"Yes (cr)"| PreviewFull["Difftool on full branch diff, read verdict, stop"]
+    Preview -->|Yes| PreviewDiff["Difftool on working tree, read verdict, stop"]
+    Preview -->|No| Repo["Confirm target repo"] --> Tests
 
     subgraph "Step 0: Tests"
         Tests["Run test suite"] --> TestResult{Tests pass?}
@@ -45,6 +48,19 @@ flowchart TD
         Review -->|fix-now comments| Fix["Address fix-now comments"] --> Tests
     end
 ```
+
+## Preview mode (`--preview`)
+
+When invoked with `--preview`, this is a **look-only** path: open a diff in the difftool for review, then stop. Do **not** run tests, stage, draft a message, or commit — none of the steps below apply. Resolve the target repo the same way (see "Target repo"), pick the diff scope from the argument, and launch the shared wrapper as a **background** Bash call (`run_in_background: true`), exactly as Step 4 does for the post-commit review:
+
+- **`--preview`** — the working tree vs `HEAD` (`--local`), to look over uncommitted work before committing. If the working tree is clean there's nothing uncommitted to show: say so and stop rather than opening an empty diff.
+- **`--preview cr`** (or `mr` / `pr`) — the whole branch vs the default branch (`--full`), the way a reviewer sees the change request. Useful for a self-review of the full changeset before you open or update the CR.
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --local   # or --full for `cr` / `mr` / `pr`
+```
+
+Read the verdict back with the **BashOutput tool** (the `REVIEW_VERDICT` / `REVIEW_OUTPUT` contract is identical to Step 4 below). Map it to a one-line result — `Previewed — clean`, `Previewed — fix-now comments` (list them), `Previewed — unreviewed hunks` / `review closed without a verdict` — and surface any advisory `fix-later` / `consider` comments.
 
 ## Task tracking when orchestrated
 

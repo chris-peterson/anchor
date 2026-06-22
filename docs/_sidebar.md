@@ -1,6 +1,5 @@
 - [Home](/)
 - Skills
-  - [preview](/skills/preview)
   - [commit](/skills/commit)
   - [prepare-review](/skills/prepare-review)
   - [resolve-feedback](/skills/resolve-feedback)

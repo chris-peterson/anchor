@@ -9,7 +9,7 @@ forge, and anchor drives each leg of that passage.
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
 flowchart LR
-    WIP["work in progress"] -->|commit / preview| Review["visual review"]
+    WIP["work in progress"] -->|commit| Review["visual review"]
     Review -->|prepare-review| Forge["committed + CR on the forge"]
 ```
 
@@ -24,8 +24,7 @@ way — a hunk-level review, a why-first message, and a draft change request:
 
 | Surface | What it does |
 |---|---|
-| [`/anchor:preview`](/skills/preview) | Stage all local changes and open them in moor — review in-flight work before you commit |
-| [`/anchor:commit`](/skills/commit) | Confirm the repo, run tests, stage everything, write a *why*-focused commit message, then open the change in [moor](https://github.com/chris-peterson/moor) for a hunk-level review |
+| [`/anchor:commit`](/skills/commit) | Confirm the repo, run tests, stage everything, write a *why*-focused commit message, then open the change in [moor](https://github.com/chris-peterson/moor) for a hunk-level review — or `--preview` to review the working tree without committing |
 | [`/anchor:prepare-review`](/skills/prepare-review) | Rebase on `main`, open a draft change request (assigned to you, source branch set to delete on merge), and draft a description that routes reviewer attention to where their judgment matters most |
 | [`/anchor:resolve-feedback`](/skills/resolve-feedback) | Fetch the unresolved review threads on an open CR, triage each with you, then drive each to resolution — fix / reply / resolve |
 | [`/anchor:pipeline`](/skills/pipeline) | Work with a commit's forge pipeline — report its latest state, or watch until it settles (passed, failed with the failed jobs, or no pipeline) |
@@ -47,10 +46,10 @@ The two skills you reach for most, in motion:
 
 2. **Make some changes**, then:
 
-   2a. *(optional)* Preview the working tree before committing:
+   2a. *(optional)* Review the working tree before committing:
 
    ```text
-   /anchor:preview
+   /anchor:commit --preview
    ```
 
    2b. Commit with a reviewed, *why*-first message:
@@ -79,8 +78,8 @@ path of least resistance.
 - **prepare-review** writes for a reviewer who has never seen the system, leads
   with the *why*, and deep-links the critical path so a skim lands on what
   matters.
-- **preview** is the quick look before you commit — same review channel, no
-  commit yet.
+- **commit --preview** is the quick look before you commit — same review
+  channel, no commit yet.
 
 ## Optional integrations
 
@@ -88,10 +87,10 @@ anchor stands alone and reaches further when its siblings are installed; each
 degrades gracefully when absent.
 
 - **[moor](https://github.com/chris-peterson/moor)** — the keyboard-driven diff
-  viewer `commit` and `preview` launch for review. Its `MOOR_CONTEXT` sidecar
-  contract (the review-feedback channel) is defined in
+  viewer `commit` launches for review (including `--preview`). Its `MOOR_CONTEXT`
+  sidecar contract (the review-feedback channel) is defined in
   [moor's `SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md).
-  Without moor, `commit` and `preview` fall back to `git difftool --dir-diff`
+  Without moor, `commit` falls back to `git difftool --dir-diff`
   with your configured difftool — you still get a visual review, and the skill
   asks whether to revise or proceed in place of moor's structured rejected-hunk
   feedback.

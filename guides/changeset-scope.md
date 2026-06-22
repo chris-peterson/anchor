@@ -1,7 +1,7 @@
 # Staying in changeset scope
 
 Once a change enters review — an open CR, a branch you're iterating on, a diff
-you're walking through `/anchor:preview` or resolving with
+you're walking through with `/anchor:commit --preview` or resolving with
 `/anchor:resolve-feedback` — the goal is **minimal churn**: change as few lines
 as you can. Be surgical. Keep edits within the changeset's existing scope and
 resist pulling in pre-existing code unrelated to the change's purpose, even when
