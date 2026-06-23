@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.12.0
+
+Three skill changes: `/anchor:issue` now guards against duplicates, and the `preview` skill folds into `/anchor:commit`.
+
+- **`/anchor:issue` checks for similar issues before filing.** On the create path, it searches the forge (open *and* closed) for issues that already cover the need and surfaces any matches; picking one reroutes into the existing update path instead of filing a duplicate.
+- **`preview` folds into `/anchor:commit --preview`.** The standalone `preview` skill is removed. `/anchor:commit --preview` opens the working-tree diff in the difftool for review without committing — the look-before-you-commit pass, same review channel, no commit.
+- **`--preview cr` reviews the whole change request.** `/anchor:commit --preview cr` (or `mr` / `pr`) opens the full branch-vs-default-branch diff, the way a reviewer sees the CR — a self-review of the complete changeset before opening or updating it.
+
 ## 0.11.0
 
 Build and release plumbing for the plugin — no skill behavior changes.
