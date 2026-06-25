@@ -182,17 +182,29 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/look-ahead.sh"
 
 Squashing into a pushed commit requires force push, so the squash option must never appear when there are no unpushed commits.
 
-**If the count is `>=1` (unpushed commits exist):** get the prior commit's subject line:
+**If the count is `>=1` (unpushed commits exist):** get the prior commit's subject line and author email:
 
 ```bash
 git log -1 --format=%s HEAD
 ```
 
+```bash
+git log -1 --format=%ae HEAD
+```
+
+**Author guard — don't offer to rewrite someone else's commit.** Compare HEAD's author email to the current `user.email`:
+
+```bash
+git config user.email
+```
+
+If they differ, the squash target isn't yours. Amending or squashing rewrites HEAD in place — it would overwrite another person's commit, replacing their authorship and (once force-pushed) their published history. Present only the no-squash options — a new commit, or **Edit** to revise the message first — just as the count-`0` path does, and say why in one line (e.g. `HEAD was authored by <name> — squashing would rewrite their commit, so only a new commit is offered`). Skip the CR-draft probe and the relatedness heuristic below; they only decide *how* to squash, and squash is off the table. The rest of this step applies only when HEAD is your own commit.
+
 **Then check whether a CR is open on this branch, and whether it's still a draft.** Once a CR is marked **ready** (non-draft), **force-pushing over commits a reviewer may have seen is off the table** — they should see each iteration as its own commit. While the CR is still a **draft**, mutable history remains the norm (anchor creates CRs as drafts for exactly this reason). Either way, this only protects *pushed* commits. If the squash target (HEAD) is itself unpushed, the reviewer has never seen it, and amending into it doesn't disturb the review at all.
 
-At this point in the flow, HEAD is unpushed by definition — we only reach the squash-vs-new-commit decision when the earlier ahead-count probe (or the `origin/main..HEAD` fallback for local-only branches) reported a positive count, meaning HEAD has at least one commit (including itself) not on upstream. So the squash target is always safe to amend. An open review still informs the option text — surfacing context — but does not flip the recommendation away from amend.
+At this point in the flow, HEAD is unpushed by definition — we only reach the squash-vs-new-commit decision when the earlier ahead-count probe (or the `origin/main..HEAD` fallback for local-only branches) reported a positive count, meaning HEAD has at least one commit (including itself) not on upstream. So — once the author guard above has confirmed HEAD is your own commit — the squash target is always safe to amend. An open review still informs the option text — surfacing context — but does not flip the recommendation away from amend.
 
-**Narrow exception — message-only amend on a pushed commit no reviewer has engaged with yet.** This applies in a different code path (when HEAD itself is pushed, so the squash decision below doesn't fire). The rule's motivation is protecting reviewers from re-reviewing the same code; that motivation doesn't apply when the *diff is unchanged*. If the user reports the commit message is demonstrably wrong (e.g., pasted from a different repo, references identifiers that don't exist in this codebase, doesn't match what the diff actually does), the right action is `git commit --amend -F <msg-file>` to fix the message, then surface "force-push to overwrite the wrong message" as an explicit choice. The tree stays identical; only the message changes. Still surface the trade-off — "force-push affects only the message; the tree is unchanged" — and let the user decide. Do not extend this exception to content rewrites; the moment any file content moves, the standard rule applies again.
+**Narrow exception — message-only amend on a pushed commit no reviewer has engaged with yet.** This applies in a different code path (when HEAD itself is pushed, so the squash decision below doesn't fire), and the same author guard holds — never amend a commit someone else authored, even for a message-only fix. The rule's motivation is protecting reviewers from re-reviewing the same code; that motivation doesn't apply when the *diff is unchanged*. If the user reports the commit message is demonstrably wrong (e.g., pasted from a different repo, references identifiers that don't exist in this codebase, doesn't match what the diff actually does), the right action is `git commit --amend -F <msg-file>` to fix the message, then surface "force-push to overwrite the wrong message" as an explicit choice. The tree stays identical; only the message changes. Still surface the trade-off — "force-push affects only the message; the tree is unchanged" — and let the user decide. Do not extend this exception to content rewrites; the moment any file content moves, the standard rule applies again.
 
 Detect the branch's open CR and its draft status with the matching forge tool (pick by the `origin` remote URL; empty output = no open CR):
 

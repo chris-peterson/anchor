@@ -9,7 +9,11 @@ For rewrites the skill doesn't cover, gate on what's reliable at decision
 time — push state and the CR's draft flag (`gh pr view --json isDraft` /
 `glab mr view --output json | jq .draft`):
 
-- **Unpushed commits** are yours — amend, squash, and rebase freely.
+- **Unpushed commits you authored** — amend, squash, and rebase freely.
+  First confirm HEAD's author is you (`git log -1 --format=%ae HEAD` vs
+  `git config user.email`); amending rewrites HEAD in place, so a commit
+  someone else authored is never a squash/amend target regardless of push
+  state — land your work as a new commit.
 - **Pushed, CR still a draft** — mutable history is still the norm. Draft
   is the author's declared "not under review yet" (anchor creates CRs as
   drafts for exactly this reason); amend and force-push with lease freely
