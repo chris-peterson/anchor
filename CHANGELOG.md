@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.13.0
+
+`/anchor:commit` no longer suggests rewriting a commit you didn't author.
+
+- **Author guard on squash/amend.** The squash-vs-new-commit decision keyed only on push state and the CR's draft flag — both assuming an unpushed commit is your own. Since `--amend` and squash rewrite HEAD in place, `/anchor:commit` now compares HEAD's author email to your `user.email` and, on a mismatch, drops the squash option and offers only a new commit, so it never proposes overwriting someone else's commit and authorship. The `rewrite-history-through-anchor` rule's "unpushed commits are yours" guidance is refined to match.
+
 ## 0.12.0
 
 Three skill changes: `/anchor:issue` now guards against duplicates, and the `preview` skill folds into `/anchor:commit`.
