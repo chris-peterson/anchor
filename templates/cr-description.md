@@ -10,6 +10,15 @@ Draft each section in order, filling from the changeset and the author's
 answers in Step 2. Sections marked *(rare)* or *(conditional)* earn their place
 only when they carry something a reviewer needs — omit them rather than pad.
 
+**Use the heading names verbatim.** The section names below — **Context**,
+**Review guide**, **Approach & trade-offs**, **Testing**, **Validation** — are
+the canonical headings that appear in the description as written, not
+paraphrasable suggestions. Don't rename them into invented alternatives ("What
+it does", "What to review", "Where it's been used") — reviewers (and your own
+future passes) scan for the canonical names. The numeric prefixes (`1.`, `2.`)
+in this file are template organization only; emit the bare name (`## Context`,
+`## Review guide`). Omit a section that doesn't apply; never rename one.
+
 **How much to write is configurable.** `anchor.reviewBudgetMins` is the minutes
 of focused review you expect this CR to get — a tight budget (≈5) leads with the
 essentials and cuts asides, a generous one keeps more depth. A standing rule can
@@ -85,25 +94,35 @@ assessment: hard-to-test code paths, environments tested against beyond CI, or
 coverage decisions the reviewer might push back on. If the suite runs in CI,
 reviewers already assume it ran — don't repeat.
 
-## 5. Validation *(conditional — shared components)*
+## 5. Validation *(conditional — when correctness is best shown by real-world use)*
 
-When the change is to a shared component (terraform module, library, base config
-consumed by other repos by semver or git ref), the diff and rendered artifact
-aren't enough on their own. Subtle issues (plan-diff churn, `set`-vs-`list`
-ordering, missed `for_each` rekeys, library semver compat) only surface when the
-change *composes* with a real downstream consumer.
+Some changes can't be fully judged from the diff and the rendered artifact alone
+— their correctness only surfaces when the change *composes* with something real.
+The unifying test: *would a reviewer trust this more knowing it had already
+worked in the real world?* If yes, this section records that evidence. Two common
+cases:
 
-**Ask the author what validation looks like — don't guess it.** When the
-shared-component signals fire (see the `prepare-review` skill's detection
-signals), the skill asks rather than inventing a checklist; the author's answer
-fills this section. Record it as a single evidence row:
+- **Shared component** consumed by other repos by semver or git ref (terraform
+  module, library, base config). Subtle issues (plan-diff churn, `set`-vs-`list`
+  ordering, missed `for_each` rekeys, library semver compat) only surface when
+  the change *composes* with a real downstream consumer.
+- **A tool, skill, or automation whose value is the work it drives.** The diff
+  shows what the tool *says*; the evidence a reviewer wants is what it *did* —
+  the real runs (deploys, pipelines, tickets) it has already produced.
+
+**Ask the author what validation looks like — don't guess it.** When the signals
+fire (see the `prepare-review` skill's detection signals), the skill asks rather
+than inventing a checklist; the author's answer fills this section. Record it as
+one or more evidence rows:
 
 ```markdown
 - [ ] **Validated against a consumer** — `<consumer or sandbox>` — observed: `<what the author saw>`
+- [x] **Exercised in production** — `<the real run / deploy / ticket>` — observed: `<what it produced>`
 ```
 
-Skip this section entirely for a deployable service or UI app — it ships its own
-production validation.
+Skip this section when the diff plus CI already settle correctness — an ordinary
+self-contained service or UI change ships its own production validation and needs
+no separate evidence row.
 
 ## Honoring a project's forge template
 

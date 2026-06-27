@@ -205,7 +205,7 @@ If the only open item is the WHY, ask:
 
 `ANCHOR_CONFIG` from Step 1's block holds the project + global `anchor.*` keys as JSON (`{}` when none). The keys come back lowercased (`anchor.reviewbudgetmins`); match them case-insensitively. Apply the keys relevant to a CR description; absent keys keep anchor's defaults — never invent a value:
 
-- **`anchor.reviewBudgetMins`** — the minutes of focused review you expect this CR to get (an *input*, not a length cap; unset behaves like ≈10). A tight budget (≈5) leads with the essentials and cuts asides hard; a generous one (≈30) keeps more supporting context and depth. This steers how aggressively the anti-recency and "What to avoid" passes cut.
+- **`anchor.reviewBudgetMins`** — the minutes of focused review you expect this CR to get (an *input*, not a length cap; unset behaves like ≈10). A tight budget (≈5) leads with the essentials and cuts asides hard; a generous one (≈30) keeps more supporting context and depth. This steers how aggressively the anti-recency and "What to avoid" passes cut — it steers *what to include*, never the *register*; a tight budget is not license for punchy or marketing tone (see Tone).
 - **`anchor.workTrackerBaseUri`** — when the user mentions a ticket (a full tracker URL, or a bare id), link it in the description: use a full URL as-is, or build `<base-uri><id>` from a bare id. No mention, no link — don't scrape the branch or prompt.
 - **`anchor.crRules`**, with forge overrides **`anchor.mrRules`** (GitLab) / **`anchor.prRules`** (GitHub) — an extra rule layered onto the default CR-description rules. Pick the forge by the `origin` remote: use `mrRules` / `prRules` when set, else fall back to `crRules`.
 
@@ -227,7 +227,9 @@ A concise imperative phrase (under 72 characters) that captures the change. Same
 
 ### Body structure
 
-Draft the description following the section template in `templates/cr-description.md`: **Context**, **Review guide**, **Approach & trade-offs** *(rare)*, **Testing** *(rare)*, and **Validation** *(shared components only)*. The template owns the *shape* — which sections, in what order, and what each is for; the guidance below owns the *technique* for realizing it.
+Draft the description following the section template in `templates/cr-description.md`: **Context**, **Review guide**, **Approach & trade-offs** *(rare)*, **Testing** *(rare)*, and **Validation** *(when correctness is best shown by real-world use)*. The template owns the *shape* — which sections, in what order, and what each is for; the guidance below owns the *technique* for realizing it.
+
+**Use these heading names verbatim.** Context / Review guide / Approach & trade-offs / Testing / Validation are the canonical section headings, not paraphrasable suggestions — emit them as written. Don't rename them into invented alternatives ("What it does", "What to review", "Where it's been used"); reviewers scan for the canonical names. Omit a section that doesn't apply; never rename one.
 
 **Deep-link construction (Review guide).** Always deep-link to the actual line, not just the file — reviewers should be one click away from the hunk you're pointing them at. Construction differs by forge:
 
@@ -235,7 +237,12 @@ Draft the description following the section template in `templates/cr-descriptio
 
 - **GitHub:** `<CR_URL>/files#diff-<file-anchor>R<new-line>` (or `L<new-line>` for the left/old side). The `<file-anchor>` for GitHub is `sha256(<file-path>)` — `gh` doesn't expose it directly, so fall back to opening the CR's "Files changed" tab and copying the link from the line-number gutter when in doubt.
 
-**Validation — ask, don't guess (shared components).** The Validation section applies when the change is to a shared component consumed by other repos. Detect it from these signals: shared-component repo path (`terraform-modules/`, `libraries/`, `base-configs/`), no direct deploy pipeline of its own, version exposed as a git ref or semver tag pinned by other repos. **Skip** when the change is to a deployable service or UI app — it ships its own production validation.
+**Validation — ask, don't guess.** The Validation section applies when the change's correctness is best evidenced by real-world use — when the diff and the rendered artifact don't settle it on their own. Two signal clusters:
+
+- **Shared component consumed by other repos** — shared-component repo path (`terraform-modules/`, `libraries/`, `base-configs/`), no direct deploy pipeline of its own, version exposed as a git ref or semver tag pinned by other repos. Correctness surfaces only against a real downstream consumer.
+- **A tool, skill, or automation whose value is the work it drives** — the evidence a reviewer wants is the real runs that exercised it (the deploys, pipelines, or tickets it produced), not the diff alone.
+
+**Skip** when the diff plus CI already settle correctness — an ordinary self-contained service or UI change ships its own production validation and needs no separate row.
 
 When the signals fire, **ask the author what validation looks like** rather than emitting a guessed checklist row:
 
@@ -246,6 +253,8 @@ Record their answer as the evidence row shown in the template's Validation secti
 ### Tone
 
 Conversational and informal. Reviewers are colleagues, not stakeholders — write like you'd talk through the change at a desk, not like a status report. Sentence fragments are fine. Mid-thought asides in parens are fine. Don't sweat capitalization on tier labels and short bullets, and don't sweat trailing punctuation on fragments — `core change, lives here` reads as well as `Core change, lives here.` and a closing period on a one-line bullet adds nothing. Save the more formal register for the *Why* paragraph where context actually matters; everywhere else, default low-friction.
+
+**A tight review budget is not license for marketing punch.** A low `anchor.reviewBudgetMins` (≈5) steers *what you include* — lead with essentials, cut asides — it does **not** loosen the register into hype. Buzzwords, flattery of the reviewer ("you know this system cold", "your domain eye"), and punchy taglines ("proof it's not theory", "X 101") are noise that costs the reviewer attention, not signal that earns it. Terse means *fewer words*, not *louder ones*. The no-hyperbole discipline in "What to avoid" governs at every budget — a short description and a punchy one are not the same thing.
 
 ### Formatting
 
@@ -260,6 +269,7 @@ The menu, ordered by data shape:
 | Process / shape / interaction | **Mermaid diagram** | State machine (`stateDiagram-v2`), service sequence (`sequenceDiagram`), decision/data flow (`flowchart TD`), type relationships (`classDiagram`). |
 | Tree-shaped / hierarchical | **Inline HTML table with `rowspan` / `colspan`** | A parent record with multiple child records sharing parent attributes; a per-environment matrix where one row spans envs. Markdown tables can't represent 2D nesting — drop into raw HTML (`<table><tr><td rowspan="2">…`). Markdown renderers accept raw HTML; use it where it's the right tool. |
 | Structural change | **Before/after with highlights** | Added input, swapped algorithm, new flow. Two mermaid blocks under explicit `### Before` / `### After` headings, with `classDef` highlighting the changed nodes. |
+| Files a change creates | **`diff` block, `+` additions** | A scaffold/init change that adds a tree of new files. Render the created layout as `+`-prefixed lines inside a ` ```diff ` fence so it reads as all-additions (green), not a neutral file tree. Use the real paths from the changeset — never invent a placeholder repo or root-dir name. |
 | Visual / UX change | **Annotated screenshots** (preferred) or **Before/After markdown table** | Component, CSS, template, or layout changes — anything where the rendered output is what the reviewer needs to evaluate. |
 
 Pick once and commit. If two visualizations would each carry the data, prefer the more compact one — reviewers stop reading when they run out of time, not when you run out of content.
@@ -349,7 +359,7 @@ Categories of cruft. If something fits one of these, it doesn't belong in the de
 - **Step-2 leftovers** — hedges, offers, or open questions ("happy to / open to / let me know if"); unsubstantiated verification claims ("verified" / "tested" / "confirmed" for things you didn't actually exercise). If ambiguity is still in flux, defer drafting; don't park it in the description.
 - **Boilerplate** — generic openings ("This change updates…"); assuming domain knowledge the reviewer doesn't have.
 
-The single exception to "no verification content in the description body" is the **Validation** evidence row for shared components — see the Validation section in `templates/cr-description.md`. That row records *evidence*, not a todo.
+The single exception to "no verification content in the description body" is the **Validation** evidence row — see the Validation section in `templates/cr-description.md`. That row records *evidence* of real-world use, not a todo.
 
 ## Step 4: Output
 
