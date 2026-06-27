@@ -20,8 +20,11 @@ flowchart TD
     Start(["/prepare-review"]) --> CR{Open CR?}
 
     subgraph "Step 1: Gather the changeset"
-        CR -->|No| MakeCR["Open draft CR"]
+        CR -->|No| Ahead{Commits ahead?}
         CR -->|Yes| Behind
+        Ahead -->|No| Commit["/anchor:commit, then re-gather"]
+        Ahead -->|Yes| MakeCR["Open draft CR"]
+        Commit --> MakeCR
         MakeCR --> Tack["Link to tack (optional)"]
         Tack --> Behind{Behind main?}
         Behind -->|Yes| DoRebase["Rebase + force-with-lease"]
@@ -82,7 +85,8 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 | `FORGE` | `github` / `gitlab` picks the CLI for the rest of the skill; `none` → the URL-free `skip-deep-links` path |
 | `DEFAULT_BRANCH` | substitute for `main` in the diff/log commands below |
 | `ON_DEFAULT_BRANCH=1` | HEAD is the default branch — no CR; the no-commits-ahead check below stops the run |
-| `AHEAD=0` | nothing ahead of the default branch — say so and stop |
+| `AHEAD=0` | nothing ahead of the default branch — `NEEDS_COMMIT=1` chains to `/anchor:commit` (see below); otherwise say so and stop |
+| `NEEDS_COMMIT=1` | no CR and nothing committed ahead of the default branch — chain into `/anchor:commit` before continuing (see "Chain to commit") |
 | `BEHIND=<n>` | `>0` → run the rebase dialog below |
 | `CR_URL` / `CR_IID` | the resolved or freshly-opened draft — deep-link target and write target (empty on `skip-deep-links`) |
 | `CR_DRAFT` | gates the post-rebase force-push (see below) |
@@ -93,6 +97,18 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 | `FILE_ANCHORS` | precomputed `sha1(path)` per changed file for GitLab deep links (Step 3), as JSON |
 
 If the block carries a `CR_CREATE_ERROR=…` line, the draft-open hit an auth or push failure — surface it and ask the user to refresh credentials; do **not** fall back to the URL-free path (the fail-fast-on-auth rule).
+
+### Chain to commit when `NEEDS_COMMIT=1`
+
+"Work finished, nothing committed yet" is a common state to invoke prepare-review from — you've done the work and want to open the review. The script can't open a CR from it (a CR needs a commit ahead of the default branch to exist), so rather than letting `glab mr create` / `gh pr create` dead-end on a raw *"Could not find any commits between origin/`<default>` and `<branch>`"*, the script reports `NEEDS_COMMIT=1` and skips the auto-open.
+
+When `NEEDS_COMMIT=1`, chain into `/anchor:commit` — commit the work first, then continue into prepare-review. Invoke the commit skill, let it run its flow (tests, staging, message, the visual diff review), and once the commit lands, **re-run the gather script** so it resolves the now-creatable CR:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh"
+```
+
+The second run finds a commit ahead, auto-opens the draft CR, and returns a normal block (`NEEDS_COMMIT=0`, a resolved `CR_URL`). Proceed from there into the rebase / drafting flow as usual. If the second run still reports `NEEDS_COMMIT=1` — the user declined the commit, or it produced nothing ahead — say so and stop; don't loop.
 
 **Why auto-open is the default.** A draft CR is cheap and reversible: it requests no review, the push already triggered any branch-level CI, and self-assign notifies only you. The deep links are the load-bearing part of the description, and a placeholder-only draft is broken on arrival — opening the real CR first is what makes the description useful. The script does **not** sniff for a "merges direct to `main`, never opens CRs" convention, because there's no reliable signal for it. Two cases give way to the `skip-deep-links` path:
 
@@ -160,7 +176,7 @@ git diff main...HEAD --stat
 git diff main...HEAD
 ```
 
-(`AHEAD=0` already told you to stop if nothing is ahead.)
+(`AHEAD=0` already routed you — chained to `/anchor:commit` on `NEEDS_COMMIT=1`, or stopped otherwise — so a run that reaches here is ahead of the default branch.)
 
 ### Act on `STATE`
 

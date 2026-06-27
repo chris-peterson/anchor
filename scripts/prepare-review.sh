@@ -29,6 +29,9 @@
 #   ON_DEFAULT_BRANCH=<0|1>      1 == HEAD is the default branch (no CR to open)
 #   AHEAD=<n>                    commits HEAD is ahead of the default branch
 #   BEHIND=<n>                   commits HEAD is behind — >0 means run the rebase dialog
+#   NEEDS_COMMIT=<0|1>           1 == no CR and nothing ahead of the default
+#                                branch, so a CR can't be opened yet — the skill
+#                                chains into /anchor:commit before continuing
 #   CR_PREEXISTING=<0|1>         a CR was already open before this run
 #   CR_CREATED=<0|1>             this script opened a draft CR
 #   CR_URL=<web url>             empty on the skip-deep-links path
@@ -132,9 +135,19 @@ resolve_cr() {
   esac
 }
 
+needs_commit=0
 if [[ "$forge" != "none" && "$on_default" -eq 0 ]]; then
   if resolve_cr; then
     cr_preexisting=1
+  elif [[ "$ahead" -eq 0 ]]; then
+    # No CR, and nothing committed ahead of the default branch. Opening a draft
+    # here is what fails — `glab mr create` / `gh pr create` reject with "Could
+    # not find any commits between origin/<default> and <branch>". The work is
+    # finished but uncommitted (or the only commits are unpushed and zero ahead
+    # of the default branch, e.g. on the default branch itself). Report the
+    # condition so the skill chains into /anchor:commit instead of surfacing a
+    # raw forge error.
+    needs_commit=1
   elif [[ "$auto_open" -eq 1 ]]; then
     # No CR yet — open a draft, assigned to me, source branch deleted on merge.
     # Push first so the create call has a remote branch to target.
@@ -242,6 +255,7 @@ echo "DEFAULT_BRANCH=$default_branch"
 echo "ON_DEFAULT_BRANCH=$on_default"
 echo "AHEAD=$ahead"
 echo "BEHIND=$behind"
+echo "NEEDS_COMMIT=$needs_commit"
 echo "CR_PREEXISTING=$cr_preexisting"
 echo "CR_CREATED=$cr_created"
 echo "CR_URL=$cr_url"
