@@ -63,6 +63,24 @@ Run inner commands (like the `glab api user` id lookup) as their own step and
 reuse the captured value — chaining with `$(…)` or `;`/`&&` trips structural
 safety gates in some agents and prompts unnecessarily.
 
+## GitLab-flavored markdown traps
+
+Two facts about how GitLab renders an MR/issue body. Both produce output that
+links the wrong target or renders wrong, and both are invisible in the markdown
+source — they surface only once rendered.
+
+**Cross-project references need the full URL.** The `#NNNN` (issue), `!NNNN`
+(MR), and `@name` (user) shortcuts resolve *within the current project*. In an
+MR, a bare `#1234` autolinks to issue 1234 of that MR's project — not to a
+same-numbered item in another project. CI/deploy pipelines routinely live in a
+different project than the MR, so any reference to a pipeline, issue, or CR
+outside the current project must use the full URL. The bare shortcut silently
+links the wrong thing.
+
+**Tables can't be indented under a list item.** A table indented beneath a list
+item renders unreliably in GitLab-flavored markdown. Keep tables at root level —
+break them out of the surrounding list rather than nesting them under a bullet.
+
 ## PR create (GitHub)
 
 ```bash
