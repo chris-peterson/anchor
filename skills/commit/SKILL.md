@@ -53,7 +53,19 @@ flowchart TD
 
 When invoked with `--preview`, this is a **look-only** path: open a diff in the difftool for review, then stop. Do **not** run tests, stage, draft a message, or commit — none of the steps below apply. Resolve the target repo the same way (see "Target repo"), pick the diff scope from the argument, and launch the shared wrapper as a **background** Bash call (`run_in_background: true`), exactly as Step 4 does for the post-commit review:
 
-- **`--preview`** — the working tree vs `HEAD` (`--local`), to look over uncommitted work before committing. If the working tree is clean there's nothing uncommitted to show: say so and stop rather than opening an empty diff.
+- **`--preview`** — the working tree vs `HEAD` (`--local`), to look over uncommitted work before committing. If the working tree is clean there's nothing uncommitted to show — but the branch may still hold unpushed commits worth a look before pushing. Check the unpushed-commit count:
+
+  ```bash
+  bash "${CLAUDE_PLUGIN_ROOT}/scripts/look-ahead.sh"
+  ```
+
+  If the count is `1` or more, offer the branch review — the whole branch vs the default branch, the same diff `--preview cr` shows — and run it when the user accepts:
+
+  ```bash
+  bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --full
+  ```
+
+  If the count is `0` or empty (nothing uncommitted and nothing unpushed), say so and stop rather than opening an empty diff.
 - **`--preview cr`** (or `mr` / `pr`) — the whole branch vs the default branch (`--full`), the way a reviewer sees the change request. Useful for a self-review of the full changeset before you open or update the CR.
 
 ```bash
