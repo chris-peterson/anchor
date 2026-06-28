@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.14.0
+
+### Features
+- `/anchor:prepare-review` no longer dead-ends when run with finished-but-uncommitted work. It detects that nothing is committed ahead of the default branch and chains into `/anchor:commit`, then resumes — instead of surfacing the forge's raw "could not find any commits between" error.
+
+### Other
+- Sharpened the change-request description guidance in prepare-review, encoding recurring traps (re-describing the diff in prose, two GitLab-markdown pitfalls) so generated descriptions stay focused on *why* a change exists.
+
 ## 0.13.0
 
 `/anchor:commit` no longer suggests rewriting a commit you didn't author.
