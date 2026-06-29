@@ -13,5 +13,6 @@
 - Guides
   - [Configuring anchor](/guides/configuring)
   - [Forge cookbook](/guides/forge-cookbook)
+  - [Markdown gotchas](/guides/markdown-gotchas)
   - [Description vs docs](/guides/description-vs-docs)
   - [Staying in changeset scope](/guides/changeset-scope)

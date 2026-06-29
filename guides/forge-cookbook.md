@@ -63,11 +63,13 @@ Run inner commands (like the `glab api user` id lookup) as their own step and
 reuse the captured value — chaining with `$(…)` or `;`/`&&` trips structural
 safety gates in some agents and prompts unnecessarily.
 
-## GitLab-flavored markdown traps
+## Forge autolink traps
 
-Two facts about how GitLab renders an MR/issue body. Both produce output that
-links the wrong target or renders wrong, and both are invisible in the markdown
-source — they surface only once rendered.
+For the renderer-general markdown gotchas — character escaping, nested code
+fences, mermaid, collapsible `<details>`, tables in lists — see the bundled
+`markdown-gotchas.md`. This section covers the forge-specific autolink trap:
+output that links the wrong target, invisible in the markdown source until
+rendered.
 
 **Cross-project references need the full URL.** The `#NNNN` (issue), `!NNNN`
 (MR), and `@name` (user) shortcuts resolve *within the current project*. In an
@@ -76,10 +78,6 @@ same-numbered item in another project. CI/deploy pipelines routinely live in a
 different project than the MR, so any reference to a pipeline, issue, or CR
 outside the current project must use the full URL. The bare shortcut silently
 links the wrong thing.
-
-**Tables can't be indented under a list item.** A table indented beneath a list
-item renders unreliably in GitLab-flavored markdown. Keep tables at root level —
-break them out of the surrounding list rather than nesting them under a bullet.
 
 ## PR create (GitHub)
 
