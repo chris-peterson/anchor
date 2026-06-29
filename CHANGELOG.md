@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.14.1
+
+### Other
+- Markdown-rendering gotchas — character escaping (`~`, `$`, `_`, `*`), nested code fences, mermaid blocks, collapsible `<details>`, and tables under list items — are now collected in a single `markdown-gotchas` guide, referenced from `/anchor:prepare-review`, `/anchor:issue`, and the forge cookbook instead of restated in each.
+- Documents a tilde-strikethrough trap: GFM strikes text wrapped in one or two tildes, so two `~`-prefixed values in one paragraph (for example two approximate costs) can pair into an unintended strike.
+
 ## 0.14.0
 
 ### Features
