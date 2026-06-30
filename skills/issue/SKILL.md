@@ -1,5 +1,6 @@
 ---
 name: issue
+disable-model-invocation: true
 description: Draft and file (or update) a forge issue that leads with WHY the work is needed.
 ---
 

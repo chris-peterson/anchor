@@ -1,5 +1,6 @@
 ---
 name: commit
+disable-model-invocation: true
 description: Stage changes and prepare a commit message; reach for it when work is ready to commit.
 ---
 
