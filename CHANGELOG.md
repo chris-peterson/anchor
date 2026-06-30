@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.15.0
+
+### Features
+- New `omit-attribution-trailers` ambient rule. The default Claude Code harness appends a `Co-Authored-By: Claude` trailer to commits and ends PR/MR bodies with a "Generated with Claude Code" line. anchor produces commits, change requests, and issues, so it now injects a rule countering those defaults — keeping its git artifacts free of tooling attribution, with the `Refs:` work-tracker link the only trailer it adds. The commit-message template's Trailers section and the ambient-rules page point at the new rule.
+
 ## 0.14.3
 
 ### Other
