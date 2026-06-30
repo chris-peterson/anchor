@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.3
+
+### Other
+- The `/`-invoked skills (`commit`, `issue`, `prepare-review`, `resolve-feedback`, `pipeline`) are now marked `disable-model-invocation`, dropping their descriptions from every session's always-resident context. They stay available via `/` and in the menu; Claude just no longer auto-loads them.
+
 ## 0.14.2
 
 ### Other
