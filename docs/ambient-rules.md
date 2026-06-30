@@ -17,3 +17,7 @@ anchor adds to your sessions.
 ---
 
 [use-forge-clis](rules/use-forge-clis.md ':include')
+
+---
+
+[omit-attribution-trailers](rules/omit-attribution-trailers.md ':include')
