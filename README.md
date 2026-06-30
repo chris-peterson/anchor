@@ -38,8 +38,6 @@ installed (each degrades gracefully when absent):
   `commit` skill launches (including `--preview`). Absent → it falls back to `git difftool
   --dir-diff` with your configured difftool, asking whether to revise or proceed
   in place of moor's rejected-hunk feedback.
-- **[tack](https://github.com/chris-peterson/tack)** — the WIP route tracker. Absent
-  → CR-to-tack linking is skipped silently.
 
 ## Try the plugin locally
 

@@ -94,10 +94,6 @@ degrades gracefully when absent.
   with your configured difftool — you still get a visual review, and the skill
   asks whether to revise or proceed in place of moor's structured rejected-hunk
   feedback.
-- **[tack](https://github.com/chris-peterson/tack)** — the work-in-progress route
-  tracker. When present, `prepare-review` records the CR as the active tack's
-  deliverable and offers to mark the work done. Without tack, that linking is
-  skipped.
 
 ## Reference
 

@@ -25,8 +25,7 @@ flowchart TD
         Ahead -->|No| Commit["/anchor:commit, then re-gather"]
         Ahead -->|Yes| MakeCR["Open draft CR"]
         Commit --> MakeCR
-        MakeCR --> Tack["Link to tack (optional)"]
-        Tack --> Behind{Behind main?}
+        MakeCR --> Behind{Behind main?}
         Behind -->|Yes| DoRebase["Rebase + force-with-lease"]
         Behind -->|No| StateCheck
         DoRebase --> StateCheck["Sanity-check vs CR head"]
@@ -114,26 +113,6 @@ The second run finds a commit ahead, auto-opens the draft CR, and returns a norm
 
 - **`ON_DEFAULT_BRANCH=1`** — HEAD is the default branch, so there's no feature branch to open a CR *from*; the script skips auto-open.
 - **User asks not to open one** — the repo merges direct to `main` without CRs, or the CLI's default forge instance is wrong for this repo. Re-run with `--no-open` to proceed URL-free; or, if they'd rather open the draft themselves, pause until they confirm one is open, then re-run so the script resolves its URL.
-
-### Link the CR to tack (optional)
-
-[tack](https://github.com/chris-peterson/tack) tracks work-in-progress as routes
-and tacks. The integration is **optional** — if `tack` isn't on PATH, skip this
-section silently. When it is present and a route resolves (a pinned `.tack` file,
-or `tack find <CR_URL> --json` matches), record the CR as the tack's deliverable
-so the WIP tracker links to the review:
-
-```bash
-tack deliverable <slug> <tack-id> "MR" "<CR_URL>"   # "PR" on GitHub
-```
-
-When the CR represents the completion of that unit of work, offer to mark the
-tack done:
-
-> Mark tack `<slug>/<tack-id>` done? `[yes / no]`
-
-On `yes`, run `tack done <slug> <tack-id>`. Leave it open if more work on the
-tack is expected after review.
 
 ### Rebase on main when `BEHIND > 0`
 
