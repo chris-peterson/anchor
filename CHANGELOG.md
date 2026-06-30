@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.16.0
+
+### Features
+- The `/`-invoked skills (`commit`, `prepare-review`, `resolve-feedback`, `issue`, `pipeline`) are model-invocable again, and each `description` now carries a "when to use" hint so Claude reaches for the right one without being told. This restores the auto-invocation and trigger cues that 0.14.2–0.14.3 had trimmed for token cost — the descriptions stay lean but key off intent: `commit` off commit/push/checkpoint, `prepare-review` off opening an MR/PR or creating a review, `pipeline` off pipeline/build/CI/GitHub Actions, and so on.
+
+### Other
+- Decoupled from tack. `prepare-review` no longer calls `tack` to record the CR as a route's deliverable: tack already detects the CR URL from the `gh`/`glab` output through its own hook, so the explicit `tack find` / `deliverable` / `done` calls were redundant and coupled anchor to tack's CLI. anchor and tack now compose through the shared session — neither plugin references the other. The close-the-loop "mark done" step is left to a future merge/release skill. tack is dropped from the suite dependencies and the optional-integrations docs.
+
 ## 0.15.0
 
 ### Features
