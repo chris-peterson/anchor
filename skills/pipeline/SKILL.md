@@ -1,6 +1,7 @@
 ---
 name: pipeline
-description: Report a commit's forge pipeline state, or watch until it settles. Triggers on 'is the build green', 'did my pipeline pass', 'notify me when ci passes'.
+disable-model-invocation: true
+description: Report a commit's forge pipeline state, or watch until it settles.
 ---
 
 # Pipeline
