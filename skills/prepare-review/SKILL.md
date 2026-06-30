@@ -1,7 +1,6 @@
 ---
 name: prepare-review
-disable-model-invocation: true
-description: Get the branch ready for review — rebase on main, resolve conflicts, then draft a description that tells reviewers WHY the change exists.
+description: Rebase on the default branch, push, open the PR/MR, and draft a description that tells reviewers WHY the change exists. Use when opening an MR/PR or creating a review.
 ---
 
 # Prepare Review

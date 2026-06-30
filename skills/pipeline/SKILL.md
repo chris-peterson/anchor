@@ -1,7 +1,6 @@
 ---
 name: pipeline
-disable-model-invocation: true
-description: Report a commit's forge pipeline state, or watch until it settles.
+description: Report a commit's forge pipeline state, or watch until it settles. Use when checking the status of a pipeline, build, CI, or GitHub Actions run — or watching one to completion.
 ---
 
 # Pipeline

@@ -1,7 +1,6 @@
 ---
 name: commit
-disable-model-invocation: true
-description: Stage changes and prepare a commit message; reach for it when work is ready to commit.
+description: Stage changes, run tests, and write a commit message. Use when work is ready to commit, push, or checkpoint.
 ---
 
 # Prepare Commit Message

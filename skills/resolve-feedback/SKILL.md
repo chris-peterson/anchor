@@ -1,7 +1,6 @@
 ---
 name: resolve-feedback
-disable-model-invocation: true
-description: Fetch an open CR's review feedback and drive each thread to resolution — fix, reply, resolve.
+description: Fetch an open CR's review feedback and drive each thread to resolution — fix, reply, resolve. Use when addressing review feedback or resolving comment threads on an open PR/MR.
 ---
 
 # Resolve Review Feedback
