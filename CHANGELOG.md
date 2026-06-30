@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.14.2
+
+### Other
+- Trimmed skill `description` frontmatter to cut the always-resident context cost each skill carries on every turn. The `/`-invoked skills (`commit`, `issue`, `prepare-review`, `resolve-feedback`) no longer list redundant trigger phrases; `pipeline` keeps only the natural-language cues ("is the build green", "did my pipeline pass", "notify me when ci passes").
+
 ## 0.14.1
 
 ### Other
