@@ -1,6 +1,6 @@
 ---
 name: pipeline
-description: Work with a commit's forge pipeline — report its latest state, or watch until it settles (pass / fail with the failed jobs / no pipeline). Triggers on 'pipeline', 'pipeline status', 'get latest pipeline', 'is the build green', 'did my pipeline pass', 'watch the pipeline', 'notify me when ci passes'.
+description: Report a commit's forge pipeline state, or watch until it settles. Triggers on 'is the build green', 'did my pipeline pass', 'notify me when ci passes'.
 ---
 
 # Pipeline

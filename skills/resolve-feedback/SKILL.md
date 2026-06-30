@@ -1,6 +1,6 @@
 ---
 name: resolve-feedback
-description: Fetch an open CR's review feedback and drive each thread to resolution — fix, reply, resolve. Triggers on 'resolve feedback', 'address feedback', 'review feedback', 'incorporate feedback', 'respond to review', or a pasted CR URL with review comments.
+description: Fetch an open CR's review feedback and drive each thread to resolution — fix, reply, resolve.
 ---
 
 # Resolve Review Feedback

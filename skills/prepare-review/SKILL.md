@@ -1,6 +1,6 @@
 ---
 name: prepare-review
-description: Get the branch ready for review — rebase on main, resolve conflicts, then draft a description that tells reviewers WHY the change exists. Triggers on 'prepare review', 'describe this change', 'review description'.
+description: Get the branch ready for review — rebase on main, resolve conflicts, then draft a description that tells reviewers WHY the change exists.
 ---
 
 # Prepare Review

@@ -1,6 +1,6 @@
 ---
 name: commit
-description: Stage all changes and prepare a commit message. Run with `--preview` to open the working-tree diff in the difftool without committing, or `--preview cr` to review the whole branch the way a reviewer sees the change request. Triggers on 'commit', 'commit message', 'ready to commit', 'commit --preview'.
+description: Stage changes and prepare a commit message; reach for it when work is ready to commit.
 ---
 
 # Prepare Commit Message

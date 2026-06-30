@@ -1,6 +1,6 @@
 ---
 name: issue
-description: Draft and file (or update) a forge issue that leads with WHY the work is needed. Triggers on 'file an issue', 'create an issue', 'write an issue', 'open an issue'.
+description: Draft and file (or update) a forge issue that leads with WHY the work is needed.
 ---
 
 # Issue
