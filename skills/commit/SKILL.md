@@ -34,7 +34,9 @@ flowchart TD
     subgraph "Step 2-3: Write & Confirm"
         ReadDiff --> Draft["Draft commit message"]
         ReadHead --> Draft
-        Draft --> Confirm{User choice?}
+        Draft --> OnDefault{On default branch?}
+        OnDefault -->|Yes| Branch["Offer feature branch"] --> Confirm
+        OnDefault -->|No| Confirm{User choice?}
         Confirm -->|Yes| Commit["git commit"]
         Confirm -->|Merge| Amend["git commit --amend"]
         Confirm -->|Edit| Revise["Revise message"] --> Confirm
@@ -80,13 +82,20 @@ At the very start, call `TaskList`. If any task is already `in_progress`, this
 skill is running inside an orchestrator (e.g. a release workflow) — run silently
 and do **not** create your own tasks; the orchestrator's list is the source of
 truth. If nothing is `in_progress`, `/commit` is the entry point; enumerate these
-steps as tasks:
+steps as tasks. Label them by what happens, not by the `## Step N` headings
+(the headings start at Step 0, so a numbered task list drifts one off) — and
+don't split out a "read the diff" task, since reading is the input to drafting,
+not a step of its own:
 
-- `Step 1: Run tests`
-- `Step 2: Stage and read changes`
-- `Step 3: Draft commit message`
-- `Step 4: Commit`
-- `Step 5: Visual diff review`
+- `Run tests`
+- `Stage changes`
+- `Draft commit message`
+- `Commit the checkpoint`
+- `Review the commit (amend on fix-now)`
+
+The last two read commit-then-review on purpose: the commit is a durable,
+re-reviewable checkpoint, and a `fix-now` amends that still-unpushed commit and
+re-reviews. (To review *before* committing, that's `--preview` — see below.)
 
 If the diff is empty and the skill exits early, mark remaining tasks `deleted`
 rather than leaving them pending.
@@ -179,6 +188,28 @@ wrapped at 72 characters. Focus on context that isn't
 obvious from the diff.
 ```
 
+### When on the default branch — offer a feature branch first
+
+Before committing, check whether HEAD is the default branch:
+
+```bash
+git branch --show-current
+```
+
+Compare it to the default (`git symbolic-ref --short refs/remotes/origin/HEAD | sed 's@^origin/@@'`, falling back to `main`/`master`). **If they match, don't just commit onto the default branch** — a commit meant for review belongs on a feature branch, and committing to the default branch directly is how work lands unreviewable (and how the leaked "commit on main, then try to open an MR from main" dead-end happens). Offer the branch, named from the subject you just drafted:
+
+- **Slug the subject** — lowercase, non-alphanumeric runs → single hyphens, trim leading/trailing hyphens, cap ~50 chars. `Add retry to checkout` → `add-retry-to-checkout`.
+- Ask with `AskUserQuestion` (header `Branch`), recommended option first so the default lands on branch creation:
+  1. **Create branch `<slug>`** *(recommended)* — `git checkout -b <slug>`, then commit onto it.
+  2. **Commit to `<default>`** — the deliberate direct-to-default case (a release commit, a docs typo on `main`); proceed as normal.
+  3. **Edit name** — take a name from the user, then `git checkout -b <that>`.
+
+Create the branch (when chosen) **before** the commit below, so the commit lands on the feature branch. When `/anchor:prepare-review` chained here, the recommended branch path is exactly what it needs — it re-gathers afterward and opens the CR from the new branch.
+
+Committing directly to the default branch is never a squash target (the gate below blocks it via `default-branch-tip`), so even the "commit to `<default>`" path lands as a new commit rather than amending the published tip.
+
+### Squash gate
+
 Before presenting options, decide whether squashing the staged changes into HEAD (via `git commit --amend`) is on the table. The gate is *"is HEAD out for review?"* — the deterministic facts come from the helper, one launch-and-read:
 
 ```bash
@@ -190,10 +221,10 @@ The block it prints:
 | Key | What to do with it |
 |-----|--------------------|
 | `SQUASH_ALLOWED` | `1` → amending HEAD is safe; offer squash (gated further by relatedness below). `0` → squash is off the table; present the no-squash options |
-| `SQUASH_BLOCK_REASON` | why squash is blocked: `foreign-author` (HEAD authored by someone else), or `cr-ready` (HEAD is pushed and the CR is out for review) |
+| `SQUASH_BLOCK_REASON` | why squash is blocked: `other-author` (HEAD authored by someone else), `default-branch-tip` (HEAD is published on the default branch), or `cr-ready` (HEAD is pushed and the CR is out for review) |
 | `SQUASH_NEEDS_FORCE_PUSH` | `1` → squash is allowed but HEAD is pushed (a draft CR, or no CR), so the amend must be followed by `git push --force-with-lease` |
 | `CR_STATE` | `none` / `draft` / `ready` — the branch's open CR review state |
-| `HEAD_AUTHOR_NAME` | name to cite in the `foreign-author` explanation |
+| `HEAD_AUTHOR_NAME` | name to cite in the `other-author` explanation |
 | `PRIOR_SUBJECT` | HEAD's subject, for the squash option text |
 
 The helper folds in the old unpushed-count probe (including the no-upstream `origin/<default>..HEAD` fallback), the author guard, and the CR-draft probe — don't re-run those.
@@ -207,10 +238,11 @@ Squash is off the table; do not offer it. Present:
 
 Say why in one line:
 
-- **`foreign-author`** — `HEAD was authored by <HEAD_AUTHOR_NAME> — squashing would rewrite their commit, so only a new commit is offered.` Amending rewrites HEAD in place; a commit someone else authored is never a squash target, even for a message-only fix.
+- **`other-author`** — `HEAD was authored by <HEAD_AUTHOR_NAME> — squashing would rewrite their commit, so only a new commit is offered.` Amending rewrites HEAD in place; a commit someone else authored is never a squash target, even for a message-only fix.
+- **`default-branch-tip`** — `HEAD is the published tip of <default> — amending it would rewrite shared history, so this lands as a new commit.` Reachable from `origin/<default>`, so amend + force-push would rewrite the published default branch. (This is also the "fresh feature branch, no commits of your own yet" case — HEAD is still the default-branch tip, so there's nothing of yours to squash into.) The message-only-amend exception below does **not** apply — never rewrite the published default branch.
 - **`cr-ready`** — `CR is out for review — a reviewer relies on the per-commit "changes since" diff, so this lands as a new commit.`
 
-**Narrow exception — message-only amend on a ready CR.** When the reason is `cr-ready` and the user reports the *message* (not the code) is demonstrably wrong — pasted from a different repo, references identifiers that don't exist here, doesn't match what the diff does — the tree is unchanged, so the reviewer-protection motivation doesn't apply. Offer `git commit --amend -F <msg-file>` to fix the message, then surface "force-push (`--force-with-lease`) affects only the message; the tree is unchanged" as an explicit choice and let the user decide. The `foreign-author` guard still holds — never amend someone else's commit even for a message fix. Do not extend this to content rewrites; the moment any file content moves, the standard gate applies again.
+**Narrow exception — message-only amend on a ready CR.** When the reason is `cr-ready` and the user reports the *message* (not the code) is demonstrably wrong — pasted from a different repo, references identifiers that don't exist here, doesn't match what the diff does — the tree is unchanged, so the reviewer-protection motivation doesn't apply. Offer `git commit --amend -F <msg-file>` to fix the message, then surface "force-push (`--force-with-lease`) affects only the message; the tree is unchanged" as an explicit choice and let the user decide. The `other-author` guard still holds — never amend someone else's commit even for a message fix. Do not extend this to content rewrites; the moment any file content moves, the standard gate applies again.
 
 ### When `SQUASH_ALLOWED=1` — apply the relatedness judgment
 
