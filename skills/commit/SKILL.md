@@ -179,81 +179,67 @@ wrapped at 72 characters. Focus on context that isn't
 obvious from the diff.
 ```
 
-Before presenting options, check whether HEAD is ahead of the upstream (i.e., there is at least one unpushed commit):
+Before presenting options, decide whether squashing the staged changes into HEAD (via `git commit --amend`) is on the table. The gate is *"is HEAD out for review?"* — the deterministic facts come from the helper, one launch-and-read:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/look-ahead.sh"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/squash-check.sh"
 ```
 
-**If output is empty (no upstream configured — common on freshly-created local branches that haven't been `push -u`'d yet):** fall back to the same `origin/main..HEAD` range Step 4 uses for the difftool — substitute the symbolic origin HEAD (`git symbolic-ref refs/remotes/origin/HEAD`) or `master` if `main` doesn't exist. A local-only branch with unpushed commits should still get the squash option; otherwise the heuristic silently misroutes the most common "I just made the first commit on a new branch" case.
+The block it prints:
 
-**If the count is `0` (or the fallback finds no unpushed commits):** skip straight to the simple options — do not offer squash, do not run `git log`, do not mention unpushed commits:
+| Key | What to do with it |
+|-----|--------------------|
+| `SQUASH_ALLOWED` | `1` → amending HEAD is safe; offer squash (gated further by relatedness below). `0` → squash is off the table; present the no-squash options |
+| `SQUASH_BLOCK_REASON` | why squash is blocked: `foreign-author` (HEAD authored by someone else), or `cr-ready` (HEAD is pushed and the CR is out for review) |
+| `SQUASH_NEEDS_FORCE_PUSH` | `1` → squash is allowed but HEAD is pushed (a draft CR, or no CR), so the amend must be followed by `git push --force-with-lease` |
+| `CR_STATE` | `none` / `draft` / `ready` — the branch's open CR review state |
+| `HEAD_AUTHOR_NAME` | name to cite in the `foreign-author` explanation |
+| `PRIOR_SUBJECT` | HEAD's subject, for the squash option text |
 
-1) **Accept** — commit as-is
+The helper folds in the old unpushed-count probe (including the no-upstream `origin/<default>..HEAD` fallback), the author guard, and the CR-draft probe — don't re-run those.
+
+### When `SQUASH_ALLOWED=0` — present the no-squash options
+
+Squash is off the table; do not offer it. Present:
+
+1) **Accept** — commit as-is (a new commit)
 2) **Edit** — tell you what to change
 
-Squashing into a pushed commit requires force push, so the squash option must never appear when there are no unpushed commits.
+Say why in one line:
 
-**If the count is `>=1` (unpushed commits exist):** get the prior commit's subject line and author email:
+- **`foreign-author`** — `HEAD was authored by <HEAD_AUTHOR_NAME> — squashing would rewrite their commit, so only a new commit is offered.` Amending rewrites HEAD in place; a commit someone else authored is never a squash target, even for a message-only fix.
+- **`cr-ready`** — `CR is out for review — a reviewer relies on the per-commit "changes since" diff, so this lands as a new commit.`
 
-```bash
-git log -1 --format=%s HEAD
-```
+**Narrow exception — message-only amend on a ready CR.** When the reason is `cr-ready` and the user reports the *message* (not the code) is demonstrably wrong — pasted from a different repo, references identifiers that don't exist here, doesn't match what the diff does — the tree is unchanged, so the reviewer-protection motivation doesn't apply. Offer `git commit --amend -F <msg-file>` to fix the message, then surface "force-push (`--force-with-lease`) affects only the message; the tree is unchanged" as an explicit choice and let the user decide. The `foreign-author` guard still holds — never amend someone else's commit even for a message fix. Do not extend this to content rewrites; the moment any file content moves, the standard gate applies again.
 
-```bash
-git log -1 --format=%ae HEAD
-```
+### When `SQUASH_ALLOWED=1` — apply the relatedness judgment
 
-**Author guard — don't offer to rewrite someone else's commit.** Compare HEAD's author email to the current `user.email`:
-
-```bash
-git config user.email
-```
-
-If they differ, the squash target isn't yours. Amending or squashing rewrites HEAD in place — it would overwrite another person's commit, replacing their authorship and (once force-pushed) their published history. Present only the no-squash options — a new commit, or **Edit** to revise the message first — just as the count-`0` path does, and say why in one line (e.g. `HEAD was authored by <name> — squashing would rewrite their commit, so only a new commit is offered`). Skip the CR-draft probe and the relatedness heuristic below; they only decide *how* to squash, and squash is off the table. The rest of this step applies only when HEAD is your own commit.
-
-**Then check whether a CR is open on this branch, and whether it's still a draft.** Once a CR is marked **ready** (non-draft), **force-pushing over commits a reviewer may have seen is off the table** — they should see each iteration as its own commit. While the CR is still a **draft**, mutable history remains the norm (anchor creates CRs as drafts for exactly this reason). Either way, this only protects *pushed* commits. If the squash target (HEAD) is itself unpushed, the reviewer has never seen it, and amending into it doesn't disturb the review at all.
-
-At this point in the flow, HEAD is unpushed by definition — we only reach the squash-vs-new-commit decision when the earlier ahead-count probe (or the `origin/main..HEAD` fallback for local-only branches) reported a positive count, meaning HEAD has at least one commit (including itself) not on upstream. So — once the author guard above has confirmed HEAD is your own commit — the squash target is always safe to amend. An open review still informs the option text — surfacing context — but does not flip the recommendation away from amend.
-
-**Narrow exception — message-only amend on a pushed commit no reviewer has engaged with yet.** This applies in a different code path (when HEAD itself is pushed, so the squash decision below doesn't fire), and the same author guard holds — never amend a commit someone else authored, even for a message-only fix. The rule's motivation is protecting reviewers from re-reviewing the same code; that motivation doesn't apply when the *diff is unchanged*. If the user reports the commit message is demonstrably wrong (e.g., pasted from a different repo, references identifiers that don't exist in this codebase, doesn't match what the diff actually does), the right action is `git commit --amend -F <msg-file>` to fix the message, then surface "force-push to overwrite the wrong message" as an explicit choice. The tree stays identical; only the message changes. Still surface the trade-off — "force-push affects only the message; the tree is unchanged" — and let the user decide. Do not extend this exception to content rewrites; the moment any file content moves, the standard rule applies again.
-
-Detect the branch's open CR and its draft status with the matching forge tool (pick by the `origin` remote URL; empty output = no open CR):
-
-```bash
-# GitLab origin
-glab mr view --output json 2>/dev/null | jq -r '.draft'
-```
-
-```bash
-# GitHub origin
-gh pr view --json isDraft --jq '.isDraft' 2>/dev/null
-```
-
-Use the relatedness heuristic regardless of review status. Decide whether the staged changes are **related** to the prior commit (continuation, fix, or refinement of the same work) or **unrelated** (different topic, different files, new task). Mark the recommended option with `(* recommended)` based on this judgment:
+The gate is open; now *your* judgment decides squash vs new commit. Decide whether the staged changes are **related** to the prior commit (continuation, fix, or refinement of the same work) or **unrelated** (different topic, different files, new task):
 
 - **Related** → recommend squash
 - **Unrelated** → recommend new commit
 
-If a **ready** CR is open, annotate the squash option so the user knows the context (e.g., `_(amending the unpushed commit on top of the reviewed work — reviewer hasn't seen it)_`). If the open CR is still a **draft**, the annotation is lighter: `_(CR is draft — mutable history is the norm)_`. Do not flip the recommendation either way; the reviewer has only seen the pushed commits below HEAD, not HEAD itself.
+When `SQUASH_NEEDS_FORCE_PUSH=1` (pushed draft CR), annotate the squash option so the user knows the follow-up push is a force-push — e.g. `_(CR is draft — mutable history is the norm; amend force-pushes with lease)_`. Don't let it flip the recommendation; a draft's history is expected to move.
 
 Present options in recommended-first order:
 
 If recommending a new commit:
 
 1) **New commit** _(* recommended)_
-2) **Squash into "[prior commit subject]"**
+2) **Squash into "[PRIOR_SUBJECT]"**
 3) **Edit** — tell you what to change (e.g., "change the subject to X", "drop the second paragraph")
 
 If recommending squash:
 
-1) **Squash into "[prior commit subject]"** _(* recommended)_
+1) **Squash into "[PRIOR_SUBJECT]"** _(* recommended)_
 2) **New commit**
 3) **Edit** — tell you what to change (e.g., "change the subject to X", "drop the second paragraph")
 
+### Act on the choice
+
 If they choose New commit (or Accept when no squash option), run `git commit` with the message.
 
-If they choose Squash, write a combined commit message covering both the prior commit and the new changes, present it for confirmation, then run `git commit --amend` with the new message.
+If they choose Squash, write a combined commit message covering both the prior commit and the new changes, present it for confirmation, then run `git commit --amend` with the new message. If `SQUASH_NEEDS_FORCE_PUSH=1`, follow the amend with `git push --force-with-lease` so the open draft CR updates to the rewritten history.
 
 If they choose Edit, commit with the drafted message then immediately open the editor:
 

@@ -214,7 +214,7 @@ Recency bias is the dominant failure mode here: detail you spent the last hour p
 2. **Write a disposition for each** against *would a fresh reviewer consider this central?* — **Centerpiece** (lead Context), **Footnote** (one bullet in Review guide), or **Cut**.
 3. **If everything came out "centerpiece", redo it.** Follow-up commits are footnotes. If a follow-up deserves co-headline status, it's actually a separate CR.
 
-Run this check **internally** — it shapes what you draft, but the disposition list itself is session-internal scratch, not output. Do **not** print the "Centerpiece / Footnote / Cut" rundown to the user; the only thing they see from this step is the resulting draft. (See **Execute quietly** at the top.)
+Run this check **internally** — the disposition list is scratch that shapes the draft, not output. The only thing the user sees from this step is the resulting draft (see **Execute quietly** at the top).
 
 ### Title
 
@@ -222,127 +222,23 @@ A concise imperative phrase (under 72 characters) that captures the change. Same
 
 ### Body structure
 
-Draft the description following the section template in `templates/cr-description.md`: **Context**, **Review guide**, **Approach & trade-offs** *(rare)*, **Testing** *(rare)*, and **Validation** *(when correctness is best shown by real-world use)*. The template owns the *shape* — which sections, in what order, and what each is for; the guidance below owns the *technique* for realizing it.
+Draft the description following the section template in `templates/cr-description.md`: **Context**, **Review guide**, **Approach & trade-offs** *(rare)*, **Testing** *(rare)*, and **Validation** *(when correctness is best shown by real-world use)*. The template owns the *shape*; the guidance below owns the *technique* for realizing it.
 
-**Use these heading names verbatim.** Context / Review guide / Approach & trade-offs / Testing / Validation are the canonical section headings, not paraphrasable suggestions — emit them as written. Don't rename them into invented alternatives ("What it does", "What to review", "Where it's been used"); reviewers scan for the canonical names. Omit a section that doesn't apply; never rename one.
+**Use these heading names verbatim** — Context / Review guide / Approach & trade-offs / Testing / Validation are canonical, not paraphrasable; reviewers scan for them. Omit a section that doesn't apply; never rename one. (The template spells out why.)
 
-**Deep-link construction (Review guide).** Always deep-link to the actual line, not just the file — reviewers should be one click away from the hunk you're pointing them at. Construction differs by forge:
+**Deep-link construction (Review guide).** Always deep-link to the actual line, not just the file — reviewers should be one click away from the hunk. The forge-specific anchor construction (GitLab `sha1` path-hashes from `FILE_ANCHORS`, GitHub `sha256`) lives in `guides/cr-formatting.md`.
 
-- **GitLab:** `<CR_URL>/diffs#<file-anchor>_<old-line>_<new-line>` where `<file-anchor>` is `sha1(<repo-relative-file-path>)` — already computed per changed file in `FILE_ANCHORS` from Step 1's block. (You still pick the line numbers; only the path-hash is precomputed.) For a file-level link (no specific line), just use `<CR_URL>/diffs#<file-anchor>`. For pure additions, use the new line number for both `<old-line>` and `<new-line>` — the link still resolves.
-
-- **GitHub:** `<CR_URL>/files#diff-<file-anchor>R<new-line>` (or `L<new-line>` for the left/old side). The `<file-anchor>` for GitHub is `sha256(<file-path>)` — `gh` doesn't expose it directly, so fall back to opening the CR's "Files changed" tab and copying the link from the line-number gutter when in doubt.
-
-**Validation — ask, don't guess.** The Validation section applies when the change's correctness is best evidenced by real-world use — when the diff and the rendered artifact don't settle it on their own. Two signal clusters:
-
-- **Shared component consumed by other repos** — shared-component repo path (`terraform-modules/`, `libraries/`, `base-configs/`), no direct deploy pipeline of its own, version exposed as a git ref or semver tag pinned by other repos. Correctness surfaces only against a real downstream consumer.
-- **A tool, skill, or automation whose value is the work it drives** — the evidence a reviewer wants is the real runs that exercised it (the deploys, pipelines, or tickets it produced), not the diff alone.
-
-**Skip** when the diff plus CI already settle correctness — an ordinary self-contained service or UI change ships its own production validation and needs no separate row.
-
-When the signals fire, **ask the author what validation looks like** rather than emitting a guessed checklist row:
-
-> What does validation look like for this change? Which downstream consumer (or representative sandbox) did you exercise it against, and what did you observe?
-
-Record their answer as the evidence row shown in the template's Validation section. The diff shows what the change *says*; the rendered artifact shows what it *renders*; the author's validation evidence tells the reviewer what the change *does* in composition with the consumers that actually exercise it.
+**Validation — ask, don't guess.** The Validation section records *evidence* of real-world use, and applies only when the diff plus the rendered artifact don't settle correctness on their own — a shared component consumed by other repos, or a tool/automation whose value is the work it drives. When those signals fire, ask the author what validation looks like rather than guessing a checklist row; skip the section entirely when the diff plus CI already settle it. The detection signals, the prompt, and the evidence-row format live in the template's Validation section (`templates/cr-description.md`).
 
 ### Tone
 
 Conversational and informal. Reviewers are colleagues, not stakeholders — write like you'd talk through the change at a desk, not like a status report. Sentence fragments are fine. Mid-thought asides in parens are fine. Don't sweat capitalization on tier labels and short bullets, and don't sweat trailing punctuation on fragments — `core change, lives here` reads as well as `Core change, lives here.` and a closing period on a one-line bullet adds nothing. Save the more formal register for the *Why* paragraph where context actually matters; everywhere else, default low-friction.
 
-**A tight review budget is not license for marketing punch.** A low `anchor.reviewBudgetMins` (≈5) steers *what you include* — lead with essentials, cut asides — it does **not** loosen the register into hype. Buzzwords, flattery of the reviewer ("you know this system cold", "your domain eye"), and punchy taglines ("proof it's not theory", "X 101") are noise that costs the reviewer attention, not signal that earns it. Terse means *fewer words*, not *louder ones*. The no-hyperbole discipline in "What to avoid" governs at every budget — a short description and a punchy one are not the same thing.
+**A tight review budget is not license for marketing punch.** A low `anchor.reviewBudgetMins` (≈5) steers *what you include* — lead with essentials, cut asides — it does **not** loosen the register into hype. Buzzwords, reviewer flattery ("you know this system cold"), and punchy taglines cost attention without earning it. Terse means *fewer words*, not *louder ones*; the no-hyperbole discipline in "What to avoid" governs at every budget.
 
 ### Formatting
 
-**Presentation is a primary concern, not a finishing pass.** Before drafting, ask: *what shape is this data, and what visualization fits it?* The right choice makes information land in seconds; the wrong one buries it in prose that reviewers skim past. Pick deliberately — a diagram that doesn't match the data shape is worse than no diagram, and a flat markdown table for tree-shaped data is worse than a brief HTML table.
-
-The menu, ordered by data shape:
-
-| Data shape | Use this | When |
-|------------|----------|------|
-| Linear story | Paragraphs | Motivation → consequence → next step. The default for *Context*. |
-| Flat tabular | **Markdown table** | Lists with consistent columns: changed flags with old/new values, verification rows with `Run` / `Status` columns, affected services with owners. |
-| Process / shape / interaction | **Mermaid diagram** | State machine (`stateDiagram-v2`), service sequence (`sequenceDiagram`), decision/data flow (`flowchart TD`), type relationships (`classDiagram`). |
-| Tree-shaped / hierarchical | **Inline HTML table with `rowspan` / `colspan`** | A parent record with multiple child records sharing parent attributes; a per-environment matrix where one row spans envs. Markdown tables can't represent 2D nesting — drop into raw HTML (`<table><tr><td rowspan="2">…`). Markdown renderers accept raw HTML; use it where it's the right tool. |
-| Structural change | **Before/after with highlights** | Added input, swapped algorithm, new flow. Two mermaid blocks under explicit `### Before` / `### After` headings, with `classDef` highlighting the changed nodes. |
-| Files a change creates | **`diff` block, `+` additions** | A scaffold/init change that adds a tree of new files. Render the created layout as `+`-prefixed lines inside a ` ```diff ` fence so it reads as all-additions (green), not a neutral file tree. Use the real paths from the changeset — never invent a placeholder repo or root-dir name. |
-| Visual / UX change | **Annotated screenshots** (preferred) or **Before/After markdown table** | Component, CSS, template, or layout changes — anything where the rendered output is what the reviewer needs to evaluate. |
-
-Pick once and commit. If two visualizations would each carry the data, prefer the more compact one — reviewers stop reading when they run out of time, not when you run out of content.
-
-After visualization choice, lean into markdown for the surrounding prose:
-
-- **Bold** for the key noun or verb in a sentence, and for lead-in labels (e.g. `**Why:**`, `**Note:**`).
-- *Italics* sparingly — for tone, or to flag a term you're about to define.
-- `Backticks` for every code identifier, file path, env var, branch name, package, or CLI flag. Anything a reader might grep for or paste into a terminal earns backticks. Inline backticks are cheap and pay back hugely in skim-readability.
-  - **Exception — forge-autolink tokens stay bare.** GitLab and GitHub autolink CR/issue refs (`!148`, `#42`), commit SHAs (`a553528`), and user @mentions (`@chris`) when they appear as **bare text**. Wrapping them in backticks turns them into inert code spans and kills the link. Write `!148`, not `` `!148` ``; write `a553528`, not `` `a553528` ``.
-  - **Cross-project references need the full URL.** A bare `#42` / `!148` / `@name` shortcut resolves *within the MR's own project* — `#42` autolinks to issue 42 of that project, not to a same-numbered item elsewhere. A pipeline, issue, or CR in a different project (CI/deploy pipelines routinely live in their own) must be written as a full URL; the bare shortcut silently links the wrong target and the mistake is invisible in the markdown source — it surfaces only once rendered. See the forge cookbook for the full GitLab-markdown facts.
-- Fenced code blocks with a language tag for multi-line snippets, sample output, configs, or schemas.
-- Headings (`##`, `###`) to chunk the description so reviewers can jump straight to "Approach" or "Testing".
-
-**Collapsible sections — fold heavy detail away to keep the outline brief.** Brevity is the default, but some changes genuinely carry detail a reviewer occasionally wants and shouldn't have to scroll past to skip: a full `terraform plan`, a long log excerpt, an exhaustive flag-by-flag table, a verbose config sample. Wrap that detail in a `<details><summary>…</summary>` block. The summary line keeps the outline scannable; the detail is one click away when a reviewer wants it. This is the escape valve that lets the description stay terse *and* complete — reach for it instead of either inlining a wall of output or dropping the detail entirely. Both GitHub and GitLab render the HTML; [GitLab's markdown reference](https://docs.gitlab.com/user/markdown/#collapsible-section) documents the syntax. The one gotcha: markdown inside the block renders only with a blank line after `</summary>` and before `</details>` — without it, tables and code fences show as raw text.
-
-````markdown
-<details>
-<summary><strong>Full <code>terraform plan</code> output</strong></summary>
-
-```text
-# ~200 lines of plan output the reviewer can expand if they want it
-```
-
-</details>
-````
-
-**Mermaid diagrams.** A small mermaid diagram earns its keep when the change has shape that prose hides — a state machine, a sequence between services, a before/after architecture, a decision flow. **A picture lands faster than two paragraphs of prose.** Pick the type that matches the content:
-
-- `stateDiagram-v2` for state transitions
-- `sequenceDiagram` for service or actor interactions
-- `flowchart TD` for decision/data flow
-- `classDiagram` for type relationships
-
-Keep diagrams tight (5–10 nodes — a diagram you have to scroll is worse than no diagram). Follow these mermaid conventions: hand-drawn look (`%%{ init: { 'look': 'handDrawn' } }%%`), no `\n` or `<br>` in node labels (use separate nodes or shorter labels instead).
-
-**Before/after with highlights.** When the change has a structural shape — added input, swapped algorithm, new flow — a before/after diagram is worth the extra lines. Use **two separate fenced mermaid blocks under explicit `### Before` and `### After` markdown subheadings** — *not* two `subgraph` blocks inside a single mermaid block. Mermaid renders subgraphs in non-deterministic order, so a single-block "Before / After" can render with the After above the Before on GitLab. Explicit subheadings guarantee ordering. Highlight the new or changed nodes with a `classDef` so the reader's eye lands on the difference:
-
-````markdown
-### Before
-
-```mermaid
-%%{ init: { 'look': 'handDrawn' } }%%
-flowchart LR
-    A["input"] --> X["process"]
-    X --> O["output"]
-```
-
-### After
-
-```mermaid
-%%{ init: { 'look': 'handDrawn' } }%%
-flowchart LR
-    A["input"] --> X["process"]:::changed
-    New["new input"]:::changed --> X
-    X --> O["output (now scoped)"]
-    classDef changed fill:#fff59d,stroke:#f57c00,stroke-width:3px,color:#000
-```
-````
-
-Use `###` when Before/After fits under an existing `##` section; use `##` when it stands alone. Keep both diagrams tight — if the After grows several new inputs, collapse them into a single labeled node when their individual identity isn't load-bearing (e.g. `salt = env|app` instead of three separate nodes for `env`, `app`, `salt`).
-
-**Visual / UX changes — screenshots.** When the diff touches rendered output, prose can't show the reviewer what changed. Capture screenshots *before* drafting Context — for UX-driven CRs they're usually the centerpiece, not a footnote.
-
-- **Detect.** The changeset is UX-related when the diff touches `.css`/`.scss`, component files (`.tsx`/`.jsx`/`.vue`/`.svelte`), templates (`.html`/`.erb`/`.razor`), design tokens, or asset files (icons, images, fonts).
-- **Capture After.** Drive the running app with the Playwright MCP browser tools (`browser_navigate`, `browser_take_screenshot`). For an isolated component the app can't easily mount, a frontend-design skill can compose a representative view to screenshot.
-- **Force hover-revealed UI via CSS injection, not `page.hover()`.** Programmatic hover races the screenshot timing. Instead, inject a scoped `<style>` element via `browser_evaluate` with `!important` opacity / display rules, take the shot, then navigate away to reset (the `<style>` element doesn't survive route changes). The same technique scales to **focused crops**: hide non-target siblings with a temporary `display: none !important` class so the screenshot bounds tightly around the area of interest.
-- **Capture Before.** Stash the working tree (or `git worktree add` at `main`), screenshot the same views, restore your branch. Match viewport size and route so the only delta is the change under review.
-- **Annotate the modified regions (preferred).** Overlay boxes, arrows, or callouts on the new/modified content so the reviewer's eye lands on the change instead of doing diff-by-eye between two near-identical images.
-- **Fallback — Before/After table.** When annotation isn't practical (multiple regions, layout reflow, animation, theme swap), use a side-by-side markdown table:
-
-  ```markdown
-  | Before | After |
-  |--------|-------|
-  | ![Before](before-login.png) | ![After](after-login.png) |
-  ```
-
-Screenshots are local files; the markdown references them by path. After pasting the description into the forge web UI, drag and drop each PNG into the editor — GitHub/GitLab uploads and rewrites the path to a hosted URL automatically.
+**Presentation is a primary concern, not a finishing pass.** Before drafting, ask: *what shape is this data, and what visualization fits it?* — then pick deliberately; a diagram that doesn't match the data shape is worse than none. The full technique lives in the bundled `guides/cr-formatting.md`: the data-shape → visualization menu, the prose bold/italic/backtick conventions (with the forge-autolink bare-token exception), collapsible `<details>`, mermaid diagram and before/after recipes, and the screenshot-capture workflow. Consult it while drafting. The render-time traps that break any forge markdown — character escaping, nested fences, mermaid-fence placement, the `<details>` blank-line rule — stay in `guides/markdown-gotchas.md`.
 
 ### What to avoid
 

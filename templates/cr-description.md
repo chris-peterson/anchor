@@ -77,8 +77,8 @@ Use whatever tier labels fit the changeset (e.g. *Core logic / Glue / Tests /
 Mechanical*, or *Security-sensitive / Refactor / Cleanup*). Headers describe the
 **kind** of change, not the time it takes. "Critical" means: where a bug would
 hurt most, where a reviewer's judgment adds the most value, or where the core
-design decision lives. Always deep-link to the actual line — see the
-`prepare-review` skill for forge-specific anchor construction. For trivial
+design decision lives. Always deep-link to the actual line — see
+`guides/cr-formatting.md` for forge-specific anchor construction. For trivial
 changesets (a single file, a one-line fix), skip the tiered guide and just link
 the file and say what to look for.
 
@@ -110,10 +110,9 @@ cases:
   shows what the tool *says*; the evidence a reviewer wants is what it *did* —
   the real runs (deploys, pipelines, tickets) it has already produced.
 
-**Ask the author what validation looks like — don't guess it.** When the signals
-fire (see the `prepare-review` skill's detection signals), the skill asks rather
-than inventing a checklist; the author's answer fills this section. Record it as
-one or more evidence rows:
+**Ask the author what validation looks like — don't guess it.** When either
+signal above fires, ask rather than inventing a checklist; the author's answer
+fills this section. Record it as one or more evidence rows:
 
 ```markdown
 - [ ] **Validated against a consumer** — `<consumer or sandbox>` — observed: `<what the author saw>`
