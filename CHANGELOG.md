@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.17.0
+
+### Other
+- `commit`'s squash-vs-new-commit decision moves into a `squash-check.sh` helper and is re-gated on one question — *is HEAD out for review?* A ready CR blocks the squash (a reviewer relies on the per-commit "changes since" diff); unpushed, draft-CR, and no-CR states allow it, with `--force-with-lease` when HEAD is pushed. This corrects the earlier count-based logic that suppressed squash whenever HEAD was pushed, wrongly withholding it on pushed branches with a draft CR or no CR — the case anchor's own history-rewrite rule says is safe to amend.
+- `prepare-review`'s skill body is slimmed back under its size ceiling (~6.6k → ~5.0k words). The CR-description formatting technique — the data-shape → visualization menu, mermaid/before-after and screenshot recipes, prose conventions, and forge deep-link construction — moves to a new `cr-formatting` guide loaded on demand, and the Validation and heading-name guidance is deduped against the template that already owns it. Render-time traps stay in `markdown-gotchas`; no behavior change, the skill just stops loading its formatting reference into context on every invocation.
+
 ## 0.16.0
 
 ### Features
