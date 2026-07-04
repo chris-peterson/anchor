@@ -13,6 +13,10 @@
 #                                              the follow-up is force-push-with-lease)
 #   - HEAD pushed, no CR                     -> squash (nothing is under review;
 #                                              the follow-up is force-push-with-lease)
+#   - HEAD is the pushed tip of the default -> DON'T squash — amending force-pushes
+#     branch                                   over published shared history; no
+#                                              review-state check makes that safe.
+#                                              Land a new commit.
 #   - HEAD pushed, CR is ready (out for     -> DON'T squash — a reviewer relies
 #     review)                                  on the per-commit "changes since"
 #                                              diff; land a new commit
@@ -33,8 +37,10 @@
 #   SQUASH_ALLOWED=<0|1>            1 == amending HEAD is safe; the skill may
 #                                   offer squash (gated further by relatedness)
 #   SQUASH_BLOCK_REASON=<reason>    why squash is off the table (empty when allowed):
-#                                     foreign-author    HEAD authored by someone else
-#                                     cr-ready          pushed & the CR is out for review
+#                                     other-author        HEAD authored by someone else
+#                                     default-branch-tip  HEAD is the pushed tip of the
+#                                                         default branch (published history)
+#                                     cr-ready            pushed & the CR is out for review
 #   SQUASH_NEEDS_FORCE_PUSH=<0|1>  1 == squash is allowed but HEAD is pushed, so
 #                                   the amend must be followed by force-with-lease
 #   HEAD_PUSHED=<0|1>              HEAD is on the remote tracking branch
@@ -64,9 +70,22 @@ head_author_name=$(git log -1 --format=%an HEAD 2>/dev/null || true)
 prior_subject=$(git log -1 --format=%s HEAD 2>/dev/null || true)
 user_email=$(git config user.email 2>/dev/null || true)
 
-foreign_author=0
+other_author=0
 if [[ -n "$head_author_email" && -n "$user_email" && "$head_author_email" != "$user_email" ]]; then
-  foreign_author=1
+  other_author=1
+fi
+
+# --- Default branch (for the push probe and the default-branch guard) --------
+# Resolved once so both the push probe below and the decision block can reuse it.
+
+default_branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null \
+  | sed 's@^origin/@@' || true)
+if [[ -z "$default_branch" ]]; then
+  if git rev-parse --verify --quiet origin/main >/dev/null; then
+    default_branch=main
+  elif git rev-parse --verify --quiet origin/master >/dev/null; then
+    default_branch=master
+  fi
 fi
 
 # --- Is HEAD pushed? ----------------------------------------------------------
@@ -77,19 +96,8 @@ fi
 unpushed_count=""
 if git rev-parse --verify --quiet '@{u}' >/dev/null 2>&1; then
   unpushed_count=$(git rev-list --count '@{u}..HEAD' 2>/dev/null || echo "")
-else
-  default_branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null \
-    | sed 's@^origin/@@' || true)
-  if [[ -z "$default_branch" ]]; then
-    if git rev-parse --verify --quiet origin/main >/dev/null; then
-      default_branch=main
-    elif git rev-parse --verify --quiet origin/master >/dev/null; then
-      default_branch=master
-    fi
-  fi
-  if [[ -n "$default_branch" ]] && git rev-parse --verify --quiet "origin/${default_branch}" >/dev/null; then
-    unpushed_count=$(git rev-list --count "origin/${default_branch}..HEAD" 2>/dev/null || echo "")
-  fi
+elif [[ -n "$default_branch" ]] && git rev-parse --verify --quiet "origin/${default_branch}" >/dev/null; then
+  unpushed_count=$(git rev-list --count "origin/${default_branch}..HEAD" 2>/dev/null || echo "")
 fi
 
 # HEAD is pushed only when we resolved a count and it's zero. No resolvable
@@ -125,11 +133,20 @@ squash_allowed=0
 block_reason=""
 needs_force_push=0
 
-if [[ "$foreign_author" -eq 1 ]]; then
-  block_reason=foreign-author
+if [[ "$other_author" -eq 1 ]]; then
+  block_reason=other-author
 elif [[ "$head_pushed" -eq 0 ]]; then
   # Unpushed HEAD: squashing never touches published or reviewed history.
+  # (Local-only commits on the default branch land here too — fine to amend.)
   squash_allowed=1
+elif [[ -n "$default_branch" ]] \
+     && git rev-parse --verify --quiet "origin/${default_branch}" >/dev/null \
+     && git merge-base --is-ancestor HEAD "origin/${default_branch}" 2>/dev/null; then
+  # HEAD is reachable from origin/<default> — it's published shared history on the
+  # default branch (the pushed default-branch tip, or a fresh feature branch whose
+  # only commit so far IS that tip). Amending it force-pushes over origin/<default>,
+  # which no review-state check makes safe. Land a new commit instead.
+  block_reason=default-branch-tip
 elif [[ "$cr_state" == "ready" ]]; then
   # The one block: a ready CR is out for review, and a reviewer relies on the
   # per-commit "changes since" diff — force-pushing over it destroys that.

@@ -18,20 +18,27 @@
 #     script reports BEHIND and stops short of rebasing.
 #   - Force-push over a ready (non-draft) CR — reported via CR_DRAFT, gated by
 #     the skill.
-#   - Open a draft when one already exists, when HEAD is the default branch, or
-#     when --no-open is passed — those resolve to the URL-free skip-deep-links
-#     path.
+#   - Open a draft when one already exists, or when --no-open is passed — those
+#     resolve to the URL-free skip-deep-links path.
+#   - Create the feature branch when HEAD is the default branch with work to
+#     review — the script reports NEEDS_BRANCH and the skill branches first.
 #
 # Output lines (KEY=value, read from stdout):
 #   FORGE=<github|gitlab|none>
 #   BRANCH=<current branch>
 #   DEFAULT_BRANCH=<resolved default: origin/HEAD, else main, else master>
-#   ON_DEFAULT_BRANCH=<0|1>      1 == HEAD is the default branch (no CR to open)
+#   ON_DEFAULT_BRANCH=<0|1>      1 == HEAD is the default branch (no CR to open
+#                                from — the skill branches first; see NEEDS_BRANCH)
 #   AHEAD=<n>                    commits HEAD is ahead of the default branch
 #   BEHIND=<n>                   commits HEAD is behind — >0 means run the rebase dialog
-#   NEEDS_COMMIT=<0|1>           1 == no CR and nothing ahead of the default
-#                                branch, so a CR can't be opened yet — the skill
-#                                chains into /anchor:commit before continuing
+#   NEEDS_BRANCH=<0|1>           1 == on the default branch with work to review, so
+#                                the skill must create a feature branch before a CR
+#                                can be opened (paired with NEEDS_COMMIT when the
+#                                work is still uncommitted)
+#   NEEDS_COMMIT=<0|1>           1 == no reviewable commit exists yet (no CR and
+#                                nothing ahead of the default branch, or uncommitted
+#                                work on the default branch) — the skill chains into
+#                                /anchor:commit before continuing
 #   CR_PREEXISTING=<0|1>         a CR was already open before this run
 #   CR_CREATED=<0|1>             this script opened a draft CR
 #   CR_URL=<web url>             empty on the skip-deep-links path
@@ -136,7 +143,27 @@ resolve_cr() {
 }
 
 needs_commit=0
-if [[ "$forge" != "none" && "$on_default" -eq 0 ]]; then
+needs_branch=0
+
+# Uncommitted work? (routes the on-default case below, and reused by the state
+# check further down so we only shell out to `git status` once.)
+tree_dirty=0
+[[ -n "$(git status --porcelain)" ]] && tree_dirty=1
+
+if [[ "$forge" != "none" && "$on_default" -eq 1 ]]; then
+  # On the default branch there's no feature branch to open a CR from. Route
+  # toward one whenever there's anything to review; the skill creates the branch,
+  # then chains to /anchor:commit when the work isn't committed yet:
+  #   uncommitted work            -> branch + commit  (NEEDS_BRANCH + NEEDS_COMMIT)
+  #   unpushed commits on default -> move them to a branch (NEEDS_BRANCH)
+  #   clean, nothing ahead        -> nothing to review (both stay 0)
+  if [[ "$tree_dirty" -eq 1 ]]; then
+    needs_branch=1
+    needs_commit=1
+  elif [[ "$ahead" -gt 0 ]]; then
+    needs_branch=1
+  fi
+elif [[ "$forge" != "none" && "$on_default" -eq 0 ]]; then
   if resolve_cr; then
     cr_preexisting=1
   elif [[ "$ahead" -eq 0 ]]; then
@@ -197,7 +224,7 @@ fi
 # --- State check: local tree vs the CR head ----------------------------------
 
 worktree_clean=1
-[[ -n "$(git status --porcelain)" ]] && worktree_clean=0
+[[ "$tree_dirty" -eq 1 ]] && worktree_clean=0
 
 state="match"
 head_mismatch=0
@@ -255,6 +282,7 @@ echo "DEFAULT_BRANCH=$default_branch"
 echo "ON_DEFAULT_BRANCH=$on_default"
 echo "AHEAD=$ahead"
 echo "BEHIND=$behind"
+echo "NEEDS_BRANCH=$needs_branch"
 echo "NEEDS_COMMIT=$needs_commit"
 echo "CR_PREEXISTING=$cr_preexisting"
 echo "CR_CREATED=$cr_created"
