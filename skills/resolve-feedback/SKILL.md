@@ -63,6 +63,17 @@ substring-match against repos the session has touched; with no argument, `git
 rev-parse --show-toplevel` from the working directory; ambiguous → ask. Run
 git with `-C <repo>` when the working directory isn't the target.
 
+When the target repo isn't the working directory, the forge commands below
+(fetch, reply, resolve) also default to the cwd repo — retarget each:
+
+- **`gh` / `glab` subcommands** (`gh pr view`, `glab mr view`) — add `-R <owner/name>`.
+- **`glab api`** — has no `-R`; it expands `:fullpath` from the *current* git
+  dir. Substitute the URL-encoded project path for `:fullpath` (e.g.
+  `group%2Fproject`), and add `--hostname <host>` for self-hosted GitLab.
+
+Derive `owner/name` and the host once from `git -C <repo> remote get-url origin`
+(or, with a CR URL argument, from the URL itself).
+
 **With a CR URL argument**, derive everything from it: the forge host, the
 project path, and the CR number. If the repo isn't already local, ask the user
 where the working copy lives — this skill writes commits, so it needs one.

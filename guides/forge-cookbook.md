@@ -16,6 +16,41 @@ view`, …) reject it with *"Unknown flag"*. So when you need to name the host,
 reach for the `glab api` form of the operation rather than its porcelain
 shorthand.
 
+## Targeting a repo that isn't the working directory
+
+Every form below defaults to the repo backing the current directory. When the
+work targets a *different* repo — you're in repo A but operating on a CR in repo
+B — retarget explicitly rather than relying on cwd (which files the operation
+against the wrong project):
+
+| Command form | How to retarget |
+|---|---|
+| `git …` | `git -C <path> …` |
+| `gh` subcommand (`gh pr view`, `gh pr edit`, …) | `-R [HOST/]OWNER/REPO` |
+| `glab` subcommand (`glab mr view`, …) | `-R OWNER/REPO` (full URL/Git URL also accepted) |
+| `glab api projects/:fullpath/…` | **no `-R`** — substitute the URL-encoded project for `:fullpath` (e.g. `group%2Fproject`), plus `--hostname <host>` for self-hosted |
+
+Derive `OWNER/REPO` and the host once from `git -C <path> remote get-url origin`.
+
+**anchor's helper scripts take `--repo <path>` (or `--worktree <path>`) instead.**
+`prepare-review.sh`, `squash-check.sh`, `look-ahead.sh`, `review-diff.sh`, and
+`pipeline-status.sh` `cd` into the given checkout for their (single-process) run,
+so every git/`gh`/`glab` call inside them targets it with no per-command flag —
+and `glab mr create` works because it runs *inside* the target checkout (passing
+it `-R` is ignored and creates against the cwd repo → a `422` fork-mismatch).
+Reach for the per-command flags above only for forge operations a skill runs
+directly across separate Bash calls, where there's no persistent `cd`.
+
+**When the work mutates a repo the session didn't start in, isolate it in a
+worktree.** `scripts/worktree.sh setup <target>` decides direct-vs-isolated
+(by comparing the git common dir against the cwd repo) and, for a *different*
+repo, adds a throwaway worktree on the target's current branch so the work never
+disturbs that repo's own checkout; the skill threads the resulting `CHECKOUT`
+through every command and runs `scripts/worktree.sh teardown <target> <worktree>`
+when the flow ends. This is the "should I use a worktree?" boundary: operate
+directly in your session's repo, isolate in a worktree once you've wandered
+outside it.
+
 ## Defaults anchor applies
 
 When anchor creates a CR or an issue on your behalf, it applies these defaults.

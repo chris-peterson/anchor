@@ -24,6 +24,9 @@
 #     review — the script reports NEEDS_BRANCH and the skill branches first.
 #
 # Output lines (KEY=value, read from stdout):
+#   RESOLVED_VIA=<worktree|repo|cwd>  worktree == ran in a --worktree checkout;
+#                                repo == an explicit --repo checkout;
+#                                cwd == inferred from the working directory
 #   FORGE=<github|gitlab|none>
 #   BRANCH=<current branch>
 #   DEFAULT_BRANCH=<resolved default: origin/HEAD, else main, else master>
@@ -63,13 +66,40 @@
 # Usage:
 #   prepare-review.sh              # default: resolve CR, auto-open a draft if none
 #   prepare-review.sh --no-open    # never auto-open; no CR -> skip-deep-links path
+#   prepare-review.sh --repo <path>      # operate on a checkout other than the cwd repo
+#   prepare-review.sh --worktree <path>  # operate in a flow-owned isolated worktree
+#   prepare-review.sh --cr <iid|url>     # resolve a specific CR, not the current branch's
+#
+# --repo / --worktree cd into the target checkout so every git/gh/glab call
+# below targets it (see scripts/lib/resolve-context.sh); the emitted RESOLVED_VIA
+# reports whether the run used --worktree, --repo, or fell back to cwd. These are
+# the fix for "target repo != session cwd": for a repo the session didn't start
+# in, the skill sets up an isolated worktree first (scripts/worktree.sh) and
+# passes it here as --worktree; --repo is the operate-directly case. Pair either
+# with a checkout on the CR's branch when the CR you want isn't the current
+# branch, or add --cr.
 
 set -euo pipefail
 
+source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
+
 auto_open=1
-if [[ "${1:-}" == "--no-open" ]]; then
-  auto_open=0
-fi
+CTX_REPO=""
+CTX_WORKTREE=""
+cr_ref=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --no-open)  auto_open=0; shift ;;
+    --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
+    --worktree) CTX_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
+    --cr)       cr_ref="${2:?--cr needs an iid or URL}"; shift 2 ;;
+    *) echo "prepare-review.sh: unknown argument: $1" >&2; exit 64 ;;
+  esac
+done
+
+# Retarget onto an explicit --repo checkout when given; otherwise stay in cwd
+# (byte-for-byte today's behavior). Sets RESOLVED_VIA, emitted below.
+ctx_resolve_repo
 
 # --- Forge + branch + default branch ----------------------------------------
 
@@ -115,10 +145,13 @@ cr_preexisting=0; cr_created=0
 # Pull a CR's url/iid/draft/headsha/description into the cr_* vars. Returns
 # non-zero (leaving them empty) when no CR is open for the current branch.
 resolve_cr() {
+  # With --cr, view that specific CR (iid or URL) rather than the one the
+  # current branch backs; without it, the branch's open CR as before.
   case "$forge" in
     gitlab)
-      local json
-      json=$(glab mr view --output json 2>/dev/null) || return 1
+      local json args=(--output json)
+      [[ -n "$cr_ref" ]] && args=("$cr_ref" "${args[@]}")
+      json=$(glab mr view "${args[@]}" 2>/dev/null) || return 1
       [[ -z "$json" ]] && return 1
       cr_url=$(jq -r '.web_url // empty' <<<"$json")
       [[ -z "$cr_url" ]] && return 1
@@ -128,8 +161,9 @@ resolve_cr() {
       cr_desc=$(jq -r '.description // ""' <<<"$json")
       ;;
     github)
-      local json
-      json=$(gh pr view --json url,number,isDraft,headRefOid,body 2>/dev/null) || return 1
+      local json args=(--json "url,number,isDraft,headRefOid,body")
+      [[ -n "$cr_ref" ]] && args=("$cr_ref" "${args[@]}")
+      json=$(gh pr view "${args[@]}" 2>/dev/null) || return 1
       [[ -z "$json" ]] && return 1
       cr_url=$(jq -r '.url // empty' <<<"$json")
       [[ -z "$cr_url" ]] && return 1
@@ -276,6 +310,7 @@ fi
 
 # --- Emit ---------------------------------------------------------------------
 
+echo "RESOLVED_VIA=$RESOLVED_VIA"
 echo "FORGE=$forge"
 echo "BRANCH=$branch"
 echo "DEFAULT_BRANCH=$default_branch"

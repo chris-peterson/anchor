@@ -43,6 +43,19 @@
 
 set -euo pipefail
 
+# --repo / --worktree <path> (leading, before the mode) retargets the git range /
+# difftool onto a checkout other than the cwd repo (see
+# scripts/lib/resolve-context.sh). The --files mode takes absolute paths, so this
+# is only meaningful for the git-range modes.
+source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
+CTX_REPO=""
+CTX_WORKTREE=""
+case "${1:-}" in
+  --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
+  --worktree) CTX_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
+esac
+ctx_resolve_repo
+
 CACHE_DIR=~/.cache/moor
 mkdir -p "$CACHE_DIR"
 context_path="$CACHE_DIR/context-$$.json"

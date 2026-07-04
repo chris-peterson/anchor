@@ -37,6 +37,8 @@
 # Modes:
 #   pipeline-status.sh                 one-shot status for HEAD on the current branch
 #   pipeline-status.sh --watch         poll until terminal (or the ceiling), then emit
+#   pipeline-status.sh --repo <path>              target a checkout other than the cwd repo
+#   pipeline-status.sh --worktree <path>          target a flow-owned isolated worktree
 #   pipeline-status.sh --branch <b> --sha <sha>   target an explicit ref/commit
 #   pipeline-status.sh --job <name>               track one named job, not the pipeline
 #   pipeline-status.sh --job <name> --watch       poll that job until it settles
@@ -51,6 +53,8 @@
 
 set -euo pipefail
 
+source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
+
 POLL_INTERVAL="${PIPELINE_POLL_INTERVAL:-15}"
 WATCH_TIMEOUT="${PIPELINE_WATCH_TIMEOUT:-1800}"
 APPEAR_TIMEOUT="${PIPELINE_APPEAR_TIMEOUT:-120}"
@@ -60,9 +64,13 @@ branch=""
 sha=""
 job=""
 pipeline_id=""
+CTX_REPO=""
+CTX_WORKTREE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --watch)    mode="watch"; shift ;;
+    --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
+    --worktree) CTX_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
     --branch)   branch="${2:?--branch needs a value}"; shift 2 ;;
     --sha)      sha="${2:?--sha needs a value}"; shift 2 ;;
     --job)      job="${2:?--job needs a value}"; shift 2 ;;
@@ -72,6 +80,10 @@ while [[ $# -gt 0 ]]; do
     *) echo "pipeline-status.sh: unknown argument: $1" >&2; exit 64 ;;
   esac
 done
+
+# Retarget onto an explicit --repo checkout before any git/forge call; the
+# branch/sha defaults below then read from the target repo, not the cwd.
+ctx_resolve_repo
 
 [[ -n "$branch" ]] || branch=$(git rev-parse --abbrev-ref HEAD)
 [[ -n "$sha" ]]    || sha=$(git rev-parse HEAD)

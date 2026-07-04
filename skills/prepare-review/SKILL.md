@@ -84,6 +84,7 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 
 | Key | What to do with it |
 |-----|--------------------|
+| `RESOLVED_VIA` | `cwd` (inferred from the working directory) or `repo` (an explicit `--repo` was honored) — see "Operating against a non-cwd repo" |
 | `FORGE` | `github` / `gitlab` picks the CLI for the rest of the skill; `none` → the URL-free `skip-deep-links` path |
 | `DEFAULT_BRANCH` | substitute for `main` in the diff/log commands below |
 | `ON_DEFAULT_BRANCH=1` | HEAD is the default branch — there's no branch to open a CR *from*. With work to review, `NEEDS_BRANCH=1` routes through branch creation first; clean with nothing ahead → nothing to review, stop |
@@ -100,6 +101,38 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 | `FILE_ANCHORS` | precomputed `sha1(path)` per changed file for GitLab deep links (Step 3), as JSON |
 
 If the block carries a `CR_CREATE_ERROR=…` line, the draft-open hit an auth or push failure — surface it and ask the user to refresh credentials; do **not** fall back to the URL-free path (the fail-fast-on-auth rule).
+
+### Operating against a non-cwd repo (worktree isolation)
+
+When the CR you're preparing lives in a repo other than the session's working directory — you're in repo A, the CR is in repo B — don't drive B off cwd. Decide direct-vs-isolated **once, up front**, with the lifecycle helper:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree.sh" setup <path-to-B-checkout>
+```
+
+It prints `RESOLVED_VIA`, `WORKTREE`, and `CHECKOUT`:
+
+- **`RESOLVED_VIA=repo`** — B is the same repo as the session cwd (or a sibling worktree of it); operate directly. `<CHECKOUT>` is B's path.
+- **`RESOLVED_VIA=worktree`** — B is a *different* repo, so the helper made a throwaway worktree at `WORKTREE`, checked out on B's current branch. Working there never disturbs B's own checkout, and it dodges the `glab mr create -R` 422 (the create runs *inside* the worktree, not with a `-R` glab ignores). `<CHECKOUT>` is the worktree.
+
+`<CHECKOUT>` is the path to operate in either way. **The harness resets cwd between Bash calls, so nothing persists implicitly** — thread the target through every later command:
+
+- **Re-gather** — `prepare-review.sh --worktree <WORKTREE>` (isolated) or `--repo <CHECKOUT>` (direct), plus `--cr` if you set one.
+- **git** — `git -C <CHECKOUT> …`: the diff/log reads, the rebase, `git push --force-with-lease`.
+- **gh / glab subcommands** — `-R <owner/name>` (derive once from `git -C <CHECKOUT> remote get-url origin`).
+- **`glab api`** — has no `-R`; substitute the URL-encoded project for `:fullpath` (e.g. `group%2Fproject`), plus `--hostname <host>` for self-hosted GitLab.
+
+**Tear the worktree down when the flow ends** — after the CR is opened and described, or on abort. It's throwaway; leaving it strands a checkout on B's branch:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree.sh" teardown <path-to-B-checkout> <WORKTREE>
+```
+
+(Skip teardown on the `repo` / direct path — there's no worktree, `WORKTREE` is empty.)
+
+To act on a CR that isn't the checkout's branch (updating an MR while the checkout sits on a WIP branch), add `--cr <iid|url>` so the script resolves that CR instead of the branch's. The deep-link and diff steps still read the checkout's branch, so point setup at a checkout on the CR's branch when you need those.
+
+When the target is just the session cwd (no non-cwd repo in play), skip all of this — everything below is plain `git` / `gh` / `glab` against the working directory.
 
 ### Get to a reviewable commit (`NEEDS_BRANCH` / `NEEDS_COMMIT`)
 
@@ -302,6 +335,8 @@ Map the user's selection to the actions below:
 
    - **GitHub:** `gh pr edit --body-file <draft-path>`.
    - **GitLab:** use the API form `glab api -X PUT projects/:fullpath/merge_requests/<CR_IID> -F "description=@<draft-path>"` — `glab mr update -d` doesn't accept a file. See the [forge cookbook](https://chris-peterson.github.io/anchor/#/guides/forge-cookbook) for the full canonical invocation.
+
+   When operating against a non-cwd repo these are the write path, so retarget them per "Operating against a non-cwd repo": add `-R <owner/name>` to `gh pr edit`, and substitute the URL-encoded project for `:fullpath` in the `glab api` PUT (plus `--hostname` for self-hosted).
 2. **No (copy only)** — print the description for the user to paste into the web UI themselves. Useful when the user wants to hand-edit before pasting, or when the CLI's default forge instance is wrong for this repo.
 3. **Edit** — the user wants to adjust something. [moor](https://github.com/chris-peterson/moor) is the preferred surface for this but **optional** — check it's installed:
 

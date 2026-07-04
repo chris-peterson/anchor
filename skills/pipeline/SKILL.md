@@ -61,8 +61,10 @@ proxy. Re-resolve on every invocation.
   directory. If the session touched more than one repo, or edits landed outside
   it, state the resolved path and ask which to target.
 
-Run the helper from the resolved repo (`cd` there, or it reads the wrong
-`origin`).
+When the resolved repo isn't the working directory, pass `--repo <path>` to the
+helper on every call below — **not** `cd`, which doesn't persist across the
+separate Bash calls the harness runs (it resets cwd between them). `--repo`
+retargets the helper's own process, so it reads the right `origin`.
 
 ## Pick the mode
 

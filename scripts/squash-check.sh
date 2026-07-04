@@ -30,10 +30,11 @@
 # place, so a commit someone else authored is never a squash target — even for a
 # message-only fix.
 #
-# Run from the target repo (like look-ahead.sh / pipeline-status.sh); it reads
-# the repo from the working directory.
+# Runs against the cwd repo by default; pass --repo <path> to target another
+# checkout (see scripts/lib/resolve-context.sh).
 #
 # Output lines (KEY=value, read from stdout):
+#   RESOLVED_VIA=<worktree|repo|cwd>  the checkout this ran against (--worktree / --repo / cwd)
 #   SQUASH_ALLOWED=<0|1>            1 == amending HEAD is safe; the skill may
 #                                   offer squash (gated further by relatedness)
 #   SQUASH_BLOCK_REASON=<reason>    why squash is off the table (empty when allowed):
@@ -53,6 +54,18 @@
 #   PRIOR_SUBJECT=<subject>        HEAD's subject line (for the squash option text)
 
 set -euo pipefail
+
+source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
+CTX_REPO=""
+CTX_WORKTREE=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
+    --worktree) CTX_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
+    *) echo "squash-check.sh: unknown argument: $1" >&2; exit 64 ;;
+  esac
+done
+ctx_resolve_repo
 
 # --- Forge (for the CR probe) -------------------------------------------------
 
@@ -160,6 +173,7 @@ fi
 
 # --- Emit --------------------------------------------------------------------
 
+echo "RESOLVED_VIA=$RESOLVED_VIA"
 echo "SQUASH_ALLOWED=$squash_allowed"
 echo "SQUASH_BLOCK_REASON=$block_reason"
 echo "SQUASH_NEEDS_FORCE_PUSH=$needs_force_push"
