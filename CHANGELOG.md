@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.18.0
+
+### Features
+- anchor's forge skills can now operate on a repo, branch, or CR that isn't the session's working directory. `prepare-review`, `commit`, and the pipeline/review helpers take `--repo <path>` (or `--worktree <path>`) and retarget every git/`gh`/`glab` call there — fixing the case where an MR meant for one repo was driven against the directory you happened to be in (and the `glab mr create -R` fork-mismatch 422 that came with it). For a repo you didn't start the session in, the work is isolated in a throwaway git worktree so it never disturbs that checkout; `prepare-review` also gains `--cr` to act on a CR that isn't the current branch's. Nothing changes when no target is given.
+- Naming a target repo now resolves through tack's repo database instead of being guessed from the working directory. "File an issue against `customer-svc`" routes `customer-svc` to its real remote (and local checkout, when one is known) rather than the current directory's `origin` — no more filing against the wrong project or improvising an owner slug. Filing/updating an issue works with no local clone; the skills that need a working tree use the resolved checkout and ask for a path when there isn't one. tack stays optional — without it, resolution falls back to today's cwd behavior.
+- `prepare-review` records ordering dependencies between successive change requests on the forge, not just in prose. On GitLab it sets an enforced "blocked by" dependency so the CRs can't merge out of order; on GitHub (which has no native cross-PR dependency) it writes a `Depends on #N` reference and says plainly that the ordering isn't enforced. Detection is conservative — it acts when you say a CR must land after another.
+
 ## 0.17.0
 
 ### Other
