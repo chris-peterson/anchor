@@ -79,6 +79,47 @@ pushing, opening a CR (there must be a branch to push) — require a checkout: f
 ask for an explicit `--repo <path>` rather than proceeding. tack is optional —
 without it (or with no match) `TARGET_VIA=cwd` and everything behaves as today.
 
+## Linking an ordering dependency between CRs
+
+When one CR must land *after* another (a shared library before its consumer; a
+config that points at the consumer), record the ordering on the forge — not only
+in prose — so the two can't merge out of order.
+
+**GitLab — a real, enforced dependency** (Premium/Ultimate; the `/blocks`
+sub-resource, GitLab ≥ 17.5). Mark the dependent MR blocked by its predecessor:
+
+```bash
+glab api -X POST "projects/:fullpath/merge_requests/<iid>/blocks" \
+  -F blocking_merge_request_iid=<predecessor-iid> \
+  -F blocking_project_id=<predecessor-project-id>   # omit when same project
+```
+
+Related endpoints: `GET …/merge_requests/<iid>/blocks` (what this MR waits on),
+`GET …/merge_requests/<iid>/blockees` (what waits on it), `DELETE
+…/merge_requests/<iid>/blocks/<block_id>`. Use the `glab api` form (there's no
+`glab mr` porcelain verb for blocks); add `--hostname <host>` for a non-cwd or
+self-hosted instance.
+
+**Detect-by-attempt, degrade cleanly** — don't pre-probe the tier/version, just
+read the status:
+
+| Status | Meaning | Do |
+|---|---|---|
+| `201` | dependency created | done |
+| `409` | already linked | treat as success |
+| `404` | instance predates the `/blocks` API (< 17.5) | fall back to the prose reference |
+| `403` | not Premium/Ultimate, or no permission | fall back to the prose reference |
+
+**GitHub — no native cross-PR dependency exists.** There's nothing to set; the
+ordering lives in the description as a prose reference, which the forge does *not*
+enforce. (GitHub has "blocked by" for issues, not PRs.)
+
+**The prose reference (both forges, always when a dependency exists).** Add a line
+to the description: `Depends on !<iid>` (GitLab) / `Depends on #<num>` (GitHub) —
+bare, so it autolinks — and say it must merge first. On GitLab this *complements*
+the enforced block; on GitHub (or a GitLab fall-back) it's the only signal, so say
+plainly that ordering isn't enforced.
+
 ## Defaults anchor applies
 
 When anchor creates a CR or an issue on your behalf, it applies these defaults.

@@ -234,6 +234,7 @@ Before drafting, scan for these common ambiguities and ask the user about each o
 - **Why** — what problem this solves and why it matters (the prompt below)
 - **Audience / threat model** — for security or visibility changes, *who* is the affected population? "Anyone who can read X" is too vague. Name the population concretely: anyone inside the network, anyone with read access to the source, the on-call team, etc.
 - **Scope decisions** — should this be split? Squashed? Feature-gated? Released alongside something else?
+- **Ordering dependency** — must this CR land *after* another one (a shared library before its consumer, a config that points at the consumer)? Don't infer this aggressively — take it when the user says so, or when they've had you open the CRs as an ordered chain this session. If so, capture the predecessor CR (its iid/number, and project when cross-repo); Step 3 records it in the description and Step 4 sets the forge dependency.
 - **Surface decisions** — version bump, deprecation timeline, migration guidance for downstream callers
 - **Verification gaps** — anything you can't actually test from the working environment (UI, downstream consumers, prod-only behaviors). Surface these to the author so they can plan how/when to verify before merge. These are author homework — they do **not** become checklist items in the description.
 
@@ -283,6 +284,8 @@ A concise imperative phrase (under 72 characters) that captures the change. Same
 Draft the description following the section template in `templates/cr-description.md`: **Context**, **Review guide**, **Approach & trade-offs** *(rare)*, **Testing** *(rare)*, and **Validation** *(when correctness is best shown by real-world use)*. The template owns the *shape*; the guidance below owns the *technique* for realizing it.
 
 **Use these heading names verbatim** — Context / Review guide / Approach & trade-offs / Testing / Validation are canonical, not paraphrasable; reviewers scan for them. Omit a section that doesn't apply; never rename one. (The template spells out why.)
+
+**Ordering dependency (when Step 2 captured one).** Near the top of Context, add a bare, autolinking reference — `Depends on !<iid>` (GitLab) / `Depends on #<num>` (GitHub) — and a line that it must merge first. On GitHub, and on any GitLab fall-back (see Step 4), this prose is the *only* ordering signal, so say plainly that the forge won't enforce it.
 
 **Deep-link construction (Review guide).** Always deep-link to the actual line, not just the file — reviewers should be one click away from the hunk. The forge-specific anchor construction (GitLab `sha1` path-hashes from `FILE_ANCHORS`, GitHub `sha256`) lives in `guides/cr-formatting.md`.
 
@@ -371,5 +374,14 @@ Map the user's selection to the actions below:
    The wrapper leaves the context file in place; moor recycles it.
 
    **If `moor` isn't on PATH**, fall back to chat: ask what to change, revise the draft, and re-present (loop back to **Present the change**).
+
+### Set the ordering dependency (when Step 2 captured one)
+
+If this CR must land after a predecessor CR, record the ordering on the forge once the description is written — not just in the prose line from Step 3. The full invocation and the degrade ladder live in the cookbook's "Linking an ordering dependency between CRs"; in short:
+
+- **GitLab** — set the enforced dependency: `glab api -X POST "projects/:fullpath/merge_requests/<CR_IID>/blocks" -F blocking_merge_request_iid=<predecessor-iid>` (add `-F blocking_project_id=<id>` when the predecessor is in another project). **Detect by attempt, don't pre-probe:** `201` linked · `409` already linked (fine) · `404` the instance predates the API (< 17.5) · `403` not Premium/Ultimate or no permission. On `404`/`403`, fall back to prose — confirm the Step 3 `Depends on !<iid>` line is present and tell the user the ordering isn't enforced (they can set it in the UI if the instance supports it).
+- **GitHub** — no native cross-PR dependency exists; the Step 3 `Depends on #<num>` line is the only signal. State that GitHub won't block the merge on it.
+
+No predecessor captured (a single CR, or an independent one) → skip this entirely.
 
 > **One web-UI step remains regardless of choice:** screenshots embedded in the description must be dragged into the forge editor (`gh` / `glab` don't expose a clean upload path). After **Yes (write)** lands the body, open the CR in the browser, drop each PNG, and re-save — the forge rewrites the local paths to hosted URLs.
