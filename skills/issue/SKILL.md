@@ -16,7 +16,7 @@ Issue = a GitHub issue or a GitLab issue. Pick the forge tool by the `origin` re
 flowchart TD
     Start(["/issue"]) --> Mode{Issue ref given?}
 
-    subgraph "Step 1: Resolve target"
+    subgraph "Step 1: Resolve the issue"
         Mode -->|Yes| Update["Update: fetch current body as baseline"]
         Mode -->|No| Create["Create: new issue"]
     end
@@ -50,9 +50,27 @@ flowchart TD
     end
 ```
 
-## Step 1: Resolve the target
+## Target repo
 
-Pick the forge from the `origin` remote (`gh` for GitHub, `glab` for GitLab).
+By default this operates on the repo backing the working directory — pick the forge from its `origin` remote (`gh` for GitHub, `glab` for GitLab). But an issue is often filed *against a different repo* than the one you're sitting in ("file this against `logbook`", "open an issue in `customer-svc`"). Don't guess from cwd or improvise a `-R` from a half-remembered slug — resolve the name through tack's repo db:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh" <name>
+```
+
+Act on `TARGET_VIA`:
+
+- **`cwd`** — no tack, or no match (`TARGET_NOTE` says which). Fall back to the cwd `origin`, exactly as today. If the user clearly meant a repo that *didn't* resolve, say so rather than silently filing against the cwd repo.
+- **`ambiguous`** — `TARGET_CANDIDATES` holds the matches as `[{key,url,local}]`. Present them with `AskUserQuestion` and let the user pick; proceed with the chosen entry.
+- **`tack`** — exactly one match. Use the emitted fields for every forge call below:
+  - `TARGET_FORGE` picks the CLI (`gh` / `glab`).
+  - **GitHub:** add `-R <TARGET_PROJECT>` to the `gh issue …` calls.
+  - **GitLab:** the create/update use `glab api projects/:fullpath/…`, but `:fullpath` resolves from the *cwd* git dir — substitute the URL-encoded `TARGET_PROJECT` for `:fullpath` and add `--hostname <TARGET_HOST>` (required for self-hosted, harmless elsewhere).
+  - `TARGET_LOCAL` — the checkout, when one exists. Only the template step needs it; create/update are pure-remote and work without it (the common case for a repo you don't have checked out).
+
+## Step 1: Resolve the issue
+
+Pick the forge per **Target repo** above (`gh` for GitHub, `glab` for GitLab).
 
 - **An issue URL or number was provided** → **update** that issue. Pull its current body to a temp file now (`mktemp -u /tmp/issue-current.XXXXXX.md`); Step 5 diffs the draft against it:
 
@@ -107,7 +125,7 @@ Judge the results — a keyword hit on an unrelated issue is noise, not a match.
 
 ### Honor an existing forge template
 
-Before drafting, check whether the project ships an issue template:
+Before drafting, check whether the project ships an issue template. This reads the repo's files, so it needs a **local checkout** — look under the cwd repo, or under `TARGET_LOCAL` when a `tack` target resolved one (`ls <TARGET_LOCAL>/.gitlab/issue_templates/*.md`). When the target is remote-only (`TARGET_LOCAL` empty), skip template detection and note that a project template, if the repo has one, wasn't applied — don't block the issue on a checkout you don't have.
 
 - **GitLab:** `.gitlab/issue_templates/*.md` (respect the configured default if more than one)
 - **GitHub:** `.github/ISSUE_TEMPLATE/*.md`, or the legacy `.github/ISSUE_TEMPLATE.md`. A `.yml` **issue form** is a structured format — don't compose prose into it; surface it and let the author fill it in the web UI.
@@ -160,7 +178,9 @@ Then ask the user how to proceed with the `AskUserQuestion` tool. Use header `Di
 
 ### Yes (write)
 
-anchor assigns new issues to you. The canonical invocations — including the `glab api`-then-`glab issue update` two-step GitLab needs for a file-sourced body, and the update-from-file forms — live in the [forge cookbook](https://chris-peterson.github.io/anchor/#/guides/forge-cookbook), sections "Issue create" and "Issue description update from a file":
+anchor assigns new issues to you. The canonical invocations — including the `glab api`-then-`glab issue update` two-step GitLab needs for a file-sourced body, and the update-from-file forms — live in the [forge cookbook](https://chris-peterson.github.io/anchor/#/guides/forge-cookbook), sections "Issue create" and "Issue description update from a file".
+
+When a `tack` target resolved (see **Target repo**), retarget these off the cwd repo: add `-R <TARGET_PROJECT>` to the `gh issue` calls; on GitLab substitute the URL-encoded `TARGET_PROJECT` for `:fullpath` and add `--hostname <TARGET_HOST>` on the `glab api` calls, and `-R <TARGET_URL>` on `glab issue update`.
 
 ```bash
 # GitHub — create

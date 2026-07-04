@@ -51,6 +51,34 @@ when the flow ends. This is the "should I use a worktree?" boundary: operate
 directly in your session's repo, isolate in a worktree once you've wandered
 outside it.
 
+## Resolving a named target repo
+
+The forms above take a *path*. When the user instead names a target — "file this
+against `logbook`", "open the MR in `customer-svc`" — resolve the name through
+tack's repo db rather than guessing from cwd or improvising a `-R` slug:
+
+```bash
+bash "scripts/resolve-target.sh" <name>
+```
+
+It prints `TARGET_VIA`:
+
+- **`tack`** — one match, with `TARGET_URL`, `TARGET_FORGE`, `TARGET_HOST`,
+  `TARGET_PROJECT`, `TARGET_LOCAL`. Use `TARGET_PROJECT` / `TARGET_HOST` with the
+  per-command forms above (`gh -R`, `glab :fullpath` + `--hostname`), and
+  `TARGET_LOCAL` as the checkout for anything needing a work tree.
+- **`ambiguous`** — `TARGET_CANDIDATES` (`[{key,url,local}]`); prompt the user.
+- **`cwd`** — no tack on PATH, or no match; fall back to the cwd `origin`.
+
+**Local vs remote-only.** `TARGET_LOCAL` is empty for a known remote with no
+checkout (the common case for a repo you don't have cloned). Pure-remote
+operations — filing/updating an issue, describing or querying a CR — work fine
+remote-only via `-R` / `:fullpath`. Operations that need a work tree — committing,
+pushing, opening a CR (there must be a branch to push) — require a checkout: feed
+`TARGET_LOCAL` into the worktree lifecycle above when present, and when it's empty
+ask for an explicit `--repo <path>` rather than proceeding. tack is optional —
+without it (or with no match) `TARGET_VIA=cwd` and everything behaves as today.
+
 ## Defaults anchor applies
 
 When anchor creates a CR or an issue on your behalf, it applies these defaults.

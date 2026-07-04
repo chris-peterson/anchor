@@ -104,7 +104,15 @@ If the block carries a `CR_CREATE_ERROR=…` line, the draft-open hit an auth or
 
 ### Operating against a non-cwd repo (worktree isolation)
 
-When the CR you're preparing lives in a repo other than the session's working directory — you're in repo A, the CR is in repo B — don't drive B off cwd. Decide direct-vs-isolated **once, up front**, with the lifecycle helper:
+When the CR you're preparing lives in a repo other than the session's working directory — you're in repo A, the CR is in repo B — don't drive B off cwd.
+
+If you have B as a *name* rather than a path, resolve it first: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh" <name>` (cookbook: "Resolving a named target repo"). Act on `TARGET_VIA`:
+
+- **`tack`** → use `TARGET_LOCAL` as the `<path-to-B-checkout>` below. Opening a CR needs a checkout (there must be a branch to push), so if `TARGET_LOCAL` is empty — a known remote with no local clone — ask for a checkout rather than proceeding.
+- **`ambiguous`** → prompt with `TARGET_CANDIDATES`, then use the chosen entry.
+- **`cwd`** (no tack, or the name didn't match) → the name couldn't be resolved to a checkout. **Don't** silently prepare a review in the cwd repo when the user named a *different* one — say the name didn't resolve and ask for an explicit `--repo <path>`. (When no name was in play to begin with, this whole section doesn't apply — that's just the cwd path.)
+
+Then decide direct-vs-isolated **once, up front**, with the lifecycle helper:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree.sh" setup <path-to-B-checkout>
