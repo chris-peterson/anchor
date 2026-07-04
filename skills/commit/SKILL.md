@@ -220,29 +220,24 @@ The block it prints:
 
 | Key | What to do with it |
 |-----|--------------------|
-| `SQUASH_ALLOWED` | `1` → amending HEAD is safe; offer squash (gated further by relatedness below). `0` → squash is off the table; present the no-squash options |
-| `SQUASH_BLOCK_REASON` | why squash is blocked: `other-author` (HEAD authored by someone else), `default-branch-tip` (HEAD is published on the default branch), or `cr-ready` (HEAD is pushed and the CR is out for review) |
+| `SQUASH_ALLOWED` | `1` → amending HEAD is safe; offer squash (gated further by relatedness below). `0` → squash isn't on the table; commit normally (the ordinary path, below) |
+| `SQUASH_BLOCK_REASON` | why squash is blocked — **kept internal, never narrated**: `other-author` (HEAD authored by someone else), `default-branch-tip` (HEAD is published on the default branch), or `cr-ready` (HEAD is pushed and the CR is out for review). Only `cr-ready` is acted on — it gates the message-only-amend exception below |
 | `SQUASH_NEEDS_FORCE_PUSH` | `1` → squash is allowed but HEAD is pushed (a draft CR, or no CR), so the amend must be followed by `git push --force-with-lease` |
 | `CR_STATE` | `none` / `draft` / `ready` — the branch's open CR review state |
-| `HEAD_AUTHOR_NAME` | name to cite in the `other-author` explanation |
 | `PRIOR_SUBJECT` | HEAD's subject, for the squash option text |
 
 The helper folds in the old unpushed-count probe (including the no-upstream `origin/<default>..HEAD` fallback), the author guard, and the CR-draft probe — don't re-run those.
 
-### When `SQUASH_ALLOWED=0` — present the no-squash options
+### When `SQUASH_ALLOWED=0` — the ordinary commit
 
-Squash is off the table; do not offer it. Present:
+This is the vanilla path, and the common one: HEAD isn't yours to rewrite (`other-author`, `default-branch-tip`) or it's out for review (`cr-ready`), so a plain new commit is the only sensible outcome — which is exactly what the user asked for when they said "commit." So just commit. **Don't mention squash, and don't explain why it isn't on offer.** The user never raised squashing; narrating *"squash is off the table because HEAD was authored by …"* answers a question nobody asked and leaks the gate's internal reasoning. Present the drafted message with two choices:
 
-1) **Accept** — commit as-is (a new commit)
+1) **Accept** — commit
 2) **Edit** — tell you what to change
 
-Say why in one line:
+On Accept, run `git commit`. Keep `SQUASH_BLOCK_REASON` to yourself — it changes nothing the user sees here, and matters in exactly one situation, below.
 
-- **`other-author`** — `HEAD was authored by <HEAD_AUTHOR_NAME> — squashing would rewrite their commit, so only a new commit is offered.` Amending rewrites HEAD in place; a commit someone else authored is never a squash target, even for a message-only fix.
-- **`default-branch-tip`** — `HEAD is the published tip of <default> — amending it would rewrite shared history, so this lands as a new commit.` Reachable from `origin/<default>`, so amend + force-push would rewrite the published default branch. (This is also the "fresh feature branch, no commits of your own yet" case — HEAD is still the default-branch tip, so there's nothing of yours to squash into.) The message-only-amend exception below does **not** apply — never rewrite the published default branch.
-- **`cr-ready`** — `CR is out for review — a reviewer relies on the per-commit "changes since" diff, so this lands as a new commit.`
-
-**Narrow exception — message-only amend on a ready CR.** When the reason is `cr-ready` and the user reports the *message* (not the code) is demonstrably wrong — pasted from a different repo, references identifiers that don't exist here, doesn't match what the diff does — the tree is unchanged, so the reviewer-protection motivation doesn't apply. Offer `git commit --amend -F <msg-file>` to fix the message, then surface "force-push (`--force-with-lease`) affects only the message; the tree is unchanged" as an explicit choice and let the user decide. The `other-author` guard still holds — never amend someone else's commit even for a message fix. Do not extend this to content rewrites; the moment any file content moves, the standard gate applies again.
+**Narrow exception — message-only amend on a ready CR.** When the reason is `cr-ready` and the user reports the *message* (not the code) is demonstrably wrong — pasted from a different repo, references identifiers that don't exist here, doesn't match what the diff does — the tree is unchanged, so the reviewer-protection motivation doesn't apply. Offer `git commit --amend -F <msg-file>` to fix the message, then surface "force-push (`--force-with-lease`) affects only the message; the tree is unchanged" as an explicit choice and let the user decide. This fires for `cr-ready` only: `other-author` never amends someone else's commit even for a message fix, and `default-branch-tip` never rewrites the published default branch. Do not extend it to content rewrites; the moment any file content moves, the standard gate applies again.
 
 ### When `SQUASH_ALLOWED=1` — apply the relatedness judgment
 
