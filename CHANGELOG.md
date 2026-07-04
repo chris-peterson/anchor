@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.18.1
+
+### Other
+- `/anchor:commit` no longer explains *why* squashing isn't on offer when it's off the table for a reason you didn't ask about — HEAD authored by someone else, or the published default-branch tip. The gate's reasoning stays internal and the skill just presents the ordinary commit, instead of narrating "squash is off the table because …". The message-only-amend exception on a ready CR is unchanged.
+
 ## 0.18.0
 
 ### Features
