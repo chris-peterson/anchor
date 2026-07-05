@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.18.2
+
+### Fixes
+- anchor's skills reference their bundled guides (cr-formatting, markdown-gotchas, the forge cookbook, and others) as they work; those references now use a plugin-root-relative path that resolves from any working directory. Previously they were written as bare `guides/<name>.md`, which only resolved from the plugin's own directory — so from a user's repo the pointer didn't load. The skills now reliably pull in the guide they point at.
+
+### Other
+- anchor declares its optional **tack** integration in the marketplace suite dependency graph, alongside the existing moor edge — surfacing that named-repo resolution (`commit`, `prepare-review`, `resolve-feedback`, `issue`) routes through tack's repo database when it's installed. tack stays optional; without it, resolution falls back to the working directory as before.
+- `prepare-review`'s non-cwd / worktree-isolation procedure moves to a load-on-demand guide, trimming what the skill keeps resident on every invocation. No behavior change.
+- The plugin's shell scripts — the engine behind every skill — gain a shellcheck lint gate (a new Lint CI workflow at a zero-finding baseline), guarding against shell regressions.
+
 ## 0.18.1
 
 ### Other
