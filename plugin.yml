@@ -23,6 +23,9 @@ suite:
     - name: moor
       required: false
       reason: launches moor for diff review
+    - name: tack
+      required: false
+      reason: resolves a named target repo through tack's repo db
   # Activated by user-invoked skills (commit, prepare-review) and by ambient
   # rules injected at session start.
   activations: [user, session]
