@@ -1,0 +1,21 @@
+name: Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  shellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      # shellcheck is preinstalled on GitHub-hosted ubuntu runners; it reads
+      # .shellcheckrc from the repo root (external-sources → follows sources).
+      # scripts/lib/*.sh is sourced-only, so it's linted *through* its callers
+      # (that's how its out-vars like RESOLVED_VIA read as used) rather than as
+      # a standalone entry point. Gates at the default severity (info and up) —
+      # the scripts are a zero-finding baseline, so any new finding fails.
+      - name: shellcheck
+        run: shellcheck hooks/*.sh scripts/*.sh

@@ -13,6 +13,7 @@
 # --repo / --worktree <path> retargets onto a checkout other than the cwd repo
 # (see scripts/lib/resolve-context.sh).
 
+# shellcheck source=lib/resolve-context.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 CTX_REPO=""
 CTX_WORKTREE=""

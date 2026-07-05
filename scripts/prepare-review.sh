@@ -81,6 +81,7 @@
 
 set -euo pipefail
 
+# shellcheck source=lib/resolve-context.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 
 auto_open=1
@@ -278,13 +279,17 @@ fi
 template_path=""
 case "$forge" in
   gitlab)
-    template_path=$(ls .gitlab/merge_request_templates/*.md 2>/dev/null | head -1 || true)
+    for f in .gitlab/merge_request_templates/*.md; do
+      [[ -e $f ]] && { template_path=$f; break; }
+    done
     ;;
   github)
     if [[ -f .github/pull_request_template.md ]]; then
       template_path=.github/pull_request_template.md
     else
-      template_path=$(ls .github/PULL_REQUEST_TEMPLATE/*.md 2>/dev/null | head -1 || true)
+      for f in .github/PULL_REQUEST_TEMPLATE/*.md; do
+        [[ -e $f ]] && { template_path=$f; break; }
+      done
     fi
     ;;
 esac

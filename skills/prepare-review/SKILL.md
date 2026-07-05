@@ -104,41 +104,7 @@ If the block carries a `CR_CREATE_ERROR=…` line, the draft-open hit an auth or
 
 ### Operating against a non-cwd repo (worktree isolation)
 
-When the CR you're preparing lives in a repo other than the session's working directory — you're in repo A, the CR is in repo B — don't drive B off cwd.
-
-If you have B as a *name* rather than a path, resolve it first: `bash "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh" <name>` (cookbook: "Resolving a named target repo"). Act on `TARGET_VIA`:
-
-- **`tack`** → use `TARGET_LOCAL` as the `<path-to-B-checkout>` below. Opening a CR needs a checkout (there must be a branch to push), so if `TARGET_LOCAL` is empty — a known remote with no local clone — ask for a checkout rather than proceeding.
-- **`ambiguous`** → prompt with `TARGET_CANDIDATES`, then use the chosen entry.
-- **`cwd`** (no tack, or the name didn't match) → the name couldn't be resolved to a checkout. **Don't** silently prepare a review in the cwd repo when the user named a *different* one — say the name didn't resolve and ask for an explicit `--repo <path>`. (When no name was in play to begin with, this whole section doesn't apply — that's just the cwd path.)
-
-Then decide direct-vs-isolated **once, up front**, with the lifecycle helper:
-
-```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree.sh" setup <path-to-B-checkout>
-```
-
-It prints `RESOLVED_VIA`, `WORKTREE`, and `CHECKOUT`:
-
-- **`RESOLVED_VIA=repo`** — B is the same repo as the session cwd (or a sibling worktree of it); operate directly. `<CHECKOUT>` is B's path.
-- **`RESOLVED_VIA=worktree`** — B is a *different* repo, so the helper made a throwaway worktree at `WORKTREE`, checked out on B's current branch. Working there never disturbs B's own checkout, and it dodges the `glab mr create -R` 422 (the create runs *inside* the worktree, not with a `-R` glab ignores). `<CHECKOUT>` is the worktree.
-
-`<CHECKOUT>` is the path to operate in either way. **The harness resets cwd between Bash calls, so nothing persists implicitly** — thread the target through every later command:
-
-- **Re-gather** — `prepare-review.sh --worktree <WORKTREE>` (isolated) or `--repo <CHECKOUT>` (direct), plus `--cr` if you set one.
-- **git** — `git -C <CHECKOUT> …`: the diff/log reads, the rebase, `git push --force-with-lease`.
-- **gh / glab subcommands** — `-R <owner/name>` (derive once from `git -C <CHECKOUT> remote get-url origin`).
-- **`glab api`** — has no `-R`; substitute the URL-encoded project for `:fullpath` (e.g. `group%2Fproject`), plus `--hostname <host>` for self-hosted GitLab.
-
-**Tear the worktree down when the flow ends** — after the CR is opened and described, or on abort. It's throwaway; leaving it strands a checkout on B's branch:
-
-```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree.sh" teardown <path-to-B-checkout> <WORKTREE>
-```
-
-(Skip teardown on the `repo` / direct path — there's no worktree, `WORKTREE` is empty.)
-
-To act on a CR that isn't the checkout's branch (updating an MR while the checkout sits on a WIP branch), add `--cr <iid|url>` so the script resolves that CR instead of the branch's. The deep-link and diff steps still read the checkout's branch, so point setup at a checkout on the CR's branch when you need those.
+When the CR lives in a repo other than the session's cwd (you're in repo A, the CR is in repo B), don't drive B off cwd: resolve the target, decide direct-vs-worktree **once up front** with `bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree.sh" setup <path-to-B-checkout>`, thread the resolved `<CHECKOUT>` through every later command (the harness resets cwd between Bash calls), and tear the worktree down when the flow ends. The full procedure — name resolution via `resolve-target.sh`, the `worktree.sh` setup/teardown lifecycle, and the `git -C` / `-R` / `glab api` threading rules — is in `${CLAUDE_PLUGIN_ROOT}/guides/worktree-isolation.md`; consult it whenever B ≠ cwd.
 
 When the target is just the session cwd (no non-cwd repo in play), skip all of this — everything below is plain `git` / `gh` / `glab` against the working directory.
 
@@ -263,7 +229,7 @@ If the only open item is the WHY, ask:
 - **`anchor.workTrackerBaseUri`** — when the user mentions a ticket (a full tracker URL, or a bare id), link it in the description: use a full URL as-is, or build `<base-uri><id>` from a bare id. No mention, no link — don't scrape the branch or prompt.
 - **`anchor.crRules`**, with forge overrides **`anchor.mrRules`** (GitLab) / **`anchor.prRules`** (GitHub) — an extra rule layered onto the default CR-description rules. Pick the forge by the `origin` remote: use `mrRules` / `prRules` when set, else fall back to `crRules`.
 
-See `guides/configuring.md` for the full key set.
+See `${CLAUDE_PLUGIN_ROOT}/guides/configuring.md` for the full key set.
 
 ### Anti-recency-bias check (do this *before* drafting Context)
 
@@ -287,7 +253,7 @@ Draft the description following the section template in `templates/cr-descriptio
 
 **Ordering dependency (when Step 2 captured one).** Near the top of Context, add a bare, autolinking reference — `Depends on !<iid>` (GitLab) / `Depends on #<num>` (GitHub) — and a line that it must merge first. On GitHub, and on any GitLab fall-back (see Step 4), this prose is the *only* ordering signal, so say plainly that the forge won't enforce it.
 
-**Deep-link construction (Review guide).** Always deep-link to the actual line, not just the file — reviewers should be one click away from the hunk. The forge-specific anchor construction (GitLab `sha1` path-hashes from `FILE_ANCHORS`, GitHub `sha256`) lives in `guides/cr-formatting.md`.
+**Deep-link construction (Review guide).** Always deep-link to the actual line, not just the file — reviewers should be one click away from the hunk. The forge-specific anchor construction (GitLab `sha1` path-hashes from `FILE_ANCHORS`, GitHub `sha256`) lives in `${CLAUDE_PLUGIN_ROOT}/guides/cr-formatting.md`.
 
 **Validation — ask, don't guess.** The Validation section records *evidence* of real-world use, and applies only when the diff plus the rendered artifact don't settle correctness on their own — a shared component consumed by other repos, or a tool/automation whose value is the work it drives. When those signals fire, ask the author what validation looks like rather than guessing a checklist row; skip the section entirely when the diff plus CI already settle it. The detection signals, the prompt, and the evidence-row format live in the template's Validation section (`templates/cr-description.md`).
 
@@ -299,7 +265,7 @@ Conversational and informal. Reviewers are colleagues, not stakeholders — writ
 
 ### Formatting
 
-**Presentation is a primary concern, not a finishing pass.** Before drafting, ask: *what shape is this data, and what visualization fits it?* — then pick deliberately; a diagram that doesn't match the data shape is worse than none. The full technique lives in the bundled `guides/cr-formatting.md`: the data-shape → visualization menu, the prose bold/italic/backtick conventions (with the forge-autolink bare-token exception), collapsible `<details>`, mermaid diagram and before/after recipes, and the screenshot-capture workflow. Consult it while drafting. The render-time traps that break any forge markdown — character escaping, nested fences, mermaid-fence placement, the `<details>` blank-line rule — stay in `guides/markdown-gotchas.md`.
+**Presentation is a primary concern, not a finishing pass.** Before drafting, ask: *what shape is this data, and what visualization fits it?* — then pick deliberately; a diagram that doesn't match the data shape is worse than none. The full technique lives in the bundled `${CLAUDE_PLUGIN_ROOT}/guides/cr-formatting.md`: the data-shape → visualization menu, the prose bold/italic/backtick conventions (with the forge-autolink bare-token exception), collapsible `<details>`, mermaid diagram and before/after recipes, and the screenshot-capture workflow. Consult it while drafting. The render-time traps that break any forge markdown — character escaping, nested fences, mermaid-fence placement, the `<details>` blank-line rule — stay in `${CLAUDE_PLUGIN_ROOT}/guides/markdown-gotchas.md`.
 
 ### What to avoid
 
@@ -309,7 +275,7 @@ Categories of cruft. If something fits one of these, it doesn't belong in the de
 - **Loaded framing** — temporal/historical blame ("have always omitted", "has never worked"); minimizing qualifiers about size, whether adjectives ("one short block", "a tiny fix", "trivial change") or counts used as a framing device ("one line, in …", "just a one-liner", "only N lines") — even on a genuinely small diff, lead with *where* the change is, not *how little* it is; self-congratulatory adverbs ("correctly omits", "properly handles"); defensive softeners on technical claims ("purely additive", "completely backward-compatible"). The factual claim almost always survives the trim — and reads cleaner for it.
 - **Things the diff already shows** — flat lists of files changed without criticality ordering; re-stated commit messages; implementation details obvious from reading the code; dead-end approaches you tried and abandoned; anything a reviewer could derive from one click on a deep link; Review-guide bullets that narrate a hunk in prose instead of pointing at it (the point-of-generation rule lives in the Review guide section of `templates/cr-description.md`).
   - **The "stop before a code block" trigger.** When you're about to put a multi-line *code block* in the description, stop and ask: does this duplicate what the diff already shows? It almost always does — and it drifts from the diff the moment the code changes. Drop the block; use inline single-token backticks (`` `SomeType` ``, `` `--some-flag` ``) plus a deep link to the lines. Name the params, flags, and internal types the diff already carries in inline backticks, not in prose that re-describes them. (The exceptions stay as documented under Formatting: sample *output*, a created-file tree, a `terraform plan` — content the diff does **not** carry.)
-- **Things that belong elsewhere** — author-only checklists (eyeball staging, fill a spot-check matrix, confirm rendering, drive a fixture table — these live in a personal task list, a self-review pass, or CR comments, not the description body); changelog content the CR already ships; decisions a reviewer wouldn't have questioned (Approach & trade-offs is for *contested* choices); testing claims CI already provides; reference-grade explanation of standing behavior that grew while drafting — with the author's sign-off, split it into the repo docs and link it from the description (high bar; see the bundled `guides/description-vs-docs.md`).
+- **Things that belong elsewhere** — author-only checklists (eyeball staging, fill a spot-check matrix, confirm rendering, drive a fixture table — these live in a personal task list, a self-review pass, or CR comments, not the description body); changelog content the CR already ships; decisions a reviewer wouldn't have questioned (Approach & trade-offs is for *contested* choices); testing claims CI already provides; reference-grade explanation of standing behavior that grew while drafting — with the author's sign-off, split it into the repo docs and link it from the description (high bar; see the bundled `${CLAUDE_PLUGIN_ROOT}/guides/description-vs-docs.md`).
 - **Step-2 leftovers** — hedges, offers, or open questions ("happy to / open to / let me know if"); unsubstantiated verification claims ("verified" / "tested" / "confirmed" for things you didn't actually exercise). If ambiguity is still in flux, defer drafting; don't park it in the description.
 - **Boilerplate** — generic openings ("This change updates…"); assuming domain knowledge the reviewer doesn't have.
 
@@ -329,7 +295,7 @@ When `CURRENT_DESC_PATH` is empty (the `skip-deep-links` path, where no CR exist
 
 ### Output checklist (verify before presenting)
 
-The description gets pasted into a markdown renderer, so rendering bugs are user-visible. Walk the general rendering gotchas in the bundled `guides/markdown-gotchas.md` — character escaping (`~`/`$`/`_`/`*`), nested code fences, mermaid blocks, collapsible `<details>`, tables in lists — then these CR-description-specific checks:
+The description gets pasted into a markdown renderer, so rendering bugs are user-visible. Walk the general rendering gotchas in the bundled `${CLAUDE_PLUGIN_ROOT}/guides/markdown-gotchas.md` — character escaping (`~`/`$`/`_`/`*`), nested code fences, mermaid blocks, collapsible `<details>`, tables in lists — then these CR-description-specific checks:
 
 - **Backtick coverage is generous — except for forge-autolink tokens.** Re-scan the description for grep-bait: env vars (`$FAMILY`, `$CI_PIPELINE_CREATED_AT`), config keywords (`extends:`, `needs:`, `on_success`, `manual`, `allow_failure`), job/product/feature suffixes that match identifiers in the diff, CLI flags, file paths. The "if a reader might paste it into a terminal" test is more permissive than "code identifier only" — err generous. **But** scan separately for CR/issue refs (`!148`, `#42`), commit SHAs, and user @mentions — these must be **bare text** to autolink; backticks render them as inert code spans.
 - **Inline single quotes around `'all'` / `'true'` style values** read fine in prose but lose their distinguishing weight in scan-mode. Convert literal dropdown/enum values to backticks.
@@ -345,7 +311,7 @@ Map the user's selection to the actions below:
 1. **Yes (write)** *(default)* — push the description to the open CR. Editing a description is reversible, so this is the low-friction default. On 401/403 or similar auth failure, surface the error and ask the user to refresh credentials — do not silently fall back to copy-only. The `<draft-path>` is the temp file you wrote at the top of Step 4.
 
    - **GitHub:** `gh pr edit --body-file <draft-path>`.
-   - **GitLab:** use the API form `glab api -X PUT projects/:fullpath/merge_requests/<CR_IID> -F "description=@<draft-path>"` — `glab mr update -d` doesn't accept a file. See the [forge cookbook](https://chris-peterson.github.io/anchor/#/guides/forge-cookbook) for the full canonical invocation.
+   - **GitLab:** use the API form `glab api -X PUT projects/:fullpath/merge_requests/<CR_IID> -F "description=@<draft-path>"` — `glab mr update -d` doesn't accept a file. See the bundled forge cookbook (`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`) for the full canonical invocation.
 
    When operating against a non-cwd repo these are the write path, so retarget them per "Operating against a non-cwd repo": add `-R <owner/name>` to `gh pr edit`, and substitute the URL-encoded project for `:fullpath` in the `glab api` PUT (plus `--hostname` for self-hosted).
 2. **No (copy only)** — print the description for the user to paste into the web UI themselves. Useful when the user wants to hand-edit before pasting, or when the CLI's default forge instance is wrong for this repo.

@@ -53,6 +53,7 @@
 
 set -euo pipefail
 
+# shellcheck source=lib/resolve-context.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 
 POLL_INTERVAL="${PIPELINE_POLL_INTERVAL:-15}"

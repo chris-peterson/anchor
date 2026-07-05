@@ -47,6 +47,7 @@ set -euo pipefail
 # difftool onto a checkout other than the cwd repo (see
 # scripts/lib/resolve-context.sh). The --files mode takes absolute paths, so this
 # is only meaningful for the git-range modes.
+# shellcheck source=lib/resolve-context.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 CTX_REPO=""
 CTX_WORKTREE=""

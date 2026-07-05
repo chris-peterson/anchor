@@ -14,7 +14,7 @@ RULES_DIR="$PLUGIN_ROOT/rules"
 # expand them here so the injected text carries real, readable paths.
 printf '# Ambient rules from the anchor plugin\n\n'
 for f in "$RULES_DIR"/*.md; do
-  [ -e "$f" ] || exit 0
+  [ -e "$f" ] || break
   sed "s|\${CLAUDE_PLUGIN_ROOT}|$PLUGIN_ROOT|g" "$f"
   printf '\n'
 done

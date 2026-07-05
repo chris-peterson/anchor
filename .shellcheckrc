@@ -1,0 +1,6 @@
+# Follow `source`d files so variables set by a caller and consumed by the sourced
+# lib (CTX_REPO / CTX_WORKTREE → resolve-context.sh) aren't flagged SC2034/SC2154.
+# source-path=SCRIPTDIR resolves `# shellcheck source=` directives relative to the
+# directory of the script being checked.
+external-sources=true
+source-path=SCRIPTDIR

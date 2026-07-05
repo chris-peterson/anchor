@@ -104,7 +104,7 @@ the reviewer saw.
 ## Step 1: Fetch unresolved feedback
 
 Pull every unresolved, human-authored thread. Canonical invocations live in
-the bundled forge cookbook (`guides/forge-cookbook.md`, section "List
+the bundled forge cookbook (`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`, section "List
 unresolved review threads"); in short:
 
 - **GitLab** — `glab api "projects/:fullpath/merge_requests/<iid>/discussions?per_page=100"`,
@@ -166,11 +166,11 @@ commit; unrelated concerns get separate commits so each reply can cite a
 focused SHA.
 
 Keep each fix within the changeset's existing scope — the bundled guide
-(`guides/changeset-scope.md`) has the bar and the surface-and-confirm move.
+(`${CLAUDE_PLUGIN_ROOT}/guides/changeset-scope.md`) has the bar and the surface-and-confirm move.
 
 If the author flags something in the CR description as worth keeping,
 fold it into the repo's docs as part of the fix commit — the bar and the
-adaptation rules are in the bundled guide (`guides/description-vs-docs.md`).
+adaptation rules are in the bundled guide (`${CLAUDE_PLUGIN_ROOT}/guides/description-vs-docs.md`).
 
 ### 3b. Test and commit
 

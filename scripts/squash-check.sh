@@ -55,6 +55,7 @@
 
 set -euo pipefail
 
+# shellcheck source=lib/resolve-context.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 CTX_REPO=""
 CTX_WORKTREE=""
