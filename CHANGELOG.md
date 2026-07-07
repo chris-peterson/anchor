@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.19.1
+
+### Fixes
+- anchor's history-rewrite rule now re-reads the change request's draft/ready flag *at the moment of the rewrite*, instead of trusting a read taken earlier in the session. The flag flips live — marking a CR ready clears it instantly — so a stale "it was a draft" read could green-light an amend + force-push onto a CR that had since been marked ready, clobbering the reviewer's "changes since you last looked" diff. The rule now spells out that the check must be fresh and steers you to `/anchor:commit`, whose pre-flight re-resolves CR state live; raw `git commit --amend` / `push --force-with-lease` has no such gate.
+
 ## 0.19.0
 
 ## prepare-review: sharper CR-description rules
