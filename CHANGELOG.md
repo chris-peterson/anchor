@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.19.0
+
+## prepare-review: sharper CR-description rules
+
+Refinements to how prepare-review drafts a CR description, from auditing a real merge request that composed into a custom forge template.
+
+- **Don't invent the WHY** — draft only from what the author gave, the diff, or a cited doc; a correct-but-narrow WHY beats a speculative-but-broad one.
+- **Re-verify inherited claims** against the diff before repeating them — the plausible-sounding one is often what the diff contradicts.
+- **Template composition** — preserve reviewer-facing structure (headings, approval checklists), strip author-facing scaffolding (placeholder text, reminder sections, `(*Required*)`/`(*Optional*)` annotations); answer a justification checkbox with fact, not commentary about the box; drop optional no-data sections, prompt on required ones.
+- **Evidence & references** — encourage collapsible, deep-linked evidence blocks; link authoritative external docs rather than naming an API bare; fetch, reason about, and preview pipeline-produced artifacts.
+
 ## 0.18.2
 
 ### Fixes
