@@ -37,21 +37,27 @@ suite:
     - ["/anchor:prepare-review", "Rebase on main and open a draft change request"]
     - ["/anchor:resolve-feedback", "Work a CR's review threads to done, one by one"]
   # Skill-anchored previews of the two flagship skills, shown live on the docs
-  # site; the session: below is the at-a-glance flow the hub also reads.
+  # site; the session: below is the at-a-glance flow the hub also reads. Frames
+  # are lifted from real runs (moor rejections, the WHY prompt, the CR structure)
+  # so the previews read as an actual session, not a script.
   examples:
     - label: "/anchor:commit"
       ac: "--ship"
       frames:
         - { t: you, text: "/anchor:commit" }
-        - { t: claude, text: "Tests pass. I'll stage everything and open the diff in moor for a hunk-level review before writing the message." }
-        - { t: status, text: "drafts a why-first commit message from the reviewed diff" }
+        - { t: claude, text: "Tests pass. Staging everything, then opening the diff in moor for a hunk-level look before I write the message." }
+        - { t: moor, del: "Write the subject, then a blank line, then a why-first body.", add: "Write the subject, then a why-first body — see the commit-message template.", rej: "if we defer to the template, we should avoid repeating its contents" }
+        - { t: claude, text: "Committed df7a13e with a why-first message. The rejected hunk comes back as a concrete edit — and I sweep every site with the same pattern, not just the flagged line." }
     - label: "/anchor:prepare-review"
-      ac: "--purple"
+      ac: "--orient"
       frames:
         - { t: you, text: "/anchor:prepare-review" }
-        - { t: claude, text: "Rebased on main, no conflicts. I'll open a draft CR assigned to you and deep-link the critical path for the reviewer." }
-        - { t: status, text: "writes the CR description and sets the source branch to delete on merge" }
+        - { t: claude, text: "Branch is 13 behind main and the CR's still a draft, so rebasing is low-risk. Rebased clean, force-pushed with lease." }
+        - { t: claude, text: "Before I draft — what problem does this solve? My read of the diff: --preview on a clean tree used to just stop; now it offers a branch review. Is that the WHY, or is there more?" }
+        - { t: you, text: "that's it" }
+        - { t: claude, text: "Draft CR #13 opened. The description leads with the Context, then a Review guide that deep-links the critical path so a reviewer's skim lands where their judgment matters." }
   session:
-    - { t: claude, text: "Validation and tests are in." }
-    - { t: thought, text: "time to land this" }
-    - { t: cmd, cmd: "/anchor:commit", out: "Walks you through the diff, commits with a why-first message, and opens a draft change request." }
+    - { t: you, text: "/anchor:commit" }
+    - { t: claude, text: "No test suite here — staging everything, then a why-first message from the diff. Opening moor for the hunk-level review." }
+    - { t: moor, del: "Write the subject, then a blank line, then a why-first body.", add: "Write the subject, then a why-first body — see the commit-message template.", rej: "if we defer to the template, we should avoid repeating its contents" }
+    - { t: claude, text: "Committed df7a13e. Review came back with five fix-now comments — each rejected hunk goes back as a concrete edit, swept across every site that shares the pattern." }

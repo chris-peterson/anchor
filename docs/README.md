@@ -15,8 +15,9 @@ flowchart LR
 
 ## In action
 
-Validation passes, and `/anchor:commit` carries the change the rest of the
-way — a hunk-level review, a why-first message, and a draft change request:
+Tests pass, and `/anchor:commit` carries the change the rest of the way —
+staging, a why-first message, and a hunk-level review in moor where a rejected
+hunk comes back as a concrete edit, not a vague "looks off":
 
 <div class="cw-session" data-cw-session="session"></div>
 

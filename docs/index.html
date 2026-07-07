@@ -12,6 +12,12 @@
   <div id="app">Loading...</div>
   <script src="https://chris-peterson.github.io/js/docsify-shared.js"></script>
   <script>
+    // subMaxLevel: 0 stops docsify from auto-injecting the current page's own
+    // headings into the sidebar as a phantom child tree — which reshaped the
+    // sidebar on every page (Home sprouting its ## headings, a skill page
+    // sprouting its steps). Set before initProject: it only fills a default for
+    // keys not already present on window.$docsify.
+    window.$docsify = { subMaxLevel: 0 };
     initProject({
       name: 'anchor',
       code_languages: ['bash', 'yaml', 'json'],

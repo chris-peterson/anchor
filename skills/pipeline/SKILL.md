@@ -28,12 +28,12 @@ flowchart TD
     Start(["/pipeline"]) --> Repo["Confirm target repo"]
     Repo --> Mode{Watch requested?}
 
-    subgraph "One-shot (default)"
+    subgraph once["One-shot (default)"]
         Mode -->|No| Once["pipeline-status.sh"]
         Once --> ReportA["Report current state"]
     end
 
-    subgraph "Watch"
+    subgraph watch["Watch"]
         Mode -->|Yes| Watch["pipeline-status.sh --watch in background"]
         Watch --> Settle{Terminal state?}
         Settle --> ReportB["Report verdict on settle"]
