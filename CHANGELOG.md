@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.19.2
+
+### Fixes
+
+- The `/anchor:pipeline` flow diagram now renders on the docs site — a mermaid subgraph/node id collision (a `Watch` subgraph sharing the `Watch` node's id) was silently breaking it.
+- The docs-site sidebar no longer reshapes from page to page. Each page's own headings were being injected as a phantom child tree, so the nav grew a different branch on every route; it now stays consistent everywhere.
+
+### Other
+
+- The homepage "in action" examples are rebuilt from real sessions — a genuine moor hunk review, and prepare-review's actual rebase gate and WHY prompt — instead of illustrative copy.
+
 ## 0.19.1
 
 ### Fixes
