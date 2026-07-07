@@ -140,8 +140,30 @@ When a template is found:
 
 - **Fill the sections it defines** with `anchor`'s prose, mapping `anchor`'s
   Context and Review guide into whatever headings the template provides.
-- **Preserve its checklists and headings verbatim** — a team review-prep
-  checklist is the team's wording, not `anchor`'s to reword or drop.
+- **Preserve the *reviewer-facing* structure verbatim — strip the *author-facing*
+  scaffolding.** The test for every template line: is it there for the reviewer,
+  or to guide *you* while authoring?
+  - **Keep** — section headings, and checklists the approver acts on (a team
+    review-prep checklist is the team's wording, not `anchor`'s to reword or drop).
+  - **Strip** — a section's placeholder / helper text (`< Type your summary here >`,
+    `(Paste any relevant logs…)`, `###### Summarize the reason…`), and the
+    required / optional status annotations on its heading (`## Summary - (*Required*)`,
+    `- (*Optional*)`) — those tell the author which sections to fill, not the reviewer
+    anything. That text is a prompt *to the author*, not content, and must never
+    survive into the shipped description. The same goes for static "reminder"
+    sections whose links or prose
+    are dev-time scaffolding (how-to / wiki links, "track your MR in Slack") rather
+    than anything about *this* change — drop them.
+- **A section you have no data for** — optional → drop it; required → prompt the
+  user for content (offer an opt-out / explicit "N/A"). Never ship a bare heading
+  trailed by its own filler instructions.
+- **A checklist item that demands justification is answered with fact, not
+  meta-commentary.** When a template says "explain why none of these apply" or
+  "justify your selection," satisfy it with the factual reason Context already
+  carries — not narration about which box is ticked ("which is why *None of the
+  above* is checked below") or defensive softeners ("not a new capability",
+  "purely additive"). State the fact that makes the box correct; don't describe the
+  box.
 - **On a structure conflict, the team template wins.** `anchor` doesn't reorder
   or rename the template's sections; it supplies the writing inside them. The prose
   discipline (criticality ordering, why-not-what, terseness) still governs that

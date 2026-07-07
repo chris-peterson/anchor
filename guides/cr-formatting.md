@@ -45,6 +45,7 @@ After the visualization choice, lean into markdown for the surrounding prose:
 - `Backticks` for every code identifier, file path, env var, branch name, package, or CLI flag. Anything a reader might grep for or paste into a terminal earns backticks. Inline backticks are cheap and pay back hugely in skim-readability.
   - **Exception — forge-autolink tokens stay bare.** GitLab and GitHub autolink CR/issue refs (`!148`, `#42`), commit SHAs (`a553528`), and user @mentions (`@chris`) when they appear as **bare text**. Wrapping them in backticks turns them into inert code spans and kills the link. Write `!148`, not `` `!148` ``; write `a553528`, not `` `a553528` ``.
   - **Cross-project references need the full URL.** A bare `#42` / `!148` / `@name` shortcut resolves *within the MR's own project* — `#42` autolinks to issue 42 of that project, not to a same-numbered item elsewhere. A pipeline, issue, or CR in a different project (CI/deploy pipelines routinely live in their own) must be written as a full URL; the bare shortcut silently links the wrong target and the mistake is invisible in the markdown source — it surfaces only once rendered. See the [forge cookbook](https://chris-peterson.github.io/anchor/#/guides/forge-cookbook) for the full GitLab-markdown facts.
+- **Link authoritative external references.** When the description names an external API, service, spec, standard, or tool that has canonical documentation, embed a markdown link to it rather than naming it bare — one click of authoritative context beats making the reviewer go search for it.
 - Fenced code blocks with a language tag for multi-line snippets, sample output, configs, or schemas.
 - Headings (`##`, `###`) to chunk the description so reviewers can jump straight to "Approach" or "Testing".
 
@@ -67,7 +68,19 @@ sample. Wrap that detail in a `<details><summary>…</summary>` block. The summa
 line keeps the outline scannable; the detail is one click away when a reviewer
 wants it. This is the escape valve that lets the description stay terse *and*
 complete — reach for it instead of either inlining a wall of output or dropping
-the detail entirely. Both GitHub and GitLab render the HTML;
+the detail entirely.
+
+**Precedent and proof are a natural fit for this pattern.** Approval-gated CRs
+(security, IAM, infra) often need to *establish* that a change is consistent with
+existing grants or prior art. Collapsible blocks holding specific, deep-linked
+proofs keep that case one click away without bloating the reviewer's default
+view. Terseness still governs *what goes inside*: proof that bears on
+*this* change (the same role, the same accounts), not an estate-wide sweep of
+unrelated grants that reads as whataboutism.
+
+**Pipeline-produced artifacts belong in the description — fetched, reasoned about, and previewed.** When the CR or its commit's pipeline generates an artifact that bears on review, pull it, read it, and include the pertinent excerpt rather than describing the change without the evidence the pipeline already produced. Fold a long artifact into a collapsible and lead with the part that matters — the summary line and anything surprising in it.
+
+Both GitHub and GitLab render the HTML;
 [GitLab's markdown reference](https://docs.gitlab.com/user/markdown/#collapsible-section)
 documents the syntax. The blank-line rule that makes markdown render inside the
 block is in `guides/markdown-gotchas.md`.
