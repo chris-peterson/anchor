@@ -3,7 +3,7 @@
 # the marketplace SPA (the suite: block).
 
 name: anchor
-version: 0.21.0
+version: 0.22.0
 description: Git/forge skills for consistent and effective source control.
 author: chris-peterson
 repository: https://github.com/chris-peterson/anchor

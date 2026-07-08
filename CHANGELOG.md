@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.22.0
+
+### Features
+- `/anchor:commit` now keeps commit-message bodies free of loaded framing —
+  temporal blame, size-minimizers, self-congratulatory adverbs, and defensive
+  softeners — the same tone discipline `/anchor:prepare-review` and
+  `/anchor:issue` already apply. Commit messages previously had no such guidance.
+
+### Other
+- The loaded-framing discipline now lives in one shared guide that `commit`,
+  `prepare-review`, and `issue` reference, instead of being restated in each
+  skill — a single source of truth, examples included.
+
 ## 0.21.0
 
 ### Other
