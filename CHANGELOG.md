@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.20.0
+
+### Features
+
+- `/anchor:prepare-review` now gates its **first push** behind a review. When you have commits ahead with no CR yet and the changeset hasn't been reviewed, it runs the branch-vs-default review (the same one `commit --preview cr` shows) and only pushes and opens the draft CR once the verdict is clean — so code no longer reaches the remote unreviewed when a commit skipped its visual review. The `/anchor:commit` → `prepare-review` path already reviews at commit time, so it's unaffected.
+
+### Other
+
+- The Quickstart and forge cookbook now state the forge-CLI prerequisite up front: the skills that touch a CR, issue, or pipeline (`prepare-review`, `resolve-feedback`, `pipeline`, `issue`) need `gh` or `glab` installed and authenticated with read+write scope. `commit` works without it.
+- The homepage "in action" sessions now walk through a concrete product bug — a fare cap that overcharged trips crossing midnight — instead of anchor editing its own templates, so a newcomer sees the commit → review → prepare-review loop on a relatable change.
+
 ## 0.19.2
 
 ### Fixes
