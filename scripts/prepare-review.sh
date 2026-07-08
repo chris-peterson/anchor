@@ -22,6 +22,11 @@
 #     resolve to the URL-free skip-deep-links path.
 #   - Create the feature branch when HEAD is the default branch with work to
 #     review — the script reports NEEDS_BRANCH and the skill branches first.
+#   - Push unreviewed commits. The first push (opening the draft CR) is the moment
+#     code leaves the machine, so it must clear the visual review gate first. When
+#     commits are ahead with no CR and --reviewed was not passed, the script
+#     reports NEEDS_REVIEW and stops short of pushing; the skill runs the review
+#     and re-invokes with --reviewed on a clean verdict.
 #
 # Output lines (KEY=value, read from stdout):
 #   RESOLVED_VIA=<worktree|repo|cwd>  worktree == ran in a --worktree checkout;
@@ -42,6 +47,11 @@
 #                                nothing ahead of the default branch, or uncommitted
 #                                work on the default branch) — the skill chains into
 #                                /anchor:commit before continuing
+#   NEEDS_REVIEW=<0|1>           1 == unreviewed commit(s) ahead of the default
+#                                branch, no CR yet, and --reviewed not passed — the
+#                                skill runs the branch-vs-default review gate, then
+#                                re-invokes with --reviewed on a clean verdict to
+#                                open the draft (the pre-push review gate)
 #   CR_PREEXISTING=<0|1>         a CR was already open before this run
 #   CR_CREATED=<0|1>             this script opened a draft CR
 #   CR_URL=<web url>             empty on the skip-deep-links path
@@ -64,7 +74,10 @@
 # silently dropping to the URL-free path.
 #
 # Usage:
-#   prepare-review.sh              # default: resolve CR, auto-open a draft if none
+#   prepare-review.sh              # default: resolve CR; if commits are unreviewed
+#                                  # and no CR, report NEEDS_REVIEW (no push)
+#   prepare-review.sh --reviewed   # the changeset cleared the review gate — push +
+#                                  # open the draft CR (the skill's re-invocation)
 #   prepare-review.sh --no-open    # never auto-open; no CR -> skip-deep-links path
 #   prepare-review.sh --repo <path>      # operate on a checkout other than the cwd repo
 #   prepare-review.sh --worktree <path>  # operate in a flow-owned isolated worktree
@@ -85,12 +98,14 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 
 auto_open=1
+reviewed=0
 CTX_REPO=""
 CTX_WORKTREE=""
 cr_ref=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-open)  auto_open=0; shift ;;
+    --reviewed) reviewed=1; shift ;;
     --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
     --worktree) CTX_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
     --cr)       cr_ref="${2:?--cr needs an iid or URL}"; shift 2 ;;
@@ -179,6 +194,7 @@ resolve_cr() {
 
 needs_commit=0
 needs_branch=0
+needs_review=0
 
 # Uncommitted work? (routes the on-default case below, and reused by the state
 # check further down so we only shell out to `git status` once.)
@@ -210,8 +226,19 @@ elif [[ "$forge" != "none" && "$on_default" -eq 0 ]]; then
     # condition so the skill chains into /anchor:commit instead of surfacing a
     # raw forge error.
     needs_commit=1
+  elif [[ "$auto_open" -eq 1 && "$reviewed" -eq 0 ]]; then
+    # Unpushed, unreviewed commit(s) ahead of the default branch, and no CR yet.
+    # The push below is the moment the code first leaves the machine, so it must
+    # clear the visual review gate first. /commit's Step 4 gates the local commit,
+    # but a commit made by raw git — or one whose Step 4 was skipped — would
+    # otherwise reach the remote unreviewed the instant this script auto-opens the
+    # draft. Don't push; report NEEDS_REVIEW so the skill runs the branch-vs-default
+    # review and re-invokes with --reviewed on a clean verdict.
+    needs_review=1
   elif [[ "$auto_open" -eq 1 ]]; then
-    # No CR yet — open a draft, assigned to me, source branch deleted on merge.
+    # --reviewed: the changeset already cleared the review gate (the skill ran it
+    # on a clean verdict, or /commit's Step 4 did on the chained path). Open a
+    # draft, assigned to me, source branch deleted on merge.
     # Push first so the create call has a remote branch to target.
     if ! push_err=$(git push -u origin "$branch" 2>&1); then
       echo "CR_CREATE_ERROR=push failed: $push_err"
@@ -324,6 +351,7 @@ echo "AHEAD=$ahead"
 echo "BEHIND=$behind"
 echo "NEEDS_BRANCH=$needs_branch"
 echo "NEEDS_COMMIT=$needs_commit"
+echo "NEEDS_REVIEW=$needs_review"
 echo "CR_PREEXISTING=$cr_preexisting"
 echo "CR_CREATED=$cr_created"
 echo "CR_URL=$cr_url"
