@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.21.0
+
+### Other
+
+- All five skills now share one **execute-quietly** discipline (a new bundled
+  guide) instead of each restating it: delegating to a helper script is silent
+  by default — its output feeds the next decision rather than getting narrated —
+  and a decision is surfaced without the reasoning that produced it. The one
+  exception: feedback returned through a review tool (moor's sidecar verdict) is
+  echoed back in a table before you act on it, so you can see it landed. This
+  trims the per-run narration that had been leaking gate outcomes, config reads,
+  and orchestration checks into the chat.
+- anchor now ships a `SPEC.md` (85 EARS requirements across 11 categories,
+  reverse-engineered from the skills, rules, and scripts) and a `STATUS.md`
+  coverage ledger — a written behavioral contract the sextant spec tooling can
+  trace, sync, and audit against.
+
 ## 0.20.0
 
 ### Features
