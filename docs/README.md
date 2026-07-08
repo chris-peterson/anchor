@@ -38,6 +38,18 @@ The two skills you reach for most, in motion:
 
 ## Quickstart
 
+anchor drives the forge through its official CLI, so the skills that touch a
+change request, issue, or pipeline (`prepare-review`, `resolve-feedback`,
+`pipeline`, `issue`) need the one for your `origin` remote installed and
+authenticated with read+write scope. `commit` works without it. Install
+[`gh`](https://cli.github.com) for GitHub or
+[`glab`](https://gitlab.com/gitlab-org/cli#installation) for GitLab, then:
+
+```bash
+gh auth login      # GitHub remotes
+glab auth login    # GitLab remotes
+```
+
 1. **Install the plugin.**
 
    ```bash

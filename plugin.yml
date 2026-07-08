@@ -45,19 +45,21 @@ suite:
       ac: "--ship"
       frames:
         - { t: you, text: "/anchor:commit" }
-        - { t: claude, text: "Tests pass. Staging everything, then opening the diff in moor for a hunk-level look before I write the message." }
-        - { t: moor, del: "Write the subject, then a blank line, then a why-first body.", add: "Write the subject, then a why-first body — see the commit-message template.", rej: "if we defer to the template, we should avoid repeating its contents" }
-        - { t: claude, text: "Committed df7a13e with a why-first message. The rejected hunk comes back as a concrete edit — and I sweep every site with the same pattern, not just the flagged line." }
+        - { t: claude, text: "214 tests green, staged. Ahead-count 0, so this is a new commit — opening moor for a hunk-level look before I write the message." }
+        - { t: moor, del: "const fare = crossesMidnight ? DAILY_MAX : mins * RATE", add: "const fare = Math.min(mins * RATE, DAILY_MAX)", rej: "good fix — but DAILY_MAX is now defined here and in pricing.js; use the one source" }
+        - { t: claude, text: "Committed 4a1f9c2. The rejected hunk came back as an edit — DAILY_MAX now imported from pricing.js — and I swept the two other call sites with the same duplication. Message leads with the overcharge, not the diff." }
     - label: "/anchor:prepare-review"
       ac: "--orient"
       frames:
         - { t: you, text: "/anchor:prepare-review" }
-        - { t: claude, text: "Branch is 13 behind main and the CR's still a draft, so rebasing is low-risk. Rebased clean, force-pushed with lease." }
-        - { t: claude, text: "Before I draft — what problem does this solve? My read of the diff: --preview on a clean tree used to just stop; now it offers a branch review. Is that the WHY, or is there more?" }
-        - { t: you, text: "that's it" }
-        - { t: claude, text: "Draft CR #13 opened. The description leads with the Context, then a Review guide that deep-links the critical path so a reviewer's skim lands where their judgment matters." }
+        - { t: claude, text: "Branch is 8 behind main and the CR's still a draft, so rebasing is low-risk. Rebased clean, force-pushed with lease." }
+        - { t: claude, text: "Before I draft — the WHY, in one line: riders on trips crossing midnight were billed the full daily max instead of elapsed minutes. Is that the whole story?" }
+        - { t: you, text: "yeah — support flagged three overcharges this week" }
+        - { t: claude, text: "Draft CR #128 opened. The description leads with the overcharge, then a Review guide that deep-links the fare-cap change so a reviewer's skim lands on the money path first." }
   session:
     - { t: you, text: "/anchor:commit" }
-    - { t: claude, text: "No test suite here — staging everything, then a why-first message from the diff. Opening moor for the hunk-level review." }
-    - { t: moor, del: "Write the subject, then a blank line, then a why-first body.", add: "Write the subject, then a why-first body — see the commit-message template.", rej: "if we defer to the template, we should avoid repeating its contents" }
-    - { t: claude, text: "Committed df7a13e. Review came back with five fix-now comments — each rejected hunk goes back as a concrete edit, swept across every site that shares the pattern." }
+    - { t: claude, text: "No unpushed commits here, so this is a new commit. Running the suite before I stage anything." }
+    - { t: cmd, cmd: "npm test", out: "Tests: 214 passed, 214 total" }
+    - { t: claude, text: "Green. Staged the fare-calc fix — opening moor for a hunk-level look before I write the message." }
+    - { t: moor, del: "const fare = crossesMidnight ? DAILY_MAX : mins * RATE", add: "const fare = Math.min(mins * RATE, DAILY_MAX)", rej: "good fix — but DAILY_MAX is now defined here and in pricing.js; use the one source" }
+    - { t: claude, text: "Committed 4a1f9c2. The rejected hunk came back as a concrete edit — DAILY_MAX pulled from pricing.js — and I swept every call site that had the same duplication." }

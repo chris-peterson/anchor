@@ -7,7 +7,8 @@ review comments. Both CLIs reason more reliably from explicit flags than from
 guessing, so prefer these forms over re-deriving them.
 
 Pick the CLI by the `origin` remote: a GitHub remote → `gh`; a GitLab remote →
-`glab`. Both must be authenticated with read+write scope.
+`glab`. Both must be authenticated with read+write scope — `gh auth login` /
+`glab auth login`.
 
 When you run `glab` from **outside** a GitLab checkout — no `origin` to infer the
 host from — target the host explicitly with `--hostname <host>`. That flag is
