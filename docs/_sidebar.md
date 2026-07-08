@@ -16,6 +16,7 @@
   - [Markdown gotchas](/guides/markdown-gotchas)
   - [CR formatting](/guides/cr-formatting)
   - [Description vs docs](/guides/description-vs-docs)
+  - [Loaded framing](/guides/loaded-framing)
   - [Staying in changeset scope](/guides/changeset-scope)
   - [Execute quietly](/guides/execute-quietly)
   - [Worktree isolation](/guides/worktree-isolation)

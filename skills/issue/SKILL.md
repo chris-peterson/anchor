@@ -155,7 +155,7 @@ Draft a concise imperative **title** (under 72 characters), then the body follow
 - **Keep the approach about the plan, not the code** — what's being built and why the load-bearing decisions were made, not how every class is wired.
 - **Define unfamiliar terms with short callouts** (`> **Term?** …`), sparingly and only where a newcomer would be lost.
 - **Diagram only when it carries shape prose hides** — anchor's mermaid conventions (hand-drawn look, no `\n`/`<br>` in labels).
-- **Same "what to avoid" discipline as a CR description** — no loaded framing, no drift artifacts, no leaked deliberation, nothing the reader can already see.
+- **Same "what to avoid" discipline as a CR description** — no loaded framing (`${CLAUDE_PLUGIN_ROOT}/guides/loaded-framing.md`), no drift artifacts, no leaked deliberation, nothing the reader can already see.
 - **Watch the rendering gotchas** — the body is pasted into a markdown renderer; the bundled `${CLAUDE_PLUGIN_ROOT}/guides/markdown-gotchas.md` lists the traps (character escaping, nested fences, mermaid, `<details>`, tables in lists).
 
 ## Step 5: Output
