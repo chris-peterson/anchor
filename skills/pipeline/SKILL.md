@@ -18,9 +18,10 @@ GitHub calls a pipeline a *workflow run* and GitLab calls it a *pipeline*; this
 skill uses **pipeline** for both, and `glab api` / `gh run` for the forge calls.
 
 **Don't narrate your work.** Every step below is an operating instruction, not a
-script to read aloud. Don't announce the repo resolution, the forge detection,
-or the background launch. Speak only when the user must act or decide: the
-resolved repo in one line if it's ambiguous, and the pipeline verdict.
+script to read aloud — follow the execute-quietly discipline:
+`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. For this skill, the only
+things worth surfacing are the resolved repo in one line if it's ambiguous, and
+the pipeline verdict.
 
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%

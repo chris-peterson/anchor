@@ -17,4 +17,5 @@
   - [CR formatting](/guides/cr-formatting)
   - [Description vs docs](/guides/description-vs-docs)
   - [Staying in changeset scope](/guides/changeset-scope)
+  - [Execute quietly](/guides/execute-quietly)
   - [Worktree isolation](/guides/worktree-isolation)

@@ -55,9 +55,7 @@ flowchart TD
 
 ## Execute quietly — do the thinking, don't show it
 
-**The reviewer reviews A → B — the net change from base to final state — not the path you took to get there.** The minor pivots, dead ends, and intermediate iterations of this session are development *process*, not the change under review. This skill's recurring failure is narrating that process — to the user, or into the description — instead of just producing the artifact that describes A → B.
-
-Step 1's recon and Step 4's diff/moor review each fold into one call precisely so there is nothing to narrate between them: run the call, read the result, move on.
+Follow the execute-quietly discipline: `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. It bites hardest here because **the reviewer reviews A → B — the net change from base to final state — not the path you took to get there.** The session's pivots, dead ends, and intermediate iterations are development *process*, not the change under review; narrating that process — to the user, or into the description — is this skill's recurring failure. Step 1's recon and Step 4's diff/moor review each fold into one call precisely so there is nothing to narrate between them: run the call, read the result, move on.
 
 **The entire visible output of a run is:**
 
@@ -66,13 +64,7 @@ Step 1's recon and Step 4's diff/moor review each fold into one call precisely s
 3. the Step 2 questions;
 4. the drafted description, the Step 4 options, and the final verdict.
 
-**Everything else is internal — keep it out of the visible output:**
-
-- **Per-step plumbing** — "origin is GitLab, 1 ahead, no template, anchors computed, tree clean." The user doesn't act on recon, and the script already ran it.
-- **The anti-recency disposition** (Step 3) — the Centerpiece / Footnote / Cut rundown is scratch that *shapes* the draft; it is not output.
-- **Session-internal history** — the path from A to B: "here's what I just did / iterated on / cleaned up." Process, not the change. It belongs nowhere the reviewer reads — not the chat, and not the description, where it's the "Drift artifacts" Step 3 tells you to cut.
-
-Reserve prose for the steps that need *your* judgment or the *user's* input — the prompts in Step 2, drafting in Step 3, presenting options in Step 4. Those produce the artifact; narration *about* producing it does not.
+Everything else is internal: the per-step recon plumbing ("origin is GitLab, 1 ahead, no template, tree clean" — the script already ran it), the Step 3 anti-recency disposition (Centerpiece / Footnote / Cut scratch that *shapes* the draft, never output), and session-internal A → B history (which also gets cut from the description as a "Drift artifact" — see Step 3). Reserve prose for the steps that need *your* judgment or the *user's* input — the Step 2 prompts, drafting in Step 3, presenting options in Step 4.
 
 ## Step 1: Gather the changeset
 

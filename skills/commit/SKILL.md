@@ -7,7 +7,7 @@ description: Stage changes, run tests, and write a commit message. Use when work
 
 Confirm the target repo, run tests, stage all changes, and generate a commit message.
 
-**Don't narrate your work.** Every step below is an operating instruction, not a script to read aloud. Don't announce what you're about to do (*"/commit is the entry point; let me set up the tasks, confirm the repo, and run tests"*), don't report the plumbing of each command (ahead-counts, sidecar paths, *"launching in the background"*, *"let me read its stdout"*, *"confirming it's running"*), and don't restate the same status twice. Speak only when the user must act or decide: the resolved repo in one line, a failing test, the drafted message with its options, and the final review verdict. Where a step prescribes exact output (e.g. `Committed [short-sha]`), emit that and nothing more.
+**Don't narrate your work.** Every step below is an operating instruction, not a script to read aloud — follow the execute-quietly discipline: `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. For `/commit`, the only things worth surfacing are the resolved repo in one line, a failing test, the drafted message with its options, and the final review verdict; where a step prescribes exact output (e.g. `Committed [short-sha]`), emit that and nothing more.
 
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%

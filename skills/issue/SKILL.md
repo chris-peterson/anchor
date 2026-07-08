@@ -7,7 +7,7 @@ description: Draft and file (or update) a forge issue that leads with WHY the wo
 
 Draft an issue whose job is to convey *why* the work is needed and *how* the author intends to approach it — written for a reader who has never seen this part of the system. An issue describes work **to be done**, so unlike `commit` and `prepare-review` there is no diff to read from: the raw material is the author's intent, gathered up front.
 
-**Don't narrate your work.** Every step below is an operating instruction, not a script to read aloud. Don't announce what you're about to do or report the plumbing of each command. Speak only when the user must act or decide: a question you need answered, the drafted issue with its options, the final URL.
+**Don't narrate your work.** Every step below is an operating instruction, not a script to read aloud — follow the execute-quietly discipline: `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. For this skill, the only things worth surfacing are a question you need answered, the drafted issue with its options, and the final URL. Full principle: `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`.
 
 Issue = a GitHub issue or a GitLab issue. Pick the forge tool by the `origin` remote.
 
