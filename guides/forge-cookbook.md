@@ -155,12 +155,17 @@ see the line-anchored discussion section).
 For any body with tables, code blocks, or fenced content, write it to a temp
 file and reference the file — no command substitution, no escape gymnastics.
 
-Pick the path with `mktemp -u` (the `-u` prints a unique name *without* creating
-the file, so a follow-up `Write` treats it as fresh). A random name also avoids
-clobbering a parallel session that hardcodes the same path:
+Pick the path with `mktemp -u` — `-u` prints a unique name *without* creating
+the file, so a follow-up `Write` treats it as fresh, and a random name won't
+clobber a parallel session that hardcodes the same path. Keep the `XXXXXX`
+**trailing** and append the suffix *outside* the template: BSD/macOS mktemp only
+replaces a trailing run, so it takes `cr-body.XXXXXX.md` as a literal filename
+(creating `cr-body.XXXXXX.md` verbatim, then colliding on it the next run —
+`mkstemp failed … File exists`), whereas `$(mktemp -u …XXXXXX).md` behaves the
+same on GNU, BSD, and Git Bash:
 
 ```bash
-mktemp -u /tmp/cr-body.XXXXXX.md
+echo "$(mktemp -u "${TMPDIR:-/tmp}/cr-body.XXXXXX").md"
 # → /tmp/cr-body.aB3xKp.md
 ```
 

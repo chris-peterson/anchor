@@ -313,7 +313,7 @@ The single exception to "no verification content in the description body" is the
 
 ## Step 4: Output
 
-Write the drafted description to a temp file (`mktemp -u /tmp/cr-desc-draft.XXXXXX.md`) — both the diff presentation here and the moor edit loop below read it.
+Write the drafted description to a temp file (`$(mktemp -u "${TMPDIR:-/tmp}/cr-desc-draft.XXXXXX").md`) — both the diff presentation here and the moor edit loop below read it.
 
 **Present the change.** When `CURRENT_DESC_PATH` from Step 1's block is non-empty (any CR exists — including a freshly-opened draft, whose `--fill` baseline makes the draft render as all-additions), show what changed rather than the whole body — diff the draft against that baseline and present it in a fenced `diff` block:
 

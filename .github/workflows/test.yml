@@ -1,0 +1,25 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tmpfile:
+    # The temp-path helper's portability claim is cross-platform, so prove it on
+    # each mktemp it must survive: GNU coreutils (ubuntu), BSD (macos — the
+    # binary that broke the old form), and Git Bash's MSYS2 mktemp (windows).
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+      - name: temp-path helper
+        run: bash tests/tmpfile.test.sh
