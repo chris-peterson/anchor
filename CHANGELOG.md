@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.22.1
+
+### Fixes
+- `/anchor:prepare-review` no longer fails when a previous session left its
+  scratch file behind. The gather script generated its temp path with a
+  non-trailing `mktemp` template (`cr-desc-current.XXXXXX.md`); BSD/macOS mktemp
+  expands only a *trailing* run of `X`s, so it created that name literally and
+  the next run collided (`mktemp: mkstemp failed … File exists`). Temp paths now
+  use a trailing template via a shared helper that behaves identically on GNU,
+  BSD, and Git Bash mktemp.
+
+### Other
+- The guidance sites that teach writing a body to a temp file (`commit`,
+  `prepare-review`, `issue`, `resolve-feedback`, and the forge cookbook) now use
+  the portable idiom.
+- Added the repo's first runtime test — a functional check of the temp-path
+  helper — on an `ubuntu` / `macOS` / `windows` CI matrix; CI was previously
+  shellcheck-only.
+
 ## 0.22.0
 
 ### Features
