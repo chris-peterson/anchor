@@ -72,7 +72,7 @@ Act on `TARGET_VIA`:
 
 Pick the forge per **Target repo** above (`gh` for GitHub, `glab` for GitLab).
 
-- **An issue URL or number was provided** → **update** that issue. Pull its current body to a temp file now (`mktemp -u /tmp/issue-current.XXXXXX.md`); Step 5 diffs the draft against it:
+- **An issue URL or number was provided** → **update** that issue. Pull its current body to a temp file now (`$(mktemp -u "${TMPDIR:-/tmp}/issue-current.XXXXXX").md`); Step 5 diffs the draft against it:
 
   ```bash
   # GitHub
@@ -160,7 +160,7 @@ Draft a concise imperative **title** (under 72 characters), then the body follow
 
 ## Step 5: Output
 
-Write the drafted body to a temp file (`mktemp -u /tmp/issue-draft.XXXXXX.md`).
+Write the drafted body to a temp file (`$(mktemp -u "${TMPDIR:-/tmp}/issue-draft.XXXXXX").md`).
 
 **Present the change.** When updating an existing issue, diff the draft against the baseline captured in Step 1 and present it in a fenced `diff` block:
 

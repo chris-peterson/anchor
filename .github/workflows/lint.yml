@@ -18,4 +18,4 @@ jobs:
       # a standalone entry point. Gates at the default severity (info and up) —
       # the scripts are a zero-finding baseline, so any new finding fails.
       - name: shellcheck
-        run: shellcheck hooks/*.sh scripts/*.sh
+        run: shellcheck hooks/*.sh scripts/*.sh tests/*.sh

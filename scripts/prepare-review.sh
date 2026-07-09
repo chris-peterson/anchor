@@ -96,6 +96,8 @@ set -euo pipefail
 
 # shellcheck source=lib/resolve-context.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
+# shellcheck source=lib/tmpfile.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/tmpfile.sh"
 
 auto_open=1
 reviewed=0
@@ -279,7 +281,7 @@ fi
 
 current_desc_path=""
 if [[ -n "$cr_url" ]]; then
-  current_desc_path=$(mktemp /tmp/cr-desc-current.XXXXXX.md)
+  current_desc_path="$(anchor_tmpfile cr-desc-current)"
   printf '%s' "$cr_desc" > "$current_desc_path"
 fi
 

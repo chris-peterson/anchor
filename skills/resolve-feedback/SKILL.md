@@ -192,7 +192,7 @@ gains commits).
 
 ### 3c. Reply on each thread
 
-Write each reply body to a unique temp file (`mktemp -u /tmp/reply.XXXXXX.md`)
+Write each reply body to a unique temp file (`$(mktemp -u "${TMPDIR:-/tmp}/reply.XXXXXX").md`)
 and post it into the *existing* thread — not as a new top-level comment (see
 the cookbook, "Reply to a review thread"). Reply content:
 

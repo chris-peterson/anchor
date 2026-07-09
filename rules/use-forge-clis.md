@@ -17,7 +17,7 @@ querying an *existing* CR still uses the CLI directly, per below.
 
 For any multi-line body (tables, code fences) — CR descriptions, issue
 bodies, comments — write the body to a unique temp file
-(`mktemp -u /tmp/cr-body.XXXXXX.md`) and pass it by file (`--body-file`,
+(`$(mktemp -u "${TMPDIR:-/tmp}/cr-body.XXXXXX").md`) and pass it by file (`--body-file`,
 `-F description=@<path>`); never inline escape-quoted strings.
 
 For anything beyond these basics — creation defaults, line-anchored
