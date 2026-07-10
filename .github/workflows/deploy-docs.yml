@@ -1,5 +1,9 @@
 name: Deploy docs
 
+# Delegates to shipyard's reusable docs deploy (float to @actions during
+# consolidation). Pages permissions are granted here because reusable-workflow
+# permissions are capped by the caller's token.
+
 on:
   push:
     branches: [main]
@@ -9,27 +13,6 @@ permissions:
   pages: write
   id-token: write
 
-concurrency:
-  group: pages
-  cancel-in-progress: false
-
 jobs:
   deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - uses: actions/configure-pages@v5
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-      - run: pip install pyyaml
-      - name: Copy skill docs into docs
-        run: bash scripts/copy-skill-docs.sh
-      - uses: actions/upload-pages-artifact@v4
-        with:
-          path: docs
-      - id: deployment
-        uses: actions/deploy-pages@v4
+    uses: chris-peterson/shipyard/.github/workflows/deploy-docs.yml@main

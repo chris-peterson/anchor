@@ -55,9 +55,9 @@ Launches Claude Code with the working tree mounted as a plugin, so
 just docs
 ```
 
-Runs `scripts/copy-skill-docs.sh` (syncs each `SKILL.md` and guide into `docs/`)
-and serves the docsify site locally. Deployed to GitHub Pages on push to `main`
-via `.github/workflows/deploy-docs.yml`.
+Runs `shipyard build-docs` (renders each `SKILL.md`, rule, guide, and template
+into `docs/`) and serves the docsify site locally. Deployed to GitHub Pages on
+push to `main` via `.github/workflows/deploy-docs.yml`.
 
 ## License
 
