@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.22.2
+
+Adopt shipyard for build tooling and CI — the build scripts (plugin.json, docs, changelog, and the new source-derived catalog descriptions) now come from the shared [shipyard](https://github.com/chris-peterson/shipyard) tooling instead of per-repo copies.
+
+- `plugin.json` now includes `homepage`.
+- The marketplace catalog shows per-artifact descriptions, generated from each skill/rule/hook's own source rather than hand-written.
+
+No change to skill, rule, or hook behavior.
+
 ## 0.22.1
 
 ### Fixes
