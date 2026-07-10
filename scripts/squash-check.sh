@@ -33,24 +33,25 @@
 # Runs against the cwd repo by default; pass --repo <path> to target another
 # checkout (see scripts/lib/resolve-context.sh).
 #
+# The stdout is an OUTPUT CONTRACT, not a fact dump: it exports the decision the
+# skill acts on plus the one datum it must present, and keeps the facts that
+# produced the decision (push state, CR state, author identity, the block reason)
+# inside this script. The skill can't narrate what it never receives — so the
+# gate stays quiet by construction rather than by a "don't say this" instruction
+# the model can override. See guides/execute-quietly.md.
+#
 # Output lines (KEY=value, read from stdout):
-#   RESOLVED_VIA=<worktree|repo|cwd>  the checkout this ran against (--worktree / --repo / cwd)
-#   SQUASH_ALLOWED=<0|1>            1 == amending HEAD is safe; the skill may
-#                                   offer squash (gated further by relatedness)
-#   SQUASH_BLOCK_REASON=<reason>    why squash is off the table (empty when allowed):
-#                                     other-author        HEAD authored by someone else
-#                                     default-branch-tip  HEAD is the pushed tip of the
-#                                                         default branch (published history)
-#                                     cr-ready            pushed & the CR is out for review
-#   SQUASH_NEEDS_FORCE_PUSH=<0|1>  1 == squash is allowed but HEAD is pushed, so
-#                                   the amend must be followed by force-with-lease
-#   HEAD_PUSHED=<0|1>              HEAD is on the remote tracking branch
-#   UNPUSHED_COUNT=<n|>            commits HEAD is ahead of upstream (empty when
-#                                   no upstream and no origin fallback resolved)
-#   CR_STATE=<none|draft|ready>    the branch's open CR review state
-#   HEAD_AUTHOR_EMAIL=<email>      HEAD's author (for the guard message)
-#   HEAD_AUTHOR_NAME=<name>
-#   USER_EMAIL=<email>             the current git identity compared against
+#   SQUASH=<allowed|blocked>       allowed == amending HEAD is safe; the skill may
+#                                   offer squash (gated further by relatedness).
+#                                   blocked == present the ordinary new commit.
+#   SQUASH_FORCE_PUSH=<0|1>        meaningful only when allowed: 1 == HEAD is
+#                                   pushed (draft CR, or no CR), so the amend must
+#                                   be followed by force-with-lease
+#   ALLOW_MESSAGE_AMEND=<0|1>      1 == squash is blocked, but a message-only amend
+#                                   is permitted here (the ready-CR case: the tree
+#                                   is untouched, so a wrong *message* may be fixed
+#                                   and force-pushed). Named by what it PERMITS, not
+#                                   why — the reason itself never crosses the boundary
 #   PRIOR_SUBJECT=<subject>        HEAD's subject line (for the squash option text)
 
 set -euo pipefail
@@ -80,7 +81,6 @@ esac
 # --- Author guard facts -------------------------------------------------------
 
 head_author_email=$(git log -1 --format=%ae HEAD 2>/dev/null || true)
-head_author_name=$(git log -1 --format=%an HEAD 2>/dev/null || true)
 prior_subject=$(git log -1 --format=%s HEAD 2>/dev/null || true)
 user_email=$(git config user.email 2>/dev/null || true)
 
@@ -143,16 +143,22 @@ fi
 
 # --- Decide ------------------------------------------------------------------
 
-squash_allowed=0
-block_reason=""
-needs_force_push=0
+# The block reason, push state, and CR state below are LOCAL: they decide the
+# contract but are never emitted. Only `squash`, `force_push`, and
+# `allow_message_amend` cross the boundary — see the header's output contract.
+
+squash=blocked
+force_push=0
+allow_message_amend=0
 
 if [[ "$other_author" -eq 1 ]]; then
-  block_reason=other-author
+  # HEAD authored by someone else — amending rewrites their commit, never a target
+  # (even for a message-only fix).
+  :
 elif [[ "$head_pushed" -eq 0 ]]; then
   # Unpushed HEAD: squashing never touches published or reviewed history.
   # (Local-only commits on the default branch land here too — fine to amend.)
-  squash_allowed=1
+  squash=allowed
 elif [[ -n "$default_branch" ]] \
      && git rev-parse --verify --quiet "origin/${default_branch}" >/dev/null \
      && git merge-base --is-ancestor HEAD "origin/${default_branch}" 2>/dev/null; then
@@ -160,28 +166,23 @@ elif [[ -n "$default_branch" ]] \
   # default branch (the pushed default-branch tip, or a fresh feature branch whose
   # only commit so far IS that tip). Amending it force-pushes over origin/<default>,
   # which no review-state check makes safe. Land a new commit instead.
-  block_reason=default-branch-tip
+  :
 elif [[ "$cr_state" == "ready" ]]; then
-  # The one block: a ready CR is out for review, and a reviewer relies on the
-  # per-commit "changes since" diff — force-pushing over it destroys that.
-  block_reason=cr-ready
+  # A ready CR is out for review, and a reviewer relies on the per-commit "changes
+  # since" diff — force-pushing over it destroys that, so squash stays blocked. But
+  # the tree is untouched by a message fix, so a demonstrably-wrong *message* may be
+  # amended and force-pushed; the skill offers that only on the user's report.
+  allow_message_amend=1
 else
   # Pushed, but not out for review (draft CR, or no CR at all) — mutable history
   # is the norm; the amend is followed by force-push-with-lease.
-  squash_allowed=1
-  needs_force_push=1
+  squash=allowed
+  force_push=1
 fi
 
 # --- Emit --------------------------------------------------------------------
 
-echo "RESOLVED_VIA=$RESOLVED_VIA"
-echo "SQUASH_ALLOWED=$squash_allowed"
-echo "SQUASH_BLOCK_REASON=$block_reason"
-echo "SQUASH_NEEDS_FORCE_PUSH=$needs_force_push"
-echo "HEAD_PUSHED=$head_pushed"
-echo "UNPUSHED_COUNT=$unpushed_count"
-echo "CR_STATE=$cr_state"
-echo "HEAD_AUTHOR_EMAIL=$head_author_email"
-echo "HEAD_AUTHOR_NAME=$head_author_name"
-echo "USER_EMAIL=$user_email"
+echo "SQUASH=$squash"
+echo "SQUASH_FORCE_PUSH=$force_push"
+echo "ALLOW_MESSAGE_AMEND=$allow_message_amend"
 echo "PRIOR_SUBJECT=$prior_subject"

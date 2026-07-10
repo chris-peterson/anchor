@@ -208,47 +208,46 @@ Compare it to the default (`git symbolic-ref --short refs/remotes/origin/HEAD | 
 
 Create the branch (when chosen) **before** the commit below, so the commit lands on the feature branch. When `/anchor:prepare-review` chained here, the recommended branch path is exactly what it needs — it re-gathers afterward and opens the CR from the new branch.
 
-Committing directly to the default branch is never a squash target (the gate below blocks it via `default-branch-tip`), so even the "commit to `<default>`" path lands as a new commit rather than amending the published tip.
+Committing directly to the default branch is never a squash target — the gate below returns `SQUASH=blocked`, so even the "commit to `<default>`" path lands as a new commit rather than amending the published tip.
 
 ### Squash gate
 
-Before presenting options, decide whether squashing the staged changes into HEAD (via `git commit --amend`) is on the table. The gate is *"is HEAD out for review?"* — the deterministic facts come from the helper, one launch-and-read:
+Before presenting options, decide whether squashing the staged changes into HEAD (via `git commit --amend`) is on the table. The gate is *"is HEAD out for review?"* — the helper decides it and returns only what you act on, one launch-and-read:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/squash-check.sh"
 ```
 
-The block it prints:
+The contract it prints:
 
 | Key | What to do with it |
 |-----|--------------------|
-| `SQUASH_ALLOWED` | `1` → amending HEAD is safe; offer squash (gated further by relatedness below). `0` → squash isn't on the table; commit normally (the ordinary path, below) |
-| `SQUASH_BLOCK_REASON` | why squash is blocked — **kept internal, never narrated**: `other-author` (HEAD authored by someone else), `default-branch-tip` (HEAD is published on the default branch), or `cr-ready` (HEAD is pushed and the CR is out for review). Only `cr-ready` is acted on — it gates the message-only-amend exception below |
-| `SQUASH_NEEDS_FORCE_PUSH` | `1` → squash is allowed but HEAD is pushed (a draft CR, or no CR), so the amend must be followed by `git push --force-with-lease` |
-| `CR_STATE` | `none` / `draft` / `ready` — the branch's open CR review state |
+| `SQUASH` | `allowed` → amending HEAD is safe; offer squash (gated further by relatedness below). `blocked` → the ordinary new commit (below) |
+| `SQUASH_FORCE_PUSH` | meaningful only when `allowed`: `1` → HEAD is pushed (a draft CR, or no CR), so the amend must be followed by `git push --force-with-lease` |
+| `ALLOW_MESSAGE_AMEND` | `1` → squash is `blocked`, but a message-only amend is permitted (the ready-CR case); gates the exception below. `0` → no amend of any kind |
 | `PRIOR_SUBJECT` | HEAD's subject, for the squash option text |
 
-The helper folds in the old unpushed-count probe (including the no-upstream `origin/<default>..HEAD` fallback), the author guard, and the CR-draft probe — don't re-run those.
+The helper folds the push-state probe (including the no-upstream `origin/<default>..HEAD` fallback), the author guard, and the CR-draft probe into that decision — don't re-run them. It deliberately does **not** emit *why* squash is blocked: the block reason, push count, CR state, and author identity stay inside the script, so there's nothing here to narrate or keep quiet by hand — the gate is silent by construction (`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`).
 
-### When `SQUASH_ALLOWED=0` — the ordinary commit
+### When `SQUASH=blocked` — the ordinary commit
 
-This is the vanilla path, and the common one: HEAD isn't yours to rewrite (`other-author`, `default-branch-tip`) or it's out for review (`cr-ready`), so a plain new commit is the only sensible outcome — which is exactly what the user asked for when they said "commit." So just commit. **Don't mention squash, and don't explain why it isn't on offer.** The user never raised squashing; narrating *"squash is off the table because HEAD was authored by …"* answers a question nobody asked and leaks the gate's internal reasoning. Present the drafted message with two choices:
+The vanilla path, and the common one: HEAD isn't yours to rewrite or it's out for review, so a plain new commit is the only sensible outcome — exactly what the user asked for when they said "commit." The helper already withheld *why*, so there's nothing to keep quiet: present the drafted message with two choices and commit. The user never raised squashing; don't mention it.
 
 1) **Accept** — commit
 2) **Edit** — tell you what to change
 
-On Accept, run `git commit`. Keep `SQUASH_BLOCK_REASON` to yourself — it changes nothing the user sees here, and matters in exactly one situation, below.
+On Accept, run `git commit`.
 
-**Narrow exception — message-only amend on a ready CR.** When the reason is `cr-ready` and the user reports the *message* (not the code) is demonstrably wrong — pasted from a different repo, references identifiers that don't exist here, doesn't match what the diff does — the tree is unchanged, so the reviewer-protection motivation doesn't apply. Offer `git commit --amend -F <msg-file>` to fix the message, then surface "force-push (`--force-with-lease`) affects only the message; the tree is unchanged" as an explicit choice and let the user decide. This fires for `cr-ready` only: `other-author` never amends someone else's commit even for a message fix, and `default-branch-tip` never rewrites the published default branch. Do not extend it to content rewrites; the moment any file content moves, the standard gate applies again.
+**Narrow exception — message-only amend (`ALLOW_MESSAGE_AMEND=1`).** When the helper permits a message-only amend and the user reports the *message* (not the code) is demonstrably wrong — pasted from a different repo, references identifiers that don't exist here, doesn't match what the diff does — the tree is unchanged, so the reviewer-protection motivation doesn't apply. Offer `git commit --amend -F <msg-file>` to fix the message, then surface "force-push (`--force-with-lease`) affects only the message; the tree is unchanged" as an explicit choice and let the user decide. The flag fires only where this is safe (a ready CR whose tree a message fix leaves untouched); when it's `0`, no amend — a new commit is the only path. Do not extend it to content rewrites; the moment any file content moves, the standard gate applies again.
 
-### When `SQUASH_ALLOWED=1` — apply the relatedness judgment
+### When `SQUASH=allowed` — apply the relatedness judgment
 
 The gate is open; now *your* judgment decides squash vs new commit. Decide whether the staged changes are **related** to the prior commit (continuation, fix, or refinement of the same work) or **unrelated** (different topic, different files, new task):
 
 - **Related** → recommend squash
 - **Unrelated** → recommend new commit
 
-When `SQUASH_NEEDS_FORCE_PUSH=1` (pushed draft CR), annotate the squash option so the user knows the follow-up push is a force-push — e.g. `_(CR is draft — mutable history is the norm; amend force-pushes with lease)_`. Don't let it flip the recommendation; a draft's history is expected to move.
+When `SQUASH_FORCE_PUSH=1` (pushed draft CR), annotate the squash option so the user knows the follow-up push is a force-push — e.g. `_(CR is draft — mutable history is the norm; amend force-pushes with lease)_`. Don't let it flip the recommendation; a draft's history is expected to move.
 
 Present options in recommended-first order:
 
@@ -268,7 +267,7 @@ If recommending squash:
 
 If they choose New commit (or Accept when no squash option), run `git commit` with the message.
 
-If they choose Squash, write a combined commit message covering both the prior commit and the new changes, present it for confirmation, then run `git commit --amend` with the new message. If `SQUASH_NEEDS_FORCE_PUSH=1`, follow the amend with `git push --force-with-lease` so the open draft CR updates to the rewritten history.
+If they choose Squash, write a combined commit message covering both the prior commit and the new changes, present it for confirmation, then run `git commit --amend` with the new message. If `SQUASH_FORCE_PUSH=1`, follow the amend with `git push --force-with-lease` so the open draft CR updates to the rewritten history.
 
 If they choose Edit, commit with the drafted message then immediately open the editor:
 
