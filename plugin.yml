@@ -1,6 +1,7 @@
 # Canonical descriptor for the anchor plugin — edit here, never plugin.json.
-# Projects into .claude-plugin/plugin.json (via scripts/gen-plugin-json.py) and
-# the marketplace SPA (the suite: block).
+# shipyard projects this into .claude-plugin/plugin.json and the marketplace
+# catalog (the suite: block). suite.describe is generated from the
+# skills/rules/hooks sources — run `just build`, don't hand-edit it.
 
 name: anchor
 version: 0.22.1
@@ -40,6 +41,22 @@ suite:
   # site; the session: below is the at-a-glance flow the hub also reads. Frames
   # are lifted from real runs (moor rejections, the WHY prompt, the CR structure)
   # so the previews read as an actual session, not a script.
+  # >>> shipyard:describe — generated from source by `shipyard gen-describe`; do not edit >>>
+  describe:
+    skills:
+      commit: Stage changes, run tests, and write a commit message.
+      issue: Draft and file (or update) a forge issue that leads with WHY the work is needed.
+      pipeline: Report a commit's forge pipeline state, or watch until it settles.
+      prepare-review: Rebase on the default branch, push, open the PR/MR, and draft a description that tells reviewers WHY the change exists.
+      resolve-feedback: Fetch an open CR's review feedback and drive each thread to resolution — fix, reply, resolve.
+    rules:
+      omit-attribution-trailers: Omit AI attribution trailers
+      rewrite-history-through-anchor: Route history rewrites through anchor
+      use-forge-clis: Drive forge operations through `gh` / `glab`
+    hooks:
+      emit-rules: SessionStart — Emits the plugin's ambient rules into the agent's context.
+      hooks: 'Hook wiring: SessionStart→emit-rules.'
+  # <<< shipyard:describe <<<
   examples:
     - label: "/anchor:commit"
       ac: "--ship"
