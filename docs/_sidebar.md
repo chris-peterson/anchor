@@ -1,4 +1,5 @@
 - [Home](/)
+- [SPEC](/spec)
 - Skills
   - [commit](/skills/commit)
   - [prepare-review](/skills/prepare-review)
