@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# DOCUMENTATION: Emits the plugin's ambient rules into the agent's context.
 # SessionStart hook: emit this plugin's ambient rules into context.
 # Stdout is added to context on every SessionStart source, including after
 # compaction (no matcher in hooks.json). What gets injected and why:

@@ -1,0 +1,5 @@
+# Source of record for anchor's hooks — shipyard generates hooks.json.
+hooks:
+  - event: SessionStart
+    command: 'bash "${CLAUDE_PLUGIN_ROOT}/hooks/emit-rules.sh"'
+    description: Emits the plugin's ambient rules into the agent's context.
