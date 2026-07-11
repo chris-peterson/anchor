@@ -3,6 +3,6 @@ docs/skills/
 docs/rules/
 docs/guides/
 docs/templates/
-docs/suite.json
+docs/plugin-docs.json
 __pycache__
 .DS_Store
