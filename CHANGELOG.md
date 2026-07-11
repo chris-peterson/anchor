@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.23.0
+
+## New
+
+- **`/issues` skill** — lists and ranks the forge issues assigned to you (GitHub/GitLab) so you can pick what to work on next: ranked by soonest due date, then most recently updated, with a recommended top pick. Read-only — the browse-and-select counterpart to `/issue`. For GitHub (no per-issue due date) it ranks on the milestone's due date; GitLab uses the native `due_date`.
+
+## Changed
+
+- **`/issue`** is now framed as the singular *authoring* skill (file a new issue, or update a known one) and delegates duplicate discovery to `/issues` rather than running its own forge search.
+- **Spec** consolidates the issue requirements into a single `ISS` category and renames four cryptic requirement prefixes: `TRGT`/`CMMT`/`AMBR`/`INTX` → `TGT`/`CMT`/`RULE`/`UX`.
+- **`.gitignore`** tracks `docs/` by exception — the generated docsify site is ignored wholesale and the hand-maintained sources are force-tracked.
+
+## Fixed
+
+- **CR deep links** — the cr-formatting guide now points GitHub deep links at the `/changes` view instead of `/files`, so anchored links scroll to the referenced line.
+
 ## 0.22.2
 
 Adopt shipyard for build tooling and CI — the build scripts (plugin.json, docs, changelog, and the new source-derived catalog descriptions) now come from the shared [shipyard](https://github.com/chris-peterson/shipyard) tooling instead of per-repo copies.
