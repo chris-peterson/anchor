@@ -18,7 +18,8 @@ skills/commit/               /anchor:commit — stage, test, review, write the c
 skills/prepare-review/       /anchor:prepare-review — rebase, draft the CR description, open/update the CR
 skills/resolve-feedback/     /anchor:resolve-feedback — fetch CR feedback; fix / reply / resolve each thread to resolution
 skills/pipeline/             /anchor:pipeline — work with a commit's forge pipeline; report state or watch until it settles
-skills/issue/                /anchor:issue — gather the why/consumer/acceptance; draft and file (or update) a forge issue
+skills/issue/                /anchor:issue — gather the why/consumer/acceptance; file a new forge issue (or update a known one)
+skills/issues/               /anchor:issues — list and rank the issues assigned to you; recommend the next to work on
 rules/                       ambient rules a SessionStart hook injects into every session
 hooks/emit-rules.sh          the injecting hook (registered in hooks/hooks.json)
 scripts/review-diff.sh       launch the configured difftool through its review sidecar; print the verdict on stdout

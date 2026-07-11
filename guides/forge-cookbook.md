@@ -242,6 +242,44 @@ glab api -X PUT projects/:fullpath/merge_requests/<iid> \
   -F "description=@/tmp/cr-body.aB3xKp.md"
 ```
 
+## Issue list
+
+Listing/ranking issues (the `issues` skill). Fetch as JSON and rank client-side —
+neither CLI sorts by two keys in one pass.
+
+```bash
+# GitHub — assigned to me, open
+gh issue list --assignee "@me" --state open --limit 50 \
+  --json number,title,url,state,updatedAt,createdAt,milestone,labels,assignees
+
+# GitLab — assigned to me (open is glab's default; --closed / --all widen it)
+glab issue list --assignee=@me --output json --per-page 50
+```
+
+Filter flags:
+
+| | GitHub | GitLab |
+|--|--------|--------|
+| **Unassigned** | `--search "no:assignee"` | *(no direct flag; use `--not-assignee <user>` or filter the JSON)* |
+| **By assignee** | `--assignee <login>` | `--assignee <username>` |
+| **By label** | `--label <name>` (repeatable) | `--label <name>` (comma-sep or repeatable) |
+| **Include closed** | `--state all` (or `--state closed`) | `--all` (or `--closed`) |
+| **By author** | `--author <login>` | `--author <username>` |
+
+Known gaps:
+
+- **No per-issue due date on GitHub.** Only milestones carry `dueOn` (via
+  `--json milestone`); an issue's "due" is its milestone's due date, or absent.
+  GitLab issues have a native `due_date`.
+- **`glab` has no clean "unassigned" filter.** `--not-assignee` excludes a named
+  user; a true "no assignee" view means filtering the JSON (`.assignees | length == 0`).
+- **Compound rank isn't a CLI flag.** `glab --order` takes one field; `gh` sorts
+  only via `--search "sort:…"`. For "due, then updated," rank locally with a
+  stable two-pass sort — sort by the secondary key, then the primary:
+  `jq 'sort_by(.updatedAt) | reverse | sort_by(.milestone.dueOn // "9999-12-31")'`
+  (GitHub) / `jq 'sort_by(.updated_at) | reverse | sort_by(.due_date // "9999-12-31")'`
+  (GitLab). The far-future sentinel sorts undated issues last.
+
 ## Issue create
 
 ```bash

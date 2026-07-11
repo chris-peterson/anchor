@@ -45,7 +45,8 @@ suite:
   describe:
     skills:
       commit: Stage changes, run tests, and write a commit message.
-      issue: Draft and file (or update) a forge issue that leads with WHY the work is needed.
+      issue: File a new forge issue (or update an existing one) that leads with WHY the work is needed.
+      issues: List and rank the forge issues assigned to you so you can pick what to work on next — ranked by soonest due date, then most recently updated.
       pipeline: Report a commit's forge pipeline state, or watch until it settles.
       prepare-review: Rebase on the default branch, push, open the PR/MR, and draft a description that tells reviewers WHY the change exists.
       resolve-feedback: Fetch an open CR's review feedback and drive each thread to resolution — fix, reply, resolve.
