@@ -5,6 +5,7 @@
   - [resolve-feedback](/skills/resolve-feedback)
   - [pipeline](/skills/pipeline)
   - [issue](/skills/issue)
+  - [issues](/skills/issues)
 - [Ambient rules](/ambient-rules)
 - Templates
   - [Commit message](/templates/commit-message)

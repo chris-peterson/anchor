@@ -57,7 +57,7 @@ values (`CR_URL`, and the per-file `FILE_ANCHORS` from `prepare-review`'s Step 1
 block); construction differs by forge:
 
 - **GitLab:** `<CR_URL>/diffs#<file-anchor>_<old-line>_<new-line>` where `<file-anchor>` is `sha1(<repo-relative-file-path>)` — already computed per changed file in `FILE_ANCHORS`. (You still pick the line numbers; only the path-hash is precomputed.) For a file-level link (no specific line), just use `<CR_URL>/diffs#<file-anchor>`. For pure additions, use the new line number for both `<old-line>` and `<new-line>` — the link still resolves.
-- **GitHub:** `<CR_URL>/files#diff-<file-anchor>R<new-line>` (or `L<new-line>` for the left/old side). The `<file-anchor>` for GitHub is `sha256(<file-path>)` — `gh` doesn't expose it directly, so fall back to opening the CR's "Files changed" tab and copying the link from the line-number gutter when in doubt.
+- **GitHub:** `<CR_URL>/changes#diff-<file-anchor>R<new-line>` (or `L<new-line>` for the left/old side). Use the `/changes` view, not `/files` — the anchor scrolls to the line on `/changes`, but the classic Files-changed tab leaves it at the top. The `<file-anchor>` is `sha256(<repo-relative-file-path>)`, which matches GitHub's rendered `diff-…` id exactly — compute it directly (`printf '%s' <path> | shasum -a 256`) rather than hunting for it in the UI.
 
 ## Collapsible sections — fold heavy detail away
 

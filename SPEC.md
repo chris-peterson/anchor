@@ -10,8 +10,8 @@ Requirements use [EARS syntax](https://alistairmavin.com/ears) — each is one o
 Ubiquitous (`The <system> shall …`), State-Driven (`While …`), Event-Driven
 (`When …`), Optional (`Where …`), or Unwanted Behaviour (`If … then …`).
 
-These requirements were reverse-engineered from the implementation (the five
-skill prompts under `skills/`, the ambient rules under `rules/`, and the helper
+These requirements were reverse-engineered from the implementation (the skill
+prompts under `skills/`, the ambient rules under `rules/`, and the helper
 scripts under `scripts/`). They are a derived description of documented
 behavior, not an independent authority — review them against the source.
 
@@ -44,72 +44,72 @@ behavior, not an independent authority — review them against the source.
 
 ## Requirements
 
-### TRGT — Target repo resolution
+### TGT — Target repo resolution
 
-- **[TRGT-01]** When a skill is invoked with a name argument, the system shall
+- **[TGT-01]** When a skill is invoked with a name argument, the system shall
   resolve that name through tack's repo db before operating on any repo.
-- **[TRGT-02]** When a skill is invoked with no argument, the system shall
+- **[TGT-02]** When a skill is invoked with no argument, the system shall
   resolve the target repo from `git rev-parse --show-toplevel` of the working
   directory.
-- **[TRGT-03]** The system shall re-resolve the target repo on every invocation
+- **[TGT-03]** The system shall re-resolve the target repo on every invocation
   and shall not assume a previously resolved target carries forward.
-- **[TRGT-04]** If tack resolves a name to multiple candidates, then the system
+- **[TGT-04]** If tack resolves a name to multiple candidates, then the system
   shall present them and prompt the user to choose.
-- **[TRGT-05]** If tack yields no match or is absent, then the system shall fall
+- **[TGT-05]** If tack yields no match or is absent, then the system shall fall
   back to a case-insensitive substring match of the name against the basenames
   of git repos the session has touched.
-- **[TRGT-06]** If the session touched more than one repo or edits landed outside
+- **[TGT-06]** If the session touched more than one repo or edits landed outside
   the working directory, then the system shall state the resolved path and ask
   which repo to target.
-- **[TRGT-07]** While operating on a repo other than the working directory, the
+- **[TGT-07]** While operating on a repo other than the working directory, the
   system shall address it with `git -C` and helper `--repo`/`--worktree` flags
   rather than `cd`.
-- **[TRGT-08]** Where a write flow targets a non-cwd repo, the system shall
+- **[TGT-08]** Where a write flow targets a non-cwd repo, the system shall
   isolate the work in a dedicated git worktree and tear it down when the flow
   ends.
-- **[TRGT-09]** If a commit-writing flow resolves a target that has no local
+- **[TGT-09]** If a commit-writing flow resolves a target that has no local
   checkout, then the system shall stop rather than commit to the wrong location.
 
-### CMMT — Commit
+### CMT — Commit
 
-- **[CMMT-01]** When `/anchor:commit` runs, the system shall run the project's
+- **[CMT-01]** When `/anchor:commit` runs, the system shall run the project's
   test suite before staging changes.
-- **[CMMT-02]** If the test suite fails, then the system shall stop and not stage
+- **[CMT-02]** If the test suite fails, then the system shall stop and not stage
   or commit until it passes, including for pre-existing failures.
-- **[CMMT-03]** Where no test runner is found, the system shall skip the test
+- **[CMT-03]** Where no test runner is found, the system shall skip the test
   step silently.
-- **[CMMT-04]** When staging, the system shall stage all changes with
+- **[CMT-04]** When staging, the system shall stage all changes with
   `git add -A` and read the staged diff before drafting a message.
-- **[CMMT-05]** If nothing is staged, then the system shall describe the most
+- **[CMT-05]** If nothing is staged, then the system shall describe the most
   recent unpushed commit, and shall stop if HEAD is already pushed or there are
   no local changes.
-- **[CMMT-06]** The system shall write the commit message per the commit-message
+- **[CMT-06]** The system shall write the commit message per the commit-message
   template, spending effort on the why rather than the how.
-- **[CMMT-07]** While HEAD is the default branch, the system shall offer to
+- **[CMT-07]** While HEAD is the default branch, the system shall offer to
   create a feature branch (slugged from the subject) before committing rather
   than commit directly to the default branch.
-- **[CMMT-08]** When deciding whether to offer a squash, the system shall gate on
+- **[CMT-08]** When deciding whether to offer a squash, the system shall gate on
   whether HEAD is out for review via `squash-check.sh`.
-- **[CMMT-09]** If HEAD was authored by another user, is the published
+- **[CMT-09]** If HEAD was authored by another user, is the published
   default-branch tip, or belongs to a ready CR, then the system shall commit as
   a new commit and shall not offer to squash.
-- **[CMMT-10]** Where squashing is allowed, the system shall recommend squash for
+- **[CMT-10]** Where squashing is allowed, the system shall recommend squash for
   changes related to the prior commit and a new commit for unrelated changes.
-- **[CMMT-11]** When a squash amends a pushed draft CR, the system shall follow
+- **[CMT-11]** When a squash amends a pushed draft CR, the system shall follow
   the amend with `git push --force-with-lease`.
-- **[CMMT-12]** If squashing is not on the table, then the system shall not
+- **[CMT-12]** If squashing is not on the table, then the system shall not
   mention it or explain why it is unavailable.
-- **[CMMT-13]** Where only the message (not the tree) of a ready CR's HEAD is
+- **[CMT-13]** Where only the message (not the tree) of a ready CR's HEAD is
   wrong, the system shall offer a message-only amend and let the user decide on
   the force-push.
-- **[CMMT-14]** When a commit lands, the system shall open the change in a visual
+- **[CMT-14]** When a commit lands, the system shall open the change in a visual
   review via the review wrapper in `--commit` mode.
-- **[CMMT-15]** If the post-commit review returns fix-now comments, then the
+- **[CMT-15]** If the post-commit review returns fix-now comments, then the
   system shall address them, amend the unpushed commit, and re-run tests before
   re-reviewing.
-- **[CMMT-16]** Where `/anchor:commit` is invoked with `--preview`, the system
+- **[CMT-16]** Where `/anchor:commit` is invoked with `--preview`, the system
   shall open a look-only diff and stop without testing, staging, or committing.
-- **[CMMT-17]** If a `PreToolUse` hook blocks a commit on a substring inside the
+- **[CMT-17]** If a `PreToolUse` hook blocks a commit on a substring inside the
   message body, then the system shall surface the conflict rather than use a
   temp-file workaround.
 
@@ -170,22 +170,41 @@ behavior, not an independent authority — review them against the source.
 - **[FDBK-08]** If a resolve call does not return `resolved`/`isResolved` true,
   then the system shall treat the resolution as not done.
 
-### ISSU — Issue
+### ISS — Issues
 
-- **[ISSU-01]** When invoked with an issue reference, the system shall update that
+Authoring a single issue (the `issue` skill, ISS-01..06) and surveying the
+backlog to pick the next one (the `issues` skill, ISS-07..12).
+
+- **[ISS-01]** When invoked with an issue reference, the system shall update that
   issue against its current body as baseline; otherwise it shall create a new
   issue.
-- **[ISSU-02]** Before drafting, the system shall gather the why, consumer, and
+- **[ISS-02]** Before drafting, the system shall gather the why, consumer, and
   acceptance criteria from the author.
-- **[ISSU-03]** Where creating a new issue, the system shall search open and
-  closed forge issues for duplicates and let the author pick a match to update
-  instead.
-- **[ISSU-04]** If the author has no approach in mind, then the system shall file
+- **[ISS-03]** Where creating a new issue and it is unclear whether the need is
+  already tracked, the system shall offer to survey issues via the `issues` skill
+  rather than searching the forge itself, and shall switch to the update path if
+  the need turns out to be already tracked.
+- **[ISS-04]** If the author has no approach in mind, then the system shall file
   a problem statement without inventing one.
-- **[ISSU-05]** When writing a new issue, the system shall assign it to the
+- **[ISS-05]** When writing a new issue, the system shall assign it to the
   author.
-- **[ISSU-06]** The system shall lead the issue with why and write for a reader
+- **[ISS-06]** The system shall lead the issue with why and write for a reader
   unfamiliar with the system.
+- **[ISS-07]** The system shall list forge issues for a target repo, defaulting
+  to the issues assigned to the invoking user in the open state.
+- **[ISS-08]** The system shall interpret the invocation query to refine scope
+  (assignee, label, state), keeping the default view when the query does not call
+  for something else.
+- **[ISS-09]** The system shall rank the listed issues by soonest due date first,
+  then by most recently updated, with issues lacking a due date sorted after those
+  with one.
+- **[ISS-10]** Where the forge has no per-issue due date (GitHub), the system
+  shall use the issue's milestone due date as its due date, and treat it as absent
+  otherwise.
+- **[ISS-11]** The system shall present the ranked issues and recommend the
+  top-ranked one as the next to work on, offering to open it for viewing.
+- **[ISS-12]** The system shall not write to the forge; its output is limited to
+  listing, ranking, and opening an issue for viewing.
 
 ### PIPE — Pipeline
 
@@ -253,29 +272,29 @@ behavior, not an independent authority — review them against the source.
   surface it and ask the user to refresh credentials rather than silently fall
   back to copy-only.
 
-### AMBR — Ambient rules
+### RULE — Ambient rules
 
-- **[AMBR-01]** When a session starts, the system shall inject its ambient rules
+- **[RULE-01]** When a session starts, the system shall inject its ambient rules
   into context via the `SessionStart` hook, expanding `${CLAUDE_PLUGIN_ROOT}`
   placeholders to real paths.
-- **[AMBR-02]** The system shall omit AI/tooling attribution trailers from
+- **[RULE-02]** The system shall omit AI/tooling attribution trailers from
   commits and forge artifacts, adding only a Refs trailer when a ticket is
   mentioned.
-- **[AMBR-03]** When about to rewrite git history, the system shall route the
+- **[RULE-03]** When about to rewrite git history, the system shall route the
   decision through `/anchor:commit` rather than amend, rebase, or force-push ad
   hoc.
-- **[AMBR-04]** The system shall drive forge operations through `gh`/`glab` and
+- **[RULE-04]** The system shall drive forge operations through `gh`/`glab` and
   route CR creation through `/anchor:prepare-review` rather than a bare create.
-- **[AMBR-05]** While deciding whether a history rewrite is safe, the system shall
+- **[RULE-05]** While deciding whether a history rewrite is safe, the system shall
   read push state and the CR draft flag fresh at the moment of the rewrite
   rather than from an earlier turn.
 
-### INTX — Interaction discipline
+### UX — Interaction discipline
 
-- **[INTX-01]** The system shall not narrate its plumbing; it shall speak only
+- **[UX-01]** The system shall not narrate its plumbing; it shall speak only
   when the user must act or decide.
-- **[INTX-02]** When a skill starts while a task is already in progress, the
+- **[UX-02]** When a skill starts while a task is already in progress, the
   system shall run silently inside the orchestrator's task list and not create
   its own.
-- **[INTX-03]** The system shall present multi-way user decisions through
+- **[UX-03]** The system shall present multi-way user decisions through
   `AskUserQuestion` with the recommended option first.
