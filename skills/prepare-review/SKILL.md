@@ -154,7 +154,7 @@ Read the verdict with the **BashOutput tool** — not `tail` / `$(...)`, which t
   ```
 
 - **`1`** (fix-now) — list the `fix-now` comments (`REVIEW_OUTPUT`'s `.comments` where `action == "fix-now"`) and fix them via `/anchor:commit`, which amends the still-unpushed commit and re-reviews. Then start Step 1 over. **Do not push.**
-- **`2` / `3` / `absent`** — the review didn't complete (unreviewed hunks, closed early, or the difftool reported no verdict). Surface what happened and ask the user how to proceed; don't read silence as approval, and don't push.
+- **`2` / `3` / `absent`** — no clean verdict, so this is **not** approval: don't push on it. With `moor` on PATH the review didn't complete (unreviewed hunks, closed early, or no verdict written) — surface what happened. With `moor` *not* on PATH the wrapper showed the diff in your git-configured difftool, which writes no verdict, so `absent` here means "shown, but unconfirmed" — ask the user to confirm it's good before re-running with `--reviewed`, or what to change. Either way, don't read silence as approval.
 
 This gate fires only for the **first** push of an as-yet-unreviewed branch — once the CR exists, subsequent pushes (a rebase force-push) are gated separately by `CR_DRAFT`. When prepare-review chained through `/anchor:commit` above, Step 4 already reviewed the commit, so that path passes `--reviewed` and never sees `NEEDS_REVIEW` (see "Get to a reviewable commit").
 
