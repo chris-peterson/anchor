@@ -81,3 +81,7 @@ suite:
     - { t: claude, text: "Green. Staged the fare-calc fix — opening moor for a hunk-level look before I write the message." }
     - { t: moor, del: "const fare = crossesMidnight ? DAILY_MAX : mins * RATE", add: "const fare = Math.min(mins * RATE, DAILY_MAX)", rej: "good fix — but DAILY_MAX is now defined here and in pricing.js; use the one source" }
     - { t: claude, text: "Committed 4a1f9c2. The rejected hunk came back as a concrete edit — DAILY_MAX pulled from pricing.js — and I swept every call site that had the same duplication." }
+
+docs:
+  code_languages: [bash, yaml, json]
+  mermaid: true
