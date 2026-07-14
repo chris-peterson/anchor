@@ -13,7 +13,7 @@ two surfaces, neither of which commits an `anchor`-specific file to your repo:
   lives in `.git/config` (never tracked); add `--global` for all your repos.
 - **Team CR scaffolding** — your forge's native template
   (`.gitlab/merge_request_templates/*.md`, `.github/pull_request_template.md`).
-  `prepare-review` detects and composes into it — put the team review-prep
+  `create-review-request` detects and composes into it — put the team review-prep
   checklist there.
 
 ## Keys
@@ -24,8 +24,8 @@ purely for readability.
 
 | Key | Example | Effect |
 |---|---|---|
-| `anchor.workTrackerBaseUri` | `git config anchor.workTrackerBaseUri https://app.clickup.com/t/` | The base URL of your work tracker. When you mention a ticket, `commit` adds a `Refs:` trailer and `prepare-review` links it in the CR. See [Work-tracker references](#work-tracker-references). |
-| `anchor.reviewBudgetMins` | `git config anchor.reviewBudgetMins 10` | How many minutes of focused attention you expect this CR to get. It's an *input*, not a length cap: a tight budget (≈5) makes `prepare-review` lead with the essentials and cut asides hard; a generous one (≈30) keeps more supporting context and depth. It steers *what to include*, not the tone — a tight budget is no license for punchy or marketing framing. Unset behaves like ≈10. |
+| `anchor.workTrackerBaseUri` | `git config anchor.workTrackerBaseUri https://app.clickup.com/t/` | The base URL of your work tracker. When you mention a ticket, `commit` adds a `Refs:` trailer and `create-review-request` links it in the CR. See [Work-tracker references](#work-tracker-references). |
+| `anchor.reviewBudgetMins` | `git config anchor.reviewBudgetMins 10` | How many minutes of focused attention you expect this CR to get. It's an *input*, not a length cap: a tight budget (≈5) makes `create-review-request` lead with the essentials and cut asides hard; a generous one (≈30) keeps more supporting context and depth. It steers *what to include*, not the tone — a tight budget is no license for punchy or marketing framing. Unset behaves like ≈10. |
 | `anchor.commitRules` | `git config anchor.commitRules "prefix the subject with the affected module"` | An extra rule layered onto `anchor`'s default commit-message rules, applied to every message it drafts. |
 | `anchor.issueRules` | `git config anchor.issueRules "always include an acceptance-criteria checklist"` | An extra rule layered onto `anchor`'s default issue rules, applied to every issue the `issue` skill drafts. |
 | `anchor.crRules` | `git config anchor.crRules "@-mention the on-call lead"` | An extra rule layered onto the default CR-description rules — the forge-agnostic default. See the `mr`/`pr` overrides below. |
@@ -53,7 +53,7 @@ for one on every commit.
 ### Forge-specific overrides (`cr` / `mr` / `pr`)
 
 CR-rule keys follow a prefix convention: `cr` is the forge-agnostic default, and
-`mr` (GitLab) / `pr` (GitHub) override it when present. `prepare-review` picks the
+`mr` (GitLab) / `pr` (GitHub) override it when present. `create-review-request` picks the
 forge by the `origin` remote, uses the matching `mrRules` / `prRules` if set, and
 falls back to `crRules` otherwise. Set just `crRules` for one rule everywhere; add
 `mrRules` / `prRules` only where a forge needs something different.

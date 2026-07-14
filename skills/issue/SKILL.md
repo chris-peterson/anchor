@@ -5,7 +5,7 @@ description: File a new forge issue (or update an existing one) that leads with 
 
 # Issue
 
-File a new issue whose job is to convey *why* the work is needed and *how* the author intends to approach it — written for a reader who has never seen this part of the system. This is the singular, authoring counterpart to the `issues` skill: `issue` *drafts and writes* one issue (a new one, or an update to a known one), while `issues` *surveys the backlog* to find the next thing to work on. An issue describes work **to be done**, so unlike `commit` and `prepare-review` there is no diff to read from: the raw material is the author's intent, gathered up front.
+File a new issue whose job is to convey *why* the work is needed and *how* the author intends to approach it — written for a reader who has never seen this part of the system. This is the singular, authoring counterpart to the `issues` skill: `issue` *drafts and writes* one issue (a new one, or an update to a known one), while `issues` *surveys the backlog* to find the next thing to work on. An issue describes work **to be done**, so unlike `commit` and `create-review-request` there is no diff to read from: the raw material is the author's intent, gathered up front.
 
 **Don't narrate your work.** Every step below is an operating instruction, not a script to read aloud — follow the execute-quietly discipline: `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. For this skill, the only things worth surfacing are a question you need answered, the drafted issue with its options, and the final URL.
 
@@ -137,7 +137,7 @@ git config --get-regexp '^anchor\.' 2>/dev/null
 
 Draft a concise imperative **title** (under 72 characters), then the body following the section template in `templates/issue-description.md`: **Context**, **Proposed approach**, **Acceptance criteria**, and **Considerations** *(optional)*. The template owns the *shape*; the discipline below owns the *technique*.
 
-- **Lead with why, write for the unfamiliar reader** — the same ELI5 audience assumption `prepare-review` uses. Establish the system/business context in a sentence or two before the detail.
+- **Lead with why, write for the unfamiliar reader** — the same ELI5 audience assumption `create-review-request` uses. Establish the system/business context in a sentence or two before the detail.
 - **Keep the approach about the plan, not the code** — what's being built and why the load-bearing decisions were made, not how every class is wired.
 - **Define unfamiliar terms with short callouts** (`> **Term?** …`), sparingly and only where a newcomer would be lost.
 - **Diagram only when it carries shape prose hides** — anchor's mermaid conventions (hand-drawn look, no `\n`/`<br>` in labels).
@@ -198,4 +198,4 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --files \
   --detail repo=<repo>
 ```
 
-Read the verdict back with the **BashOutput tool** (not `tail` / `$(...)`). Only `REVIEW_VERDICT` `0` is approval; `1` carries `fix-now` comments in `REVIEW_OUTPUT.comments` to fold in before re-presenting; `2`/`3`/`absent` mean the review didn't complete — surface what happened and fall back to chat rather than treating silence as approval. (The full verdict contract matches the `prepare-review` skill's Step 4.) If `moor` isn't on PATH, fall back to chat: ask what to change, revise, and re-present.
+Read the verdict back with the **BashOutput tool** (not `tail` / `$(...)`). Only `REVIEW_VERDICT` `0` is approval; `1` carries `fix-now` comments in `REVIEW_OUTPUT.comments` to fold in before re-presenting; `2`/`3`/`absent` mean the review didn't complete — surface what happened and fall back to chat rather than treating silence as approval. (The full verdict contract matches the `create-review-request` skill's Step 4.) If `moor` isn't on PATH, fall back to chat: ask what to change, revise, and re-present.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Gather everything /prepare-review's Step 1 needs and perform the safe
+# Gather everything /create-review-request's Step 1 needs and perform the safe
 # default-path actions, then print one KEY=value block on stdout so the skill
 # acts on a single command's output — no per-step orchestration to narrate.
 #
@@ -22,11 +22,11 @@
 #     resolve to the URL-free skip-deep-links path.
 #   - Create the feature branch when HEAD is the default branch with work to
 #     review — the script reports NEEDS_BRANCH and the skill branches first.
-#   - Push unreviewed commits. The first push (opening the draft CR) is the moment
-#     code leaves the machine, so it must clear the visual review gate first. When
-#     commits are ahead with no CR and --reviewed was not passed, the script
-#     reports NEEDS_REVIEW and stops short of pushing; the skill runs the review
-#     and re-invokes with --reviewed on a clean verdict.
+#   - Push. /anchor:commit now commits and pushes, so this script operates on an
+#     already-pushed branch and never pushes. When commits are ahead of the
+#     default branch with no CR yet and the branch isn't pushed, it reports
+#     NEEDS_PUSH and the skill directs the user to /anchor:commit rather than
+#     pushing here.
 #
 # Output lines (KEY=value, read from stdout):
 #   RESOLVED_VIA=<worktree|repo|cwd>  worktree == ran in a --worktree checkout;
@@ -47,11 +47,10 @@
 #                                nothing ahead of the default branch, or uncommitted
 #                                work on the default branch) — the skill chains into
 #                                /anchor:commit before continuing
-#   NEEDS_REVIEW=<0|1>           1 == unreviewed commit(s) ahead of the default
-#                                branch, no CR yet, and --reviewed not passed — the
-#                                skill runs the branch-vs-default review gate, then
-#                                re-invokes with --reviewed on a clean verdict to
-#                                open the draft (the pre-push review gate)
+#   NEEDS_PUSH=<0|1>             1 == commit(s) ahead of the default branch, no CR
+#                                yet, but the branch isn't pushed — the skill
+#                                directs the user to /anchor:commit (which commits
+#                                and pushes) rather than pushing here
 #   CR_PREEXISTING=<0|1>         a CR was already open before this run
 #   CR_CREATED=<0|1>             this script opened a draft CR
 #   CR_URL=<web url>             empty on the skip-deep-links path
@@ -74,14 +73,12 @@
 # silently dropping to the URL-free path.
 #
 # Usage:
-#   prepare-review.sh              # default: resolve CR; if commits are unreviewed
-#                                  # and no CR, report NEEDS_REVIEW (no push)
-#   prepare-review.sh --reviewed   # the changeset cleared the review gate — push +
-#                                  # open the draft CR (the skill's re-invocation)
-#   prepare-review.sh --no-open    # never auto-open; no CR -> skip-deep-links path
-#   prepare-review.sh --repo <path>      # operate on a checkout other than the cwd repo
-#   prepare-review.sh --worktree <path>  # operate in a flow-owned isolated worktree
-#   prepare-review.sh --cr <iid|url>     # resolve a specific CR, not the current branch's
+#   create-review-request.sh             # resolve the CR, or open a draft on the
+#                                         # already-pushed branch; NEEDS_PUSH if unpushed
+#   create-review-request.sh --no-open    # never auto-open; no CR -> skip-deep-links path
+#   create-review-request.sh --repo <path>      # operate on a checkout other than the cwd repo
+#   create-review-request.sh --worktree <path>  # operate in a flow-owned isolated worktree
+#   create-review-request.sh --cr <iid|url>     # resolve a specific CR, not the current branch's
 #
 # --repo / --worktree cd into the target checkout so every git/gh/glab call
 # below targets it (see scripts/lib/resolve-context.sh); the emitted RESOLVED_VIA
@@ -100,18 +97,16 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/tmpfile.sh"
 
 auto_open=1
-reviewed=0
 CTX_REPO=""
 CTX_WORKTREE=""
 cr_ref=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-open)  auto_open=0; shift ;;
-    --reviewed) reviewed=1; shift ;;
     --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
     --worktree) CTX_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
     --cr)       cr_ref="${2:?--cr needs an iid or URL}"; shift 2 ;;
-    *) echo "prepare-review.sh: unknown argument: $1" >&2; exit 64 ;;
+    *) echo "create-review-request.sh: unknown argument: $1" >&2; exit 64 ;;
   esac
 done
 
@@ -150,10 +145,18 @@ on_default=0
 # --- Gap to the default branch -----------------------------------------------
 
 git fetch origin "$default_branch" >/dev/null 2>&1 || true
+git fetch origin "$branch" >/dev/null 2>&1 || true
 ahead=$(git rev-list --count "origin/${default_branch}..HEAD" 2>/dev/null || echo 0)
 behind=$(git rev-list --count "HEAD..origin/${default_branch}" 2>/dev/null || echo 0)
 
 local_head=$(git rev-parse HEAD)
+
+# Is the branch pushed? origin/<branch> exists and HEAD is already on it.
+# /anchor:commit does the push now; this script only opens the CR against it.
+branch_pushed=0
+if git rev-parse --verify --quiet "refs/remotes/origin/${branch}" >/dev/null; then
+  [[ "$(git rev-list --count "origin/${branch}..HEAD" 2>/dev/null || echo 1)" -eq 0 ]] && branch_pushed=1
+fi
 
 # --- Resolve (or open) the CR ------------------------------------------------
 
@@ -196,7 +199,7 @@ resolve_cr() {
 
 needs_commit=0
 needs_branch=0
-needs_review=0
+needs_push=0
 
 # Uncommitted work? (routes the on-default case below, and reused by the state
 # check further down so we only shell out to `git status` once.)
@@ -228,24 +231,16 @@ elif [[ "$forge" != "none" && "$on_default" -eq 0 ]]; then
     # condition so the skill chains into /anchor:commit instead of surfacing a
     # raw forge error.
     needs_commit=1
-  elif [[ "$auto_open" -eq 1 && "$reviewed" -eq 0 ]]; then
-    # Unpushed, unreviewed commit(s) ahead of the default branch, and no CR yet.
-    # The push below is the moment the code first leaves the machine, so it must
-    # clear the visual review gate first. /commit's Step 4 gates the local commit,
-    # but a commit made by raw git — or one whose Step 4 was skipped — would
-    # otherwise reach the remote unreviewed the instant this script auto-opens the
-    # draft. Don't push; report NEEDS_REVIEW so the skill runs the branch-vs-default
-    # review and re-invokes with --reviewed on a clean verdict.
-    needs_review=1
+  elif [[ "$branch_pushed" -eq 0 ]]; then
+    # Commit(s) ahead of the default branch, no CR, but the branch isn't pushed.
+    # /anchor:commit commits and pushes; this script never pushes. Report
+    # NEEDS_PUSH so the skill directs the user to /anchor:commit rather than
+    # pushing an as-yet-unpushed branch here.
+    needs_push=1
   elif [[ "$auto_open" -eq 1 ]]; then
-    # --reviewed: the changeset already cleared the review gate (the skill ran it
-    # on a clean verdict, or /commit's Step 4 did on the chained path). Open a
-    # draft, assigned to me, source branch deleted on merge.
-    # Push first so the create call has a remote branch to target.
-    if ! push_err=$(git push -u origin "$branch" 2>&1); then
-      echo "CR_CREATE_ERROR=push failed: $push_err"
-      exit 1
-    fi
+    # The branch is pushed (by /anchor:commit) and no CR is open yet. Open a draft
+    # against it — assigned to me, source branch deleted on merge — without
+    # pushing; the remote branch the create call targets already exists.
     case "$forge" in
       gitlab)
         username=$(glab api user 2>/dev/null | jq -r '.username // empty' || true)
@@ -271,7 +266,7 @@ elif [[ "$forge" != "none" && "$on_default" -eq 0 ]]; then
     if resolve_cr; then
       cr_created=1
     else
-      echo "CR_CREATE_ERROR=opened the draft CR but could not resolve it back (forge lag?) — re-run prepare-review"
+      echo "CR_CREATE_ERROR=opened the draft CR but could not resolve it back (forge lag?) — re-run create-review-request"
       exit 1
     fi
   fi
@@ -353,7 +348,7 @@ echo "AHEAD=$ahead"
 echo "BEHIND=$behind"
 echo "NEEDS_BRANCH=$needs_branch"
 echo "NEEDS_COMMIT=$needs_commit"
-echo "NEEDS_REVIEW=$needs_review"
+echo "NEEDS_PUSH=$needs_push"
 echo "CR_PREEXISTING=$cr_preexisting"
 echo "CR_CREATED=$cr_created"
 echo "CR_URL=$cr_url"
