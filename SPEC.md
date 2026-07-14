@@ -289,9 +289,10 @@ backlog to pick the next one (the `issues` skill, ISS-07..12).
 - **[RULE-03]** When about to rewrite git history, the system shall route the
   decision through `/anchor:commit` rather than amend, rebase, or force-push ad
   hoc.
-- **[RULE-04]** The system shall drive forge operations through `gh`/`glab` and
-  route CR creation through `/anchor:create-review` rather than a bare
-  create.
+- **[RULE-04]** The system shall use `gh`/`glab` for mechanical and query forge
+  operations, and route artifact *authoring* through the anchor skill — a CR
+  description through `/anchor:create-review`, an issue through `/anchor:issue` —
+  rather than a bare `create` / `--body`.
 - **[RULE-05]** While deciding whether a history rewrite is safe, the system shall
   read push state and the CR draft flag fresh at the moment of the rewrite
   rather than from an earlier turn.
