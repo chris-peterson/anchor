@@ -5,32 +5,31 @@ Maintained by `/sextant:spec-status`.
 
 **Last audit:** 2026-07-14
 **Spec version:** root SPEC.md (unversioned)
-**Plugin version:** 0.23.0 · targeting 1.0.0
-**Coverage:** 81 Covered, 1 Partial, 8 Missing/Contradicts
+**Plugin version:** 1.0.0
+**Coverage:** 90 Covered, 0 Partial, 0 Missing/Contradicts
 
 The implementation is the plugin itself — the skill prompts under
 `skills/`, the ambient rules under `rules/`, and the helper scripts under
-`scripts/`. Most requirements were reverse-engineered from that documented
-behavior via `/sextant:spec-req init from implementation` and are Covered by the
-source they were derived from. The exception is the 1.0 commit/review redesign
-(see audit history): those requirements now **lead** the implementation and are
-marked Contradicts/Missing until the code catches up. Treat coverage as a draft
-to review against the implementation, not an audited ledger.
+`scripts/`. These requirements were reverse-engineered from that documented
+behavior via `/sextant:spec-req init from implementation`, and the 1.0
+commit/review redesign (see audit history) has since landed in the source, so
+each is Covered by the skill / rule / script it maps to. Treat coverage as a
+draft to review against the implementation, not an audited ledger.
 
 ## Status by category
 
 | Prefix | Count | Status | Notes |
 |--------|------:|--------|-------|
 | TGT-01..09 | 9 | All Covered | Target resolution + worktree isolation — `scripts/{resolve-target,worktree}.sh`, each `skills/*/SKILL.md` "Target repo" |
-| CMT-01..19 (16 retired) | 18 | 14 Covered, 2 Contradicts, 2 Missing | Review-first commit-and-push flow (1.0) — CMT-14/15 invert to review-before-commit, CMT-18/19 add push; `skills/commit/SKILL.md` still commits-then-reviews and ships `--preview` |
-| CRR-01..13 | 13 | 9 Covered, 2 Contradicts, 1 Missing, 1 Partial | `create-review-request` (formerly `prepare-review`), pushed-branch only, no push, no review gate — skill still named `prepare-review` and pushes: `skills/prepare-review/SKILL.md`, `scripts/prepare-review.sh` |
+| CMT-01..19 (16 retired) | 18 | All Covered | Review-first commit-and-push flow (1.0) — `skills/commit/SKILL.md`, `scripts/{look-ahead,squash-check}.sh` |
+| CRR-01..13 | 13 | All Covered | `create-review-request` (formerly `prepare-review`), pushed-branch only, opens the draft CR without pushing — `skills/create-review-request/SKILL.md`, `scripts/create-review-request.sh` |
 | FDBK-01..08 | 8 | All Covered | Fetch, triage, act on threads — `skills/resolve-feedback/SKILL.md` |
 | ISS-01..12 | 12 | All Covered | Author one issue — gather intent, guard duplicates, draft, file (`skills/issue/SKILL.md`); list/scope/rank/recommend, read-only (`skills/issues/SKILL.md`) |
 | PIPE-01..06 | 6 | All Covered | Status/watch/job modes — `skills/pipeline/SKILL.md`, `scripts/pipeline-status.sh` |
 | RVEW-01..06 | 6 | All Covered | Sidecar verdict contract + graceful degrade — `scripts/review-diff.sh`, each skill's review step |
-| CONF-01..05 | 5 | All Covered | `anchor.*` key handling — `guides/configuring.md`, commit/prepare-review/issue config steps |
+| CONF-01..05 | 5 | All Covered | `anchor.*` key handling — `guides/configuring.md`, commit/create-review-request/issue config steps |
 | FORG-01..05 | 5 | All Covered | Template composition, body-file, markdown, auth — `templates/`, `guides/{forge-cookbook,markdown-gotchas}.md` |
-| RULE-01..05 | 5 | 4 Covered, 1 Contradicts | SessionStart-injected rules — `hooks/emit-rules.sh`, `rules/*.md`; RULE-04 now routes CR creation through `create-review-request` |
+| RULE-01..05 | 5 | All Covered | SessionStart-injected rules — `hooks/emit-rules.sh`, `rules/*.md`; RULE-04 routes CR creation through `create-review-request` |
 | UX-01..03 | 3 | All Covered | Narration, orchestration, decision prompts — cross-cutting, each `skills/*/SKILL.md` |
 
 ## Audit history
@@ -48,10 +47,10 @@ imposes no review gate (the pre-push review gate PREP-03/04 is retired); the
 category is renumbered PREP → CRR-01..13. RULE-04 and the Skill concept updated to
 the new name.
 
-These requirements **lead** the implementation: the code still commits-then-reviews,
-ships `--preview`, and is named `prepare-review`, so the affected rows are
-Contradicts/Missing pending the code change. 90 requirements across 11 categories.
-Run `/sextant:spec-status` for a full re-audit once the implementation lands.
+The implementation landed on the `1.0` branch in the same pass: `/anchor:commit`
+reviews then commits-and-pushes, `--preview` is gone, and the skill and script are
+renamed to `create-review-request`, so the CMT, CRR, and RULE rows are Covered
+again. 90 requirements across 11 categories; version bumped to 1.0.0.
 
 ### 2026-07-11 — Issues skill added
 
