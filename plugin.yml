@@ -34,7 +34,7 @@ suite:
   pitch: "Nervous about keeping code you didn't write? It walks you through the diff first, then commits with a why-first message and opens the change request."
   what: "Keeps your commits, change requests, and review cycles consistent — the same quality, formatting, and content every time, not reinvented per change."
   cmds:
-    - ["/anchor:commit", "Commit with a why-first message; --preview reviews the working tree first"]
+    - ["/anchor:commit", "Review the changeset, then commit with a why-first message and push"]
     - ["/anchor:prepare-review", "Rebase on main and open a draft change request"]
     - ["/anchor:resolve-feedback", "Work a CR's review threads to done, one by one"]
   # Skill-anchored previews of the two flagship skills, shown live on the docs
@@ -44,7 +44,7 @@ suite:
   # >>> shipyard:describe — generated from source by `shipyard gen-describe`; do not edit >>>
   describe:
     skills:
-      commit: Stage changes, run tests, and write a commit message.
+      commit: Stage changes, run tests, review, then commit and push.
       issue: File a new forge issue (or update an existing one) that leads with WHY the work is needed.
       issues: List and rank the forge issues assigned to you so you can pick what to work on next — ranked by soonest due date, then most recently updated.
       pipeline: Report a commit's forge pipeline state, or watch until it settles.

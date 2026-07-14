@@ -14,7 +14,7 @@ review on the forge.
 
 ```text
 .claude-plugin/plugin.json   plugin manifest
-skills/commit/               /anchor:commit — stage, test, review, write the commit message (--preview reviews the working tree without committing)
+skills/commit/               /anchor:commit — stage, test, review the changeset, then commit and push
 skills/prepare-review/       /anchor:prepare-review — rebase, draft the CR description, open/update the CR
 skills/resolve-feedback/     /anchor:resolve-feedback — fetch CR feedback; fix / reply / resolve each thread to resolution
 skills/pipeline/             /anchor:pipeline — work with a commit's forge pipeline; report state or watch until it settles
@@ -37,7 +37,7 @@ The skills work standalone and light up further when these siblings are
 installed (each degrades gracefully when absent):
 
 - **[moor](https://github.com/chris-peterson/moor)** — the visual diff viewer the
-  `commit` skill launches (including `--preview`). Absent → it falls back to `git difftool
+  `commit` skill launches. Absent → it falls back to `git difftool
   --dir-diff` with your configured difftool, asking whether to revise or proceed
   in place of moor's rejected-hunk feedback.
 
