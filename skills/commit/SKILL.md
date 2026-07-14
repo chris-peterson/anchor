@@ -74,7 +74,7 @@ When invoked with `--preview`, this is a **look-only** path: open a diff in the 
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --local   # or --full for `cr` / `mr` / `pr`
 ```
 
-Read the verdict back with the **BashOutput tool** (the `REVIEW_VERDICT` / `REVIEW_OUTPUT` contract is identical to Step 4 below). Map it to a one-line result — `Previewed — clean`, `Previewed — fix-now comments` (list them), `Previewed — unreviewed hunks` / `review closed without a verdict` — and surface any advisory `fix-later` / `consider` comments.
+Read the verdict back with the **BashOutput tool** (the `REVIEW_VERDICT` / `REVIEW_OUTPUT` contract and the `command -v moor` split are identical to Step 4 below). When `moor` is on PATH, map the verdict to a one-line result — `Previewed — clean`, `Previewed — fix-now comments` (list them), `Previewed — unreviewed hunks`, or `Previewed — review closed without a verdict` — and surface any advisory `fix-later` / `consider` comments. When `moor` isn't on PATH, the diff was shown in your git-configured difftool and the verdict comes back `absent`; report `Previewed in your difftool` rather than reading the silence as a failed review.
 
 ## Task tracking when orchestrated
 
@@ -283,7 +283,13 @@ If a commit attempt is rejected by a `PreToolUse` hook citing a substring that's
 
 ## Step 4: Launch visual diff
 
-After committing, open the change in a visual review. Launch the wrapper in `--commit` mode — **not** raw `git difftool`. The wrapper determines the diff range from the unpushed-commit count (`@{upstream}...HEAD` for the first commit, `HEAD~1...HEAD` when earlier commits were already reviewed, an `origin/...` fallback when there's no upstream), pre-populates the commit subject / body / author / hash as a header, drives git's configured difftool, and — once it closes — prints the verdict on its own stdout. Raw `git difftool` bypasses the header and the verdict.
+After committing, open the change in a visual review. First check whether moor — the difftool that speaks the sidecar contract — is on PATH, since that decides how you read the outcome (the same probe `prepare-review` and `issue` use):
+
+```bash
+command -v moor
+```
+
+Launch the wrapper in `--commit` mode — **not** raw `git difftool`. The wrapper determines the diff range from the unpushed-commit count (`@{upstream}...HEAD` for the first commit, `HEAD~1...HEAD` when earlier commits were already reviewed, an `origin/...` fallback when there's no upstream), pre-populates the commit subject / body / author / hash as a header, drives **git's configured difftool** (moor when it's installed and set as `diff.tool`, otherwise whatever `diff.tool` names), and — once it closes — prints the verdict on its own stdout. Raw `git difftool` bypasses the header and the verdict.
 
 **Launch as a background call** (`run_in_background: true`): the wrapper blocks until the difftool closes, so a foreground call would hold the turn open until the Bash timeout.
 
@@ -293,14 +299,16 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --commit
 
 When the background command completes, read its stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trip the command-substitution gate. The last lines carry the verdict (no separate file read):
 
-- `REVIEW_VERDICT` — `0` clean · `1` one-or-more fix-now · `2` unreviewed · `3` closed early · `absent` (the difftool wrote no verdict — e.g. the configured tool doesn't report one)
+- `REVIEW_VERDICT` — `0` clean · `1` one-or-more fix-now · `2` unreviewed · `3` closed early · `absent` (no sidecar was written — either moor closed without one, or a non-moor difftool ran)
 - `REVIEW_OUTPUT` — compact JSON; when the verdict is `1`, read `.comments` from here. Each comment is `{body, action, file?, startLine?, endLine?}`: `action` is `fix-now` (the blocker), `fix-later`, or `consider`; `body` is the reviewer's inline feedback; the optional `file` / `startLine` / `endLine` anchor it to a line range (a comment may target a file, a line range, or the whole changeset with no line). The verdict and comments come from the difftool's sidecar contract, defined normatively in [moor's `SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md) (`IM.OUT-*`).
 
-Map the verdict to exactly this output and nothing more:
+**If `moor` is on PATH**, it drove the review and the sidecar carries a real verdict. Map it to exactly this output and nothing more:
 
 - **`0`** → `Committed [short-sha]`. If `.comments` carries advisory comments (`action` `fix-later` or `consider`), surface them — they don't gate the commit, but the user may want to act on them.
 - **`1`** → `Committed [short-sha] — fix-now comments`, list the `fix-now` comments (the `.comments` entries where `action == "fix-now"`), then loop back to Step 0 (re-run tests after the fix). Surface any advisory (`fix-later` / `consider`) comments too. **If a comment's `body` is short** (e.g. "I don't get what this flag means") **and the cited line range contains more than one distinct change** (e.g. two flag additions in a usage block, two unrelated lines in the same range), ask the user which token the comment refers to before fixing — a one-second clarification beats several minutes of guessing wrong and re-amending. Fix the commented lines themselves; don't expand into adjacent pre-existing code (`${CLAUDE_PLUGIN_ROOT}/guides/changeset-scope.md`).
 - **`2`** → `Committed [short-sha] — unreviewed hunks, what do you want to change?`
-- **`3` or `absent`** → `Committed [short-sha] — review closed without a verdict, what do you want to change?`
+- **`3` or `absent`** → `Committed [short-sha] — review closed without a verdict, what do you want to change?` (moor was present, so `absent` means it closed before writing one — surface it as the anomaly it is.)
 
-A difftool that speaks the sidecar contract (moor) returns the `0/1/2/3` verdict and the review comments; any other configured difftool yields `absent` and you ask the user directly. Either way the commit has already landed — apply any requested changes, re-stage, amend the commit (it's unpushed), and re-launch.
+**If `moor` isn't on PATH**, the wrapper deferred to your git-configured difftool (`diff.tool` — e.g. vscode, kdiff3, vimdiff), which presents the diff but doesn't speak the sidecar contract, so the verdict comes back `absent`. Here `absent` means the change was **shown in your difftool**, not that no review happened — report `Committed [short-sha] — reviewed in your difftool, what do you want to change?` and act on the reply, rather than prompting as if over an invisible diff. If the wrapper's output shows the difftool never launched (no `diff.tool` set, or it points at a tool that isn't installed), that's a local git misconfiguration: surface it plainly so the user can fix their config or install moor — don't substitute another tool.
+
+Either way the commit has already landed — apply any requested changes, re-stage, amend the commit (it's unpushed), and re-launch.
