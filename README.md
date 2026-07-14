@@ -15,7 +15,7 @@ review on the forge.
 ```text
 .claude-plugin/plugin.json   plugin manifest
 skills/commit/               /anchor:commit — stage, test, review the changeset, then commit and push
-skills/create-review-request/ /anchor:create-review-request — open the CR on the pushed branch, rebase if behind, draft the description
+skills/create-review/        /anchor:create-review — open the CR on the pushed branch, rebase if behind, draft the description
 skills/resolve-feedback/     /anchor:resolve-feedback — fetch CR feedback; fix / reply / resolve each thread to resolution
 skills/pipeline/             /anchor:pipeline — work with a commit's forge pipeline; report state or watch until it settles
 skills/issue/                /anchor:issue — gather the why/consumer/acceptance; file a new forge issue (or update a known one)
@@ -48,7 +48,7 @@ claude --plugin-dir .
 ```
 
 Launches Claude Code with the working tree mounted as a plugin, so
-`/anchor:commit` and `/anchor:create-review-request` resolve.
+`/anchor:commit` and `/anchor:create-review` resolve.
 
 ## Docs
 

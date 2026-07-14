@@ -7,7 +7,7 @@ for the points where the user must act or decide.
 ## Delegating to a script is silent by default
 
 The helper scripts a skill launches — `squash-check.sh`, `look-ahead.sh`,
-`create-review-request.sh`, `pipeline-status.sh`, `review-diff.sh`, the project's test
+`create-review.sh`, `pipeline-status.sh`, `review-diff.sh`, the project's test
 runner — exist to do the deterministic work *for* you. Their `KEY=value` output
 is the **input to your next decision**, not something to report. Launch the
 script, read its output, act on it — without narrating that you did, and without

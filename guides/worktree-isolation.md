@@ -1,6 +1,6 @@
 # Operating against a non-cwd repo (worktree isolation)
 
-How `/anchor:create-review-request` targets a CR that lives in a repo other than the
+How `/anchor:create-review` targets a CR that lives in a repo other than the
 session's working directory. When the target *is* just the session cwd, none of
 this applies — run everything as plain `git` / `gh` / `glab` against the working
 directory.
@@ -26,7 +26,7 @@ It prints `RESOLVED_VIA`, `WORKTREE`, and `CHECKOUT`:
 
 `<CHECKOUT>` is the path to operate in either way. **The harness resets cwd between Bash calls, so nothing persists implicitly** — thread the target through every later command:
 
-- **Re-gather** — `create-review-request.sh --worktree <WORKTREE>` (isolated) or `--repo <CHECKOUT>` (direct), plus `--cr` if you set one.
+- **Re-gather** — `create-review.sh --worktree <WORKTREE>` (isolated) or `--repo <CHECKOUT>` (direct), plus `--cr` if you set one.
 - **git** — `git -C <CHECKOUT> …`: the diff/log reads, the rebase, `git push --force-with-lease`.
 - **gh / glab subcommands** — `-R <owner/name>` (derive once from `git -C <CHECKOUT> remote get-url origin`).
 - **`glab api`** — has no `-R`; substitute the URL-encoded project for `:fullpath` (e.g. `group%2Fproject`), plus `--hostname <host>` for self-hosted GitLab.

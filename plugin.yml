@@ -27,7 +27,7 @@ suite:
     - name: tack
       required: false
       reason: resolves a named target repo through tack's repo db
-  # Activated by user-invoked skills (commit, create-review-request) and by ambient
+  # Activated by user-invoked skills (commit, create-review) and by ambient
   # rules injected at session start.
   activations: [user, session]
   gloss: An anchor holds a boat in place. This holds your work in place.
@@ -35,7 +35,7 @@ suite:
   what: "Keeps your commits, change requests, and review cycles consistent — the same quality, formatting, and content every time, not reinvented per change."
   cmds:
     - ["/anchor:commit", "Review the changeset, then commit with a why-first message and push"]
-    - ["/anchor:create-review-request", "Rebase on main and open a draft change request"]
+    - ["/anchor:create-review", "Rebase on main and open a draft change request"]
     - ["/anchor:resolve-feedback", "Work a CR's review threads to done, one by one"]
   # Skill-anchored previews of the two flagship skills, shown live on the docs
   # site; the session: below is the at-a-glance flow the hub also reads. Frames
@@ -45,7 +45,7 @@ suite:
   describe:
     skills:
       commit: Stage changes, run tests, review, then commit and push.
-      create-review-request: Open the PR/MR on an already-pushed branch, rebase on the default branch if behind, and draft a description that tells reviewers WHY the change exists.
+      create-review: Open the PR/MR on an already-pushed branch, rebase on the default branch if behind, and draft a description that tells reviewers WHY the change exists.
       issue: File a new forge issue (or update an existing one) that leads with WHY the work is needed.
       issues: List and rank the forge issues assigned to you so you can pick what to work on next — ranked by soonest due date, then most recently updated.
       pipeline: Report a commit's forge pipeline state, or watch until it settles.
@@ -66,10 +66,10 @@ suite:
         - { t: claude, text: "214 tests green, staged, message drafted — opening moor for a hunk-level look before I commit." }
         - { t: moor, del: "const fare = crossesMidnight ? DAILY_MAX : mins * RATE", add: "const fare = Math.min(mins * RATE, DAILY_MAX)", rej: "good fix — but DAILY_MAX is now defined here and in pricing.js; use the one source" }
         - { t: claude, text: "Addressed the rejection, re-reviewed clean, so committed 4a1f9c2 and pushed to fix-fare-cap. DAILY_MAX now imported from pricing.js, and I swept the two other call sites with the same duplication. Message leads with the overcharge, not the diff." }
-    - label: "/anchor:create-review-request"
+    - label: "/anchor:create-review"
       ac: "--orient"
       frames:
-        - { t: you, text: "/anchor:create-review-request" }
+        - { t: you, text: "/anchor:create-review" }
         - { t: claude, text: "Branch's already pushed, so I opened draft CR #128 against it. It's 8 behind main and still a draft — rebasing now is low-risk. Rebased clean, force-pushed with lease." }
         - { t: claude, text: "Before I draft — the WHY, in one line: riders on trips crossing midnight were billed the full daily max instead of elapsed minutes. Is that the whole story?" }
         - { t: you, text: "yeah — support flagged three overcharges this week" }

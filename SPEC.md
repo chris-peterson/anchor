@@ -18,7 +18,7 @@ behavior, not an independent authority — review them against the source.
 ## Concepts
 
 - **Skill** — a user-invocable command the plugin exposes: `/anchor:commit`,
-  `/anchor:create-review-request`, `/anchor:resolve-feedback`, `/anchor:issue`,
+  `/anchor:create-review`, `/anchor:resolve-feedback`, `/anchor:issue`,
   `/anchor:pipeline`.
 - **Forge** — GitHub or GitLab, selected by the `origin` remote; drives the CLI
   choice (`gh` for GitHub, `glab` for GitLab).
@@ -116,15 +116,15 @@ behavior, not an independent authority — review them against the source.
 - **[CMT-19]** If HEAD is the default branch when committing, then the system
   shall create a feature branch first rather than push to the default branch.
 
-### CRR — Create review request
+### CRR — Create review
 
-The `create-review-request` skill (formerly `prepare-review`): open a draft CR on
+The `create-review` skill (formerly `prepare-review`): open a draft CR on
 an already-pushed branch and draft its description. Push happens in
 `/anchor:commit`, so this flow never pushes and imposes no review gate — its
 changeset analysis serves the description and Review guide, not a clean-verdict
 check.
 
-- **[CRR-01]** When `/anchor:create-review-request` runs, the system shall require
+- **[CRR-01]** When `/anchor:create-review` runs, the system shall require
   an already-pushed branch and gather the changeset via a single recon script,
   acting only on the keys it surfaces.
 - **[CRR-02]** If the branch is not yet pushed, then the system shall direct the
@@ -290,7 +290,7 @@ backlog to pick the next one (the `issues` skill, ISS-07..12).
   decision through `/anchor:commit` rather than amend, rebase, or force-push ad
   hoc.
 - **[RULE-04]** The system shall drive forge operations through `gh`/`glab` and
-  route CR creation through `/anchor:create-review-request` rather than a bare
+  route CR creation through `/anchor:create-review` rather than a bare
   create.
 - **[RULE-05]** While deciding whether a history rewrite is safe, the system shall
   read push state and the CR draft flag fresh at the moment of the rewrite

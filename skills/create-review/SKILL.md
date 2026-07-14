@@ -1,9 +1,9 @@
 ---
-name: create-review-request
+name: create-review
 description: Open the PR/MR on an already-pushed branch, rebase on the default branch if behind, and draft a description that tells reviewers WHY the change exists. Use when opening an MR/PR or creating a review.
 ---
 
-# Create Review Request
+# Create Review
 
 Draft a description whose job is to convey *why* the change exists and *how* it addresses the current problem. The proposed code stands on its own — the diff shows *what* changed; the description supplies the *reason*. The rest routes reviewer attention in order of criticality so they get maximum value from whatever time they can spend.
 
@@ -17,7 +17,7 @@ forge tool by the `origin` remote.
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
 flowchart TD
-    Start(["/create-review-request"]) --> CR{Open CR?}
+    Start(["/create-review"]) --> CR{Open CR?}
 
     subgraph "Step 1: Gather the changeset"
         CR -->|No| Pushed{Pushed commits ahead?}
@@ -66,7 +66,7 @@ Everything else is internal: the per-step recon plumbing ("origin is GitLab, 1 a
 Run the gather script once. It performs Step 1's deterministic recon and the safe default-path setup — detect the forge, resolve or auto-open the draft CR, count the gap to the default branch, capture the current description as the Step 4 diff baseline, check local state against the CR head, read the project template and `anchor.*` config — then prints one `KEY=value` block on stdout:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/create-review-request.sh"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/create-review.sh"
 ```
 
 Read the block and act only on what it surfaces; don't re-run the individual probes. The keys:
@@ -100,7 +100,7 @@ When the target is just the session cwd (no non-cwd repo in play), skip all of t
 
 ### Get to a reviewable, pushed commit (`NEEDS_BRANCH` / `NEEDS_COMMIT` / `NEEDS_PUSH`)
 
-**create-review-request is meant to run from any state.** A CR needs a commit on a feature branch that is **ahead of the default branch and pushed** — opening the draft is a pure forge operation on the pushed branch, since `/anchor:commit` now does the push. When that state doesn't exist yet, the script says so (instead of letting `glab mr create` / `gh pr create` dead-end on a raw *"Could not find any commits between origin/`<default>` and `<branch>`"*) and the skill chains into `/anchor:commit` to get there. The cases, keyed off the block:
+**create-review is meant to run from any state.** A CR needs a commit on a feature branch that is **ahead of the default branch and pushed** — opening the draft is a pure forge operation on the pushed branch, since `/anchor:commit` now does the push. When that state doesn't exist yet, the script says so (instead of letting `glab mr create` / `gh pr create` dead-end on a raw *"Could not find any commits between origin/`<default>` and `<branch>`"*) and the skill chains into `/anchor:commit` to get there. The cases, keyed off the block:
 
 - **`NEEDS_COMMIT=1`, `NEEDS_BRANCH=0`** — on a feature branch, work uncommitted. Chain into `/anchor:commit`: it runs its flow (tests, staging, message, the visual review) and, on a clean review, commits **and pushes**. Then re-gather.
 - **`NEEDS_BRANCH=1`, `NEEDS_COMMIT=1`** — on the *default* branch, work uncommitted. Still chain into `/anchor:commit` — it detects the default branch, creates the feature branch (named from the subject it drafts), commits onto it, and pushes it. Then re-gather.
@@ -118,7 +118,7 @@ When the target is just the session cwd (no non-cwd repo in play), skip all of t
 After the branch/commit/push lands, **re-run the gather script** so it resolves the now-creatable CR:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/create-review-request.sh"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/create-review.sh"
 ```
 
 The second run is on a pushed feature branch with a commit ahead; it auto-opens the draft CR and returns a normal block (`NEEDS_BRANCH=0`, `NEEDS_COMMIT=0`, `NEEDS_PUSH=0`, a resolved `CR_URL`). Proceed from there into the rebase / drafting flow as usual. If it still reports `NEEDS_COMMIT=1` / `NEEDS_PUSH=1` — the user declined `/anchor:commit`, or it produced nothing ahead or pushed nothing — say so and stop; don't loop.

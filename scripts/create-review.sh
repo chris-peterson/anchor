@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Gather everything /create-review-request's Step 1 needs and perform the safe
+# Gather everything /create-review's Step 1 needs and perform the safe
 # default-path actions, then print one KEY=value block on stdout so the skill
 # acts on a single command's output — no per-step orchestration to narrate.
 #
@@ -73,12 +73,12 @@
 # silently dropping to the URL-free path.
 #
 # Usage:
-#   create-review-request.sh             # resolve the CR, or open a draft on the
+#   create-review.sh             # resolve the CR, or open a draft on the
 #                                         # already-pushed branch; NEEDS_PUSH if unpushed
-#   create-review-request.sh --no-open    # never auto-open; no CR -> skip-deep-links path
-#   create-review-request.sh --repo <path>      # operate on a checkout other than the cwd repo
-#   create-review-request.sh --worktree <path>  # operate in a flow-owned isolated worktree
-#   create-review-request.sh --cr <iid|url>     # resolve a specific CR, not the current branch's
+#   create-review.sh --no-open    # never auto-open; no CR -> skip-deep-links path
+#   create-review.sh --repo <path>      # operate on a checkout other than the cwd repo
+#   create-review.sh --worktree <path>  # operate in a flow-owned isolated worktree
+#   create-review.sh --cr <iid|url>     # resolve a specific CR, not the current branch's
 #
 # --repo / --worktree cd into the target checkout so every git/gh/glab call
 # below targets it (see scripts/lib/resolve-context.sh); the emitted RESOLVED_VIA
@@ -106,7 +106,7 @@ while [[ $# -gt 0 ]]; do
     --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
     --worktree) CTX_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
     --cr)       cr_ref="${2:?--cr needs an iid or URL}"; shift 2 ;;
-    *) echo "create-review-request.sh: unknown argument: $1" >&2; exit 64 ;;
+    *) echo "create-review.sh: unknown argument: $1" >&2; exit 64 ;;
   esac
 done
 
@@ -266,7 +266,7 @@ elif [[ "$forge" != "none" && "$on_default" -eq 0 ]]; then
     if resolve_cr; then
       cr_created=1
     else
-      echo "CR_CREATE_ERROR=opened the draft CR but could not resolve it back (forge lag?) — re-run create-review-request"
+      echo "CR_CREATE_ERROR=opened the draft CR but could not resolve it back (forge lag?) — re-run create-review"
       exit 1
     fi
   fi
