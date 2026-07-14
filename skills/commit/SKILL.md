@@ -112,25 +112,25 @@ git diff --cached --stat
 git diff --cached
 ```
 
-If nothing is staged after `git add -A`, fall back to describing the most recent commit. But first, verify HEAD hasn't already been pushed — otherwise you'd just be describing an already-published commit:
+If nothing is staged after `git add -A`, there's no new change to commit — but the branch may hold **unpushed commits to push**. Commit-and-push means `/commit` also gets already-committed work onto the remote, so check the ahead-count:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/look-ahead.sh"
 ```
 
-The helper prints the ahead-count (unpushed commits) or empty if no upstream is configured. If the count is `0`, HEAD equals the remote tracking branch — warn the user that there are no local changes (staged or committed) and stop.
+The helper prints the ahead-count (unpushed commits) or empty if no upstream is configured. If the count is `0`, HEAD equals the remote tracking branch — nothing staged and nothing unpushed; warn the user there are no local changes and stop.
 
-Otherwise, diff the most recent commit:
+If the count is `≥1`, this is a **push-existing** run: the changeset is those unpushed commit(s), and there's no new message to draft — **skip Steps 2-3** and go straight to review-and-push. Read the unpushed range, review it in Step 4 (pass the range to the wrapper via `review-diff.sh --commit`, not `--local`), and push in Step 5. Diff the range to read it (substitute `DEFAULT_BRANCH`):
 
 ```bash
-git diff HEAD~1 --stat
+git diff "origin/main...HEAD" --stat
 ```
 
 ```bash
-git diff HEAD~1
+git diff "origin/main...HEAD"
 ```
 
-If both staged and `HEAD~1` are empty, say so and stop.
+(The message-only-amend case — an unpushed commit whose *message* is wrong, tree unchanged — is the `ALLOW_MESSAGE_AMEND` path in Step 3, not this push-only path.)
 
 ## Step 2: Write the commit message
 
@@ -262,6 +262,8 @@ Launch the wrapper in `--local` mode — **not** raw `git difftool`. The wrapper
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --local
 ```
 
+(On the **push-existing** path from Step 1 — nothing staged, unpushed commits to push — review those commits instead of the working tree: `review-diff.sh --commit`.)
+
 When the background command completes, read its stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trip the command-substitution gate. The last lines carry the verdict (no separate file read):
 
 - `REVIEW_VERDICT` — `0` clean · `1` one-or-more fix-now · `2` unreviewed · `3` closed early · `absent` (no sidecar was written — either moor closed without one, or a non-moor difftool ran)
@@ -282,6 +284,7 @@ Reached only on a clean review (or the message-only-amend exception, which has n
 
 - **New commit** → `git commit` with the drafted message.
 - **Squash** → write a combined message covering both the prior commit and the new changes, present it for confirmation, then `git commit --amend` with it.
+- **Push-existing** (Step 1 found nothing staged but unpushed commits) → no commit to make; go straight to the push.
 
 Then push:
 
