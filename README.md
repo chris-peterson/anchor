@@ -14,8 +14,8 @@ review on the forge.
 
 ```text
 .claude-plugin/plugin.json   plugin manifest
-skills/commit/               /anchor:commit — stage, test, review, write the commit message (--preview reviews the working tree without committing)
-skills/prepare-review/       /anchor:prepare-review — rebase, draft the CR description, open/update the CR
+skills/commit/               /anchor:commit — stage, test, review the changeset, then commit and push
+skills/create-review/        /anchor:create-review — open the CR on the pushed branch, rebase if behind, draft the description
 skills/resolve-feedback/     /anchor:resolve-feedback — fetch CR feedback; fix / reply / resolve each thread to resolution
 skills/pipeline/             /anchor:pipeline — work with a commit's forge pipeline; report state or watch until it settles
 skills/issue/                /anchor:issue — gather the why/consumer/acceptance; file a new forge issue (or update a known one)
@@ -37,7 +37,7 @@ The skills work standalone and light up further when these siblings are
 installed (each degrades gracefully when absent):
 
 - **[moor](https://github.com/chris-peterson/moor)** — the visual diff viewer the
-  `commit` skill launches (including `--preview`). Absent → it falls back to `git difftool
+  `commit` skill launches. Absent → it falls back to `git difftool
   --dir-diff` with your configured difftool, asking whether to revise or proceed
   in place of moor's rejected-hunk feedback.
 
@@ -48,7 +48,7 @@ claude --plugin-dir .
 ```
 
 Launches Claude Code with the working tree mounted as a plugin, so
-`/anchor:commit` and `/anchor:prepare-review` resolve.
+`/anchor:commit` and `/anchor:create-review` resolve.
 
 ## Docs
 

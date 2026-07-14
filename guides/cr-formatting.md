@@ -4,7 +4,7 @@ How to *render* a CR description once its shape is decided: which visualization
 fits which data, the mermaid and screenshot recipes, and the prose conventions
 that make a description skim-readable. `templates/cr-description.md` owns the
 *shape* (which sections, in what order); this guide owns the *technique* for
-realizing it. The `prepare-review` skill points here from its Step 3 drafting
+realizing it. The `create-review` skill points here from its Step 3 drafting
 flow.
 
 For the render-time traps that bite any markdown a forge displays — character
@@ -53,7 +53,7 @@ After the visualization choice, lean into markdown for the surrounding prose:
 
 Always deep-link to the actual line, not just the file — reviewers should be one
 click away from the hunk you're pointing them at. The skill supplies the runtime
-values (`CR_URL`, and the per-file `FILE_ANCHORS` from `prepare-review`'s Step 1
+values (`CR_URL`, and the per-file `FILE_ANCHORS` from `create-review`'s Step 1
 block); construction differs by forge:
 
 - **GitLab:** `<CR_URL>/diffs#<file-anchor>_<old-line>_<new-line>` where `<file-anchor>` is `sha1(<repo-relative-file-path>)` — already computed per changed file in `FILE_ANCHORS`. (You still pick the line numbers; only the path-hash is precomputed.) For a file-level link (no specific line), just use `<CR_URL>/diffs#<file-anchor>`. For pure additions, use the new line number for both `<old-line>` and `<new-line>` — the link still resolves.

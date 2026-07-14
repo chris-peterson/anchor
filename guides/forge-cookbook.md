@@ -34,7 +34,7 @@ against the wrong project):
 Derive `OWNER/REPO` and the host once from `git -C <path> remote get-url origin`.
 
 **anchor's helper scripts take `--repo <path>` (or `--worktree <path>`) instead.**
-`prepare-review.sh`, `squash-check.sh`, `look-ahead.sh`, `review-diff.sh`, and
+`create-review.sh`, `squash-check.sh`, `look-ahead.sh`, `review-diff.sh`, and
 `pipeline-status.sh` `cd` into the given checkout for their (single-process) run,
 so every git/`gh`/`glab` call inside them targets it with no per-command flag —
 and `glab mr create` works because it runs *inside* the target checkout (passing

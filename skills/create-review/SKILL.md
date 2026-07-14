@@ -1,9 +1,9 @@
 ---
-name: prepare-review
-description: Rebase on the default branch, push, open the PR/MR, and draft a description that tells reviewers WHY the change exists. Use when opening an MR/PR or creating a review.
+name: create-review
+description: Open the PR/MR on an already-pushed branch, rebase on the default branch if behind, and draft a description that tells reviewers WHY the change exists. Use when opening an MR/PR or creating a review.
 ---
 
-# Prepare Review
+# Create Review
 
 Draft a description whose job is to convey *why* the change exists and *how* it addresses the current problem. The proposed code stands on its own — the diff shows *what* changed; the description supplies the *reason*. The rest routes reviewer attention in order of criticality so they get maximum value from whatever time they can spend.
 
@@ -17,18 +17,13 @@ forge tool by the `origin` remote.
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
 flowchart TD
-    Start(["/prepare-review"]) --> CR{Open CR?}
+    Start(["/create-review"]) --> CR{Open CR?}
 
     subgraph "Step 1: Gather the changeset"
-        CR -->|No| OnDefault{On default branch?}
+        CR -->|No| Pushed{Pushed commits ahead?}
         CR -->|Yes| Behind
-        OnDefault -->|Yes| Branch["Create branch + commit, re-gather"]
-        OnDefault -->|No| Ahead{Commits ahead?}
-        Ahead -->|No| Commit["/anchor:commit, then re-gather"]
-        Ahead -->|Yes| Review["Review gate: branch vs default"]
-        Review -->|Clean| MakeCR["Open draft CR"]
-        Review -->|fix-now| Commit
-        Branch --> Review
+        Pushed -->|No| Commit["/anchor:commit commits and pushes, then re-gather"]
+        Pushed -->|Yes| MakeCR["Open draft CR"]
         Commit --> MakeCR
         MakeCR --> Behind{Behind main?}
         Behind -->|Yes| DoRebase["Rebase + force-with-lease"]
@@ -71,7 +66,7 @@ Everything else is internal: the per-step recon plumbing ("origin is GitLab, 1 a
 Run the gather script once. It performs Step 1's deterministic recon and the safe default-path setup — detect the forge, resolve or auto-open the draft CR, count the gap to the default branch, capture the current description as the Step 4 diff baseline, check local state against the CR head, read the project template and `anchor.*` config — then prints one `KEY=value` block on stdout:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/create-review.sh"
 ```
 
 Read the block and act only on what it surfaces; don't re-run the individual probes. The keys:
@@ -83,9 +78,9 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 | `DEFAULT_BRANCH` | substitute for `main` in the diff/log commands below |
 | `ON_DEFAULT_BRANCH=1` | HEAD is the default branch — there's no branch to open a CR *from*. With work to review, `NEEDS_BRANCH=1` routes through branch creation first; clean with nothing ahead → nothing to review, stop |
 | `AHEAD=0` | nothing ahead of the default branch — `NEEDS_COMMIT=1` chains to `/anchor:commit` (see below); otherwise say so and stop |
-| `NEEDS_BRANCH=1` | on the default branch with work to review — a feature branch must exist before a CR can be opened (see "Get to a reviewable commit") |
-| `NEEDS_COMMIT=1` | no reviewable commit yet — chain into `/anchor:commit` before continuing (see "Get to a reviewable commit") |
-| `NEEDS_REVIEW=1` | commits are ahead, no CR yet, and unreviewed — the script stopped short of pushing. Run the pre-push review gate, then re-invoke with `--reviewed` on a clean verdict (see "Review before the first push") |
+| `NEEDS_BRANCH=1` | on the default branch with work to review — a feature branch must exist before a CR can be opened (see "Get to a reviewable, pushed commit") |
+| `NEEDS_COMMIT=1` | no reviewable commit yet — chain into `/anchor:commit` before continuing (see "Get to a reviewable, pushed commit") |
+| `NEEDS_PUSH=1` | commits are ahead, no CR yet, but the branch isn't pushed — chain into `/anchor:commit`, which commits and pushes, then re-gather (see "Get to a reviewable, pushed commit") |
 | `BEHIND=<n>` | `>0` → run the rebase dialog below |
 | `CR_URL` / `CR_IID` | the resolved or freshly-opened draft — deep-link target and write target (empty on `skip-deep-links`) |
 | `CR_DRAFT` | gates the post-rebase force-push (see below) |
@@ -103,13 +98,14 @@ When the CR lives in a repo other than the session's cwd (you're in repo A, the 
 
 When the target is just the session cwd (no non-cwd repo in play), skip all of this — everything below is plain `git` / `gh` / `glab` against the working directory.
 
-### Get to a reviewable commit (`NEEDS_BRANCH` / `NEEDS_COMMIT`)
+### Get to a reviewable, pushed commit (`NEEDS_BRANCH` / `NEEDS_COMMIT` / `NEEDS_PUSH`)
 
-**prepare-review is meant to run from any state.** A CR needs a commit on a feature branch ahead of the default branch; when that doesn't exist yet, the script says so (instead of letting `glab mr create` / `gh pr create` dead-end on a raw *"Could not find any commits between origin/`<default>` and `<branch>`"*) and the skill delegates to get there. Three cases, keyed off the block:
+**create-review is meant to run from any state.** A CR needs a commit on a feature branch that is **ahead of the default branch and pushed** — opening the draft is a pure forge operation on the pushed branch, since `/anchor:commit` now does the push. When that state doesn't exist yet, the script says so (instead of letting `glab mr create` / `gh pr create` dead-end on a raw *"Could not find any commits between origin/`<default>` and `<branch>`"*) and the skill chains into `/anchor:commit` to get there. The cases, keyed off the block:
 
-- **`NEEDS_COMMIT=1`, `NEEDS_BRANCH=0`** — on a feature branch, work uncommitted. Chain into `/anchor:commit`: let it run its flow (tests, staging, message, the visual diff review). Once the commit lands, re-gather (below).
-- **`NEEDS_BRANCH=1`, `NEEDS_COMMIT=1`** — on the *default* branch, work uncommitted. Still chain into `/anchor:commit` — it detects the default branch and offers to create the feature branch (named from the subject it drafts), committing onto it. Take the recommended branch option; the commit lands on the new feature branch, not the default branch. Then re-gather.
-- **`NEEDS_BRANCH=1`, `NEEDS_COMMIT=0`** — on the default branch with commits that exist locally but only on the default branch (e.g. committed to `main` by habit, never pushed). Nothing to commit; the commits just need their own branch. Slug the latest subject (`git log -1 --format=%s`, same convention `/anchor:commit` uses), confirm the name with the user, then move them off the default branch:
+- **`NEEDS_COMMIT=1`, `NEEDS_BRANCH=0`** — on a feature branch, work uncommitted. Chain into `/anchor:commit`: it runs its flow (tests, staging, message, the visual review) and, on a clean review, commits **and pushes**. Then re-gather.
+- **`NEEDS_BRANCH=1`, `NEEDS_COMMIT=1`** — on the *default* branch, work uncommitted. Still chain into `/anchor:commit` — it detects the default branch, creates the feature branch (named from the subject it drafts), commits onto it, and pushes it. Then re-gather.
+- **`NEEDS_PUSH=1`** — a feature branch with commit(s) ahead of the default branch that were never pushed (e.g. committed with raw `git`). The branch just needs pushing, which is `/anchor:commit`'s job now — chain into it rather than pushing here, then re-gather.
+- **`NEEDS_BRANCH=1`, `NEEDS_COMMIT=0`** — on the default branch with commits that exist only on the local default branch (committed to `main` by habit, never pushed). Move them onto their own branch first, then chain into `/anchor:commit` to push it. Slug the latest subject (`git log -1 --format=%s`, the convention `/anchor:commit` uses), confirm the name with the user, then:
 
   ```bash
   git branch <slug>                    # point the new branch at the current commits
@@ -117,52 +113,21 @@ When the target is just the session cwd (no non-cwd repo in play), skip all of t
   git switch <slug>                    # continue on the feature branch
   ```
 
-  This is safe because the local default branch was only *ahead* of `origin/<default>` — the reset drops those commits from the default branch, but they're preserved on `<slug>`. Then re-gather.
+  This is safe because the local default branch was only *ahead* of `origin/<default>` — the reset drops those commits from the default branch, but they're preserved on `<slug>`. Now on a feature branch with unpushed commits, chain into `/anchor:commit` to push, then re-gather.
 
-After the branch/commit lands, **re-run the gather script** so it resolves the now-creatable CR. Which form depends on how you got here:
-
-- **You chained `/anchor:commit`** (`NEEDS_COMMIT`, either case) — its Step 4 already ran the visual review, so pass `--reviewed`; the second run opens the draft without a redundant review:
-
-  ```bash
-  bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh" --reviewed
-  ```
-
-- **You *moved* commits to a branch** (`NEEDS_BRANCH=1, NEEDS_COMMIT=0`) — those commits were never reviewed, so re-gather **without** `--reviewed`; the script reports `NEEDS_REVIEW=1` and the gate runs before the push (see "Review before the first push"):
-
-  ```bash
-  bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh"
-  ```
-
-The second run is on a feature branch with a commit ahead; with `--reviewed` it auto-opens the draft CR and returns a normal block (`NEEDS_BRANCH=0`, `NEEDS_COMMIT=0`, a resolved `CR_URL`). Proceed from there into the rebase / drafting flow as usual. If the second run still reports `NEEDS_COMMIT=1` — the user declined the commit, or it produced nothing ahead — say so and stop; don't loop.
-
-### Review before the first push (`NEEDS_REVIEW`)
-
-`NEEDS_REVIEW=1` means commit(s) are ahead of the default branch, no CR is open yet, and the changeset hasn't cleared the review gate — so the script **stopped short of pushing**. The first push is what opens the draft CR, and that push is the moment the code leaves the machine: it must be reviewed first. (`/commit`'s Step 4 gates the *local* commit, but a commit made with raw `git` — or one whose Step 4 was skipped — would otherwise reach the remote unreviewed the instant the draft auto-opens.)
-
-Run the same branch-vs-default visual review `/commit --preview cr` uses, as a **background** Bash call (`run_in_background: true`) — the wrapper blocks until the difftool closes:
+After the branch/commit/push lands, **re-run the gather script** so it resolves the now-creatable CR:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --full
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/create-review.sh"
 ```
 
-Read the verdict with the **BashOutput tool** — not `tail` / `$(...)`, which trips the command-substitution gate. The `REVIEW_VERDICT` / `REVIEW_OUTPUT` contract is identical to `/commit` Step 4:
+The second run is on a pushed feature branch with a commit ahead; it auto-opens the draft CR and returns a normal block (`NEEDS_BRANCH=0`, `NEEDS_COMMIT=0`, `NEEDS_PUSH=0`, a resolved `CR_URL`). Proceed from there into the rebase / drafting flow as usual. If it still reports `NEEDS_COMMIT=1` / `NEEDS_PUSH=1` — the user declined `/anchor:commit`, or it produced nothing ahead or pushed nothing — say so and stop; don't loop.
 
-- **`0`** (clean) — re-invoke the gather script with `--reviewed` to push and open the draft CR, then proceed into the rebase / drafting flow:
-
-  ```bash
-  bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh" --reviewed
-  ```
-
-- **`1`** (fix-now) — list the `fix-now` comments (`REVIEW_OUTPUT`'s `.comments` where `action == "fix-now"`) and fix them via `/anchor:commit`, which amends the still-unpushed commit and re-reviews. Then start Step 1 over. **Do not push.**
-- **`2` / `3` / `absent`** — no clean verdict, so this is **not** approval: don't push on it. With `moor` on PATH the review didn't complete (unreviewed hunks, closed early, or no verdict written) — surface what happened. With `moor` *not* on PATH the wrapper showed the diff in your git-configured difftool, which writes no verdict, so `absent` here means "shown, but unconfirmed" — ask the user to confirm it's good before re-running with `--reviewed`, or what to change. Either way, don't read silence as approval.
-
-This gate fires only for the **first** push of an as-yet-unreviewed branch — once the CR exists, subsequent pushes (a rebase force-push) are gated separately by `CR_DRAFT`. When prepare-review chained through `/anchor:commit` above, Step 4 already reviewed the commit, so that path passes `--reviewed` and never sees `NEEDS_REVIEW` (see "Get to a reviewable commit").
-
-**Why auto-open is the default.** A draft CR is cheap and reversible: it requests no review, the push already triggered any branch-level CI, and self-assign notifies only you. The deep links are the load-bearing part of the description, and a placeholder-only draft is broken on arrival — opening the real CR first is what makes the description useful. Auto-open still fires only *after* the review gate clears: the script pushes on `--reviewed`, which the skill passes once the branch-vs-default review returns clean (see "Review before the first push"). The script does **not** sniff for a "merges direct to `main`, never opens CRs" convention, because there's no reliable signal for it. One case gives way to the `skip-deep-links` path:
+**Why auto-open is the default.** A draft CR is cheap and reversible: it requests no review, the push already triggered any branch-level CI, and self-assign notifies only you. The deep links are the load-bearing part of the description, and a placeholder-only draft is broken on arrival — opening the real CR first is what makes the description useful. The script opens the draft against the already-pushed branch (it never pushes) and does **not** sniff for a "merges direct to `main`, never opens CRs" convention, because there's no reliable signal for it. One case gives way to the `skip-deep-links` path:
 
 - **User asks not to open one** — the repo merges direct to `main` without CRs, or the CLI's default forge instance is wrong for this repo. Re-run with `--no-open` to proceed URL-free; or, if they'd rather open the draft themselves, pause until they confirm one is open, then re-run so the script resolves its URL.
 
-(When `ON_DEFAULT_BRANCH=1`, the script doesn't auto-open either — but that routes through branch creation, not skip-deep-links; see "Get to a reviewable commit" above.)
+(When `ON_DEFAULT_BRANCH=1`, the script doesn't auto-open either — but that routes through branch creation, not skip-deep-links; see above.)
 
 ### Rebase on main when `BEHIND > 0`
 

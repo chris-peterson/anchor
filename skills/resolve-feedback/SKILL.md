@@ -9,7 +9,7 @@ Fetch the unresolved review threads on an open change request, triage each
 one with the author, then act: change the code, reply on the thread, resolve
 it — in whatever combination each thread calls for. The goal is **resolution**:
 every thread ends fixed, answered, or resolved, not merely acknowledged. This
-closes the loop that `/anchor:prepare-review` opens: prepare-review routes
+closes the loop that `/anchor:create-review` opens: create-review routes
 reviewer attention out; resolve-feedback brings their findings back into the
 branch and drives each one to done.
 
@@ -95,7 +95,7 @@ gh pr view --json number,url,isDraft,headRefOid 2>/dev/null
 
 No open CR → say so and stop; there's nothing to address.
 
-**Confirm local state matches the CR head** (same check as prepare-review):
+**Confirm local state matches the CR head** (same check as create-review):
 `git status --porcelain` clean, and local HEAD equals the CR head SHA. If
 they disagree, surface the mismatch and stop — replies that say "fixed in
 <sha>" must reference commits that actually contain the fix on top of what
