@@ -18,7 +18,7 @@ behavior, not an independent authority — review them against the source.
 ## Concepts
 
 - **Skill** — a user-invocable command the plugin exposes: `/anchor:commit`,
-  `/anchor:prepare-review`, `/anchor:resolve-feedback`, `/anchor:issue`,
+  `/anchor:create-review-request`, `/anchor:resolve-feedback`, `/anchor:issue`,
   `/anchor:pipeline`.
 - **Forge** — GitHub or GitLab, selected by the `origin` remote; drives the CLI
   choice (`gh` for GitHub, `glab` for GitLab).
@@ -102,51 +102,57 @@ behavior, not an independent authority — review them against the source.
 - **[CMT-13]** Where only the message (not the tree) of a ready CR's HEAD is
   wrong, the system shall offer a message-only amend and let the user decide on
   the force-push.
-- **[CMT-14]** When a commit lands, the system shall open the change in a visual
-  review via the review wrapper in `--commit` mode.
-- **[CMT-15]** If the post-commit review returns fix-now comments, then the
-  system shall address them, amend the unpushed commit, and re-run tests before
-  re-reviewing.
-- **[CMT-16]** Where `/anchor:commit` is invoked with `--preview`, the system
-  shall open a look-only diff and stop without testing, staging, or committing.
+- **[CMT-14]** When changes are staged and a message is drafted, the system shall
+  open a visual review of the pending changeset (working tree vs `HEAD`) via the
+  review wrapper and shall not commit until the verdict is clean.
+- **[CMT-15]** If the pre-commit review returns fix-now comments, then the system
+  shall address them in the working tree, re-run tests, and re-review — committing
+  only once the verdict is clean, rather than committing and then amending.
 - **[CMT-17]** If a `PreToolUse` hook blocks a commit on a substring inside the
   message body, then the system shall surface the conflict rather than use a
   temp-file workaround.
+- **[CMT-18]** When the pre-commit review verdict is clean, the system shall
+  commit and push in one step.
+- **[CMT-19]** If HEAD is the default branch when committing, then the system
+  shall create a feature branch first rather than push to the default branch.
 
-### PREP — Prepare review
+### CRR — Create review request
 
-- **[PREP-01]** When `/anchor:prepare-review` runs, the system shall gather the
-  changeset via a single recon script and act only on the keys it surfaces.
-- **[PREP-02]** If there is no reviewable commit or feature branch yet, then the
-  system shall get to one (chain `/anchor:commit`, or move commits onto a
-  branch) before opening a CR.
-- **[PREP-03]** When commits are ahead with no CR and the branch is unreviewed,
-  the system shall run a branch-vs-default review gate before the first push.
-- **[PREP-04]** If the pre-push review returns anything other than a clean
-  verdict, then the system shall not push and shall surface the outcome.
-- **[PREP-05]** When the pre-push review is clean, the system shall push and
-  auto-open a draft CR.
-- **[PREP-06]** While the branch is behind the default branch, the system shall
-  offer to rebase before drafting.
-- **[PREP-07]** While a CR is a draft, the system shall force-push with lease
+The `create-review-request` skill (formerly `prepare-review`): open a draft CR on
+an already-pushed branch and draft its description. Push happens in
+`/anchor:commit`, so this flow never pushes and imposes no review gate — its
+changeset analysis serves the description and Review guide, not a clean-verdict
+check.
+
+- **[CRR-01]** When `/anchor:create-review-request` runs, the system shall require
+  an already-pushed branch and gather the changeset via a single recon script,
+  acting only on the keys it surfaces.
+- **[CRR-02]** If the branch is not yet pushed, then the system shall direct the
+  user to `/anchor:commit` (which commits and pushes) rather than pushing itself.
+- **[CRR-03]** The system shall open a draft CR against the already-pushed branch
+  and shall not push.
+- **[CRR-04]** While the branch is behind the default branch, the system shall
+  offer to rebase and, since the branch is already pushed, follow the rebase with
+  `git push --force-with-lease` per the draft/ready gate.
+- **[CRR-05]** While a CR is a draft, the system shall force-push with lease
   freely; while it is marked ready, the system shall ask before force-pushing.
-- **[PREP-08]** If local state does not match the CR head, then the system shall
+- **[CRR-06]** If local state does not match the CR head, then the system shall
   surface the mismatch and stop rather than draft.
-- **[PREP-09]** Before drafting, the system shall resolve open questions (why,
+- **[CRR-07]** Before drafting, the system shall resolve open questions (why,
   audience, scope, ordering, verification gaps) with the user rather than park
   them in the description.
-- **[PREP-10]** The system shall draft the description leading with why, for a
+- **[CRR-08]** The system shall draft the description leading with why, for a
   reader unfamiliar with the system, using the canonical section headings
   verbatim.
-- **[PREP-11]** Before drafting Context, the system shall run an anti-recency
+- **[CRR-09]** Before drafting Context, the system shall run an anti-recency
   check dispositioning recent iterations as centerpiece, footnote, or cut.
-- **[PREP-12]** The system shall deep-link Review-guide references to the specific
+- **[CRR-10]** The system shall deep-link Review-guide references to the specific
   changed lines rather than to files alone.
-- **[PREP-13]** If a claim about prior workflow or current state lacks a citable
+- **[CRR-11]** If a claim about prior workflow or current state lacks a citable
   source, then the system shall omit it from the description.
-- **[PREP-14]** Where a predecessor CR was captured, the system shall record the
+- **[CRR-12]** Where a predecessor CR was captured, the system shall record the
   ordering dependency in the description and, on GitLab, on the forge.
-- **[PREP-15]** When presenting the drafted description, the system shall offer
+- **[CRR-13]** When presenting the drafted description, the system shall offer
   write / copy-only / edit, defaulting to write.
 
 ### FDBK — Resolve feedback
@@ -284,7 +290,8 @@ backlog to pick the next one (the `issues` skill, ISS-07..12).
   decision through `/anchor:commit` rather than amend, rebase, or force-push ad
   hoc.
 - **[RULE-04]** The system shall drive forge operations through `gh`/`glab` and
-  route CR creation through `/anchor:prepare-review` rather than a bare create.
+  route CR creation through `/anchor:create-review-request` rather than a bare
+  create.
 - **[RULE-05]** While deciding whether a history rewrite is safe, the system shall
   read push state and the CR draft flag fresh at the moment of the rewrite
   rather than from an earlier turn.
