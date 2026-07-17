@@ -4,7 +4,7 @@
 # skills/rules/hooks sources — run `just build`, don't hand-edit it.
 
 name: anchor
-version: 0.23.0
+version: 0.24.0
 description: Git/forge skills for consistent and effective source control.
 author: chris-peterson
 repository: https://github.com/chris-peterson/anchor
@@ -37,6 +37,7 @@ suite:
     - ["/anchor:commit", "Commit with a why-first message; --preview reviews the working tree first"]
     - ["/anchor:prepare-review", "Rebase on main and open a draft change request"]
     - ["/anchor:resolve-feedback", "Work a CR's review threads to done, one by one"]
+    - ["/anchor:merge", "Check the merge gates, wait on the pipeline, then land the CR and clean up"]
   # Skill-anchored previews of the two flagship skills, shown live on the docs
   # site; the session: below is the at-a-glance flow the hub also reads. Frames
   # are lifted from real runs (moor rejections, the WHY prompt, the CR structure)
@@ -47,6 +48,7 @@ suite:
       commit: Stage changes, run tests, and write a commit message.
       issue: File a new forge issue (or update an existing one) that leads with WHY the work is needed.
       issues: List and rank the forge issues assigned to you so you can pick what to work on next — ranked by soonest due date, then most recently updated.
+      merge: Merge an approved change request once its gates are green — waiting on the pipeline if needed — then clean up the branch.
       pipeline: Report a commit's forge pipeline state, or watch until it settles.
       prepare-review: Rebase on the default branch, push, open the PR/MR, and draft a description that tells reviewers WHY the change exists.
       resolve-feedback: Fetch an open CR's review feedback and drive each thread to resolution — fix, reply, resolve.

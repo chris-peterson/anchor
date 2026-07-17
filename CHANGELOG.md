@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.24.0
+
+## New
+
+- **`/merge` skill** — the terminal lifecycle step: lands an open change request once its gates are green. Checks that the CR is marked ready, mergeable, pipeline-passing, approved, and has its review threads resolved — and when the pipeline is still running, watches it to a terminal state (via `pipeline-status.sh --watch`) instead of handing control back to be re-asked. Preserves the branch's commits by default and recommends squash only when the history is non-atomic (wip/fixup increments or review-feedback noise), always confirming the method. After merging it deletes the source branch, returns the checkout to the default branch, and records the tack deliverable.
+
+## Changed
+
+- **Forge cookbook** gains canonical `gh`/`glab` invocations for merging a CR (per-strategy flags, source-branch deletion, head-SHA guard, and reading which strategies a repo allows) and for the merge gates — mergeable state and approvals.
+- **Spec** adds the `MRG` requirement category (`MRG-01..16`) covering the merge skill.
+
 ## 0.23.0
 
 ## New

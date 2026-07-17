@@ -17,6 +17,7 @@ review on the forge.
 skills/commit/               /anchor:commit — stage, test, review, write the commit message (--preview reviews the working tree without committing)
 skills/prepare-review/       /anchor:prepare-review — rebase, draft the CR description, open/update the CR
 skills/resolve-feedback/     /anchor:resolve-feedback — fetch CR feedback; fix / reply / resolve each thread to resolution
+skills/merge/                /anchor:merge — check the merge gates (wait on the pipeline), merge the CR, delete the branch
 skills/pipeline/             /anchor:pipeline — work with a commit's forge pipeline; report state or watch until it settles
 skills/issue/                /anchor:issue — gather the why/consumer/acceptance; file a new forge issue (or update a known one)
 skills/issues/               /anchor:issues — list and rank the issues assigned to you; recommend the next to work on

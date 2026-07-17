@@ -18,8 +18,8 @@ behavior, not an independent authority — review them against the source.
 ## Concepts
 
 - **Skill** — a user-invocable command the plugin exposes: `/anchor:commit`,
-  `/anchor:prepare-review`, `/anchor:resolve-feedback`, `/anchor:issue`,
-  `/anchor:pipeline`.
+  `/anchor:prepare-review`, `/anchor:resolve-feedback`, `/anchor:merge`,
+  `/anchor:issue`, `/anchor:issues`, `/anchor:pipeline`.
 - **Forge** — GitHub or GitLab, selected by the `origin` remote; drives the CLI
   choice (`gh` for GitHub, `glab` for GitLab).
 - **CR (change request)** — a pull request on GitHub or a merge request on
@@ -169,6 +169,53 @@ behavior, not an independent authority — review them against the source.
   disposition includes resolve.
 - **[FDBK-08]** If a resolve call does not return `resolved`/`isResolved` true,
   then the system shall treat the resolution as not done.
+
+### MRG — Merge
+
+Landing an approved CR into the default branch (the `merge` skill) — the terminal
+step after `prepare-review` opens the CR and `resolve-feedback` clears its threads.
+
+- **[MRG-01]** When `/anchor:merge` runs, the system shall resolve the target repo
+  and the open CR for the branch, and shall stop if there is no open CR or it is
+  already merged or closed.
+- **[MRG-02]** If local state does not match the CR head, then the system shall
+  surface the mismatch and stop rather than merge.
+- **[MRG-03]** Before merging, the system shall check that the CR is marked ready,
+  mergeable, pipeline-passing, and approved, plus that review threads are resolved,
+  stopping at the first blocking gate.
+- **[MRG-04]** If the CR is a draft, then the system shall not merge it silently and
+  shall ask whether to mark it ready and proceed.
+- **[MRG-05]** If the CR conflicts with or is behind its target branch, then the
+  system shall stop and route to a rebase via `/anchor:prepare-review` rather than
+  attempt the merge.
+- **[MRG-06]** While the pipeline is still running, the system shall watch it to a
+  terminal state rather than return control for the user to re-ask.
+- **[MRG-07]** If the pipeline failed, was canceled, or is blocked awaiting a manual
+  action, then the system shall stop and report the failed jobs rather than merge.
+- **[MRG-08]** If required approvals are missing, then the system shall stop and
+  report what is outstanding, pointing at `/anchor:resolve-feedback` when changes
+  were requested.
+- **[MRG-09]** Where a repo has no approval rules and where the commit has no
+  pipeline, the system shall treat that gate as not applicable rather than a failure.
+- **[MRG-10]** When unresolved human-authored review threads remain, the system shall
+  surface them and confirm before merging, offering to hand off to
+  `/anchor:resolve-feedback`.
+- **[MRG-11]** The system shall merge with a commit-preserving merge commit
+  (`--no-ff`) by default and shall change the method only where the project or CR is
+  configured for a different one, rather than from a judgment about the commit
+  history — GitLab's `merge_method` / `squash_option` and the MR's squash flag,
+  GitHub's allowed strategies.
+- **[MRG-12]** The system shall preview the resolved merge method and confirm before
+  merging without offering a method menu, and shall squash only where the forge is
+  configured to.
+- **[MRG-13]** When merging, the system shall use the forge CLI, delete the source
+  branch, and guard the merge on the CR head SHA.
+- **[MRG-14]** If a forge write fails with an auth error, then the system shall
+  surface it and ask the user to refresh credentials rather than retry or fall back.
+- **[MRG-15]** After a successful merge, the system shall return the local checkout
+  to the default branch, pull the merged result, and delete the merged local branch.
+- **[MRG-16]** Where a tack route is bound to the session, the system shall mark the
+  tack done and record the CR as its deliverable after merging.
 
 ### ISS — Issues
 
