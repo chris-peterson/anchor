@@ -242,6 +242,92 @@ glab api -X PUT projects/:fullpath/merge_requests/<iid> \
   -F "description=@/tmp/cr-body.aB3xKp.md"
 ```
 
+## Check a CR's mergeable state
+
+Before merging, read whether the forge considers the CR landable — conflicts or a
+behind-base branch make the merge fail (or require a rebase first, which
+`/anchor:prepare-review` owns).
+
+```bash
+# GitHub — mergeable is MERGEABLE / CONFLICTING / UNKNOWN;
+# mergeStateStatus is CLEAN / BLOCKED / BEHIND / DIRTY / UNSTABLE / DRAFT / HAS_HOOKS.
+gh pr view <num> --json mergeable,mergeStateStatus
+
+# GitLab — detailed_merge_status is the single summarizing field (newer GitLab);
+# merge_status (mergeable / cannot_be_merged) is the older fallback.
+glab mr view <iid> --output json | jq '{detailed_merge_status, merge_status}'
+```
+
+GitLab's `detailed_merge_status` folds several gates into one value: `mergeable`,
+`conflict` / `need_rebase` (not landable — rebase first), and the gate-not-met
+states `not_approved`, `ci_still_running`, `ci_must_pass`, `discussions_not_resolved`,
+`draft_status` (which the approval / pipeline / thread / draft checks below read
+individually). On GitHub, `mergeStateStatus` of `BEHIND` means rebase-first,
+`DIRTY` means conflicts, `BLOCKED` means a required gate (review/checks) isn't met.
+
+## Check a CR's approvals
+
+```bash
+# GitHub — reviewDecision is APPROVED / REVIEW_REQUIRED / CHANGES_REQUESTED,
+# or null when the repo requires no reviews (nothing to satisfy).
+gh pr view <num> --json reviewDecision --jq '.reviewDecision'
+
+# GitLab — the approvals sub-resource: approved (bool), approvals_required,
+# approvals_left (0 when satisfied), approved_by[].
+glab api "projects/:fullpath/merge_requests/<iid>/approvals" \
+  | jq '{approved, approvals_required, approvals_left, by: [.approved_by[].user.username]}'
+```
+
+A GitHub `reviewDecision` of `null` and a GitLab `approvals_required` of `0` both
+mean the repo has no approval rules — there's nothing to satisfy, so don't invent a
+requirement.
+
+## Merge a CR
+
+Land an open CR into its target branch. Delete the source branch as part of the
+merge (`--delete-branch` / `--remove-source-branch`) — anchor sets this at create
+time, but pass it here too in case it wasn't. Guard the merge on the head SHA so a
+commit that landed after you last looked can't sneak in unreviewed
+(`--match-head-commit` / `--sha`).
+
+```bash
+# GitHub — pick exactly one strategy flag.
+gh pr merge <num> --merge  --delete-branch --match-head-commit <sha>   # preserve commits
+gh pr merge <num> --squash --delete-branch --match-head-commit <sha>   # squash into one
+gh pr merge <num> --rebase --delete-branch --match-head-commit <sha>   # rebase, no merge commit
+
+# GitLab — no --squash/--rebase flag means the project's configured merge method
+# (merge commit / semi-linear / fast-forward). --yes skips the confirm prompt.
+# glab enables auto-merge when a pipeline is running, so pass --auto-merge=false
+# to merge immediately (the pipeline gate is already checked before this point).
+glab mr merge <iid> --remove-source-branch --sha <sha> --yes --auto-merge=false          # preserve
+glab mr merge <iid> --squash --remove-source-branch --sha <sha> --yes --auto-merge=false # squash
+```
+
+**Which strategies a repo allows.** GitHub enables merge/squash/rebase per repo
+setting; a disabled strategy rejects the merge. Read them before offering a choice:
+
+```bash
+gh repo view --json mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed
+```
+
+On GitLab the merge method (merge commit vs. semi-linear vs. fast-forward) is a
+project setting, not a per-merge flag — `glab mr merge` follows it; `--squash` /
+`--rebase` are the only per-merge overrides:
+
+```bash
+glab api projects/:fullpath | jq '{merge_method, squash_option}'
+```
+
+`merge_method` is `merge` / `rebase_merge` (semi-linear) / `ff` (fast-forward);
+`squash_option` (`never` / `always` / `default_on` / `default_off`) says whether
+squash is offered and its default. For `default_on` / `default_off` the author's
+per-MR checkbox decides — read the MR's `squash` field to see which way it's set:
+
+```bash
+glab mr view <iid> --output json | jq '{squash}'
+```
+
 ## Issue list
 
 Listing/ranking issues (the `issues` skill). Fetch as JSON and rank client-side —
