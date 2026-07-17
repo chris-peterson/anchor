@@ -64,7 +64,15 @@ suite:
       frames:
         - { t: you, text: "/anchor:commit" }
         - { t: claude, text: "214 tests green, staged. Ahead-count 0, so this is a new commit — opening moor for a hunk-level look before I write the message." }
-        - { t: moor, del: "const fare = crossesMidnight ? DAILY_MAX : mins * RATE", add: "const fare = Math.min(mins * RATE, DAILY_MAX)", rej: "good fix — but DAILY_MAX is now defined here and in pricing.js; use the one source" }
+        - t: moor
+          file: fare.js
+          lines:
+            - { ln: 22, text: "function fare(mins, crossesMidnight) {" }
+            - { ln: 23, text: "const fare = crossesMidnight ? DAILY_MAX : mins * RATE", del: true }
+            - { ln: 24, text: "const fare = Math.min(mins * RATE, DAILY_MAX)", add: true }
+            - { ln: 25, text: "return fare" }
+            - { ln: 26, text: "}" }
+          comment: { ln: 24, action: fix-now, body: "good fix — but DAILY_MAX is now defined here and in pricing.js; use the one source" }
         - { t: claude, text: "Committed 4a1f9c2. The rejected hunk came back as an edit — DAILY_MAX now imported from pricing.js — and I swept the two other call sites with the same duplication. Message leads with the overcharge, not the diff." }
     - label: "/anchor:prepare-review"
       ac: "--orient"
@@ -79,7 +87,15 @@ suite:
     - { t: claude, text: "No unpushed commits here, so this is a new commit. Running the suite before I stage anything." }
     - { t: cmd, cmd: "npm test", out: "Tests: 214 passed, 214 total" }
     - { t: claude, text: "Green. Staged the fare-calc fix — opening moor for a hunk-level look before I write the message." }
-    - { t: moor, del: "const fare = crossesMidnight ? DAILY_MAX : mins * RATE", add: "const fare = Math.min(mins * RATE, DAILY_MAX)", rej: "good fix — but DAILY_MAX is now defined here and in pricing.js; use the one source" }
+    - t: moor
+      file: fare.js
+      lines:
+        - { ln: 22, text: "function fare(mins, crossesMidnight) {" }
+        - { ln: 23, text: "const fare = crossesMidnight ? DAILY_MAX : mins * RATE", del: true }
+        - { ln: 24, text: "const fare = Math.min(mins * RATE, DAILY_MAX)", add: true }
+        - { ln: 25, text: "return fare" }
+        - { ln: 26, text: "}" }
+      comment: { ln: 24, action: fix-now, body: "good fix — but DAILY_MAX is now defined here and in pricing.js; use the one source" }
     - { t: claude, text: "Committed 4a1f9c2. The rejected hunk came back as a concrete edit — DAILY_MAX pulled from pricing.js — and I swept every call site that had the same duplication." }
 
 docs:
