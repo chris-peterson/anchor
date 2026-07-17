@@ -44,4 +44,3 @@ prose skills consult this guide for the tone discipline — `commit`,
 - Load-bearing claims where the qualifier is the point — *"passwords are never
   logged"* is a security guarantee, not hyperbole.
 - Explicit deprecation notices, where naming the prior state is the announcement.
-- Internal scratch documents where tone-checking isn't the goal.
