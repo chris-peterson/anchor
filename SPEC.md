@@ -28,10 +28,10 @@ behavior, not an independent authority — review them against the source.
   resolved from `origin/HEAD`.
 - **Ambient rule** — standing guidance a `SessionStart` hook injects into every
   session's context.
-- **Review sidecar / verdict** — the `review-diff.sh` wrapper's contract: it
-  drives the configured difftool (moor when present) through a `MOOR_CONTEXT`
-  file and returns a normalized verdict (`0` clean · `1` fix-now · `2`
-  unreviewed · `3` closed-early · `absent` no-verdict).
+- **Review contract** — the tool-agnostic result `review-diff.sh` returns: a
+  `verdict` (`approved` · `changes-requested` · `incomplete` · `no-verdict`)
+  plus normalized comments and capabilities, produced from the backend's native
+  output by a per-backend adapter (moor by default). Defined under REV.
 - **Squash gate** — the deterministic "is HEAD out for review?" decision
   (`squash-check.sh`) that governs squash-vs-new-commit.
 - **Deep link** — a line-anchored forge URL in a CR description that lands a
@@ -102,51 +102,64 @@ behavior, not an independent authority — review them against the source.
 - **[CMT-13]** Where only the message (not the tree) of a ready CR's HEAD is
   wrong, the system shall offer a message-only amend and let the user decide on
   the force-push.
-- **[CMT-14]** When a commit lands, the system shall open the change in a visual
-  review via the review wrapper in `--commit` mode.
-- **[CMT-15]** If the post-commit review returns fix-now comments, then the
-  system shall address them, amend the unpushed commit, and re-run tests before
-  re-reviewing.
-- **[CMT-16]** Where `/anchor:commit` is invoked with `--preview`, the system
-  shall open a look-only diff and stop without testing, staging, or committing.
+- **[CMT-14]** When changes are staged and a message is drafted, the system shall
+  open a visual review of the pending changeset (working tree vs `HEAD`) via the
+  review wrapper and shall not commit until the verdict is clean.
+- **[CMT-15]** If the pre-commit review returns fix-now comments, then the system
+  shall address them in the working tree, re-run tests, and re-review — committing
+  only once the verdict is clean, rather than committing and then amending.
+- **[CMT-16]** *(retired in 1.0)* Formerly specified `/anchor:commit --preview`,
+  the look-only working-tree review. The default flow now reviews before
+  committing, so a standalone preview mode is redundant.
 - **[CMT-17]** If a `PreToolUse` hook blocks a commit on a substring inside the
   message body, then the system shall surface the conflict rather than use a
   temp-file workaround.
+- **[CMT-18]** When the pre-commit review verdict is clean, the system shall
+  commit and push in one step, performed by a single helper (`commit.sh`) rather
+  than as separate agent-run `git commit` / `git push` commands, and shall select
+  the push variant (set-upstream / plain / force-with-lease) within that helper.
+- **[CMT-19]** If HEAD is the default branch when committing, then the system
+  shall create a feature branch first rather than push to the default branch, and
+  the commit helper shall refuse to commit onto the default branch unless
+  explicitly told the direct-to-default case was chosen.
 
 ### PREP — Prepare review
 
-- **[PREP-01]** When `/anchor:prepare-review` runs, the system shall gather the
-  changeset via a single recon script and act only on the keys it surfaces.
-- **[PREP-02]** If there is no reviewable commit or feature branch yet, then the
-  system shall get to one (chain `/anchor:commit`, or move commits onto a
-  branch) before opening a CR.
-- **[PREP-03]** When commits are ahead with no CR and the branch is unreviewed,
-  the system shall run a branch-vs-default review gate before the first push.
-- **[PREP-04]** If the pre-push review returns anything other than a clean
-  verdict, then the system shall not push and shall surface the outcome.
-- **[PREP-05]** When the pre-push review is clean, the system shall push and
-  auto-open a draft CR.
-- **[PREP-06]** While the branch is behind the default branch, the system shall
-  offer to rebase before drafting.
-- **[PREP-07]** While a CR is a draft, the system shall force-push with lease
+The `prepare-review` skill: open (or refresh) a draft CR on an already-pushed
+branch and draft its description. Push happens in
+`/anchor:commit`, so this flow never pushes and imposes no review gate — its
+changeset analysis serves the description and Review guide, not a clean-verdict
+check.
+
+- **[PREP-01]** When `/anchor:prepare-review` runs, the system shall require
+  an already-pushed branch and gather the changeset via a single recon script,
+  acting only on the keys it surfaces.
+- **[PREP-02]** If the branch is not yet pushed, then the system shall direct the
+  user to `/anchor:commit` (which commits and pushes) rather than pushing itself.
+- **[PREP-03]** The system shall open a draft CR against the already-pushed branch
+  and shall not push.
+- **[PREP-04]** While the branch is behind the default branch, the system shall
+  offer to rebase and, since the branch is already pushed, follow the rebase with
+  `git push --force-with-lease` per the draft/ready gate.
+- **[PREP-05]** While a CR is a draft, the system shall force-push with lease
   freely; while it is marked ready, the system shall ask before force-pushing.
-- **[PREP-08]** If local state does not match the CR head, then the system shall
+- **[PREP-06]** If local state does not match the CR head, then the system shall
   surface the mismatch and stop rather than draft.
-- **[PREP-09]** Before drafting, the system shall resolve open questions (why,
+- **[PREP-07]** Before drafting, the system shall resolve open questions (why,
   audience, scope, ordering, verification gaps) with the user rather than park
   them in the description.
-- **[PREP-10]** The system shall draft the description leading with why, for a
+- **[PREP-08]** The system shall draft the description leading with why, for a
   reader unfamiliar with the system, using the canonical section headings
   verbatim.
-- **[PREP-11]** Before drafting Context, the system shall run an anti-recency
+- **[PREP-09]** Before drafting Context, the system shall run an anti-recency
   check dispositioning recent iterations as centerpiece, footnote, or cut.
-- **[PREP-12]** The system shall deep-link Review-guide references to the specific
+- **[PREP-10]** The system shall deep-link Review-guide references to the specific
   changed lines rather than to files alone.
-- **[PREP-13]** If a claim about prior workflow or current state lacks a citable
+- **[PREP-11]** If a claim about prior workflow or current state lacks a citable
   source, then the system shall omit it from the description.
-- **[PREP-14]** Where a predecessor CR was captured, the system shall record the
+- **[PREP-12]** Where a predecessor CR was captured, the system shall record the
   ordering dependency in the description and, on GitLab, on the forge.
-- **[PREP-15]** When presenting the drafted description, the system shall offer
+- **[PREP-13]** When presenting the drafted description, the system shall offer
   write / copy-only / edit, defaulting to write.
 
 ### FDBK — Resolve feedback
@@ -269,22 +282,85 @@ backlog to pick the next one (the `issues` skill, ISS-07..12).
 - **[PIPE-06]** If the origin remote is not a recognized forge, then the system
   shall report that there is no pipeline to show.
 
-### RVEW — Visual review integration
+### REV — Review integration
 
-- **[RVEW-01]** The system shall launch diff review through the review wrapper,
-  never raw `git difftool`, so the sidecar and verdict are populated.
-- **[RVEW-02]** While a review runs, the system shall launch the wrapper as a
-  background call and read its verdict with the BashOutput tool rather than
-  `tail` or command substitution.
-- **[RVEW-03]** The system shall interpret the review verdict as `0` clean, `1`
-  fix-now, `2` unreviewed, `3` closed-early, and `absent` no-verdict.
-- **[RVEW-04]** If the verdict is anything other than `0`, then the system shall
-  not treat the review as approval.
-- **[RVEW-05]** Where the configured difftool does not speak the sidecar
-  contract, the system shall treat the verdict as absent and ask the user
-  directly.
-- **[RVEW-06]** Where moor is absent, the system shall degrade gracefully to a
-  configured difftool or chat rather than fail.
+Diff review is tool-agnostic. Each review skill launches review through one
+dispatcher (`review-diff.sh`), which resolves the diff range, drives the
+configured backend, and normalizes the tool's native output to the contract
+below via a per-backend adapter. moor is the default backend. The shape borrows
+its two axes — an outcome `verdict` kept separate from a per-comment `action` —
+from SARIF (`result.kind` vs `result.level`) and reviewdog; its verdict names
+from GitHub's pull-request review states; and its "the backend cannot express
+this" nullability from SARIF's `notApplicable`.
+
+**Normalized result** — emitted on stdout as `REVIEW_VERDICT=<verdict>` and
+`REVIEW_OUTPUT=<json>`, where the JSON is:
+
+```
+{
+  backend:            "moor" | "revdiff" | "difftool",
+  verdict:            "approved" | "changes-requested" | "incomplete" | "no-verdict",
+  severitySource:     "graded" | "inferred",
+  reviewCompleteness: "complete" | "partial" | null,   // null = backend cannot say
+  reviewer:           string | null,
+  comments: [{
+    body:        string,
+    action:      "fix-now" | "fix-later" | "consider" | "unspecified",
+    target:      "line" | "file" | "changeset",
+    file?:       string,        // present when target != changeset
+    startLine?:  number,        // 1-based, inclusive; present when target == line
+    endLine?:    number,        // 1-based, inclusive; == startLine for a single line
+    side?:       "old" | "new", // defaults to new
+    suggestion?: string,        // proposed replacement for the anchored range
+    raw?:        string         // the backend's verbatim comment text
+  }],
+  editedFields: [{ target: "commit-message" | "description", original?: string, edited: string }],
+  capabilities: {
+    producesVerdict: bool, gradedSeverity: bool, perHunkReview: bool,
+    editableCommitMessage: bool, editableDescription: bool, sideMarkers: bool
+  },
+  raw: { exitCode: number | "absent", output?: string }
+}
+```
+
+**Verdict mapping:**
+
+| `verdict` | moor | revdiff | meaning |
+|---|---|---|---|
+| `approved` | exit 0 | exit 0 | clean — proceed |
+| `changes-requested` | exit 1 | exit 10 | blocking feedback to address |
+| `incomplete` | exit 2 | — | not every hunk was reviewed (moor-only) |
+| `no-verdict` | exit 3 / absent | exit 1 | no usable verdict — the cause (closed early, tool error, or a difftool that does not speak the contract) is read from `raw.exitCode` and `capabilities.producesVerdict` |
+
+- **[REV-01]** The system shall launch diff review through the dispatcher, never
+  raw `git difftool`, so the result is normalized and the verdict is populated.
+- **[REV-02]** While a review runs, the system shall launch the dispatcher as a
+  background call and read its result with the BashOutput tool rather than `tail`
+  or command substitution.
+- **[REV-03]** The system shall drive the backend named by
+  `anchor.reviewBackend` (default `moor`) through a per-backend adapter that maps
+  the tool's native output onto the normalized result.
+- **[REV-04]** The system shall report the verdict as one of `approved`,
+  `changes-requested`, `incomplete`, or `no-verdict`, mapped from the backend's
+  native signal per the verdict table.
+- **[REV-05]** If the verdict is anything other than `approved`, then the system
+  shall not treat the review as approval.
+- **[REV-06]** Where the verdict is `no-verdict`, the system shall read its cause
+  from `raw.exitCode` and `capabilities.producesVerdict` and ask the user rather
+  than proceeding.
+- **[REV-07]** The system shall represent a dimension a backend cannot express as
+  `null` (e.g. `reviewCompleteness`) rather than a fabricated value, so a
+  consumer distinguishes "unsupported" from "checked and found none".
+- **[REV-08]** The system shall record severity provenance: a backend that grades
+  its comments emits their `action` with `severitySource` `graded`; a backend
+  that does not emits `action` `unspecified` with `severitySource` `inferred`.
+- **[REV-09]** The system shall carry each comment's backend-verbatim text in
+  `raw` so feedback the normalization cannot represent is not lost.
+- **[REV-10]** Where the configured difftool does not speak the contract, the
+  system shall emit `backend` `difftool`, `capabilities.producesVerdict` false,
+  and verdict `no-verdict`, and ask the user directly.
+- **[REV-11]** Where the selected backend is absent, the system shall degrade
+  gracefully to a configured difftool or chat rather than fail.
 
 ### CONF — Configuration
 
@@ -330,8 +406,10 @@ backlog to pick the next one (the `issues` skill, ISS-07..12).
 - **[RULE-03]** When about to rewrite git history, the system shall route the
   decision through `/anchor:commit` rather than amend, rebase, or force-push ad
   hoc.
-- **[RULE-04]** The system shall drive forge operations through `gh`/`glab` and
-  route CR creation through `/anchor:prepare-review` rather than a bare create.
+- **[RULE-04]** The system shall use `gh`/`glab` for mechanical and query forge
+  operations, and route artifact *authoring* through the anchor skill — a CR
+  description through `/anchor:prepare-review`, an issue through `/anchor:issue` —
+  rather than a bare `create` / `--body`.
 - **[RULE-05]** While deciding whether a history rewrite is safe, the system shall
   read push state and the CR draft flag fresh at the moment of the rewrite
   rather than from an earlier turn.
