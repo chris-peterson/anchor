@@ -4,6 +4,7 @@
   - [commit](/skills/commit)
   - [prepare-review](/skills/prepare-review)
   - [resolve-feedback](/skills/resolve-feedback)
+  - [merge](/skills/merge)
   - [pipeline](/skills/pipeline)
   - [issue](/skills/issue)
   - [issues](/skills/issues)

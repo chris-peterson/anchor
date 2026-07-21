@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.0.0
+
+Reworks the commit and review-request flow into one traditional path: review the pending change, then commit and push. Breaking — a flag is removed and `/anchor:prepare-review` no longer pushes.
+
+## Changed
+
+- **`/anchor:commit` reviews before it commits, then commits *and pushes*.** The flow is now stage → draft message → review the pending changeset (working tree vs `HEAD`) → on a clean verdict, commit and push in one step. A `fix-now` edits the working tree and re-reviews rather than amending a committed checkpoint. On the default branch it creates a feature branch first, so a commit-and-push never lands on the default branch unless you explicitly choose it. When there's nothing new to stage but the branch has unpushed commits, `/commit` reviews and pushes those.
+- **`/anchor:prepare-review` now operates on an already-pushed branch.** It opens the draft CR — it no longer pushes — and drafts the description. When the branch isn't pushed, it directs you to `/anchor:commit`. Rebase-when-behind still force-pushes with lease per the CR's draft state.
+
+## New
+
+- **Pluggable review backends.** Diff review runs through one dispatcher that normalizes any backend's output to a single verdict contract (the `REV` contract in `SPEC.md`). `moor` stays the default; set `git config anchor.reviewBackend revdiff` to use [revdiff](https://revdiff.com), a terminal-native reviewer that also handles hg and jj repos. Its annotations come back ungraded, so the skills treat each as feedback to address and confirm the commit message directly.
+
+## Removed
+
+- **`/anchor:commit --preview`.** The default flow now reviews before committing, so the standalone look-only path is redundant.
+- **The pre-push review gate in the review-request flow.** Review happens at commit time; opening the CR imposes no separate gate.
+
 ## 0.24.0
 
 ## New
