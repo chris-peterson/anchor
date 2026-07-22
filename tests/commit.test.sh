@@ -7,6 +7,10 @@
 # Windows-Git-Bash in CI.
 set -euo pipefail
 
+# Hermetic: ignore the user's global/system git config (hooks, templates, a
+# global anchor.* key) so the test's behavior doesn't depend on the environment.
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 commit_sh="$here/../scripts/commit.sh"
 

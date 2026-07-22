@@ -8,6 +8,10 @@
 # the normalized REV contract each adapter emits. Requires jq.
 set -euo pipefail
 
+# Hermetic: ignore the user's global/system git config so backend selection is
+# controlled per-case here, not by a global anchor.reviewBackend.
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 dispatch="$here/../scripts/review-diff.sh"
 
@@ -36,9 +40,11 @@ EOF
 chmod +x "$bin/stub-launch-revdiff.sh"
 export ANCHOR_REVDIFF_LAUNCHER="$bin/stub-launch-revdiff.sh"
 
-# --- fake git difftool: copies $MOOR_FIXTURE into the sidecar named by MOOR_CONTEXT
+# --- fake git difftool: captures the adapter's input sidecar (for asserting the
+# seeded header), then copies $MOOR_FIXTURE into the sidecar named by MOOR_CONTEXT
 cat > "$bin/fake-difftool.sh" <<'EOF'
 #!/usr/bin/env bash
+[ -n "${MOOR_INPUT_CAPTURE:-}" ] && [ -n "${MOOR_CONTEXT:-}" ] && cp "$MOOR_CONTEXT" "$MOOR_INPUT_CAPTURE" 2>/dev/null
 if [ -n "${MOOR_FIXTURE:-}" ] && [ -n "${MOOR_CONTEXT:-}" ]; then
   cat "$MOOR_FIXTURE" > "$MOOR_CONTEXT"
 fi
@@ -120,6 +126,20 @@ o=$(run --previous); j=$(json_of "$o")
 [ "$(jq -r .backend <<<"$j")" = moor ]  || fail "moor range backend"
 ok "moor: range mode (difftool with sidecar output) -> approved"
 
+# --message-file seeds the drafted commit message into the review input header
+printf 'wip line\n' >> "$repo/a.txt"
+msg="$work/msg.txt"; printf 'Add a feature\n\nThe body explains why.\n' > "$msg"
+export MOOR_FIXTURE="$(mkfix '{"output":{"exitCode":0,"reviewer":"Rev","comments":[]}}')"
+export MOOR_INPUT_CAPTURE="$work/input.json"
+o=$(run --local --message-file "$msg")
+[ "$(verdict_of "$o")" = approved ] || fail "message-file review verdict"
+[ "$(jq -r '.input.title' "$MOOR_INPUT_CAPTURE")" = "Add a feature" ] \
+  || fail "subject not seeded as title: $(jq -c .input.title "$MOOR_INPUT_CAPTURE")"
+[ "$(jq -r '.input.details[] | select(.label=="body") | .value' "$MOOR_INPUT_CAPTURE")" = "The body explains why." ] \
+  || fail "body not seeded as a body row"
+unset MOOR_INPUT_CAPTURE
+ok "moor: --message-file seeds subject as title and body as a body row"
+
 # difftool fallback: sidecar left with no output section -> no-verdict/difftool
 unset MOOR_FIXTURE
 o=$(run --previous); j=$(json_of "$o")
@@ -161,6 +181,22 @@ md=$'## a.txt:2 (-)\nthis deletion looks wrong'
 export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT="$md"; o=$(run --previous); j=$(json_of "$o")
 [ "$(jq -r '.comments[0].side' <<<"$j")" = old ] || fail "revdiff (-) -> side=old"
 ok "revdiff: (-) marker -> side=old"
+
+# (description) echo block is dropped (round-trip not consumed yet), so an
+# exit-10 whose only annotation is the seeded description reads as approved
+md=$'## (description) (file-level)\n# subject\n\n- body: seeded message'
+export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT="$md"; o=$(run --previous); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = approved ]        || fail "description-only -> approved, got $(verdict_of "$o")"
+[ "$(jq '.comments|length' <<<"$j")" = 0 ] || fail "(description) block should be dropped from comments"
+ok "revdiff: (description) echo dropped -> approved, no comments"
+
+# a real comment alongside a (description) block survives -> changes-requested
+md=$'## (description) (file-level)\nseeded msg\n\n## a.txt:2 (+)\nfix this'
+export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT="$md"; o=$(run --previous); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = changes-requested ]       || fail "real comment + description -> changes-requested"
+[ "$(jq '.comments|length' <<<"$j")" = 1 ]         || fail "keep the 1 real comment, drop description"
+[ "$(jq -r '.comments[0].file' <<<"$j")" = a.txt ] || fail "surviving comment should be the real one"
+ok "revdiff: real comment kept, (description) dropped -> changes-requested"
 
 # rc 1 -> no-verdict (tool error)
 export REVDIFF_STUB_RC=1 REVDIFF_STUB_OUTPUT=""; o=$(run --previous); j=$(json_of "$o")
