@@ -40,6 +40,8 @@ jobs:
           git config --global user.name "CI"
       - name: commit helper
         run: bash tests/commit.test.sh
+      - name: commit preflight
+        run: bash tests/commit-preflight.test.sh
 
   review:
     # Exercises the review dispatcher and its moor/revdiff adapters against stub

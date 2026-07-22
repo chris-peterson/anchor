@@ -103,8 +103,10 @@ behavior, not an independent authority — review them against the source.
   wrong, the system shall offer a message-only amend and let the user decide on
   the force-push.
 - **[CMT-14]** When changes are staged and a message is drafted, the system shall
-  open a visual review of the pending changeset (working tree vs `HEAD`) via the
-  review wrapper and shall not commit until the verdict is clean.
+  open a visual review of the pending changeset (working tree vs `HEAD`) with the
+  drafted commit message presented alongside the diff (not gated separately in
+  chat) via the review wrapper, and shall not commit until the verdict is clean;
+  an edited message the review returns (`editedFields`) is used for the commit.
 - **[CMT-15]** If the pre-commit review returns fix-now comments, then the system
   shall address them in the working tree, re-run tests, and re-review — committing
   only once the verdict is clean, rather than committing and then amending.

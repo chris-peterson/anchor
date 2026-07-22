@@ -21,7 +21,7 @@ draft to review against the implementation, not an audited ledger.
 | Prefix | Count | Status | Notes |
 |--------|------:|--------|-------|
 | TGT-01..09 | 9 | All Covered | Target resolution + worktree isolation — `scripts/{resolve-target,worktree}.sh`, each `skills/*/SKILL.md` "Target repo" |
-| CMT-01..19 (16 retired) | 18 | All Covered | Review-first commit-and-push flow (1.0) — `skills/commit/SKILL.md`, `scripts/{commit,look-ahead,squash-check}.sh` |
+| CMT-01..19 (16 retired) | 18 | All Covered | Review-first commit-and-push flow (1.0) — `skills/commit/SKILL.md`, `scripts/{commit,commit-preflight,look-ahead,squash-check}.sh` |
 | PREP-01..13 | 13 | All Covered | `prepare-review`, pushed-branch only, opens the draft CR without pushing — `skills/prepare-review/SKILL.md`, `scripts/prepare-review.sh` |
 | FDBK-01..08 | 8 | All Covered | Fetch, triage, act on threads — `skills/resolve-feedback/SKILL.md` |
 | MRG-01..16 | 16 | All Covered | Gate checks (ready/mergeable/pipeline/approvals/threads), method choice, merge + cleanup — `skills/merge/SKILL.md`, `guides/forge-cookbook.md` |

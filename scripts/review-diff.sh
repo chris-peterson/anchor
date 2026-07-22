@@ -14,6 +14,10 @@
 # Three review modes, each named for what it shows:
 #   --local      local changes — working tree vs the last commit (stages first):
 #     bash review-diff.sh --local       -> HEAD
+#     bash review-diff.sh --local --message-file <path>
+#       also seeds the drafted commit message (subject as headline, body as prose)
+#       into the review, so the reviewer reviews the message with the diff and can
+#       edit it in-tool; the edit comes back as editedFields (see SPEC.md "REV").
 #   --previous   previous changeset — the last commit vs its parent:
 #     bash review-diff.sh --previous    -> HEAD~1...HEAD
 #   --full       full diff — the whole branch vs the default branch, the way a
@@ -92,6 +96,7 @@ diff_range=""
 header_mode=""
 review_title=""
 review_details_json="[]"
+message_file=""
 
 if [[ "${1:-}" == "--files" ]]; then
   review_mode="files"
@@ -123,6 +128,12 @@ else
     git add -A
     diff_range="HEAD"
     header_mode="local"
+    # --message-file seeds the drafted commit message into the review so the
+    # reviewer reviews it alongside the diff (and can edit it in-tool).
+    if [[ "${2:-}" == "--message-file" ]]; then
+      message_file="${3:?--message-file needs a path}"
+      [[ -r "$message_file" ]] || { echo "review-diff.sh: message file not readable: $message_file" >&2; exit 66; }
+    fi
   elif [[ "${1:-}" == "--previous" ]]; then
     git rev-parse --verify --quiet HEAD~1 >/dev/null || {
       echo "review-diff.sh: HEAD has no parent commit to compare against" >&2
@@ -147,11 +158,24 @@ else
   if [[ "$header_mode" == "local" ]]; then
     stat=$(git diff --cached --stat HEAD | tail -1 | sed 's/^[[:space:]]*//')
     base=$(git log -1 --format='%h %s' HEAD)
-    review_title="Local changes vs HEAD"
-    review_details_json=$(jq -n \
-      --arg repo "$repo" --arg br "$branch" --arg base "$base" --arg s "$stat" \
-      '[{label:"repo",value:$repo},{label:"branch",value:$br},
-        {label:"on top of",value:$base},{label:"summary",value:$s}]')
+    if [[ -n "$message_file" ]]; then
+      # Seed the drafted message: subject is the headline (moor's title), the
+      # body row is the message prose moor renders and seeds its editable
+      # message from (IM.IN-02 / CO-10), so message + diff are reviewed together.
+      review_title=$(head -1 "$message_file")
+      msg_body=$(tail -n +3 "$message_file")
+      review_details_json=$(jq -n \
+        --arg repo "$repo" --arg br "$branch" --arg base "$base" --arg s "$stat" --arg body "$msg_body" \
+        '[{label:"repo",value:$repo},{label:"branch",value:$br},
+          {label:"on top of",value:$base},{label:"summary",value:$s}]
+         + (if $body == "" then [] else [{label:"body",value:$body}] end)')
+    else
+      review_title="Local changes vs HEAD"
+      review_details_json=$(jq -n \
+        --arg repo "$repo" --arg br "$branch" --arg base "$base" --arg s "$stat" \
+        '[{label:"repo",value:$repo},{label:"branch",value:$br},
+          {label:"on top of",value:$base},{label:"summary",value:$s}]')
+    fi
   elif [[ "$header_mode" == "full" ]]; then
     base_ref="${diff_range%%...*}"
     count=$(git rev-list --count "${base_ref}..HEAD" 2>/dev/null || echo "?")
