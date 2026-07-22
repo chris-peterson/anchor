@@ -39,6 +39,16 @@ prose skills consult this guide for the tone discipline — `commit`,
   - Bad: *"The change is purely additive."*
   - Better: *"The change is additive."*
 
+- **Appeals to precedent / normalizing claims.** Framing the change as routine
+  to pre-empt scrutiny: *"injected the same way ~30 other classes already do"*,
+  *"follows the existing pattern"*, *"the standard approach"*. Whether something
+  is common is the reviewer's call, and the count is unverifiable noise — stating
+  it primes them to under-scrutinize. Say what the code does; if a convention is
+  genuinely load-bearing (the reviewer must follow it), cite the one concrete
+  example rather than asserting ubiquity.
+  - Bad: *"EventContext is injected the same way ~30 other classes already take it."*
+  - Better: *"EventContext is injected via the constructor."* (or drop it — the diff shows the injection)
+
 ## Exceptions
 
 - Load-bearing claims where the qualifier is the point — *"passwords are never
