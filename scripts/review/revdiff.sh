@@ -134,18 +134,29 @@ emit_review() {
   local annotations rc=0
   annotations=$("$launcher" "${args[@]}") || rc=$?
 
-  local verdict
-  case "$rc" in
-    0)  verdict="approved" ;;
-    10) verdict="changes-requested" ;;
-    *)  verdict="no-verdict" ;;   # 1 (error) or anything unexpected
-  esac
-
   local out_file
   out_file=$(mktemp "${TMPDIR:-/tmp}/revdiff-out.XXXXXX")
   printf '%s' "$annotations" > "$out_file"
+
+  # The fork echoes the seeded --description back as a `(description)` block on
+  # quit (and would carry an edited message there). The description round-trip
+  # isn't consumed yet (see the REV plan), so drop those blocks and derive the
+  # verdict from real code comments only — otherwise a seeded message would
+  # always read as changes-requested. TODO: when the round-trip lands, route a
+  # changed `(description)` to editedFields[commit-message] instead of dropping.
   local comments
-  comments=$(revdiff_parse_comments "$out_file")
+  comments=$(revdiff_parse_comments "$out_file" | jq -c '[.[] | select(.file != "(description)")]')
+
+  local verdict
+  case "$rc" in
+    0)  verdict="approved" ;;
+    10) if [[ "$(jq 'length' <<<"$comments")" -gt 0 ]]; then
+          verdict="changes-requested"
+        else
+          verdict="approved"   # exit 10 was only the echoed description, no real feedback
+        fi ;;
+    *)  verdict="no-verdict" ;;   # 1 (error) or anything unexpected
+  esac
 
   local out
   out=$(jq -cn \
