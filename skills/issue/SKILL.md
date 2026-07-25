@@ -189,7 +189,7 @@ After the issue lands, print its URL.
 
 ### Edit
 
-[moor](https://github.com/chris-peterson/moor) is the preferred edit surface but **optional** — check `command -v moor`. If present, open a one-off review of the current body vs. the draft (when updating) or the draft alone, launched via the wrapper as a **background** Bash call so it doesn't hold the turn open:
+A visual review is the preferred edit surface but **optional** — it runs when a review backend ([moor](https://github.com/chris-peterson/moor) by default, or revdiff) is available. When one is, open a one-off review of the current body vs. the draft (when updating) or the draft alone, launched via the dispatcher as a **background** Bash call so it doesn't hold the turn open:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --files \
@@ -198,4 +198,4 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --files \
   --detail repo=<repo>
 ```
 
-Read the verdict back with the **BashOutput tool** (not `tail` / `$(...)`). Only `REVIEW_VERDICT` `0` is approval; `1` carries `fix-now` comments in `REVIEW_OUTPUT.comments` to fold in before re-presenting; `2`/`3`/`absent` mean the review didn't complete — surface what happened and fall back to chat rather than treating silence as approval. (The full verdict contract matches the `prepare-review` skill's Step 4.) If `moor` isn't on PATH, fall back to chat: ask what to change, revise, and re-present.
+Read the verdict back with the **BashOutput tool** (not `tail` / `$(...)`). Only `REVIEW_VERDICT` `approved` is approval; `changes-requested` carries comments in `REVIEW_OUTPUT.comments` to fold in before re-presenting (the `fix-now` entries when `severitySource` is `graded`, else every comment); `incomplete` / `no-verdict` mean the review didn't complete — surface what happened and fall back to chat rather than treating silence as approval. (The full verdict contract matches the `prepare-review` skill's Step 4.) If no review backend is available, fall back to chat: ask what to change, revise, and re-present.

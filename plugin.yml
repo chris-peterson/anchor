@@ -4,7 +4,7 @@
 # skills/rules/hooks sources — run `just build`, don't hand-edit it.
 
 name: anchor
-version: 0.24.0
+version: 1.0.0
 description: Git/forge skills for consistent and effective source control.
 author: chris-peterson
 repository: https://github.com/chris-peterson/anchor
@@ -23,7 +23,10 @@ suite:
   dependencies:
     - name: moor
       required: false
-      reason: launches moor for diff review
+      reason: default diff-review backend
+    - name: revdiff
+      required: false
+      reason: alternate diff-review backend (anchor.reviewBackend=revdiff)
     - name: tack
       required: false
       reason: resolves a named target repo through tack's repo db
@@ -34,7 +37,7 @@ suite:
   pitch: "Nervous about keeping code you didn't write? It walks you through the diff first, then commits with a why-first message and opens the change request."
   what: "Keeps your commits, change requests, and review cycles consistent — the same quality, formatting, and content every time, not reinvented per change."
   cmds:
-    - ["/anchor:commit", "Commit with a why-first message; --preview reviews the working tree first"]
+    - ["/anchor:commit", "Review the changeset, then commit with a why-first message and push"]
     - ["/anchor:prepare-review", "Rebase on main and open a draft change request"]
     - ["/anchor:resolve-feedback", "Work a CR's review threads to done, one by one"]
     - ["/anchor:merge", "Check the merge gates, wait on the pipeline, then land the CR and clean up"]
@@ -45,12 +48,12 @@ suite:
   # >>> shipyard:describe — generated from source by `shipyard gen-describe`; do not edit >>>
   describe:
     skills:
-      commit: Stage changes, run tests, and write a commit message.
+      commit: Stage changes, run tests, review, then commit and push.
       issue: File a new forge issue (or update an existing one) that leads with WHY the work is needed.
       issues: List and rank the forge issues assigned to you so you can pick what to work on next — ranked by soonest due date, then most recently updated.
       merge: Merge an approved change request once its gates are green — waiting on the pipeline if needed — then clean up the branch.
       pipeline: Report a commit's forge pipeline state, or watch until it settles.
-      prepare-review: Rebase on the default branch, push, open the PR/MR, and draft a description that tells reviewers WHY the change exists.
+      prepare-review: Open the PR/MR on an already-pushed branch, rebase on the default branch if behind, and draft a description that tells reviewers WHY the change exists.
       resolve-feedback: Fetch an open CR's review feedback and drive each thread to resolution — fix, reply, resolve.
     rules:
       omit-attribution-trailers: Omit AI attribution trailers
@@ -65,7 +68,7 @@ suite:
       ac: "--ship"
       frames:
         - { t: you, text: "/anchor:commit" }
-        - { t: claude, text: "214 tests green, staged. Ahead-count 0, so this is a new commit — opening moor for a hunk-level look before I write the message." }
+        - { t: claude, text: "214 tests green, staged, message drafted — opening moor for a hunk-level look before I commit." }
         - t: moor
           file: fare.js
           lines:
@@ -75,20 +78,20 @@ suite:
             - { ln: 25, text: "return fare" }
             - { ln: 26, text: "}" }
           comment: { ln: 24, action: fix-now, body: "good fix — but DAILY_MAX is now defined here and in pricing.js; use the one source" }
-        - { t: claude, text: "Committed 4a1f9c2. The rejected hunk came back as an edit — DAILY_MAX now imported from pricing.js — and I swept the two other call sites with the same duplication. Message leads with the overcharge, not the diff." }
+        - { t: claude, text: "Addressed the rejection, re-reviewed clean, so committed 4a1f9c2 and pushed to fix-fare-cap. DAILY_MAX now imported from pricing.js, and I swept the two other call sites with the same duplication. Message leads with the overcharge, not the diff." }
     - label: "/anchor:prepare-review"
       ac: "--orient"
       frames:
         - { t: you, text: "/anchor:prepare-review" }
-        - { t: claude, text: "Branch is 8 behind main and the CR's still a draft, so rebasing is low-risk. Rebased clean, force-pushed with lease." }
+        - { t: claude, text: "Branch's already pushed, so I opened draft CR #128 against it. It's 8 behind main and still a draft — rebasing now is low-risk. Rebased clean, force-pushed with lease." }
         - { t: claude, text: "Before I draft — the WHY, in one line: riders on trips crossing midnight were billed the full daily max instead of elapsed minutes. Is that the whole story?" }
         - { t: you, text: "yeah — support flagged three overcharges this week" }
-        - { t: claude, text: "Draft CR #128 opened. The description leads with the overcharge, then a Review guide that deep-links the fare-cap change so a reviewer's skim lands on the money path first." }
+        - { t: claude, text: "Description written to #128 — leads with the overcharge, then a Review guide that deep-links the fare-cap change so a reviewer's skim lands on the money path first." }
   session:
     - { t: you, text: "/anchor:commit" }
     - { t: claude, text: "No unpushed commits here, so this is a new commit. Running the suite before I stage anything." }
     - { t: cmd, cmd: "npm test", out: "Tests: 214 passed, 214 total" }
-    - { t: claude, text: "Green. Staged the fare-calc fix — opening moor for a hunk-level look before I write the message." }
+    - { t: claude, text: "Green. Staged the fare-calc fix and drafted the message — opening moor for a hunk-level look before I commit." }
     - t: moor
       file: fare.js
       lines:
@@ -98,7 +101,7 @@ suite:
         - { ln: 25, text: "return fare" }
         - { ln: 26, text: "}" }
       comment: { ln: 24, action: fix-now, body: "good fix — but DAILY_MAX is now defined here and in pricing.js; use the one source" }
-    - { t: claude, text: "Committed 4a1f9c2. The rejected hunk came back as a concrete edit — DAILY_MAX pulled from pricing.js — and I swept every call site that had the same duplication." }
+    - { t: claude, text: "Addressed the rejection, re-reviewed clean, so committed 4a1f9c2 and pushed. DAILY_MAX pulled from pricing.js, and I swept every call site with the same duplication." }
 
 docs:
   code_languages: [bash, yaml, json]
