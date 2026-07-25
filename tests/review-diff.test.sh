@@ -8,6 +8,10 @@
 # the normalized REV contract each adapter emits. Requires jq.
 set -euo pipefail
 
+# Hermetic: ignore the user's global/system git config so backend selection is
+# controlled per-case here, not by a global anchor.reviewBackend.
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 dispatch="$here/../scripts/review-diff.sh"
 
@@ -73,13 +77,17 @@ run() { ( cd "$repo" && bash "$dispatch" "$@" ); }
 verdict_of() { sed -n 's/^REVIEW_VERDICT=//p' <<<"$1"; }
 json_of()    { sed -n 's/^REVIEW_OUTPUT=//p' <<<"$1"; }
 
-mkfix() { printf '%s' "$1" > "$work/fixture.json"; echo "$work/fixture.json"; }
+# Write a moor sidecar fixture and point MOOR_FIXTURE at it, which is what both
+# stubs above read. Exporting inside the helper keeps the call sites a bare
+# `mkfix '<json>'` rather than an `export VAR="$(mkfix ...)"` that masks its
+# return value (SC2155).
+mkfix() { printf '%s' "$1" > "$work/fixture.json"; MOOR_FIXTURE="$work/fixture.json"; export MOOR_FIXTURE; }
 
 # ============================ moor adapter ================================
 # (default backend; exercised through files mode via the stub moor)
 
 # approved + complete
-export MOOR_FIXTURE="$(mkfix '{"output":{"exitCode":0,"reviewer":"Rev","comments":[]}}')"
+mkfix '{"output":{"exitCode":0,"reviewer":"Rev","comments":[]}}'
 o=$(run --files "$repo/a.txt" "$repo/a.txt")
 [ "$(verdict_of "$o")" = approved ] || fail "moor exit0 -> $(verdict_of "$o"), want approved"
 j=$(json_of "$o")
@@ -90,7 +98,7 @@ j=$(json_of "$o")
 ok "moor: exit 0 -> approved, complete, graded"
 
 # changes-requested with a mapped line comment
-export MOOR_FIXTURE="$(mkfix '{"output":{"exitCode":1,"reviewer":"Rev","comments":[{"body":"fix this","action":"fix-now","file":"a.txt","startLine":2,"endLine":2}]}}')"
+mkfix '{"output":{"exitCode":1,"reviewer":"Rev","comments":[{"body":"fix this","action":"fix-now","file":"a.txt","startLine":2,"endLine":2}]}}'
 o=$(run --files "$repo/a.txt" "$repo/a.txt"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = changes-requested ] || fail "moor exit1 verdict"
 [ "$(jq -r '.comments[0].action' <<<"$j")" = fix-now ] || fail "moor comment action"
@@ -100,21 +108,21 @@ o=$(run --files "$repo/a.txt" "$repo/a.txt"); j=$(json_of "$o")
 ok "moor: exit 1 -> changes-requested + line comment mapped"
 
 # incomplete + partial
-export MOOR_FIXTURE="$(mkfix '{"output":{"exitCode":2,"reviewer":"Rev","comments":[]}}')"
+mkfix '{"output":{"exitCode":2,"reviewer":"Rev","comments":[]}}'
 o=$(run --files "$repo/a.txt" "$repo/a.txt"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = incomplete ] || fail "moor exit2 verdict"
 [ "$(jq -r .reviewCompleteness <<<"$j")" = partial ] || fail "moor exit2 completeness=partial"
 ok "moor: exit 2 -> incomplete, partial"
 
 # edited commit message -> editedFields
-export MOOR_FIXTURE="$(mkfix '{"output":{"exitCode":0,"reviewer":"Rev","comments":[],"commitMessage":{"original":"old subj","edited":"new subj"}}}')"
+mkfix '{"output":{"exitCode":0,"reviewer":"Rev","comments":[],"commitMessage":{"original":"old subj","edited":"new subj"}}}'
 o=$(run --files "$repo/a.txt" "$repo/a.txt"); j=$(json_of "$o")
 [ "$(jq -r '.editedFields[0].target' <<<"$j")" = commit-message ] || fail "moor editedFields target"
 [ "$(jq -r '.editedFields[0].edited' <<<"$j")" = "new subj" ]      || fail "moor editedFields edited"
 ok "moor: edited commit message -> editedFields[commit-message]"
 
 # range mode through the fake difftool (backend=moor when the sidecar has output)
-export MOOR_FIXTURE="$(mkfix '{"output":{"exitCode":0,"reviewer":"Rev","comments":[]}}')"
+mkfix '{"output":{"exitCode":0,"reviewer":"Rev","comments":[]}}'
 o=$(run --previous); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = approved ]     || fail "moor range verdict"
 [ "$(jq -r .backend <<<"$j")" = moor ]  || fail "moor range backend"
@@ -185,7 +193,7 @@ ok "revdiff: --previous translated to base/against refs"
 
 # ============================ backend selection ==========================
 git -C "$repo" config --unset anchor.reviewBackend
-export MOOR_FIXTURE="$(mkfix '{"output":{"exitCode":0,"reviewer":"Rev","comments":[]}}')"
+mkfix '{"output":{"exitCode":0,"reviewer":"Rev","comments":[]}}'
 o=$(run --previous); j=$(json_of "$o")
 [ "$(jq -r .backend <<<"$j")" = moor ] || fail "default backend should be moor"
 ok "backend: defaults to moor when anchor.reviewBackend is unset"

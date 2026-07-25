@@ -7,6 +7,10 @@
 # Windows-Git-Bash in CI.
 set -euo pipefail
 
+# Hermetic: ignore the user's global/system git config (hooks, templates, a
+# global anchor.* key) so the test's behavior doesn't depend on the environment.
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 commit_sh="$here/../scripts/commit.sh"
 
@@ -78,6 +82,7 @@ echo "$out" | grep -q '^PUSH_MODE=force-with-lease$' || fail "expected force-wit
 echo "$out" | grep -q '^PUSHED=ok$'                 || fail "amend push not ok: $out"
 [[ "$(git -C "$repo" rev-list --count feat)" -eq 3 ]] || fail "amend changed the commit count (should stay 3: seed, a, b)"
 [[ "$(git -C "$repo" log -1 --format=%s)" == "Add b on feat (amended)" ]] || fail "amend did not rewrite the message"
+[[ "$(git -C "$repo" rev-parse HEAD)" != "$sha_after_new" ]] || fail "amend left HEAD at the pre-amend sha"
 [[ "$(git -C "$remote" log -1 refs/heads/feat --format=%s)" == "Add b on feat (amended)" ]] || fail "remote feat not force-updated"
 ok "amend force-pushes with lease and rewrites HEAD in place"
 
