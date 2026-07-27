@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.1
+
+## Fixed
+
+- **`/anchor:prepare-review` no longer asks you to approve a description you haven't read.** It presented the draft by running `git diff --no-index`, whose output goes to the model — the terminal shows a collapsed `+80 lines` stub — and then asked "write this to the PR?". The drafted description now opens in the review tool (current vs. draft, through the same dispatcher `/anchor:commit` uses for the commit message) and a clean verdict writes it, so the review *is* the presentation instead of an opt-in third choice behind a blind gate. With no review backend installed, or no CR to diff against, the body is pasted into the reply as text before the prompt.
+- **Deep-link anchors come from the recon block on both forges.** `FILE_ANCHORS` computed path hashes for GitLab only, so a GitHub run hand-rolled a `shasum -a 256` loop over the changed files and spliced 64-char hex into URLs in prose (one run then needed a `perl` pass to repair a mangled anchor). `scripts/deep-links.sh` now emits `FILE_LINKS` — the whole prefix per changed file, right view path and right hash for the forge — for GitHub and GitLab alike. The skill appends only the line part, and takes hunk line numbers from the diff it already read rather than re-grepping for `@@` headers. The recon block also hands over `DESC_DRAFT_PATH`, so drafting costs no `mktemp` call of its own.
+- **Path hashing works where `sha1sum` isn't installed.** The old inline hash called `sha1sum` unconditionally, which a plain macOS (no coreutils) doesn't have; `deep-links.sh` prefers `shasum` and is covered on ubuntu, macOS, and Windows in CI.
+- **Context sections stop padding.** The CR-description template caps Context at two short paragraphs with the change named in the first, and rules out three patterns that grew it: flavor about the status quo, alternatives rejected in Context rather than under *Approach & trade-offs*, and analogy reached for before the change is stated.
+- **`/anchor:issue`** carried the same present-by-running-a-command hazard in its output step, and now says the diff goes in the reply.
+
+## Other
+
+- `guides/execute-quietly.md` distinguishes narration (silent by default) from the artifact under decision, which reaches the user as text or through a review tool. Spec adds `UX-04`/`UX-05` for that and rewrites `PREP-13` (in-tool review before any write prompt) with `PREP-14` for the text fallback.
+
 ## 1.0.0
 
 Reworks the commit and review-request flow into one traditional path: review the pending change, then commit and push. Adds `/merge` as the terminal lifecycle step, so a change goes from working tree to landed through anchor end to end. Breaking: a flag is removed and `/anchor:prepare-review` no longer pushes.

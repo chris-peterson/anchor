@@ -3,10 +3,10 @@
 Tracking status of the requirements declared in [`SPEC.md`](SPEC.md).
 Maintained by `/sextant:spec-status`.
 
-**Last audit:** 2026-07-14
+**Last audit:** 2026-07-27
 **Spec version:** root SPEC.md (unversioned)
 **Plugin version:** 1.0.0
-**Coverage:** 111 Covered, 0 Partial, 0 Missing/Contradicts
+**Coverage:** 114 Covered, 0 Partial, 0 Missing/Contradicts
 
 The implementation is the plugin itself — the skill prompts under
 `skills/`, the ambient rules under `rules/`, and the helper scripts under
@@ -22,7 +22,7 @@ draft to review against the implementation, not an audited ledger.
 |--------|------:|--------|-------|
 | TGT-01..09 | 9 | All Covered | Target resolution + worktree isolation — `scripts/{resolve-target,worktree}.sh`, each `skills/*/SKILL.md` "Target repo" |
 | CMT-01..19 (16 retired) | 18 | All Covered | Review-first commit-and-push flow (1.0) — `skills/commit/SKILL.md`, `scripts/{commit,commit-preflight,look-ahead,squash-check}.sh` |
-| PREP-01..13 | 13 | All Covered | `prepare-review`, pushed-branch only, opens the draft CR without pushing — `skills/prepare-review/SKILL.md`, `scripts/prepare-review.sh` |
+| PREP-01..14 | 14 | All Covered | `prepare-review`, pushed-branch only, opens the draft CR without pushing, reviews the description in the tool — `skills/prepare-review/SKILL.md`, `scripts/{prepare-review,deep-links}.sh` |
 | FDBK-01..08 | 8 | All Covered | Fetch, triage, act on threads — `skills/resolve-feedback/SKILL.md` |
 | MRG-01..16 | 16 | All Covered | Gate checks (ready/mergeable/pipeline/approvals/threads), method choice, merge + cleanup — `skills/merge/SKILL.md`, `guides/forge-cookbook.md` |
 | ISS-01..12 | 12 | All Covered | Author one issue — gather intent, guard duplicates, draft, file (`skills/issue/SKILL.md`); list/scope/rank/recommend, read-only (`skills/issues/SKILL.md`) |
@@ -31,9 +31,22 @@ draft to review against the implementation, not an audited ledger.
 | CONF-01..05 | 5 | All Covered | `anchor.*` key handling — `guides/configuring.md`, commit/prepare-review/issue config steps |
 | FORG-01..05 | 5 | All Covered | Template composition, body-file, markdown, auth — `templates/`, `guides/{forge-cookbook,markdown-gotchas}.md` |
 | RULE-01..05 | 5 | All Covered | SessionStart-injected rules — `hooks/emit-rules.sh`, `rules/*.md`; RULE-04 routes CR creation through `prepare-review` |
-| UX-01..03 | 3 | All Covered | Narration, orchestration, decision prompts — cross-cutting, each `skills/*/SKILL.md` |
+| UX-01..05 | 5 | All Covered | Narration, orchestration, decision prompts, artifact visibility, recon-supplied values — cross-cutting, each `skills/*/SKILL.md`, `guides/execute-quietly.md` |
 
 ## Audit history
+
+### 2026-07-27 — The CR description is reviewed in the tool
+
+`prepare-review` presented the drafted description by running
+`git diff --no-index` and then asking whether to write it — output that reaches the
+model, not the user, who saw a collapsed stub and a confirmation prompt for prose
+they had not read. PREP-13 now requires the in-tool review (the same shape
+`/anchor:commit` uses for the commit message) before any write prompt, with PREP-14
+covering the text-in-reply fallback when no backend is installed or no CR exists.
+UX-04 states the underlying rule for every skill; UX-05 requires reading values the
+recon block supplies rather than re-deriving them, which is what `FILE_LINKS`
+(PREP-10, `scripts/deep-links.sh`) now does for deep-link anchors on both forges.
+114 requirements across 12 categories.
 
 ### 2026-07-21 — Tool-agnostic review contract (REV)
 

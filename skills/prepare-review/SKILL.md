@@ -9,7 +9,7 @@ Draft a description whose job is to convey *why* the change exists and *how* it 
 
 **Audience assumption — ELI5 / assume unfamiliarity.** Write for a competent developer who has never seen this system. Explain *what it does today* and *why this change exists* in plain language; spare a sentence or two to establish the business/system context up front — that investment is almost always worth the words. Skip the parts the diff already speaks to (which loop does what, which file moved where).
 
-**Default to terse on everything else.** Justifications, hedges, asides, and "we used to / now we" framing add bytes without adding signal. Trim aggressively on the first pass; reviewers will ask for more if they want it. The shape to aim for: a Context section that earns its 30-60 seconds, then a tight Review guide. Recency-polish bullets, decisions no one was going to question, and author-todo lists all belong somewhere else — see Step 3 "What to avoid".
+**Default to terse on everything else.** Justifications, hedges, asides, and "we used to / now we" framing add bytes without adding signal. Trim aggressively on the first pass; reviewers will ask for more if they want it. The shape to aim for: a Context section that earns its 30-60 seconds, then a tight Review guide. Context's budget is **two short paragraphs, the change named in the first** — the template holds that cap and the padding patterns it rules out, so the unfamiliarity assumption above doesn't read as licence to expand. Recency-polish bullets, decisions no one was going to question, and author-todo lists all belong somewhere else — see Step 3 "What to avoid".
 
 CR = change request: a pull request on GitHub, a merge request on GitLab. Pick the
 forge tool by the `origin` remote.
@@ -35,16 +35,17 @@ flowchart TD
         StateCheck --> Why["Ask the WHY + open decisions"]
     end
 
-    subgraph "Step 3-4: Draft & write"
+    subgraph "Step 3-4: Draft, review, write"
         Why --> Recency["Anti-recency check"]
         Recency --> Draft["Draft Context + Review guide"]
-        Draft --> Out{Disposition?}
-        Out -->|Write| Forge(["Push to CR"])
-        Out -->|Copy| CopyOnly(["Print for paste"])
-        Out -->|Edit| EditCh{moor?}
-        EditCh -->|Yes| Moor["One-off moor review"]
-        EditCh -->|No| Recency
-        Moor --> Recency
+        Draft --> Backend{Review backend?}
+        Backend -->|Yes| InTool["Review the description in the tool"]
+        Backend -->|No| Chat["Paste the body in chat, then ask"]
+        InTool --> Verdict{Verdict?}
+        Verdict -->|approved| Forge(["Write to CR"])
+        Verdict -->|changes requested| Draft
+        Chat -->|write| Forge
+        Chat -->|copy only| CopyOnly(["Print for paste"])
     end
 ```
 
@@ -57,7 +58,9 @@ Follow the execute-quietly discipline: `${CLAUDE_PLUGIN_ROOT}/guides/execute-qui
 1. a decision the script flagged that needs the user (`BEHIND`, a `STATE` mismatch, a `CR_CREATE_ERROR`);
 2. the resolved CR URL, once;
 3. the Step 2 questions;
-4. the drafted description, the Step 4 options, and the final verdict.
+4. the review feedback echoed back, and the one-line result of the write.
+
+The drafted description itself is *shown in the review tool*, not pasted into chat — the exception is the no-backend fallback in Step 4, where chat is the only surface it has.
 
 Everything else is internal: the per-step recon plumbing ("origin is GitLab, 1 ahead, no template, tree clean" — the script already ran it), the Step 3 anti-recency disposition (Centerpiece / Footnote / Cut scratch that *shapes* the draft, never output), and session-internal A → B history (which also gets cut from the description as a "Drift artifact" — see Step 3). Reserve prose for the steps that need *your* judgment or the *user's* input — the Step 2 prompts, drafting in Step 3, presenting options in Step 4.
 
@@ -85,10 +88,11 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 | `CR_URL` / `CR_IID` | the resolved or freshly-opened draft — deep-link target and write target (empty on `skip-deep-links`) |
 | `CR_DRAFT` | gates the post-rebase force-push (see below) |
 | `STATE` | `match` → proceed; anything else → surface and stop (see "Act on `STATE`") |
-| `CURRENT_DESC_PATH` | baseline the Step 4 diff reads (empty on `skip-deep-links`) |
+| `CURRENT_DESC_PATH` | the review's left-hand side in Step 4 (empty on `skip-deep-links`) |
+| `DESC_DRAFT_PATH` | where to write the drafted description in Step 4 — already `mktemp`'d, so don't make your own |
 | `TEMPLATE_PATH` | project CR template to compose into (Step 3) |
 | `ANCHOR_CONFIG` | `anchor.*` keys to apply (Step 3), as JSON |
-| `FILE_ANCHORS` | precomputed `sha1(path)` per changed file for GitLab deep links (Step 3), as JSON |
+| `FILE_LINKS` | ready-to-use deep-link prefix per changed file, both forges (Step 3), as JSON — append the line part, never hash a path yourself |
 
 If the block carries a `CR_CREATE_ERROR=…` line, the draft-open hit an auth or push failure — surface it and ask the user to refresh credentials; do **not** fall back to the URL-free path (the fail-fast-on-auth rule).
 
@@ -246,7 +250,7 @@ Draft the description following the section template in `templates/cr-descriptio
 
 **Ordering dependency (when Step 2 captured one).** Near the top of Context, add a bare, autolinking reference — `Depends on !<iid>` (GitLab) / `Depends on #<num>` (GitHub) — and a line that it must merge first. On GitHub, and on any GitLab fall-back (see Step 4), this prose is the *only* ordering signal, so say plainly that the forge won't enforce it.
 
-**Deep-link construction (Review guide).** Always deep-link to the actual line, not just the file — reviewers should be one click away from the hunk. The forge-specific anchor construction (GitLab `sha1` path-hashes from `FILE_ANCHORS`, GitHub `sha256`) lives in `${CLAUDE_PLUGIN_ROOT}/guides/cr-formatting.md`.
+**Deep-link construction (Review guide).** Always deep-link to the actual line, not just the file — reviewers should be one click away from the hunk. `FILE_LINKS` from Step 1's block already carries the whole prefix per changed file (the right view path and the right path-hash for the forge); you append only the line part, whose grammar is in `${CLAUDE_PLUGIN_ROOT}/guides/cr-formatting.md`. **Two things not to do**, both of which put plumbing on the user's screen: don't hash a path yourself, and don't re-grep the diff for hunk headers — you read the full diff in Step 1, so take the line numbers from what you already read.
 
 **Pipeline artifacts — fetch, reason, include.** When the CR or its commit's pipeline produces an artifact that bears on review, fetch it, reason about what it shows, and include the pertinent excerpt (collapsed if long; see `${CLAUDE_PLUGIN_ROOT}/guides/cr-formatting.md`). Don't describe a change whose effect the pipeline already rendered without showing it.
 
@@ -276,63 +280,66 @@ Categories of cruft. If something fits one of these, it doesn't belong in the de
 
 The single exception to "no verification content in the description body" is the **Validation** evidence row — see the Validation section in `templates/cr-description.md`. That row records *evidence* of real-world use, not a todo.
 
-## Step 4: Output
+## Step 4: Review the drafted description
 
-Write the drafted description to a temp file (`$(mktemp -u "${TMPDIR:-/tmp}/cr-desc-draft.XXXXXX").md`) — both the diff presentation here and the moor edit loop below read it.
+Write the drafted description to `DESC_DRAFT_PATH` from Step 1's block — the review below reads it, and the path is already `mktemp`'d, so this costs no `mktemp` call of your own.
 
-**Present the change.** When `CURRENT_DESC_PATH` from Step 1's block is non-empty (any CR exists — including a freshly-opened draft, whose `--fill` baseline makes the draft render as all-additions), show what changed rather than the whole body — diff the draft against that baseline and present it in a fenced `diff` block:
+**The user reads the description in the review tool, not in chat.** Same discipline as `/anchor:commit`, which reviews the drafted commit message alongside the diff it describes rather than gating on it in chat: you don't ask someone to approve prose they haven't read. The review *is* the presentation, so it comes **before** any write prompt — never after.
 
-```bash
-git --no-pager diff --no-index <CURRENT_DESC_PATH> <draft-path>
-```
+### Output checklist (walk this before the review opens)
 
-When `CURRENT_DESC_PATH` is empty (the `skip-deep-links` path, where no CR exists), display the full description in a fenced code block instead. Use markdown formatting appropriate for the platform (GitHub, GitLab, etc.). After presenting, offer to write the description back to the forge — see the final prompt below.
-
-### Output checklist (verify before presenting)
-
-The description gets pasted into a markdown renderer, so rendering bugs are user-visible. Walk the general rendering gotchas in the bundled `${CLAUDE_PLUGIN_ROOT}/guides/markdown-gotchas.md` — character escaping (`~`/`$`/`_`/`*`), nested code fences, mermaid blocks, collapsible `<details>`, tables in lists — then these CR-description-specific checks:
+The description gets pasted into a markdown renderer, so rendering bugs are user-visible — and the review shows the source, not the render, so a broken fence survives a clean verdict. Walk the general rendering gotchas in the bundled `${CLAUDE_PLUGIN_ROOT}/guides/markdown-gotchas.md` — character escaping (`~`/`$`/`_`/`*`), nested code fences, mermaid blocks, collapsible `<details>`, tables in lists — then these CR-description-specific checks:
 
 - **Backtick coverage is generous — except for forge-autolink tokens.** Re-scan the description for grep-bait: env vars (`$FAMILY`, `$CI_PIPELINE_CREATED_AT`), config keywords (`extends:`, `needs:`, `on_success`, `manual`, `allow_failure`), job/product/feature suffixes that match identifiers in the diff, CLI flags, file paths. The "if a reader might paste it into a terminal" test is more permissive than "code identifier only" — err generous. **But** scan separately for CR/issue refs (`!148`, `#42`), commit SHAs, and user @mentions — these must be **bare text** to autolink; backticks render them as inert code spans.
 - **Inline single quotes around `'all'` / `'true'` style values** read fine in prose but lose their distinguishing weight in scan-mode. Convert literal dropdown/enum values to backticks.
+- **Every deep link is `FILE_LINKS[<path>]` plus a line part** — no hand-built anchors (Step 3).
 
-Then ask the user how to proceed using the `AskUserQuestion` tool — an arrow-key-selectable prompt beats a free-text `[write / edit / copy]` prompt the user has to type out. Use header `Disposition` and these three options (in order, so the default lands on **Yes**):
+### Open the review
 
-- **Yes (write)** — push the description to the open CR.
-- **No (copy only)** — print the description for the user to paste themselves.
-- **Edit** — mark up the change inline (moor) or in chat, then re-present.
+The description review runs when the configured review backend (`anchor.reviewBackend`, default [moor](https://github.com/chris-peterson/moor)) is installed. Check for it:
 
-Map the user's selection to the actions below:
+```bash
+command -v "$(git config anchor.reviewBackend 2>/dev/null || echo moor)"
+```
 
-1. **Yes (write)** *(default)* — push the description to the open CR. Editing a description is reversible, so this is the low-friction default. On 401/403 or similar auth failure, surface the error and ask the user to refresh credentials — do not silently fall back to copy-only. The `<draft-path>` is the temp file you wrote at the top of Step 4.
+With a backend available, open the current description vs. the draft through the **dispatcher** — not the backend directly; the dispatcher builds the header and prints the normalized result on its stdout. The viewer blocks until closed, so launch as a **background** Bash call (`run_in_background: true`); a foreground call holds the turn open until the Bash timeout:
 
-   - **GitHub:** `gh pr edit --body-file <draft-path>`.
-   - **GitLab:** use the API form `glab api -X PUT projects/:fullpath/merge_requests/<CR_IID> -F "description=@<draft-path>"` — `glab mr update -d` doesn't accept a file. See the bundled forge cookbook (`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`) for the full canonical invocation.
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --files \
+  <CURRENT_DESC_PATH> <DESC_DRAFT_PATH> \
+  --title 'CR description' \
+  --detail branch=<BRANCH> --detail CR=<CR_URL>
+```
 
-   When operating against a non-cwd repo these are the write path, so retarget them per "Operating against a non-cwd repo": add `-R <owner/name>` to `gh pr edit`, and substitute the URL-encoded project for `:fullpath` in the `glab api` PUT (plus `--hostname` for self-hosted).
-2. **No (copy only)** — print the description for the user to paste into the web UI themselves. Useful when the user wants to hand-edit before pasting, or when the CLI's default forge instance is wrong for this repo.
-3. **Edit** — the user wants to adjust something. A visual review is the preferred surface but **optional** — it runs when the configured review backend (`anchor.reviewBackend`, default [moor](https://github.com/chris-peterson/moor)) is installed. Check for it:
+`CURRENT_DESC_PATH` is the left-hand side. On a freshly-opened draft its `--fill` baseline is the commit body, so the review reads as mostly additions — that's expected, and still the right comparison: it shows the reviewer what they're getting *instead of* what the forge already has.
 
-   ```bash
-   command -v "$(git config anchor.reviewBackend 2>/dev/null || echo moor)"
-   ```
+When the background command completes, read its stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trips the command-substitution gate. The last lines carry `REVIEW_VERDICT` (`approved` / `changes-requested` / `incomplete` / `no-verdict`) and `REVIEW_OUTPUT` (compact JSON — the REV contract in `SPEC.md`). **Don't read silence as success** — only `approved` is approval:
 
-   **If a review backend is available** (moor by default, or revdiff), open a one-off review of the current description vs. the draft so the user can comment on specific lines with a reason — directed, line-anchored feedback instead of a prose back-and-forth. Launch via the dispatcher (**not** the backend directly — the dispatcher builds the header and prints the normalized result on its stdout). The viewer blocks until closed, so launch as a **background** Bash call (`run_in_background: true`); a foreground call holds the turn open until the Bash timeout:
+- **`approved`** — write the draft to the CR (see "Write it" below). The reviewer read the description and signed off; a second chat gate asking the same question is the ceremony this step exists to remove. Surface any advisory (`fix-later` / `consider`) comments after the write.
+- **`changes-requested`** — each entry in `REVIEW_OUTPUT.comments` is `{body, action, target, file?, startLine?, endLine?, side?}`, where `body` is the inline feedback. Fold in the blocking comments — the `fix-now` entries when `severitySource` is `graded`, or *every* comment when it's `inferred` (an ungraded backend can't say which block) — plus any advisory ones worth taking, then re-open the review on the revised draft. Echo the comments back first (the review-feedback table in `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`) so the user knows they landed.
+- **`incomplete`** — the reviewer closed with hunks unreviewed: a partial pass, not approval. Ask what they want to change, then re-review.
+- **`no-verdict`** — the review **did not complete**. `backend: "difftool"` (or `capabilities.producesVerdict: false`) means a difftool with no contract showed the description; otherwise the backend closed early or errored (see `raw.exitCode`). Either way the user *may* have seen it and definitely didn't grade it: report what happened, then fall back to the chat presentation below. Don't silently retry — the same failure recurs.
 
-   ```bash
-   bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --files \
-     <CURRENT_DESC_PATH> <draft-path> \
-     --title 'CR description — proposed edits' \
-     --detail branch=<BRANCH> --detail CR=<CR_URL>
-   ```
+### When there's no review backend (or no CR yet)
 
-   When the background command completes, read its stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trips the command-substitution gate. The last lines carry the normalized result: `REVIEW_VERDICT` (`approved` / `changes-requested` / `incomplete` / `no-verdict`) and `REVIEW_OUTPUT` (compact JSON — the REV contract). **Don't read silence as success** — only `approved` is approval; every other outcome either carries feedback to fold in or means the review never happened, so never write the description off the back of one.
+Two cases land here: no backend is installed, and the `skip-deep-links` path where `CURRENT_DESC_PATH` is empty because no CR exists.
 
-   - **`approved`** — reviewed clean, nothing blocking: write the draft to the CR (the **Yes** action above).
-   - **`changes-requested`** — comments to address: each entry in `REVIEW_OUTPUT.comments` is `{body, action, target, file?, startLine?, endLine?, side?}`, where `body` is the inline feedback. Fold the blocking comments — the `fix-now` entries when `severitySource` is `graded`, or every comment when it's `inferred` (an ungraded backend can't say which block) — into a revised draft, along with any advisory `fix-later` / `consider` comments worth incorporating, then loop back to **Present the change**.
-   - **`incomplete`** — the reviewer closed with hunks still unreviewed: a partial pass, not approval. Ask what they want to change, then re-present.
-   - **`no-verdict`** — the review **did not complete**: `backend: "difftool"` (or `capabilities.producesVerdict: false`) means a difftool with no contract showed the diff; otherwise the backend closed early or errored (see `raw.exitCode`). Do **not** treat this as approval or write the description. Surface what happened, then fall back: re-present the chat `diff` from **Present the change** and ask what to change. Don't silently retry — the same failure recurs.
+**Put the description in your own message.** Paste the full body into a fenced code block in the reply — running `git diff --no-index` (or any other command) does *not* show it to the user: a Bash tool's output goes to you, and the terminal collapses it to a `+80 lines` stub they'd have to expand. Approving off the back of that is approving blind. Then ask how to proceed with the `AskUserQuestion` tool, header `Disposition`, options in this order:
 
-   **If no review backend is available**, fall back to chat: ask what to change, revise the draft, and re-present (loop back to **Present the change**).
+- **Yes (write)** *(default)* — push the description to the open CR.
+- **No (copy only)** — leave it for the user to paste into the web UI themselves.
+- **Edit** — say what to change in chat; revise and re-present.
+
+### Write it
+
+Reached on an `approved` review, or on **Yes (write)** from the no-backend fallback. Editing a description is reversible, which is why the review's sign-off is enough to write on. On 401/403 or similar auth failure, surface the error and ask the user to refresh credentials — do not silently fall back to copy-only. The draft is `DESC_DRAFT_PATH`:
+
+- **GitHub:** `gh pr edit --body-file <DESC_DRAFT_PATH>`.
+- **GitLab:** use the API form `glab api -X PUT projects/:fullpath/merge_requests/<CR_IID> -F "description=@<DESC_DRAFT_PATH>"` — `glab mr update -d` doesn't accept a file. See the bundled forge cookbook (`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`) for the full canonical invocation.
+
+When operating against a non-cwd repo these are the write path, so retarget them per "Operating against a non-cwd repo": add `-R <owner/name>` to `gh pr edit`, and substitute the URL-encoded project for `:fullpath` in the `glab api` PUT (plus `--hostname` for self-hosted).
+
+Report the write as one line — the CR URL and that the description landed. **No CR to write to** (`skip-deep-links`, or the user picked copy-only): print the body for them to paste into the web UI themselves.
 
 ### Set the ordering dependency (when Step 2 captured one)
 
