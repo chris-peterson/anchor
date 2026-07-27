@@ -6,7 +6,7 @@ Maintained by `/sextant:spec-status`.
 **Last audit:** 2026-07-27
 **Spec version:** root SPEC.md (unversioned)
 **Plugin version:** 1.0.0
-**Coverage:** 114 Covered, 0 Partial, 0 Missing/Contradicts
+**Coverage:** 115 Covered, 0 Partial, 0 Missing/Contradicts
 
 The implementation is the plugin itself — the skill prompts under
 `skills/`, the ambient rules under `rules/`, and the helper scripts under
@@ -21,7 +21,7 @@ draft to review against the implementation, not an audited ledger.
 | Prefix | Count | Status | Notes |
 |--------|------:|--------|-------|
 | TGT-01..09 | 9 | All Covered | Target resolution + worktree isolation — `scripts/{resolve-target,worktree}.sh`, each `skills/*/SKILL.md` "Target repo" |
-| CMT-01..19 (16 retired) | 18 | All Covered | Review-first commit-and-push flow (1.0) — `skills/commit/SKILL.md`, `scripts/{commit,commit-preflight,look-ahead,squash-check}.sh` |
+| CMT-01..20 (16 retired) | 19 | All Covered | Review-first commit-and-push flow (1.0) — `skills/commit/SKILL.md`, `scripts/{commit,commit-preflight,look-ahead,squash-check}.sh` |
 | PREP-01..14 | 14 | All Covered | `prepare-review`, pushed-branch only, opens the draft CR without pushing, reviews the description in the tool — `skills/prepare-review/SKILL.md`, `scripts/{prepare-review,deep-links}.sh` |
 | FDBK-01..08 | 8 | All Covered | Fetch, triage, act on threads — `skills/resolve-feedback/SKILL.md` |
 | MRG-01..16 | 16 | All Covered | Gate checks (ready/mergeable/pipeline/approvals/threads), method choice, merge + cleanup — `skills/merge/SKILL.md`, `guides/forge-cookbook.md` |
@@ -46,7 +46,9 @@ covering the text-in-reply fallback when no backend is installed or no CR exists
 UX-04 states the underlying rule for every skill; UX-05 requires reading values the
 recon block supplies rather than re-deriving them, which is what `FILE_LINKS`
 (PREP-10, `scripts/deep-links.sh`) now does for deep-link anchors on both forges.
-114 requirements across 12 categories.
+CMT-20 covers the same theme on the commit side: the test gate reads the runner's
+exit status on the first invocation instead of its output, which had cost a second
+full run of the suite. 115 requirements across 12 categories.
 
 ### 2026-07-21 — Tool-agnostic review contract (REV)
 

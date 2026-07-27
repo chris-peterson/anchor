@@ -313,6 +313,8 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --files \
 
 `CURRENT_DESC_PATH` is the left-hand side. On a freshly-opened draft its `--fill` baseline is the commit body, so the review reads as mostly additions — that's expected, and still the right comparison: it shows the reviewer what they're getting *instead of* what the forge already has.
 
+**Don't announce the launch.** The backend puts the diff on screen itself — a terminal overlay (revdiff) or its own window (moor) — so the user can see it. A line saying the review is open, and what's in it, describes what the tool is already showing. The next thing you say is the verdict, the feedback echoed back, or the one-line write result.
+
 When the background command completes, read its stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trips the command-substitution gate. The last lines carry `REVIEW_VERDICT` (`approved` / `changes-requested` / `incomplete` / `no-verdict`) and `REVIEW_OUTPUT` (compact JSON — the REV contract in `SPEC.md`). **Don't read silence as success** — only `approved` is approval:
 
 - **`approved`** — write the draft to the CR (see "Write it" below). The reviewer read the description and signed off; a second chat gate asking the same question is the ceremony this step exists to remove. Surface any advisory (`fix-later` / `consider`) comments after the write.

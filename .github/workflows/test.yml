@@ -23,10 +23,8 @@ jobs:
       - uses: actions/checkout@v6
       - name: temp-path helper
         run: bash tests/tmpfile.test.sh
-      # Same matrix, same reason: the deep-link anchors are path hashes, and
-      # which hashing binary exists differs by platform (macOS ships `shasum`
-      # with no `sha1sum`; distros vary), so prove the prefixes come out
-      # identical on each.
+      # In this matrix because the deep-link anchors are path hashes, and the
+      # hashing binary varies (macOS ships `shasum` with no `sha1sum`).
       - name: deep links
         run: bash tests/deep-links.test.sh
 

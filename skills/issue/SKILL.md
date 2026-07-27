@@ -200,4 +200,6 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --files \
   --detail repo=<repo>
 ```
 
+Don't announce the launch — the backend puts the draft on screen itself, in a terminal overlay (revdiff) or its own window (moor), so a line saying the review is open describes what the user can already see; the next thing you say is the verdict.
+
 Read the verdict back with the **BashOutput tool** (not `tail` / `$(...)`). Only `REVIEW_VERDICT` `approved` is approval; `changes-requested` carries comments in `REVIEW_OUTPUT.comments` to fold in before re-presenting (the `fix-now` entries when `severitySource` is `graded`, else every comment); `incomplete` / `no-verdict` mean the review didn't complete — surface what happened and fall back to chat rather than treating silence as approval. (The full verdict contract matches the `prepare-review` skill's Step 4.) If no review backend is available, fall back to chat: ask what to change, revise, and re-present.

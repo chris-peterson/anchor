@@ -174,8 +174,8 @@ adaptation rules are in the bundled guide (`${CLAUDE_PLUGIN_ROOT}/guides/descrip
 
 ### 3b. Test and commit
 
-Run the project's test suite (same detection as `/anchor:commit` Step 0); a
-failing suite blocks the push, no exceptions. Then commit **as new commits —
+Run the project's test suite (same detection, exit-code gate, and silence on a
+pass as `/anchor:commit` Step 0); a failing suite blocks the push, no exceptions. Then commit **as new commits —
 never amend** what the reviewer has seen: a CR with feedback on it is being
 read, so the "changes since you last looked" diff is load-bearing regardless
 of draft state. Subject names the concern, body cites the thread:

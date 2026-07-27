@@ -124,6 +124,9 @@ behavior, not an independent authority — review them against the source.
   shall create a feature branch first rather than push to the default branch, and
   the commit helper shall refuse to commit onto the default branch unless
   explicitly told the direct-to-default case was chosen.
+- **[CMT-20]** The system shall decide the test gate from the runner's exit
+  status, captured on its first invocation, rather than from its output, and shall
+  not run the suite a second time to obtain that status.
 
 ### PREP — Prepare review
 

@@ -13,19 +13,23 @@ is the **input to your next decision**, not something to report. Launch the
 script, read its output, act on it — without narrating that you did, and without
 relaying the state it surfaced.
 
-## Silent-by-default is about *narration*, not about showing the artifact
+## Show the finished artifact, keep the intermediates quiet
 
-Running a command is not showing the user anything. A Bash tool's output goes to
-*you*; the terminal collapses it to a `+80 lines (ctrl+o to expand)` stub. So a
-command whose whole purpose is to present something — `git diff --no-index` of a
-drafted description against the live one, a rendered table, a plan — satisfies
-nothing on its own. If the user has to read it, it goes in your message as text,
-or into a review tool that shows it to them properly.
+Silence covers the *intermediate* objects: the `KEY=value` blocks, the gate
+outcomes, the diff you ran to check your own work. The finished artifact is the
+opposite. The commit message, the CR description, the drafted issue are what the
+user is there to decide on, and they have to actually reach the user — as text
+in your reply, or through a review tool that shows them properly.
+
+Running a command shows the user nothing. A Bash tool's output goes to *you*;
+the terminal collapses it to a `+80 lines (ctrl+o to expand)` stub. So a command
+whose whole purpose is to present something (`git diff --no-index` of a drafted
+description against the live one, a rendered table) satisfies nothing on its
+own.
 
 The failure this catches is a confirmation prompt about content the user never
 saw: the artifact "presented" as a collapsed tool result, then *Write this to the
-PR?* Silence is the default for the *plumbing*; the artifact under decision is
-never the plumbing.
+PR?*
 
 ## Don't narrate the reasoning that led to an action
 

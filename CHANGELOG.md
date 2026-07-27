@@ -9,10 +9,12 @@
 - **Path hashing works where `sha1sum` isn't installed.** The old inline hash called `sha1sum` unconditionally, which a plain macOS (no coreutils) doesn't have; `deep-links.sh` prefers `shasum` and is covered on ubuntu, macOS, and Windows in CI.
 - **Context sections stop padding.** The CR-description template caps Context at two short paragraphs with the change named in the first, and rules out three patterns that grew it: flavor about the status quo, alternatives rejected in Context rather than under *Approach & trade-offs*, and analogy reached for before the change is stated.
 - **`/anchor:issue`** carried the same present-by-running-a-command hazard in its output step, and now says the diff goes in the reply.
+- **`/anchor:commit` says less on the way to the review.** Three lines of output that no step asked for: a passing test suite reported as news, and the `--stat` summary printed on the ordinary-commit path where Step 3 asks nothing and Step 4's review shows the same changeset moments later. The stat now appears only alongside the branch or squash prompt it qualifies, a clean suite is silent, and the review launch isn't announced (the backend puts the diff on screen itself; the next thing said is the verdict).
+- **The test suite runs once.** Step 0 gated on the runner's *output*, so a suite that prints `*** Found 1 error(s)` while successfully exercising a validator against known-bad fixtures read as a failure through `| tail -30`, and got re-run with `>/dev/null` to obtain a clean exit code. The gate is the exit status, captured on the first invocation (`CMT-20`).
 
 ## Other
 
-- `guides/execute-quietly.md` distinguishes narration (silent by default) from the artifact under decision, which reaches the user as text or through a review tool. Spec adds `UX-04`/`UX-05` for that and rewrites `PREP-13` (in-tool review before any write prompt) with `PREP-14` for the text fallback.
+- `guides/execute-quietly.md` splits the rule by object: the finished commit message, CR description, or drafted issue has to reach the user as text or through a review tool, while the `KEY=value` blocks and gate outcomes behind it stay quiet. Spec adds `UX-04`/`UX-05` for that and rewrites `PREP-13` (in-tool review before any write prompt) with `PREP-14` for the text fallback.
 
 ## 1.0.0
 

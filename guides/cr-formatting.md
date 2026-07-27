@@ -59,8 +59,8 @@ renders (`sha1` on GitLab, `sha256` on GitHub — `scripts/deep-links.sh` comput
 it). Use the bare prefix for a file-level link; append the line part for a line
 link, which is all that differs by forge:
 
-- **GitLab:** append `_<old-line>_<new-line>` → `<prefix>_82_82`. For pure additions, use the new line number for both — the link still resolves.
-- **GitHub:** append `R<new-line>` for the right side, `L<old-line>` for the left → `<prefix>R665`.
+- **GitLab:** append `_<old-line>_<new-line>`; line 82 on both sides gives `<prefix>_82_82`. For pure additions, use the new line number for both — the link still resolves.
+- **GitHub:** append `R<new-line>` for the right side, `L<old-line>` for the left; line 665 on the right gives `<prefix>R665`.
 
 Don't hash a path yourself and don't hand-assemble the prefix. A 64-char hex
 anchor spliced into prose is where these links break, and the hash you'd compute
