@@ -23,6 +23,17 @@ Reworks the commit and review-request flow into one traditional path: review the
 - **`/anchor:commit --preview`.** The default flow now reviews before committing, so the standalone look-only path is redundant.
 - **The pre-push review gate in the review-request flow.** Review happens at commit time; opening the CR imposes no separate gate.
 
+## Fixed
+
+- **A difftool that isn't moor no longer reads as a failed review.** `/anchor:commit` inferred moor's absence from an `absent` sidecar verdict and asked "the review closed without a verdict, what do you want to change?" — a prompt about a diff you had in fact just seen in your own `diff.tool`. The dispatcher now reports that case as `no-verdict` with `backend: difftool` and `capabilities.producesVerdict: false`, so the skill can tell "shown in your difftool, ungraded" apart from "the review never happened".
+- **The docs-site session previews render their diff.** The `moor` playback frames on the landing page and the `/anchor:commit` page showed `◆ moor · undefined` above an empty diff, because the frames carried `del`/`add`/`rej` fields while the player renders from `file`, `lines[]`, `comment{}`, and `verdict`. The frames now use the player's schema and show the example hunk with its `fix-now` comment.
+
+## Other
+
+- The doc site is generated end to end from `plugin.yml` through shipyard: `docs/index.html` is projected rather than committed (it had drifted from the shared template), and the SPEC surfaces at a consistent `/spec` route.
+- CI runs shipyard's reusable `preview.yml` gate in place of the removed `check.yml`, and every shipyard caller — release, docs deploy, the `scripts/shipyard` wrapper — is pinned to the `@v1` major-version alias so a breaking change on shipyard's `main` can't reach this plugin's release. The pre-commit drift hook is gone; the release commits the projection back.
+- New CI jobs cover the commit helper, the pre-flight recon, and the review dispatcher against both adapters, and the shellcheck gate now includes the backend adapters.
+
 ## 0.23.0
 
 ## New
