@@ -124,6 +124,9 @@ behavior, not an independent authority — review them against the source.
   shall create a feature branch first rather than push to the default branch, and
   the commit helper shall refuse to commit onto the default branch unless
   explicitly told the direct-to-default case was chosen.
+- **[CMT-20]** The system shall decide the test gate from the runner's exit
+  status, captured on its first invocation, rather than from its output, and shall
+  not run the suite a second time to obtain that status.
 
 ### PREP — Prepare review
 
@@ -156,13 +159,24 @@ check.
 - **[PREP-09]** Before drafting Context, the system shall run an anti-recency
   check dispositioning recent iterations as centerpiece, footnote, or cut.
 - **[PREP-10]** The system shall deep-link Review-guide references to the specific
-  changed lines rather than to files alone.
+  changed lines rather than to files alone, building each link from the per-file
+  prefix the recon block supplies (`FILE_LINKS`, from `deep-links.sh`) on both
+  forges, and shall not hash a file path or assemble an anchor itself.
 - **[PREP-11]** If a claim about prior workflow or current state lacks a citable
   source, then the system shall omit it from the description.
 - **[PREP-12]** Where a predecessor CR was captured, the system shall record the
   ordering dependency in the description and, on GitLab, on the forge.
-- **[PREP-13]** When presenting the drafted description, the system shall offer
-  write / copy-only / edit, defaulting to write.
+- **[PREP-13]** When a drafted description is ready, the system shall present it
+  to the user in a visual review (the current description vs. the draft, via the
+  review wrapper) before any write prompt, and shall write it to the CR on a clean
+  verdict without a further chat confirmation.
+- **[PREP-14]** If no review backend is installed, or no CR exists to diff
+  against, then the system shall present the description as text in its own reply
+  and offer write / copy-only / edit, defaulting to write.
+- **[PREP-15]** Before opening the description review, the system shall verify
+  each deep link's line part against the working tree (`deep-links.sh --verify`)
+  and re-point every line reported out-of-range, blank, outside a changed hunk,
+  or anchored to a file the range doesn't touch.
 
 ### FDBK — Resolve feedback
 
@@ -425,3 +439,10 @@ this" nullability from SARIF's `notApplicable`.
   its own.
 - **[UX-03]** The system shall present multi-way user decisions through
   `AskUserQuestion` with the recommended option first.
+- **[UX-04]** The system shall not treat the output of a presentation command as
+  having shown the user anything, and shall not ask for approval of an artifact it
+  has emitted only as tool output — a drafted artifact under decision reaches the
+  user as text in the reply or through a review tool.
+- **[UX-05]** Where a helper script can supply a value the skill would otherwise
+  derive with its own commands (a path hash, a temp path), the system shall read it
+  from the recon block rather than run those commands.

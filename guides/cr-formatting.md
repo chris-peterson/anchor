@@ -52,12 +52,19 @@ After the visualization choice, lean into markdown for the surrounding prose:
 ## Deep-link construction (Review guide)
 
 Always deep-link to the actual line, not just the file — reviewers should be one
-click away from the hunk you're pointing them at. The skill supplies the runtime
-values (`CR_URL`, and the per-file `FILE_ANCHORS` from `prepare-review`'s Step 1
-block); construction differs by forge:
+click away from the hunk you're pointing them at. **`FILE_LINKS` from
+`prepare-review`'s Step 1 block is the whole prefix**, per changed file: the CR
+URL, the view path the anchor actually scrolls on, and the path-hash the forge
+renders (`sha1` on GitLab, `sha256` on GitHub — `scripts/deep-links.sh` computes
+it). Use the bare prefix for a file-level link; append the line part for a line
+link, which is all that differs by forge:
 
-- **GitLab:** `<CR_URL>/diffs#<file-anchor>_<old-line>_<new-line>` where `<file-anchor>` is `sha1(<repo-relative-file-path>)` — already computed per changed file in `FILE_ANCHORS`. (You still pick the line numbers; only the path-hash is precomputed.) For a file-level link (no specific line), just use `<CR_URL>/diffs#<file-anchor>`. For pure additions, use the new line number for both `<old-line>` and `<new-line>` — the link still resolves.
-- **GitHub:** `<CR_URL>/changes#diff-<file-anchor>R<new-line>` (or `L<new-line>` for the left/old side). Use the `/changes` view, not `/files` — the anchor scrolls to the line on `/changes`, but the classic Files-changed tab leaves it at the top. The `<file-anchor>` is `sha256(<repo-relative-file-path>)`, which matches GitHub's rendered `diff-…` id exactly — compute it directly (`printf '%s' <path> | shasum -a 256`) rather than hunting for it in the UI.
+- **GitLab:** append `_<old-line>_<new-line>`; line 82 on both sides gives `<prefix>_82_82`. For pure additions, use the new line number for both — the link still resolves.
+- **GitHub:** append `R<new-line>` for the right side, `L<old-line>` for the left; line 665 on the right gives `<prefix>R665`.
+
+Don't hash a path yourself and don't hand-assemble the prefix. A 64-char hex
+anchor spliced into prose is where these links break, and the hash you'd compute
+is the one `FILE_LINKS` already handed you.
 
 ## Collapsible sections — fold heavy detail away
 

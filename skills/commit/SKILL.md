@@ -78,7 +78,9 @@ Run git with `-C <checkout>` when the working directory isn't the target, rather
 
 Before reading changes, look for a test runner in the project (e.g., `just test`, `npm test`, `dotnet test`, `pytest`, `go test ./...`, a `Makefile` test target). Run the test suite.
 
-If tests pass, proceed to Step 1.
+**Gate on the exit code, not on the output.** A suite's stdout is not a reliable pass/fail signal: a runner that exercises a validator against known-bad fixtures prints `*** Found 1 error(s)` on a *successful* run, and `| tail -30` of that reads as a failure. Reading the output then re-running to get a clean exit code runs the suite twice. So capture the status on the first invocation — `<runner>; echo "exit: $?"`, or `${PIPESTATUS[0]}` when a pipe is unavoidable — and let that decide.
+
+**A passing suite is silent.** Don't report it: it's an input to the next step, not a decision the user makes (`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`). Proceed to Step 1 without a word about tests.
 
 If tests fail, **stop and fix them**. Present the failures and help the user resolve them. Do NOT proceed to Step 1 until the test suite exits cleanly. No exceptions — "pre-existing" failures still block the commit.
 
@@ -136,7 +138,9 @@ Write the drafted message to a temp file (`$(mktemp -u "${TMPDIR:-/tmp}/commit-m
 
 ## Step 3: Settle the branch and shape
 
-Nothing is committed in this step — it settles *where* and *how* the commit lands: the branch to commit on, and whether this is a new commit or a squash. The **message itself isn't confirmed here** — it rides into the Step 4 review, where you read it beside the diff (and, on moor, edit it in the tool). Display the `--stat` summary from Step 1 so the user sees what's in scope.
+Nothing is committed in this step — it settles *where* and *how* the commit lands: the branch to commit on, and whether this is a new commit or a squash. The **message itself isn't confirmed here** — it rides into the Step 4 review, where you read it beside the diff (and, on moor, edit it in the tool).
+
+**Show the `--stat` summary from Step 1 only when this step actually asks the user something** — the branch prompt or the squash prompt below. There it's the scope the choice applies to. On the path where neither fires (the ordinary `SQUASH=blocked` commit on a feature branch, which is the common one), there is no question for it to qualify, and Step 4's review opens on the same changeset moments later; printing it there is a line of output attached to no decision.
 
 ### When on the default branch — create a feature branch first
 
@@ -205,6 +209,8 @@ If a commit attempt in Step 5 is rejected by a `PreToolUse` hook citing a substr
 Before committing, open the pending changeset — the working tree vs `HEAD`, the exact changes Step 5 will commit — in a visual review, **with the drafted message shown alongside it**. Launch the **dispatcher** in `--local` mode with `--message-file` (the message file from Step 2) — **not** raw `git difftool`. It stages everything so the index equals the working tree, diffs it against `HEAD`, seeds the drafted message (subject as the headline, body as prose) plus a repo/branch/summary header, drives the configured review backend (`anchor.reviewBackend`, default moor), and — once it closes — prints the normalized result on its own stdout. So you review the message and the diff *together* — no separate chat gate — and on moor you can edit the message in the tool (it returns as `editedFields`). Raw `git difftool` bypasses the header and the verdict.
 
 **Launch as a background call** (`run_in_background: true`): the dispatcher blocks until the review closes, so a foreground call would hold the turn open until the Bash timeout.
+
+**Don't announce the launch.** The backend puts the diff on screen itself — a terminal overlay (revdiff) or its own window (moor) — so the user can see it. A line saying the review is open, and what's in it, describes what the tool is already showing. The next thing you say is the verdict (or what the review asked for).
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --local --message-file <commit-msg-path>

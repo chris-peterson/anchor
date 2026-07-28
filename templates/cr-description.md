@@ -33,9 +33,26 @@ guide](/guides/configuring) for the full key set.
 - Link any ticket, incident, or design doc. Mention a tracker URL or a bare id
   and `anchor` links it — expanding a bare id against `anchor.workTrackerBaseUri`.
 
-Context's job is to orient. If the diff plus a one-line *why* gets the reviewer
-there, write that and stop. Padding Context to feel substantive is a failure
-mode, not thoroughness.
+**Two short paragraphs, and the reviewer should know what this CR does by the end
+of the first.** Orientation earns its words only as much as the reviewer needs to
+follow the problem; a third paragraph of runway before the change appears means
+the orientation became the subject. If the diff plus a one-line *why* gets the
+reviewer there, write that and stop.
+
+Three patterns that pad Context without informing it:
+
+- **Flavor about the status quo** — *"Short, lowercase, quick to type."* True,
+  and it changes nothing the reviewer decides. Describe today's behavior only
+  where the change acts on it.
+- **Rejected alternatives** — *"and none of the planning semantics: no rollup, no
+  dates, no percent-complete."* That's *Approach & trade-offs* material, and only
+  when a reviewer would otherwise question the choice. In Context it defends
+  against an objection nobody raised yet.
+- **Analogy before substance** — reaching for a comparison ("forge products solve
+  this with a milestone") before stating what the change does. Lead with the
+  change; keep the analogy only if it's shorter than the plain statement.
+
+Padding Context to feel substantive is a failure mode, not thoroughness.
 
 ## 2. Review guide
 

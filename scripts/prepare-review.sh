@@ -61,11 +61,13 @@
 #   WORKTREE_CLEAN=<0|1>
 #   STATE=<match|dirty|head-mismatch|dirty+head-mismatch>   drift vs the CR head
 #   CURRENT_DESC_PATH=<path>     temp file holding the CR's current description
-#                                (baseline for the Step 4 diff); empty when no CR
+#                                (baseline for the Step 4 review); empty when no CR
+#   DESC_DRAFT_PATH=<path>       temp file the skill writes the drafted description
+#                                to (the review's right-hand side)
 #   TEMPLATE_PATH=<path>         project CR template, empty when none
 #   ANCHOR_CONFIG=<json>         {key: value} of anchor.* git config; {} when none
-#   FILE_ANCHORS=<json>          {path: sha1(path)} for changed files (GitLab deep
-#                                links); {} on GitHub (sha256, gh doesn't expose it)
+#   FILE_LINKS=<json>            {path: deep-link prefix} per changed file, from
+#                                deep-links.sh — both forges; {} when no CR
 #
 # On an auth failure (or any failure) while opening the draft, it prints
 # CR_CREATE_ERROR=<message> and exits non-zero so the skill surfaces it and asks
@@ -326,16 +328,18 @@ while read -r name value; do
   anchor_cfg=$(jq -c --arg n "$name" --arg v "$value" '. + {($n): $v}' <<<"$anchor_cfg")
 done < <(git config --get-regexp '^anchor\.' 2>/dev/null || true)
 
-# --- File anchors for GitLab deep links (sha1 of each changed path) ----------
+# --- Deep-link prefixes + draft path (both forges) ----------------------------
 
-file_anchors='{}'
-if [[ "$forge" == "gitlab" && "$ahead" -gt 0 ]]; then
-  while read -r path; do
-    [[ -z "$path" ]] && continue
-    sha=$(printf '%s' "$path" | sha1sum | cut -d' ' -f1)
-    file_anchors=$(jq -c --arg p "$path" --arg s "$sha" '. + {($p): $s}' <<<"$file_anchors")
-  done < <(git diff --name-only "origin/${default_branch}...HEAD" 2>/dev/null || true)
+file_links='{}'
+if [[ "$ahead" -gt 0 ]]; then
+  file_links=$(bash "$(dirname "${BASH_SOURCE[0]}")/deep-links.sh" \
+    --forge "$forge" --cr-url "$cr_url" --base "origin/${default_branch}" \
+    | sed -n 's/^FILE_LINKS=//p')
 fi
+
+# The path Step 4 writes the drafted description to. Handed over here so drafting
+# costs no separate mktemp call.
+desc_draft_path="$(anchor_tmpfile cr-desc-draft)"
 
 # --- Emit ---------------------------------------------------------------------
 
@@ -359,6 +363,7 @@ echo "LOCAL_HEAD_SHA=$local_head"
 echo "WORKTREE_CLEAN=$worktree_clean"
 echo "STATE=$state"
 echo "CURRENT_DESC_PATH=$current_desc_path"
+echo "DESC_DRAFT_PATH=$desc_draft_path"
 echo "TEMPLATE_PATH=$template_path"
 echo "ANCHOR_CONFIG=$anchor_cfg"
-echo "FILE_ANCHORS=$file_anchors"
+echo "FILE_LINKS=$file_links"

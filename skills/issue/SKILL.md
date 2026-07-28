@@ -148,7 +148,9 @@ Draft a concise imperative **title** (under 72 characters), then the body follow
 
 Write the drafted body to a temp file (`$(mktemp -u "${TMPDIR:-/tmp}/issue-draft.XXXXXX").md`).
 
-**Present the change.** When updating an existing issue, diff the draft against the baseline captured in Step 1 and present it in a fenced `diff` block:
+**Present the change — in your own message.** Running a command does *not* show the user anything: a Bash tool's output goes to you, and the terminal collapses it to a `+80 lines` stub they'd have to expand. Asking them to approve off the back of that is asking them to approve blind. So whatever you present, it goes in the reply as text.
+
+When updating an existing issue, diff the draft against the baseline captured in Step 1 and **paste that diff** into a fenced `diff` block in your message:
 
 ```bash
 git --no-pager diff --no-index <current-path> <draft-path>
@@ -197,5 +199,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --files \
   --title 'Issue body — proposed edits' \
   --detail repo=<repo>
 ```
+
+Don't announce the launch — the backend puts the draft on screen itself, in a terminal overlay (revdiff) or its own window (moor), so a line saying the review is open describes what the user can already see; the next thing you say is the verdict.
 
 Read the verdict back with the **BashOutput tool** (not `tail` / `$(...)`). Only `REVIEW_VERDICT` `approved` is approval; `changes-requested` carries comments in `REVIEW_OUTPUT.comments` to fold in before re-presenting (the `fix-now` entries when `severitySource` is `graded`, else every comment); `incomplete` / `no-verdict` mean the review didn't complete — surface what happened and fall back to chat rather than treating silence as approval. (The full verdict contract matches the `prepare-review` skill's Step 4.) If no review backend is available, fall back to chat: ask what to change, revise, and re-present.
