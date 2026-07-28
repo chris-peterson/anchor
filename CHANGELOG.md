@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.1.2
+
+Fixes the publish step of `/anchor:release` on GitHub, where reaching for an abbreviated commit sha as the release target failed validation with an error that pointed at the tag.
+
+## Fixed
+
+- **`/anchor:release` doesn't hand GitHub an abbreviated commit sha.** `gh release create --target` takes a branch name or a full 40-char sha, and an abbreviated one is rejected at the create: the 422 leads with two errors about the tag (`tag_name is not a valid tag`, `Published releases must have a valid tag`) and puts the actual cause (`Release.target_commitish is invalid`) last, so it reads as a bad version tag. The publish step now leaves the target at its default, the default branch's tip, which the release recon has already established HEAD to be, and a caller that needs to tag some other commit is pointed at the full sha.
+
+## Other
+
+- The forge cookbook's **Publish a release** recipe carries the accepted form of `--target` and the error text it produces, so the next 422 is recognizable from the message alone.
+
 ## 1.1.1
 
 Fixes pipeline resolution: a commit's CI run is found by the commit, whatever ref triggered it, and on GitHub the verdict now covers every workflow on that commit rather than whichever one finished last.
