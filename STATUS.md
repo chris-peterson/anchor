@@ -6,7 +6,7 @@ Maintained by `/sextant:spec-status`.
 **Last audit:** 2026-07-28
 **Spec version:** root SPEC.md (unversioned)
 **Plugin version:** 1.0.1
-**Coverage:** 135 Covered, 1 Partial, 0 Missing/Contradicts
+**Coverage:** 136 Covered, 0 Partial, 0 Missing/Contradicts
 
 The implementation is the plugin itself — the skill prompts under
 `skills/`, the ambient rules under `rules/`, and the helper scripts under
@@ -20,7 +20,7 @@ draft to review against the implementation, not an audited ledger.
 
 | Prefix | Count | Status | Notes |
 |--------|------:|--------|-------|
-| TGT-01..09 | 9 | 8 Covered, 1 Partial | Target resolution + worktree isolation — `scripts/{resolve-target,worktree}.sh`, each `skills/*/SKILL.md` "Target repo". TGT-01 Partial: `skills/pipeline/SKILL.md:57` matches a name argument against session-touched repo basenames without the tack repo-db lookup the other seven skills run via `resolve-target.sh` |
+| TGT-01..09 | 9 | All Covered | Target resolution + worktree isolation — `scripts/{resolve-target,worktree}.sh`, each `skills/*/SKILL.md` "Target repo"; every skill routes a name argument through `resolve-target.sh` |
 | CMT-01..20 (16 retired) | 19 | All Covered | Review-first commit-and-push flow (1.0) — `skills/commit/SKILL.md`, `scripts/{commit,commit-preflight,look-ahead,squash-check}.sh` |
 | PREP-01..15 | 15 | All Covered | `prepare-review`, pushed-branch only, opens the draft CR without pushing, reviews the description in the tool, verifies deep-link line parts — `skills/prepare-review/SKILL.md`, `scripts/{prepare-review,deep-links}.sh` |
 | FDBK-01..08 | 8 | All Covered | Fetch, triage, act on threads — `skills/resolve-feedback/SKILL.md` |
@@ -35,6 +35,14 @@ draft to review against the implementation, not an audited ledger.
 | UX-01..05 | 5 | All Covered | Narration, orchestration, decision prompts, artifact visibility, recon-supplied values — cross-cutting, each `skills/*/SKILL.md`, `guides/execute-quietly.md` |
 
 ## Audit history
+
+### 2026-07-28 — TGT-01 closed for `pipeline`
+
+TGT-01 Partial → Covered: `skills/pipeline/SKILL.md` now resolves a name argument
+through `scripts/resolve-target.sh` and acts on `TARGET_VIA`, with the
+session-touched substring match kept as the `cwd` fallback (TGT-05). `pipeline`
+reads a work tree, so an empty `TARGET_LOCAL` stops rather than falling through to
+the cwd repo. Every skill now shares the same resolution path.
 
 ### 2026-07-28 — Coverage refresh (spec-status)
 
