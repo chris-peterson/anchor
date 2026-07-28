@@ -42,9 +42,21 @@ git -C "$repo" commit --quiet -m change
 
 run() { ( cd "$repo" && bash "$links" "$@" ); }
 
-# Reference hashes for src/cli.ts, computed independently of the script.
-sha1_cli=$(printf '%s' src/cli.ts | shasum -a 1   | cut -d' ' -f1)
-sha256_cli=$(printf '%s' src/cli.ts | shasum -a 256 | cut -d' ' -f1)
+# Reference hashes, computed here rather than by calling the script. Which
+# binary exists is itself the platform difference this test runs the matrix for:
+# macOS has `shasum` and no `sha1sum`, Windows Git Bash has `sha1sum`/`sha256sum`
+# and no `shasum`, and distros vary — so the test can't hardcode either name.
+ref_hash() {
+  if command -v shasum >/dev/null 2>&1; then
+    printf '%s' "$2" | shasum -a "$1" | cut -d' ' -f1
+  elif command -v "sha${1}sum" >/dev/null 2>&1; then
+    printf '%s' "$2" | "sha${1}sum" | cut -d' ' -f1
+  else
+    fail "no sha$1 tool available to compute a reference hash"
+  fi
+}
+sha1_cli=$(ref_hash 1 src/cli.ts)
+sha256_cli=$(ref_hash 256 src/cli.ts)
 
 # --- GitHub: sha256 anchor on the /changes view -------------------------------
 o=$(run --forge github --cr-url https://github.com/o/r/pull/32 --base main)
@@ -75,7 +87,7 @@ ok "no changed files -> {}"
 
 # --- --verify: the line part, the half the prefix derivation doesn't cover -----
 gh_url=https://github.com/o/r/pull/32
-app_prefix="$gh_url/changes#diff-$(printf '%s' app.txt | shasum -a 256 | cut -d' ' -f1)"
+app_prefix="$gh_url/changes#diff-$(ref_hash 256 app.txt)"
 draft="$work/draft.md"
 
 verify() { ( cd "$repo" && bash "$links" --verify "$draft" --forge "$1" --cr-url "$2" --base main ); }
@@ -93,7 +105,7 @@ grep -q "^SUSPECT unchanged-line app.txt:1"  <<<"$o" || fail "missed the unchang
 grep -q "^SUSPECT out-of-range app.txt:99"   <<<"$o" || fail "missed the out-of-range line: $o"
 ok "verify: blank / unchanged / out-of-range each reported"
 
-printf '%s\n' "[gone]($gh_url/changes#diff-$(printf '%s' nope.txt | shasum -a 256 | cut -d' ' -f1)R2)" > "$draft"
+printf '%s\n' "[gone]($gh_url/changes#diff-$(ref_hash 256 nope.txt)R2)" > "$draft"
 o=$(verify github "$gh_url") && fail "an anchor for an unchanged file should exit non-zero: $o"
 grep -q "^SUSPECT unknown-file" <<<"$o" || fail "missed the unknown file: $o"
 ok "verify: anchor matching no changed file -> unknown-file"
@@ -112,7 +124,7 @@ grep -q '^DEEP_LINK_TREE=' <<<"$o" && fail "a clean tree should say nothing abou
 ok "verify: dirty tree flagged, clean tree silent"
 
 gl_url=https://gitlab.com/g/p/-/merge_requests/7
-gl_prefix="$gl_url/diffs#$(printf '%s' app.txt | shasum -a 1 | cut -d' ' -f1)"
+gl_prefix="$gl_url/diffs#$(ref_hash 1 app.txt)"
 printf '%s\n' "[a](${gl_prefix}_3_3) [b](${gl_prefix}_4_4)" > "$draft"
 o=$(verify gitlab "$gl_url") && fail "gitlab drift should exit non-zero: $o"
 [ "$(val DEEP_LINK_SUSPECTS "$o")" = 1 ] || fail "expected 1 suspect, got: $o"

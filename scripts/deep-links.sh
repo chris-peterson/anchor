@@ -52,8 +52,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Hash a path with the given algorithm. `shasum` covers macOS, Windows Git Bash,
-# and most Linux; the GNU coreutils names cover distros that ship those instead.
+# Hash a path with the given algorithm. Neither name is available everywhere:
+# macOS ships `shasum` and no `sha1sum`, Windows Git Bash ships `sha1sum` /
+# `sha256sum` and no `shasum`, and distros vary. Try both before giving up.
 path_hash() {
   local algo="$1" path="$2"
   if command -v shasum >/dev/null 2>&1; then
