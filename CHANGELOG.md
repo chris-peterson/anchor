@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.1.1
+
+Fixes pipeline resolution: a commit's CI run is found by the commit, whatever ref triggered it, and on GitHub the verdict now covers every workflow on that commit rather than whichever one finished last.
+
+## Fixed
+
+- **`/anchor:pipeline` finds the run for a commit even when a tag triggered it.** The lookup asked GitHub for the runs on a branch (`gh run list --branch`) and GitLab for the pipelines on a ref, then matched the commit inside that ref's results. A run fired by a published release or a pushed tag carries the *tag* as its branch, so watching the v1.1.0 release run reported "no pipeline for this commit" for a run that was for exactly that commit. Both lookups now filter by commit sha, so how the run was triggered no longer decides whether it can be found. `--branch` still names a ref, now as the thing whose commit to resolve (an annotated tag works there too).
+- **A GitHub commit's verdict covers every workflow on it.** GitHub answers with one run per workflow, so a commit that triggers lint, test, and docs has three runs and there is no single "the pipeline" to report. Taking the most recent one reported whichever finished last, which could be green while another workflow was still running or already red. `/anchor:pipeline` now folds the runs into one verdict: each workflow's latest attempt (a retry supersedes the run it replaced), then the least-settled and worst-off run speaks for the commit. It reports in-flight while any workflow is still going, and red if any went red. Ask about a single workflow with `--workflow <path|file|display name>`; the run the verdict came from is named in the report.
+- **`/anchor:release` watches the release run, not a neighbor that shares its commit.** The release workflow fires on the tag, so its run sits on the same commit as everything the merge already ran there. The watch now names the workflow, which is what makes the verdict the release's.
+- **`/anchor:merge`'s pipeline gate stays on one run.** The fold is `/anchor:pipeline`'s answer, not every caller's: whether *every* required check passed is the forge's own merge check, which that skill already reads a step earlier. Folding the commit's other runs in as well would block a merge the forge is willing to take, so the gate asks for the commit's most recent run alone.
+- **Job mode no longer exits non-zero on a successful watch.** Tracking a named job (`--job <name>`) ended on a test for the timeout flag, so the ordinary no-timeout path returned 1 and `set -e` turned that into a failing exit even though the job had been reported.
+
+## Other
+
+- CI exercises `pipeline-status.sh` against stub `gh`/`glab` binaries that filter their fixtures the way the real CLIs do, since the verdict turns on which runs a lookup can see. A release-event fixture pins the tag-as-branch case.
+- The spec gains `PIPE-07`, `PIPE-08`, and `PIPE-09` for commit-scoped resolution, the per-workflow fold, and the single-run opt-out. The forge cookbook's CI section documents the by-sha invocations for both forges.
+
 ## 1.1.0
 
 Adds `/anchor:release`, the step after `/anchor:merge`: it works out what has landed since the last release, recommends a semver bump, drafts notes for someone who *uses* the project, and publishes along the path your repo already publishes on.
