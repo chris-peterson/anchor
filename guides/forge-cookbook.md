@@ -43,12 +43,13 @@ Reach for the per-command flags above only for forge operations a skill runs
 directly across separate Bash calls, where there's no persistent `cd`.
 
 **When the work mutates a repo the session didn't start in, isolate it in a
-worktree.** `scripts/worktree.sh setup <target>` decides direct-vs-isolated
-(by comparing the git common dir against the cwd repo) and, for a *different*
-repo, adds a throwaway worktree on the target's current branch so the work never
-disturbs that repo's own checkout; the skill threads the resulting `CHECKOUT`
-through every command and runs `scripts/worktree.sh teardown <target> <worktree>`
-when the flow ends. This is the "should I use a worktree?" boundary: operate
+worktree.** `${CLAUDE_PLUGIN_ROOT}/scripts/worktree.sh setup <target>` decides
+direct-vs-isolated (by comparing the git common dir against the cwd repo) and,
+for a *different* repo, adds a throwaway worktree on the target's current branch
+so the work never disturbs that repo's own checkout; the skill threads the
+resulting `CHECKOUT` through every command and runs
+`${CLAUDE_PLUGIN_ROOT}/scripts/worktree.sh teardown <target> <worktree>` when the
+flow ends. This is the "should I use a worktree?" boundary: operate
 directly in your session's repo, isolate in a worktree once you've wandered
 outside it.
 
@@ -59,7 +60,7 @@ against `logbook`", "open the MR in `customer-svc`" — resolve the name through
 tack's repo db rather than guessing from cwd or improvising a `-R` slug:
 
 ```bash
-bash "scripts/resolve-target.sh" <name>
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh" <name>
 ```
 
 It prints `TARGET_VIA`:
@@ -504,8 +505,8 @@ A commit's CI run goes by different names per forge: GitHub calls it a
 **workflow run** (the *Actions* tab), GitLab a **pipeline**. anchor uses
 **pipeline** as the generic term for both — pick `gh run` on a GitHub origin,
 `glab` (the pipelines API) on a GitLab one. The `/anchor:pipeline` skill and its
-`scripts/pipeline-status.sh` helper wrap the invocations below; reach for them
-directly when scripting a one-off.
+`${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh` helper wrap the invocations
+below; reach for them directly when scripting a one-off.
 
 **Find the pipeline for a commit.** Resolve by branch, then pin to the exact
 commit SHA — the latest run on a branch isn't always the one you pushed.

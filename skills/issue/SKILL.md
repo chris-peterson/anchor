@@ -116,7 +116,7 @@ Before drafting, check whether the project ships an issue template. This reads t
 - **GitLab:** `.gitlab/issue_templates/*.md` (respect the configured default if more than one)
 - **GitHub:** `.github/ISSUE_TEMPLATE/*.md`, or the legacy `.github/ISSUE_TEMPLATE.md`. A `.yml` **issue form** is a structured format — don't compose prose into it; surface it and let the author fill it in the web UI.
 
-If a template exists, it's the team's required scaffolding — **compose into it, don't replace it.** Fill the sections it defines, preserve its checklists and headings verbatim, and **strip any "delete before publishing" instruction block** after following its guidance. On a structure conflict the team template wins. The composition rules live in the "Honoring a project's forge template" section of `templates/issue-description.md`.
+If a template exists, it's the team's required scaffolding — **compose into it, don't replace it.** Fill the sections it defines, preserve its checklists and headings verbatim, and **strip any "delete before publishing" instruction block** after following its guidance. On a structure conflict the team template wins. The composition rules live in the "Honoring a project's forge template" section of `${CLAUDE_PLUGIN_ROOT}/templates/issue-description.md`.
 
 ### Honor `anchor.*` config
 
@@ -135,7 +135,7 @@ git config --get-regexp '^anchor\.' 2>/dev/null
 
 ### Body structure
 
-Draft a concise imperative **title** (under 72 characters), then the body following the section template in `templates/issue-description.md`: **Context**, **Proposed approach**, **Acceptance criteria**, and **Considerations** *(optional)*. The template owns the *shape*; the discipline below owns the *technique*.
+Draft a concise imperative **title** (under 72 characters), then the body following the section template in `${CLAUDE_PLUGIN_ROOT}/templates/issue-description.md`: **Context**, **Proposed approach**, **Acceptance criteria**, and **Considerations** *(optional)*. The template owns the *shape*; the discipline below owns the *technique*.
 
 - **Lead with why, write for the unfamiliar reader** — the same ELI5 audience assumption `prepare-review` uses. Establish the system/business context in a sentence or two before the detail.
 - **Keep the approach about the plan, not the code** — what's being built and why the load-bearing decisions were made, not how every class is wired.

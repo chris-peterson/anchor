@@ -69,7 +69,7 @@ and do **not** create your own tasks. Otherwise enumerate:
 ## Target repo and CR
 
 Resolve the repo as the other anchor skills do. **With a name argument**, resolve
-it through tack's repo db (`scripts/resolve-target.sh <name>`, see the cookbook's
+it through tack's repo db (`${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh <name>`, see the cookbook's
 "Resolving a named target repo"): `TARGET_VIA=tack` → use `TARGET_LOCAL` as the
 checkout — this skill runs `git` post-merge (checkout, pull, branch delete), so it
 needs one; if `TARGET_LOCAL` is empty, ask where the checkout lives rather than

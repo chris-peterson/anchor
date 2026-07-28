@@ -2,15 +2,16 @@
 
 How to *render* a CR description once its shape is decided: which visualization
 fits which data, the mermaid and screenshot recipes, and the prose conventions
-that make a description skim-readable. `templates/cr-description.md` owns the
-*shape* (which sections, in what order); this guide owns the *technique* for
-realizing it. The `prepare-review` skill points here from its Step 3 drafting
-flow.
+that make a description skim-readable.
+[cr-description](/templates/cr-description) owns the *shape* (which sections, in
+what order); this guide owns the *technique* for realizing it. The
+`prepare-review` skill points here from its Step 3 drafting flow.
 
 For the render-time traps that bite any markdown a forge displays — character
 escaping, nested fences, mermaid-fence placement, the collapsible `<details>`
-blank-line rule, tables in lists — see `guides/markdown-gotchas.md`. This guide
-is about *what to reach for*; that one is about *what breaks*.
+blank-line rule, tables in lists — see
+[markdown-gotchas](/guides/markdown-gotchas). This guide is about *what to reach
+for*; that one is about *what breaks*.
 
 ## Pick the visualization that fits the data shape
 
@@ -55,9 +56,10 @@ Always deep-link to the actual line, not just the file — reviewers should be o
 click away from the hunk you're pointing them at. **`FILE_LINKS` from
 `prepare-review`'s Step 1 block is the whole prefix**, per changed file: the CR
 URL, the view path the anchor actually scrolls on, and the path-hash the forge
-renders (`sha1` on GitLab, `sha256` on GitHub — `scripts/deep-links.sh` computes
-it). Use the bare prefix for a file-level link; append the line part for a line
-link, which is all that differs by forge:
+renders (`sha1` on GitLab, `sha256` on GitHub —
+`${CLAUDE_PLUGIN_ROOT}/scripts/deep-links.sh` computes it). Use the bare prefix
+for a file-level link; append the line part for a line link, which is all that
+differs by forge:
 
 - **GitLab:** append `_<old-line>_<new-line>`; line 82 on both sides gives `<prefix>_82_82`. For pure additions, use the new line number for both — the link still resolves.
 - **GitHub:** append `R<new-line>` for the right side, `L<old-line>` for the left; line 665 on the right gives `<prefix>R665`.
@@ -90,7 +92,7 @@ unrelated grants that reads as whataboutism.
 Both GitHub and GitLab render the HTML;
 [GitLab's markdown reference](https://docs.gitlab.com/user/markdown/#collapsible-section)
 documents the syntax. The blank-line rule that makes markdown render inside the
-block is in `guides/markdown-gotchas.md`.
+block is in [markdown-gotchas](/guides/markdown-gotchas).
 
 ````markdown
 <details>

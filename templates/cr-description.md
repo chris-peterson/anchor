@@ -95,9 +95,9 @@ Mechanical*, or *Security-sensitive / Refactor / Cleanup*). Headers describe the
 **kind** of change, not the time it takes. "Critical" means: where a bug would
 hurt most, where a reviewer's judgment adds the most value, or where the core
 design decision lives. Always deep-link to the actual line — see
-`guides/cr-formatting.md` for forge-specific anchor construction. For trivial
-changesets (a single file, a one-line fix), skip the tiered guide and just link
-the file and say what to look for.
+[cr-formatting](/guides/cr-formatting) for forge-specific anchor construction.
+For trivial changesets (a single file, a one-line fix), skip the tiered guide and
+just link the file and say what to look for.
 
 ## 3. Approach & trade-offs *(rare — only when a reviewer would otherwise question the choice)*
 
