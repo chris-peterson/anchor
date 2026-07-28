@@ -54,10 +54,17 @@ task-tracking.
 Resolve which repo this operates on — the working directory isn't a reliable
 proxy. Re-resolve on every invocation.
 
-- **With an argument** (`/anchor:pipeline <name>`): case-insensitive
-  substring-match `<name>` against the basename of every git repo the session
-  has touched. One match → use it (confirm in one line). Zero or multiple → list
-  the candidates and ask.
+- **With an argument** (`/anchor:pipeline <name>`): resolve the name through
+  tack's repo db — `bash "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh" <name>`
+  (see the cookbook's "Resolving a named target repo"). `TARGET_VIA=tack` → use
+  `TARGET_LOCAL` as the checkout and pass it as `--repo` to the helper below; this
+  skill reads the branch and HEAD from a work tree, so if `TARGET_LOCAL` is empty
+  (a repo tack knows but you have no clone of) say so and stop, rather than
+  reporting the cwd repo's pipeline under the requested repo's name. `ambiguous` →
+  prompt with `TARGET_CANDIDATES`. `cwd` (no tack, or no match) → fall back to a
+  case-insensitive substring-match of `<name>` against the basename of every git
+  repo the session has touched; one match → use it (confirm in one line),
+  zero/multiple → ask.
 - **No argument**: run `git rev-parse --show-toplevel` from the working
   directory. If the session touched more than one repo, or edits landed outside
   it, state the resolved path and ask which to target.
