@@ -329,6 +329,43 @@ per-MR checkbox decides — read the MR's `squash` field to see which way it's s
 glab mr view <iid> --output json | jq '{squash}'
 ```
 
+## Publish a release
+
+Creating a release is the publish step for the `release-triggered` and
+`tag-triggered` models (see `guides/release-models.md`). Pass the notes by file —
+they are multi-line prose, and the body is what a release-triggered workflow
+proxies into the changelog verbatim:
+
+```bash
+# GitHub — creates the tag from the default branch's tip if it doesn't exist;
+# --target points that elsewhere, --verify-tag instead aborts unless the tag is
+# already pushed. Never --generate-notes: a generated body lands a list of
+# unrelated prior PRs in the changelog section a release workflow writes.
+gh release create v<X.Y.Z> --title "v<X.Y.Z>" --notes-file <path>
+
+# GitLab — same default (tags the default branch's tip when the tag is missing);
+# --ref points it at a specific commit, tag, or branch instead.
+glab release create v<X.Y.Z> --notes-file <path>
+glab release create v<X.Y.Z> --notes-file <path> --ref <sha>
+```
+
+**Check the token can write releases before drafting.** Pushing over SSH needs no
+forge token at all, so a token missing `Contents: write` (GitHub) or the
+equivalent scope fails only at the create:
+
+```bash
+gh auth status                      # scopes the token carries
+glab auth status
+```
+
+**Confirm what the last release actually was**, rather than inferring it from
+tags alone — a tag can exist with no release attached:
+
+```bash
+gh release view --json tagName,publishedAt,isDraft
+glab release list --per-page 5
+```
+
 ## Issue list
 
 Listing/ranking issues (the `issues` skill). Fetch as JSON and rank client-side —

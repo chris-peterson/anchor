@@ -5,13 +5,17 @@ description: Merge an approved change request once its gates are green — waiti
 
 # Merge
 
-Land an open change request into the default branch. This is the terminal step
-of the anchor lifecycle: `/anchor:prepare-review` opens the CR and
-`/anchor:resolve-feedback` drives its threads to done; `/anchor:merge` checks
-that the CR is actually ready to land, merges it, and cleans up the branch
-behind it. The job is a **safe merge**: never land a CR that a gate says isn't
-ready, and never leave the local checkout stranded on a branch that no longer
-exists.
+Land an open change request into the default branch. `/anchor:prepare-review`
+opens the CR and `/anchor:resolve-feedback` drives its threads to done;
+`/anchor:merge` checks that the CR is actually ready to land, merges it, and
+cleans up the branch behind it. The job is a **safe merge**: never land a CR that
+a gate says isn't ready, and never leave the local checkout stranded on a branch
+that no longer exists.
+
+Publishing what landed is `/anchor:release`, and this skill **names it without
+running it**. Releasing is a deliberate act on its own schedule — several merges
+commonly batch into one release — so the choice of when to cut one belongs to the
+author, not to whichever merge happened to be last.
 
 CR = change request: a pull request on GitHub, a merge request on GitLab. Pick
 the forge tool by the `origin` remote.
@@ -300,3 +304,8 @@ Once the forge confirms the merge, leave the local checkout on a clean footing:
 One line: `Merged <CR ref> into <target> (<method>) — <merge-sha>`, with the CR URL.
 Note the branch cleanup only if it needed the user's attention (a `-d` that refused).
 Nothing more — the merge is the outcome, not a status report.
+
+Where the repo has something to publish, close with `/anchor:release` as the next
+step — one clause, not a pitch, and don't run it. On a repo with no version
+artifact (`RELEASE_MODEL=no-version-artifact` — the merge *was* the release), leave
+it out entirely rather than pointing at a skill that would no-op.

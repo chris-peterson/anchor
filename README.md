@@ -18,6 +18,7 @@ skills/commit/               /anchor:commit — stage, test, review the changese
 skills/prepare-review/        /anchor:prepare-review — open the CR on the pushed branch, rebase if behind, draft the description
 skills/resolve-feedback/     /anchor:resolve-feedback — fetch CR feedback; fix / reply / resolve each thread to resolution
 skills/merge/                /anchor:merge — check the merge gates (wait on the pipeline), merge the CR, delete the branch
+skills/release/              /anchor:release — establish the release model, recommend a version, draft notes, publish
 skills/pipeline/             /anchor:pipeline — work with a commit's forge pipeline; report state or watch until it settles
 skills/issue/                /anchor:issue — gather the why/consumer/acceptance; file a new forge issue (or update a known one)
 skills/issues/               /anchor:issues — list and rank the issues assigned to you; recommend the next to work on
@@ -25,9 +26,10 @@ rules/                       ambient rules a SessionStart hook injects into ever
 hooks/emit-rules.sh          the injecting hook (registered in hooks/hooks.json)
 scripts/review-diff.sh       launch the configured difftool through its review sidecar; print the verdict on stdout
 scripts/pipeline-status.sh   resolve / watch a commit's pipeline on the forge; print a normalized verdict on stdout
+scripts/release-recon.sh     the release facts in one pass: model, manifest + version, bump convention, shipping range
 scripts/look-ahead.sh        unpushed-commit count (bash-analyzer-safe helper)
 scripts/squash-check.sh      "is HEAD out for review?" gate for /commit's squash-vs-new-commit decision
-guides/                      load-bearing reference the skills/rules read at runtime (configuring, forge cookbook, markdown-gotchas, cr-formatting, description-vs-docs, changeset-scope, execute-quietly)
+guides/                      load-bearing reference the skills/rules read at runtime (configuring, forge cookbook, markdown-gotchas, cr-formatting, description-vs-docs, changeset-scope, execute-quietly, loaded-framing, release-models, worktree-isolation)
 templates/                   the output shapes the skills produce (commit-message, cr-description, issue-description), read at runtime
 docs/                        end-user docs site (docsify, GitHub Pages); skills/, rules/, guides/, templates/ are rendered in
 ```
