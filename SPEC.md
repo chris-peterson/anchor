@@ -19,7 +19,7 @@ behavior, not an independent authority — review them against the source.
 
 - **Skill** — a user-invocable command the plugin exposes: `/anchor:commit`,
   `/anchor:prepare-review`, `/anchor:resolve-feedback`, `/anchor:merge`,
-  `/anchor:issue`, `/anchor:issues`, `/anchor:pipeline`.
+  `/anchor:release`, `/anchor:issue`, `/anchor:issues`, `/anchor:pipeline`.
 - **Forge** — GitHub or GitLab, selected by the `origin` remote; drives the CLI
   choice (`gh` for GitHub, `glab` for GitLab).
 - **CR (change request)** — a pull request on GitHub or a merge request on
@@ -36,6 +36,10 @@ behavior, not an independent authority — review them against the source.
   (`squash-check.sh`) that governs squash-vs-new-commit.
 - **Deep link** — a line-anchored forge URL in a CR description that lands a
   reviewer directly on the relevant hunk.
+- **Release model** — who owns the version bump for a repo: a CI workflow
+  triggered by a published release or a tag push, a bump commit in the repo
+  itself, or nobody (no version artifact). Resolved by `release-recon.sh` and
+  decisive for the whole release path. Defined under REL.
 - **Worktree isolation** — running a write flow that targets a non-cwd repo in a
   dedicated git worktree, set up and torn down around the flow.
 - **tack** / **moor** — sibling plugins anchor integrates with when present
@@ -246,6 +250,66 @@ step after `prepare-review` opens the CR and `resolve-feedback` clears its threa
 - **[MRG-16]** Where a tack route is bound to the session, the system shall mark the
   tack done and record the CR as its deliverable after merging.
 
+### REL — Release
+
+Publishing what has landed (the `release` skill) — the step after `merge`, always
+invoked explicitly. The **release model** decides the whole path, so it is
+established before anything is proposed or written.
+
+- **[REL-01]** When `/anchor:release` runs, the system shall resolve the target
+  repo and gather the release state via a single recon script, acting only on the
+  keys it surfaces.
+- **[REL-02]** The system shall establish the repo's release model —
+  `release-triggered`, `tag-triggered`, `bump-commit`, or `no-version-artifact` —
+  before recommending a version or editing any file.
+- **[REL-03]** The system shall detect a release-triggered model from the CI
+  workflow's trigger block rather than from a `release` key appearing anywhere in
+  the file, so a job named `release` is not read as a trigger.
+- **[REL-04]** While the release model is `release-triggered` or `tag-triggered`,
+  the system shall not bump the version manifest, regenerate it, or edit the
+  changelog, because the workflow owns those.
+- **[REL-05]** Where the release model is `no-version-artifact`, the system shall
+  report what the range contains and stop rather than manufacture a version or a
+  publish step.
+- **[REL-06]** If no commits have landed since the last release, then the system
+  shall report the last release as current and stop.
+- **[REL-07]** The system shall anchor the shipping range on the latest version
+  tag, falling back to the most recent commit that changed the version, then to
+  the root commit.
+- **[REL-08]** The system shall classify the range as breaking changes, features,
+  fixes, and other, and recommend a semver bump from that classification.
+- **[REL-09]** If the version has never been bumped, then the system shall present
+  starting versioning as the author's decision rather than default to a bump.
+- **[REL-10]** If the current version already has a changelog section, then the
+  system shall treat that version as shipped — confirming the next version and
+  not rewriting the shipped section's notes.
+- **[REL-11]** The system shall write notes describing each change's effect on
+  someone using the project, and shall pass them to every consumer by file rather
+  than as an inline string.
+- **[REL-12]** Where the notes are published as a release body, the system shall
+  present them in a visual review before publishing and shall not publish on a
+  verdict other than approved.
+- **[REL-13]** The system shall confirm the publish with the author even after an
+  approved review, because a published release is immediately public and its tag
+  may be immutable.
+- **[REL-14]** The system shall not publish forge-generated notes in place of the
+  categorized notes it drafted.
+- **[REL-15]** When a publish fires a release workflow, the system shall watch
+  that workflow to a terminal state and then fast-forward the local checkout onto
+  the commit it pushed, performing that pull rather than offering it.
+- **[REL-16]** Where the version manifest is generated from a canonical
+  descriptor, the system shall bump the descriptor and regenerate rather than edit
+  the manifest.
+- **[REL-17]** Where the release model is `bump-commit`, the system shall shape
+  the bump commit to the repo's prior convention and land it through
+  `/anchor:commit` rather than running git commit and push itself.
+- **[REL-18]** Where a changelog holds an accruing Unreleased section, the system
+  shall retitle it to the new version rather than insert a new section above it.
+- **[REL-19]** The system shall not cascade from a merge into a release;
+  `/anchor:merge` shall name `release` as the next step without invoking it.
+- **[REL-20]** Where a tack route is bound to the session, the system shall attach
+  the release URL to the route's tack as a link.
+
 ### ISS — Issues
 
 Authoring a single issue (the `issue` skill, ISS-01..06) and surveying the
@@ -424,8 +488,9 @@ this" nullability from SARIF's `notApplicable`.
   hoc.
 - **[RULE-04]** The system shall use `gh`/`glab` for mechanical and query forge
   operations, and route artifact *authoring* through the anchor skill — a CR
-  description through `/anchor:prepare-review`, an issue through `/anchor:issue` —
-  rather than a bare `create` / `--body`.
+  description through `/anchor:prepare-review`, an issue through `/anchor:issue`,
+  release notes through `/anchor:release` — rather than a bare `create` /
+  `--body` / `--generate-notes`.
 - **[RULE-05]** While deciding whether a history rewrite is safe, the system shall
   read push state and the CR draft flag fresh at the moment of the rewrite
   rather than from an earlier turn.

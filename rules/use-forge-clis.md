@@ -23,10 +23,19 @@ follow-up fix).
   `gh issue create --body` / `glab issue create --description`. The skill leads
   the issue with *why* the work is needed, written for a reader who's never seen
   that part of the system — the shape a raw `create` drops.
+- **Publishing a release → `/anchor:release`**, never a bare
+  `gh release create` / `glab release create`, and never `--generate-notes`. The
+  skill establishes who owns the version bump before anything is written — a
+  hand-bump on a repo whose CI workflow also bumps lands two conflicting commits —
+  and writes notes describing each change's effect on someone *using* the project.
+  A generated body is the costlier mistake of the two: where a workflow proxies the
+  release body into the changelog, it permanently lands a list of unrelated prior
+  CRs there.
 
-The moment work needs a PR/MR or an issue *body*, hand off to the skill rather
-than improvising the `create` inline. Editing or querying an *existing* CR or
-issue — labels, assignees, state, comments, views — still uses the CLI directly.
+The moment work needs a PR/MR body, an issue body, or release notes, hand off to
+the skill rather than improvising the `create` inline. Editing or querying an
+*existing* CR, issue, or release — labels, assignees, state, comments, views —
+still uses the CLI directly.
 
 For any multi-line body the skill produces (tables, code fences) — CR
 descriptions, issue bodies, comments — write it to a unique temp file

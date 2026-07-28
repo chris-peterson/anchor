@@ -47,6 +47,23 @@ jobs:
       - name: commit preflight
         run: bash tests/commit-preflight.test.sh
 
+  release:
+    # Exercises scripts/release-recon.sh against a repo per release model, since
+    # the model decides who owns the version bump and a wrong read collides with
+    # the CI workflow's own commit.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+      - name: configure git identity
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "CI"
+      - name: release recon
+        run: bash tests/release-recon.test.sh
+
   review:
     # Exercises the review dispatcher and its moor/revdiff adapters against stub
     # backends, asserting the normalized REV contract each emits.

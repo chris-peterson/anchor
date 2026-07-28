@@ -41,6 +41,7 @@ suite:
     - ["/anchor:prepare-review", "Rebase on main and open a draft change request"]
     - ["/anchor:resolve-feedback", "Work a CR's review threads to done, one by one"]
     - ["/anchor:merge", "Check the merge gates, wait on the pipeline, then land the CR and clean up"]
+    - ["/anchor:release", "Work out what's shipping, recommend a version, draft the notes, publish"]
   # Skill-anchored previews of the two flagship skills, shown live on the docs
   # site; the session: below is the at-a-glance flow the hub also reads. Frames
   # are lifted from real runs (moor rejections, the WHY prompt, the CR structure)
@@ -54,6 +55,7 @@ suite:
       merge: Merge an approved change request once its gates are green — waiting on the pipeline if needed — then clean up the branch.
       pipeline: Report a commit's forge pipeline state, or watch until it settles.
       prepare-review: Open the PR/MR on an already-pushed branch, rebase on the default branch if behind, and draft a description that tells reviewers WHY the change exists.
+      release: Cut a release for what has landed — recommend a semver bump, draft the notes, and drive the repo's own publish path.
       resolve-feedback: Fetch an open CR's review feedback and drive each thread to resolution — fix, reply, resolve.
     rules:
       omit-attribution-trailers: Omit AI attribution trailers

@@ -3,10 +3,10 @@
 Tracking status of the requirements declared in [`SPEC.md`](SPEC.md).
 Maintained by `/sextant:spec-status`.
 
-**Last audit:** 2026-07-27
+**Last audit:** 2026-07-28
 **Spec version:** root SPEC.md (unversioned)
-**Plugin version:** 1.0.0
-**Coverage:** 115 Covered, 0 Partial, 0 Missing/Contradicts
+**Plugin version:** 1.0.1
+**Coverage:** 135 Covered, 1 Partial, 0 Missing/Contradicts
 
 The implementation is the plugin itself — the skill prompts under
 `skills/`, the ambient rules under `rules/`, and the helper scripts under
@@ -20,11 +20,12 @@ draft to review against the implementation, not an audited ledger.
 
 | Prefix | Count | Status | Notes |
 |--------|------:|--------|-------|
-| TGT-01..09 | 9 | All Covered | Target resolution + worktree isolation — `scripts/{resolve-target,worktree}.sh`, each `skills/*/SKILL.md` "Target repo" |
+| TGT-01..09 | 9 | 8 Covered, 1 Partial | Target resolution + worktree isolation — `scripts/{resolve-target,worktree}.sh`, each `skills/*/SKILL.md` "Target repo". TGT-01 Partial: `skills/pipeline/SKILL.md:57` matches a name argument against session-touched repo basenames without the tack repo-db lookup the other seven skills run via `resolve-target.sh` |
 | CMT-01..20 (16 retired) | 19 | All Covered | Review-first commit-and-push flow (1.0) — `skills/commit/SKILL.md`, `scripts/{commit,commit-preflight,look-ahead,squash-check}.sh` |
 | PREP-01..15 | 15 | All Covered | `prepare-review`, pushed-branch only, opens the draft CR without pushing, reviews the description in the tool, verifies deep-link line parts — `skills/prepare-review/SKILL.md`, `scripts/{prepare-review,deep-links}.sh` |
 | FDBK-01..08 | 8 | All Covered | Fetch, triage, act on threads — `skills/resolve-feedback/SKILL.md` |
 | MRG-01..16 | 16 | All Covered | Gate checks (ready/mergeable/pipeline/approvals/threads), method choice, merge + cleanup — `skills/merge/SKILL.md`, `guides/forge-cookbook.md` |
+| REL-01..20 | 20 | All Covered | Release-model detection, version recommendation, notes + review, per-model publish — `skills/release/SKILL.md`, `scripts/release-recon.sh`, `guides/release-models.md`, `guides/forge-cookbook.md` |
 | ISS-01..12 | 12 | All Covered | Author one issue — gather intent, guard duplicates, draft, file (`skills/issue/SKILL.md`); list/scope/rank/recommend, read-only (`skills/issues/SKILL.md`) |
 | PIPE-01..06 | 6 | All Covered | Status/watch/job modes — `skills/pipeline/SKILL.md`, `scripts/pipeline-status.sh` |
 | REV-01..11 | 11 | All Covered | Tool-agnostic review contract — dispatcher `scripts/review-diff.sh` + adapters `scripts/review/{moor,revdiff}.sh`; consumers read the normalized verdict |
@@ -34,6 +35,32 @@ draft to review against the implementation, not an audited ledger.
 | UX-01..05 | 5 | All Covered | Narration, orchestration, decision prompts, artifact visibility, recon-supplied values — cross-cutting, each `skills/*/SKILL.md`, `guides/execute-quietly.md` |
 
 ## Audit history
+
+### 2026-07-28 — Coverage refresh (spec-status)
+
+TGT-01 Covered → Partial: `pipeline` resolves a name argument by session-touched
+substring match only, skipping the tack repo-db lookup the requirement specifies
+and the other seven skills perform. REL-01..20 verified against
+`skills/release/SKILL.md`, `scripts/release-recon.sh`, and `skills/merge/SKILL.md`
+(REL-19); all Covered.
+
+### 2026-07-28 — Release skill added (REL)
+
+Added the `release` skill (`REL-01..20`), the step after `merge`: it establishes
+the repo's **release model** — who owns the version bump — then recommends a
+semver bump, drafts user-facing notes, and publishes along that model's path.
+`scripts/release-recon.sh` supplies the model plus the manifest, its generating
+descriptor, the version history, the bump convention, and the shipping range in
+one pass (REL-01, UX-05); `guides/release-models.md` carries the per-model
+procedure and traps. The model detection reads the CI workflow's *trigger* block
+rather than grepping for `release`, so a job named `release` isn't mistaken for a
+trigger (REL-03) — the case `tests/release-recon.test.sh` pins along with the four
+model verdicts. Where a workflow owns the bump, the skill publishes and never
+hand-edits the manifest (REL-04); where it doesn't, the bookkeeping lands through
+`/anchor:commit` (REL-17). `merge` names `release` as the next step but does not
+cascade into it (REL-19) — publishing is a deliberate act, and several merges
+commonly batch into one release. Requirement rows added by hand alongside the code
+change. 136 requirements across 13 categories.
 
 ### 2026-07-27 — The CR description is reviewed in the tool
 
