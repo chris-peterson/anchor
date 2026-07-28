@@ -67,7 +67,10 @@ release only *starts* it. Two follow-throughs:
 1. **Watch the workflow to a terminal state.** The release exists the instant the
    command returns, but the bump, changelog, and dispatch can still fail — and a
    red workflow leaves a *published* release with no changelog. Delegate the wait
-   to the pipeline helper rather than hand-rolling a poll loop.
+   to the pipeline helper rather than hand-rolling a poll loop, naming the
+   workflow (`--workflow <RELEASE_WORKFLOW>`). The run fires on the *tag*, so it
+   carries the tag as its branch and sits on the same commit as the merge's own
+   runs — a ref-scoped or unscoped watch answers about the wrong thing.
 2. **Fast-forward local state onto the workflow's commit.** The workflow pushes
    its bump commit to the default branch, so the local checkout is now behind.
    That commit carries *generated* content (a bumped manifest, a regenerated
