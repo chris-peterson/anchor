@@ -173,6 +173,10 @@ check.
 - **[PREP-14]** If no review backend is installed, or no CR exists to diff
   against, then the system shall present the description as text in its own reply
   and offer write / copy-only / edit, defaulting to write.
+- **[PREP-15]** Before opening the description review, the system shall verify
+  each deep link's line part against the working tree (`deep-links.sh --verify`)
+  and re-point every line reported out-of-range, blank, outside a changed hunk,
+  or anchored to a file the range doesn't touch.
 
 ### FDBK — Resolve feedback
 

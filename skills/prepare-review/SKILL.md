@@ -293,6 +293,14 @@ The description gets pasted into a markdown renderer, so rendering bugs are user
 - **Backtick coverage is generous — except for forge-autolink tokens.** Re-scan the description for grep-bait: env vars (`$FAMILY`, `$CI_PIPELINE_CREATED_AT`), config keywords (`extends:`, `needs:`, `on_success`, `manual`, `allow_failure`), job/product/feature suffixes that match identifiers in the diff, CLI flags, file paths. The "if a reader might paste it into a terminal" test is more permissive than "code identifier only" — err generous. **But** scan separately for CR/issue refs (`!148`, `#42`), commit SHAs, and user @mentions — these must be **bare text** to autolink; backticks render them as inert code spans.
 - **Inline single quotes around `'all'` / `'true'` style values** read fine in prose but lose their distinguishing weight in scan-mode. Convert literal dropdown/enum values to backticks.
 - **Every deep link is `FILE_LINKS[<path>]` plus a line part** — no hand-built anchors (Step 3).
+- **Verify the line parts against the tree.** The prefix is derived, so it's right by construction; the line part you read off the diff by hand is the half that drifts, and a drifted link still resolves — the forge just scrolls somewhere the bullet isn't describing, which nothing about the rendered link reveals. Run the checker over the draft and fix what it names:
+
+  ```bash
+  bash "${CLAUDE_PLUGIN_ROOT}/scripts/deep-links.sh" --verify <DESC_DRAFT_PATH> \
+    --forge <FORGE> --cr-url <CR_URL> --base <DEFAULT_BRANCH>
+  ```
+
+  It exits non-zero with one `SUSPECT <kind> <path>:<line> <why>` per problem: `out-of-range`, `blank-line`, `unchanged-line` (the line exists but isn't in a changed hunk), `unknown-file` (an anchor for a file the range doesn't touch). Re-point each at the line the bullet is actually about. A link that landed on the *wrong changed line* is the one case it can't see, so the check passing doesn't retire your own read. It needs the clean tree Step 1's `STATE=match` already established — it reads line content from the working tree and changed hunks from `<DEFAULT_BRANCH>...HEAD`, and emits `DEEP_LINK_TREE=dirty` when those have diverged. Skip it on the `skip-deep-links` path, where there are no links to check.
 
 ### Open the review
 

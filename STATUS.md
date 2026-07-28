@@ -22,7 +22,7 @@ draft to review against the implementation, not an audited ledger.
 |--------|------:|--------|-------|
 | TGT-01..09 | 9 | All Covered | Target resolution + worktree isolation — `scripts/{resolve-target,worktree}.sh`, each `skills/*/SKILL.md` "Target repo" |
 | CMT-01..20 (16 retired) | 19 | All Covered | Review-first commit-and-push flow (1.0) — `skills/commit/SKILL.md`, `scripts/{commit,commit-preflight,look-ahead,squash-check}.sh` |
-| PREP-01..14 | 14 | All Covered | `prepare-review`, pushed-branch only, opens the draft CR without pushing, reviews the description in the tool — `skills/prepare-review/SKILL.md`, `scripts/{prepare-review,deep-links}.sh` |
+| PREP-01..15 | 15 | All Covered | `prepare-review`, pushed-branch only, opens the draft CR without pushing, reviews the description in the tool, verifies deep-link line parts — `skills/prepare-review/SKILL.md`, `scripts/{prepare-review,deep-links}.sh` |
 | FDBK-01..08 | 8 | All Covered | Fetch, triage, act on threads — `skills/resolve-feedback/SKILL.md` |
 | MRG-01..16 | 16 | All Covered | Gate checks (ready/mergeable/pipeline/approvals/threads), method choice, merge + cleanup — `skills/merge/SKILL.md`, `guides/forge-cookbook.md` |
 | ISS-01..12 | 12 | All Covered | Author one issue — gather intent, guard duplicates, draft, file (`skills/issue/SKILL.md`); list/scope/rank/recommend, read-only (`skills/issues/SKILL.md`) |
@@ -48,7 +48,10 @@ recon block supplies rather than re-deriving them, which is what `FILE_LINKS`
 (PREP-10, `scripts/deep-links.sh`) now does for deep-link anchors on both forges.
 CMT-20 covers the same theme on the commit side: the test gate reads the runner's
 exit status on the first invocation instead of its output, which had cost a second
-full run of the suite. 115 requirements across 12 categories.
+full run of the suite. PREP-15 closes the half `FILE_LINKS` leaves open: the prefix
+is derived and exact, while the `R<n>` the author reads off the diff is hand-work
+that drifts silently, so `deep-links.sh --verify` reads each line part back against
+the tree. 116 requirements across 12 categories.
 
 ### 2026-07-21 — Tool-agnostic review contract (REV)
 
