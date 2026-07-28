@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.1.0
+
+Adds `/anchor:release`, the step after `/anchor:merge`: it works out what has landed since the last release, recommends a semver bump, drafts notes for someone who *uses* the project, and publishes along the path your repo already publishes on.
+
+## New
+
+- **`/anchor:release` cuts a release for what has landed.** It opens by establishing the repo's **release model**, the answer to "who owns the version bump": a CI workflow fired by a published release, a CI workflow fired by a tag push, a bump commit in the repo itself, or nobody. That answer decides the rest of the run. Where a workflow owns the bump, the skill publishes and leaves the manifest and changelog to it; where nothing does, the bookkeeping lands through `/anchor:commit`. Notes are drafted from the commits *and* the diff, sorted into breaking / features / fixes / other, and opened in your review tool before anything ships. Publishing then takes its own explicit yes, because a release is public the instant it exists and its tag may be immutable.
+- **The publish doesn't end at the create.** Where the release fires a workflow, the skill watches that run to a terminal state and pulls the commit it pushes back into your checkout. A red run leaves a published release with no changelog, and skipping the pull leaves your tree missing generated files, so the next push is rejected as non-fast-forward.
+- **[Release models](https://github.com/chris-peterson/anchor/blob/main/guides/release-models.md)** documents the four models and the traps each one hides: forge-generated notes landing a run of unrelated prior PRs in your changelog, a release of the version the manifest already holds silently writing nothing, a cross-repo notification token scoped to the wrong repo.
+- **`scripts/release-recon.sh`** gathers the release facts in one pass (model, manifest and the descriptor it's generated from, version history, bump convention, shipping range), so the skill reads them instead of re-deriving them per run.
+- **`/anchor:merge` names `/anchor:release` as the next step, and doesn't run it.** Several merges commonly batch into one release, so when to cut one stays your call. On a repo with no version artifact, where the merge *was* the release, it says nothing at all.
+
+## Fixed
+
+- **`/anchor:pipeline <name>` resolves the name the way every other skill does.** It matched `<name>` only against repos the session had already touched, so a repo tack knows but this session hadn't opened fell through to the working directory's pipeline and reported it under the name you asked for. The name now goes through tack's repo db first, with the session-touched match kept as the fallback, and a repo tack knows with no local checkout stops rather than answering about a different repo.
+- **Skill instructions point at the plugin's own files.** References like `scripts/worktree.sh` and `templates/cr-description.md` read as paths in whatever repo you happened to be working in. They now carry `${CLAUDE_PLUGIN_ROOT}`, so they resolve to the installed plugin wherever the session is running.
+
+## Other
+
+- CI exercises `release-recon.sh` against a fixture repo per release model, including a workflow with a job *named* `release` that is not release-triggered.
+- The spec gains the `REL` category (`REL-01..20`) covering the release skill.
+
 ## 1.0.1
 
 ## Fixed
