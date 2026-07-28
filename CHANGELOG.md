@@ -15,6 +15,7 @@
 
 ## Other
 
+- `guides/configuring.md` gains **Review-backend config**, with a per-backend subsection each so a link can land on the one you use: how the diff renders is the review tool's knob, not an `anchor.*` key. anchor sends no presentation flags, so `~/.config/revdiff/config` (`wrap`, `compact`, `cross-file-hunks`, …) applies to an anchor-launched review as it does to a hand-run one. The section recommends the file over the matching `REVDIFF_*` variables, because the terminal overlay anchor launches the TUI through starts from a server process that never sourced your shell rc and carries only `EDITOR`/`VISUAL` across.
 - `guides/execute-quietly.md` splits the rule by object: the finished commit message, CR description, or drafted issue has to reach the user as text or through a review tool, while the `KEY=value` blocks and gate outcomes behind it stay quiet. Spec adds `UX-04`/`UX-05` for that and rewrites `PREP-13` (in-tool review before any write prompt) with `PREP-14` for the text fallback.
 
 ## 1.0.0
