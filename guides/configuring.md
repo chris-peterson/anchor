@@ -25,7 +25,7 @@ purely for readability.
 | Key | Example | Effect |
 |---|---|---|
 | `anchor.workTrackerBaseUri` | `git config anchor.workTrackerBaseUri https://app.clickup.com/t/` | The base URL of your work tracker. When you mention a ticket, `commit` adds a `Refs:` trailer and `prepare-review` links it in the CR. See [Work-tracker references](#work-tracker-references). |
-| `anchor.reviewBackend` | `git config anchor.reviewBackend revdiff` | Which visual-review tool the skills launch: `moor` (default) or `revdiff`. Both return the same normalized review verdict; `revdiff` is a terminal-native reviewer that also handles hg/jj repos, while `moor` additionally grades comments, tracks per-hunk review, and round-trips an edited commit message. Selecting `revdiff` needs the revdiff plugin installed — anchor delegates to its terminal-overlay launcher to open the TUI. |
+| `anchor.reviewBackend` | `git config anchor.reviewBackend revdiff` | Which visual-review tool the skills launch: `moor` (default) or `revdiff`. Both return the same normalized review verdict; `revdiff` is a terminal-native reviewer that also handles hg/jj repos, while `moor` additionally grades comments, tracks per-hunk review, and round-trips an edited commit message. Selecting `revdiff` needs the revdiff plugin installed — anchor delegates to its terminal-overlay launcher to open the TUI. How the chosen tool renders the diff is its own knob, not an `anchor.*` key: see [Review-backend config](#review-backend-config) (per backend: [`revdiff`](#review-backend-config-revdiff), [`moor`](#review-backend-config-moor)). |
 | `anchor.reviewBudgetMins` | `git config anchor.reviewBudgetMins 10` | How many minutes of focused attention you expect this CR to get. It's an *input*, not a length cap: a tight budget (≈5) makes `prepare-review` lead with the essentials and cut asides hard; a generous one (≈30) keeps more supporting context and depth. It steers *what to include*, not the tone — a tight budget is no license for punchy or marketing framing. Unset behaves like ≈10. |
 | `anchor.commitRules` | `git config anchor.commitRules "prefix the subject with the affected module"` | An extra rule layered onto `anchor`'s default commit-message rules, applied to every message it drafts. |
 | `anchor.issueRules` | `git config anchor.issueRules "always include an acceptance-criteria checklist"` | An extra rule layered onto `anchor`'s default issue rules, applied to every issue the `issue` skill drafts. |
@@ -50,6 +50,44 @@ commit trailer and a link in the CR description. Two forms work:
 
 If you don't mention a ticket, `anchor` leaves the trailer off — it won't prompt
 for one on every commit.
+
+### Review-backend config
+
+`anchor` hands the review backend only what the review *is*: the diff range (or
+the two paths), the header, and the channel it reads the verdict back from. How
+the diff *looks* stays the tool's own knob, so set your preferences in the tool's
+config rather than looking for an `anchor.*` key. `anchor` passes no presentation
+flags, so nothing it sends overrides what you set there.
+
+#### Review-backend config: `revdiff`
+
+revdiff reads
+[`~/.config/revdiff/config`](https://revdiff.com/docs.html#config-file), an INI
+file whose keys are the long flag names:
+
+```ini
+compact          = true
+cross-file-hunks = true
+theme            = dracula
+wrap             = true
+```
+
+It reads that file itself, so the same preferences apply whether you run it by
+hand or `anchor` opens it.
+
+Prefer the file over the matching `REVDIFF_*` environment variables. `anchor`
+opens the TUI through the revdiff plugin's terminal-overlay launcher, and the
+overlays it uses (`tmux display-popup`, `kitty @ launch`, `zellij run`) spawn from
+a long-running server process whose environment predates your shell rc; the
+launcher forwards only `EDITOR` and `VISUAL` into it. So an
+`export REVDIFF_WRAP=true` in `.zshrc` reaches a `revdiff` you start yourself and
+can miss the one `anchor` opens. See
+[revdiff's options](https://revdiff.com/docs.html#options) for the full list.
+
+#### Review-backend config: `moor`
+
+moor takes no presentation flags (it reads only the title and the sidecar path
+`anchor` gives it), so there's nothing to configure on that side.
 
 ### Forge-specific overrides (`cr` / `mr` / `pr`)
 
