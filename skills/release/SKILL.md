@@ -244,7 +244,11 @@ lands unrelated prior CRs in the changelog the workflow writes). The two models
 publish differently:
 
 - **`release-triggered`** — create the forge release with the notes as its body
-  (the cookbook's "Publish a release"). Creating it makes the tag.
+  (the cookbook's "Publish a release"). Creating it makes the tag. Leave the
+  target at its default, the default branch's tip, which the recon block has
+  already established HEAD to be (`RELEASE_ON_DEFAULT=1`, `RELEASE_UNPUSHED=0`);
+  reach for `--target` / `--ref` only to tag a different commit, and pass the
+  full 40-char sha there, because GitHub rejects an abbreviated one.
 - **`tag-triggered`** — the tag *is* the trigger: annotate it with the notes and
   push it as its own step (`git tag -a v<X.Y.Z> -F <RELEASE_NOTES_PATH>` then
   `git push origin v<X.Y.Z>`), so a failed push doesn't leave a local-only tag

@@ -343,6 +343,13 @@ proxies into the changelog verbatim:
 # unrelated prior PRs in the changelog section a release workflow writes.
 gh release create v<X.Y.Z> --title "v<X.Y.Z>" --notes-file <path>
 
+# --target takes a branch name or a FULL 40-char sha. An abbreviated sha is
+# rejected, and the 422 reads as a bad tag rather than a bad target:
+#   tag_name is not a valid tag
+#   Published releases must have a valid tag
+#   Release.target_commitish is invalid
+gh release create v<X.Y.Z> --title "v<X.Y.Z>" --notes-file <path> --target <full-sha>
+
 # GitLab — same default (tags the default branch's tip when the tag is missing);
 # --ref points it at a specific commit, tag, or branch instead.
 glab release create v<X.Y.Z> --notes-file <path>
