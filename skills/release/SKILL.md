@@ -260,7 +260,11 @@ easy to drop precisely because the publish already succeeded:
 1. **Watch the workflow to a terminal state** — it still has to bump, write the
    changelog, and commit, and a red run leaves a published release with no
    changelog. Delegate to `/anchor:pipeline`, which watches in the background and
-   runs silently under an orchestrator.
+   runs silently under an orchestrator. Hand it the workflow by name
+   (`--workflow <RELEASE_WORKFLOW>`) and watch *before* the pull below: this run
+   belongs to the commit that was tagged, and it shares that commit with whatever
+   the merge already ran, so naming the workflow is what makes the verdict the
+   release's.
 2. **Fast-forward the local checkout onto the workflow's commit** —
    `git pull --ff-only`, once the run is green. Do it; don't offer it. That commit
    carries generated content, so skipping it leaves the tree missing files and the

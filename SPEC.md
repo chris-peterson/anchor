@@ -361,6 +361,17 @@ backlog to pick the next one (the `issues` skill, ISS-07..12).
   just that job.
 - **[PIPE-06]** If the origin remote is not a recognized forge, then the system
   shall report that there is no pipeline to show.
+- **[PIPE-07]** The system shall resolve a pipeline by the commit it ran on,
+  independent of the ref that triggered it, so that a run fired by a published
+  release or a pushed tag — which carries the tag as its branch — resolves for
+  that commit.
+- **[PIPE-08]** Where a forge reports several runs for one commit (GitHub's one
+  run per workflow), the system shall report a single verdict over them — each
+  workflow's latest attempt, then the least-settled and worst-off run — and shall
+  accept a named workflow to scope the verdict to one run.
+- **[PIPE-09]** Where a caller gates on the forge's own merge checks rather than
+  on the commit's overall CI state, the system shall report the commit's most
+  recent run alone, without folding the commit's other runs into the verdict.
 
 ### REV — Review integration
 

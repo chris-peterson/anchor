@@ -545,19 +545,28 @@ A commit's CI run goes by different names per forge: GitHub calls it a
 `${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh` helper wrap the invocations
 below; reach for them directly when scripting a one-off.
 
-**Find the pipeline for a commit.** Resolve by branch, then pin to the exact
-commit SHA — the latest run on a branch isn't always the one you pushed.
+**Find the pipeline for a commit — ask by SHA, not by ref.** A run fired by a
+published release or a pushed tag carries the *tag* as its branch, so
+`--branch main` / `?ref=main` misses it even though the run is for that commit.
+Both forges filter by commit directly:
 
 ```bash
-# GitHub — list recent runs and pick the one whose headSha matches.
-gh run list --branch <branch> --limit 25 \
-  --json databaseId,status,conclusion,headSha,url \
-  | jq -c --arg sha "<sha>" '[ .[] | select(.headSha == $sha) ] | .[0]'
+# GitHub — every run for the commit, whatever ref triggered it.
+gh api "repos/{owner}/{repo}/actions/runs?head_sha=<sha>&per_page=100" \
+  | jq -c '.workflow_runs[] | {id, name, path, status, conclusion, html_url}'
 
-# GitLab — the pipelines API filters by ref + sha directly.
-glab api "projects/:fullpath/pipelines?ref=<branch>&sha=<sha>&per_page=1" \
+# GitLab — the pipelines API filters by sha.
+glab api "projects/:fullpath/pipelines?sha=<sha>&per_page=1" \
   | jq '.[0]'   # → {id, status, web_url, sha, ...}
 ```
+
+**GitHub answers with one run per workflow.** There is no single "the pipeline"
+for a commit: a push that triggers lint, test, and docs workflows produces three
+runs, and a release adds a fourth on the same commit. Picking the most recent
+one reports whichever finished last, so scope to the workflow you mean —
+`/actions/workflows/<file>/runs?head_sha=<sha>` — or fold the runs into one
+verdict (each workflow's latest attempt, then the worst state wins), which is
+what `pipeline-status.sh` does.
 
 **State vocabularies differ.** GitLab's pipeline `status` is a single field
 (`success` / `failed` / `canceled` / `skipped` / `manual` are terminal;

@@ -64,6 +64,24 @@ jobs:
       - name: release recon
         run: bash tests/release-recon.test.sh
 
+  pipeline:
+    # Exercises scripts/pipeline-status.sh against stub gh/glab binaries that
+    # filter their fixtures the way the real CLIs do, since the verdict turns on
+    # which runs a lookup can see — a release-triggered run carries the tag as
+    # its branch, and a GitHub commit has one run per workflow.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+      - name: configure git identity
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "CI"
+      - name: pipeline status
+        run: bash tests/pipeline-status.test.sh
+
   review:
     # Exercises the review dispatcher and its moor/revdiff adapters against stub
     # backends, asserting the normalized REV contract each emits.

@@ -6,7 +6,7 @@ Maintained by `/sextant:spec-status`.
 **Last audit:** 2026-07-28
 **Spec version:** root SPEC.md (unversioned)
 **Plugin version:** 1.0.1
-**Coverage:** 136 Covered, 0 Partial, 0 Missing/Contradicts
+**Coverage:** 139 Covered, 0 Partial, 0 Missing/Contradicts
 
 The implementation is the plugin itself — the skill prompts under
 `skills/`, the ambient rules under `rules/`, and the helper scripts under
@@ -27,7 +27,7 @@ draft to review against the implementation, not an audited ledger.
 | MRG-01..16 | 16 | All Covered | Gate checks (ready/mergeable/pipeline/approvals/threads), method choice, merge + cleanup — `skills/merge/SKILL.md`, `guides/forge-cookbook.md` |
 | REL-01..20 | 20 | All Covered | Release-model detection, version recommendation, notes + review, per-model publish — `skills/release/SKILL.md`, `scripts/release-recon.sh`, `guides/release-models.md`, `guides/forge-cookbook.md` |
 | ISS-01..12 | 12 | All Covered | Author one issue — gather intent, guard duplicates, draft, file (`skills/issue/SKILL.md`); list/scope/rank/recommend, read-only (`skills/issues/SKILL.md`) |
-| PIPE-01..06 | 6 | All Covered | Status/watch/job modes — `skills/pipeline/SKILL.md`, `scripts/pipeline-status.sh` |
+| PIPE-01..09 | 9 | All Covered | Status/watch/job modes, commit-scoped resolution, per-workflow fold and the single-run opt-out — `skills/pipeline/SKILL.md`, `skills/merge/SKILL.md` (PIPE-09), `scripts/pipeline-status.sh`, `tests/pipeline-status.test.sh` |
 | REV-01..11 | 11 | All Covered | Tool-agnostic review contract — dispatcher `scripts/review-diff.sh` + adapters `scripts/review/{moor,revdiff}.sh`; consumers read the normalized verdict |
 | CONF-01..05 | 5 | All Covered | `anchor.*` key handling — `guides/configuring.md`, commit/prepare-review/issue config steps |
 | FORG-01..05 | 5 | All Covered | Template composition, body-file, markdown, auth — `templates/`, `guides/{forge-cookbook,markdown-gotchas}.md` |
@@ -35,6 +35,24 @@ draft to review against the implementation, not an audited ledger.
 | UX-01..05 | 5 | All Covered | Narration, orchestration, decision prompts, artifact visibility, recon-supplied values — cross-cutting, each `skills/*/SKILL.md`, `guides/execute-quietly.md` |
 
 ## Audit history
+
+### 2026-07-28 — Pipelines resolve by commit, not by ref (PIPE-07, PIPE-08)
+
+`pipeline-status.sh` asked GitHub for `gh run list --branch <branch>` and GitLab
+for `pipelines?ref=<branch>`, then matched the commit within that ref's runs. A
+run fired by a published release carries the *tag* as its branch, so watching the
+v1.1.0 release run under `--branch main` reported `none` for a run that was for
+exactly that commit. Both lookups now filter by commit sha (PIPE-07), which the
+release-event fixture in `tests/pipeline-status.test.sh` pins. Doing so surfaced
+the neighbor question: a GitHub commit has one run per workflow, and taking the
+most recent of five reported whichever finished last. The verdict is now a fold —
+each workflow's latest attempt, then the least-settled and worst-off run speaks
+for the commit — with `--workflow` to scope it to one, which is how `release`
+watches the release run and not a workflow that shares its commit (PIPE-08). The
+fold is `pipeline`'s answer, not every caller's: `merge`'s gate asks for the
+commit's most recent run alone (`--single-run`, PIPE-09), leaving "did every
+required check pass" to the forge's own merge check that step 1a already reads.
+139 requirements across 13 categories.
 
 ### 2026-07-28 — TGT-01 closed for `pipeline`
 

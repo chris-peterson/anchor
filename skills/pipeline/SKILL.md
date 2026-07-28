@@ -95,9 +95,9 @@ pipeline for the commit.
 ## Run the helper
 
 The helper detects the forge from the `origin` remote (`gh`/GitHub or
-`glab`/GitLab), resolves the pipeline for the current branch at HEAD's commit,
-and prints the verdict on stdout. The forge plumbing — including the GitLab
-path's `glab api projects/:fullpath/...` calls — lives in the script; the forge
+`glab`/GitLab), resolves the pipeline for HEAD's commit, and prints the verdict
+on stdout. The forge plumbing — including the GitLab path's
+`glab api projects/:fullpath/...` calls — lives in the script; the forge
 cookbook's **CI / pipelines** section documents the same invocations.
 
 **One-shot (default)** — runs and returns immediately, so call it in the
@@ -117,10 +117,27 @@ gate):
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --watch
 ```
 
-To target a branch or commit other than the current HEAD (e.g. an orchestrator
-that pushed `main` directly), pass `--branch <b>` and/or `--sha <sha>`. In watch
+To target a commit other than the current HEAD (e.g. an orchestrator that pushed
+`main` directly), pass `--sha <sha>`, or `--branch <ref>` to take that ref's
+commit — a tag works there too, and resolution is by commit either way. In watch
 mode, poll cadence and the watch ceiling default to 15s / 30min and can be tuned
 with `--interval <s>` / `--timeout <s>`.
+
+**A GitHub commit has one run per workflow, not one pipeline.** The helper folds
+them into a single verdict — each workflow's latest attempt, then the
+least-settled and worst-off run speaks for the commit, so it reports in-flight
+while any workflow is still going and red if any went red. When the ask is about
+*one* workflow, name it with `--workflow <path|file|display name>`; the run that
+answered is in `PIPELINE_WORKFLOW`. Naming it is what a release watch needs: the
+run that a published release or a pushed tag fires carries the **tag** as its
+branch, and it shares the commit with whatever the merge already ran, so
+`--workflow <release workflow>` is how the verdict is about the release and not
+a neighbor. On GitLab the flag has nothing to narrow — one pipeline per commit.
+
+The fold is what *this* skill reports. `--single-run` opts out of it and reports
+the commit's most recent run — what a caller wants when the forge's own merge
+check already answers "is every check green" (`/anchor:merge`'s gate does exactly
+that).
 
 **Track one named job** — when the ask is about a *specific* job rather than the
 whole pipeline (*"wait for the `cand-usw2-plan` job,"* *"did the plan job
@@ -143,6 +160,8 @@ The output is `KEY=value` lines:
   (origin isn't a recognized forge). In watch mode, `PIPELINE_TIMEOUT=1` marks
   the last non-terminal state when the ceiling was hit.
 - `PIPELINE_URL` — the pipeline's web page (link it).
+- `PIPELINE_WORKFLOW` — on GitHub, the workflow whose run the verdict came from;
+  empty on GitLab.
 - `PIPELINE_FAILED_JOBS` — present only when `PIPELINE_STATE=failed`: a JSON
   array of `{name, url}` (GitHub) or `{name, stage, url}` (GitLab).
 
@@ -170,6 +189,8 @@ Map `PIPELINE_STATE` to exactly this and nothing more:
   action — say so; it won't progress on its own.
 - **`none`** → no pipeline for this commit. Common causes: path/branch filters
   excluded it, the commit isn't pushed, or the repo has no CI for this ref.
+  Under `--workflow`, it also means that workflow has no run for this commit —
+  check the name against the repo's workflow files before reporting a gap.
   State that; don't treat it as a failure.
 - **`absent`** → the `origin` remote isn't GitHub or GitLab, so there's no
   pipeline to report. Say so.
@@ -184,6 +205,10 @@ running"; in watch it means the appearance window elapsed without the job ever
 showing (check the name, or the stage is gated). Mention the parent
 `PIPELINE_STATE` only when it adds context (e.g. the pipeline failed elsewhere
 while this job passed).
+
+Name the workflow (`PIPELINE_WORKFLOW`) in the report whenever the run is what
+the verdict turns on — a failure, an in-flight state, or a `--workflow` the
+caller asked for. On a plain pass, `✓ Pipeline passed` already says it.
 
 In watch mode the report *is* the notification — the harness surfaces it when
 the background watch completes, so there's nothing to schedule or poll.

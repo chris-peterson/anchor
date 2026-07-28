@@ -143,8 +143,14 @@ Resolve the pipeline for the CR head and read its state with the pipeline helper
 failed-job reporting are shared rather than re-derived:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --single-run
 ```
+
+`--single-run` keeps this gate on one run — the commit's most recent. On GitHub a
+commit carries a run per workflow, and `/anchor:pipeline` folds them into one
+verdict; that isn't this gate's question. Whether *every* required check passed is
+the forge's own merge check, read in step 1a, and duplicating it here would block
+a merge the forge is willing to take.
 
 Map `PIPELINE_STATE`:
 
@@ -157,7 +163,7 @@ Map `PIPELINE_STATE`:
   command-substitution gate):
 
   ```bash
-  bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --watch
+  bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --single-run --watch
   ```
 
   When it settles, re-map the terminal state below. If `PIPELINE_TIMEOUT=1` (the
