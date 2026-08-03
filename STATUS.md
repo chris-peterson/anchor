@@ -3,9 +3,9 @@
 Tracking status of the requirements declared in [`SPEC.md`](SPEC.md).
 Maintained by `/sextant:spec-status`.
 
-**Last audit:** 2026-07-28
+**Last audit:** 2026-08-03
 **Spec version:** root SPEC.md (unversioned)
-**Plugin version:** 1.0.1
+**Plugin version:** 1.1.2
 **Coverage:** 140 Covered, 0 Partial, 0 Missing/Contradicts
 
 The implementation is the plugin itself — the skill prompts under
@@ -35,6 +35,12 @@ draft to review against the implementation, not an audited ledger.
 | UX-01..05 | 5 | All Covered | Narration, orchestration, decision prompts, artifact visibility, recon-supplied values — cross-cutting, each `skills/*/SKILL.md`, `guides/execute-quietly.md` |
 
 ## Audit history
+
+### 2026-08-03 — Coverage refresh (spec-status)
+
+Last audit 2026-07-28 → 2026-08-03, plugin version 1.0.1 → 1.1.2; coverage
+unchanged at 140 across 13 categories. CMT-01/CMT-02 reworded and CMT-16 refilled
+for the recon-before-tests reorder, which keeps CMT contiguous at 20.
 
 ### 2026-07-28 — Pipelines resolve by commit, not by ref (PIPE-07, PIPE-08)
 
