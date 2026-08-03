@@ -1,25 +1,28 @@
 # <img src="favicon.svg" alt="anchor" width="64" height="64" style="vertical-align: middle"> anchor
 
-Git/forge skills for consistent and effective source control.
+Consistency across the code-change lifecycle: issue, change request, review, release.
 
-An anchor holds a vessel fast against drift. Here it holds *work* fast: work
-moves from in-progress → reviewed → committed → opened for review → landed →
-released, and anchor drives each leg of that passage.
+anchor is one skill per step: file the issue, commit the work after a hunk-level
+review, open the change request, drive the review threads to done, merge, publish
+the release. The commit messages, descriptions, and release notes come out the
+same shape every time instead of reinvented per change.
 
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
-flowchart LR
-    WIP["work in progress"] -->|commit| Pushed["reviewed, committed + pushed"]
-    Pushed -->|prepare-review| Forge["CR on the forge"]
-    Forge -->|merge| Landed["landed on main"]
+flowchart TD
+    Need["work to do"] -->|issue| Filed["issue on the forge"]
+    Filed -->|commit| Pushed["reviewed and pushed"]
+    Pushed -->|prepare-review| Open["change request open"]
+    Open -->|resolve-feedback| Cleared["review threads cleared"]
+    Cleared -->|merge| Landed["landed"]
     Landed -->|release| Shipped["published version"]
 ```
 
 ## In action
 
-Tests pass, and `/anchor:commit` carries the change the rest of the way —
-staging, a why-first message, and a hunk-level review in moor where a rejected
-hunk comes back as a concrete edit, not a vague "looks off":
+Tests pass, and `/anchor:commit` does the rest — staging, a why-first message,
+and a hunk-level review in moor where a rejected hunk comes back as a concrete
+edit, not a vague "looks off":
 
 <div class="cw-session" data-cw-session="session"></div>
 
@@ -27,15 +30,15 @@ hunk comes back as a concrete edit, not a vague "looks off":
 
 | Surface | What it does |
 |---|---|
-| [`/anchor:commit`](/skills/commit) | Confirm the repo, run tests, stage everything, write a *why*-focused commit message, review the pending changeset in [moor](https://github.com/chris-peterson/moor) for a hunk-level look, then — once the review is clean — commit and push |
-| [`/anchor:prepare-review`](/skills/prepare-review) | Rebase on `main` if behind, open a draft change request on the already-pushed branch (assigned to you, source branch set to delete on merge), and draft a description that routes reviewer attention to where their judgment matters most |
+| [`/anchor:commit`](/skills/commit) | Confirm the repo, run tests, stage everything, write a why-first commit message, review the pending changeset hunk by hunk, then — once the review is clean — commit and push |
+| [`/anchor:prepare-review`](/skills/prepare-review) | Rebase on the default branch if behind, open a draft change request on the already-pushed branch (assigned to you, source branch set to delete on merge), and draft a description that points a reviewer at the lines where their judgment is worth the most |
 | [`/anchor:resolve-feedback`](/skills/resolve-feedback) | Fetch the unresolved review threads on an open CR, triage each with you, then drive each to resolution — fix / reply / resolve |
 | [`/anchor:merge`](/skills/merge) | Land an approved CR once its gates are green — waiting on the pipeline if needed — then return to the default branch and delete the merged branch |
 | [`/anchor:release`](/skills/release) | Work out what has landed since the last release, recommend a semver bump, draft notes a *user* can read, and publish the way this repo publishes — a forge release where CI owns the bump, a bump commit where it doesn't |
-| [`/anchor:pipeline`](/skills/pipeline) | Work with a commit's forge pipeline — report its latest state, or watch until it settles (passed, failed with the failed jobs, or no pipeline) |
+| [`/anchor:pipeline`](/skills/pipeline) | Report a commit's forge pipeline state, or watch until it settles — passed, failed with the failed jobs named, or no pipeline |
 | [`/anchor:issue`](/skills/issue) | Gather the *why*, the consumer, and acceptance criteria, then draft and file (or update) a forge issue — composing into the project's issue template when one exists |
 | [`/anchor:issues`](/skills/issues) | List and rank the forge issues assigned to you so you can pick what to work on next — by soonest due date, then most recently updated |
-| [Ambient rules](/ambient-rules) | A SessionStart hook injects anchor's domain invariants — post-review commit etiquette, forge-CLI routing — so they hold even when no skill is invoked |
+| [Ambient rules](/ambient-rules) | A SessionStart hook injects the invariants that have to hold when no skill is invoked — how history may be rewritten, forge work going through `gh` / `glab`, and no AI attribution trailers |
 
 The two skills you reach for most, in motion:
 
@@ -95,8 +98,8 @@ path of least resistance.
 
 ## Optional integrations
 
-anchor stands alone and reaches further when its siblings are installed; each
-degrades gracefully when absent.
+The skills run with nothing else installed. Each of these adds something when
+present and is skipped when absent.
 
 - **[moor](https://github.com/chris-peterson/moor)** — the default review
   backend, a keyboard-driven diff viewer the skills launch. Its `MOOR_CONTEXT`
@@ -112,13 +115,19 @@ degrades gracefully when absent.
   each as feedback to address and confirms the commit message itself. Because
   revdiff is a TUI, selecting it needs the revdiff plugin installed — anchor uses
   its terminal-overlay launcher to open the reviewer.
+- **[tack](https://github.com/chris-peterson/tack)** — the work tracker. Naming a
+  repo you aren't sitting in (`/anchor:commit payments-api`) resolves through
+  tack's repo database, and when a tack route is bound to the session, `merge`
+  records the CR against it and `release` attaches the release URL.
 
 ## Reference
 
+- [What's new in 1.x](/whats-new) — the steps added since 0.x, and the three
+  things that moved
 - **Skills** — per-skill pages in the sidebar, sourced directly from each
   `SKILL.md`
 - [Configuring anchor](/guides/configuring) — extend the commit and CR output
-  with `git config anchor.*` keys and your forge's own MR/PR template
+  with `git config anchor.*` keys and your forge's own PR/MR template
 - [Forge cookbook](/guides/forge-cookbook) — the `gh` / `glab` invocations and
   etiquette the skills follow
 - [Release models](/guides/release-models) — the four ways a repo publishes, and

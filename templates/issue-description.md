@@ -13,7 +13,7 @@ only when they carry something a reader needs — omit them rather than pad.
 **Issues lean hardest on team templates.** Issue conventions vary more between
 teams than commits or CRs do, so the shape below is deliberately basic — a
 fallback for when a project ships no template of its own. When a team template
-exists, `anchor` composes its prose into that shape instead (see [Honoring a
+exists, anchor composes its prose into that shape instead (see [Honoring a
 project's forge template](#honoring-a-projects-forge-template) below). A standing
 rule can be layered onto every issue via `anchor.issueRules`. See the
 [configuring guide](/guides/configuring) for the full key set.
@@ -24,7 +24,7 @@ rule can be layered onto every issue via `anchor.issueRules`. See the
   gets *what* from the title; the body's job is the reason.
 - Who is the primary caller or consumer of this change?
 - Link the driving story, ticket, or incident. Mention a tracker URL or a bare
-  id and `anchor` links it — expanding a bare id against
+  id and anchor links it — expanding a bare id against
   `anchor.workTrackerBaseUri`.
 
 Write for a competent developer who has never seen this area of the system —
@@ -39,7 +39,7 @@ it, and *why* the load-bearing decisions were made — not how every class is
 wired together.
 
 Reach for a diagram only when the work has shape that prose hides (a flow, a
-state machine, an interaction between services). Follow `anchor`'s mermaid
+state machine, an interaction between services). Follow anchor's mermaid
 conventions: hand-drawn look (`%%{ init: { 'look': 'handDrawn' } }%%`), and no
 `\n` or `<br>` in node labels. Skip the diagram when the approach is linear
 enough to state in a sentence.
@@ -85,8 +85,8 @@ paragraph of inline hedging; five where they don't is noise.
 
 ## Honoring a project's forge template
 
-The sections above are `anchor`'s default shape. When a project ships its own
-issue template, that template is the team's required scaffolding — `anchor`
+The sections above are anchor's default shape. When a project ships its own
+issue template, that template is the team's required scaffolding — anchor
 composes its prose **into** that shape rather than replacing it.
 
 The `issue` skill probes for one before drafting:
@@ -95,22 +95,22 @@ The `issue` skill probes for one before drafting:
   when a project ships more than one)
 - **GitHub:** `.github/ISSUE_TEMPLATE/*.md`, or the legacy
   `.github/ISSUE_TEMPLATE.md`. GitHub's `.yml` **issue forms** are a structured
-  format `anchor` doesn't fill prose into — surface that one and let the author
+  format anchor doesn't fill prose into — surface that one and let the author
   complete it in the web UI.
 
 When a template is found:
 
-- **Fill the sections it defines** with `anchor`'s prose, mapping the Context
+- **Fill the sections it defines** with anchor's prose, mapping the Context
   and Proposed approach into whatever headings the template provides.
 - **Preserve its checklists and headings verbatim** — a team's wording is not
-  `anchor`'s to reword or drop.
+  anchor's to reword or drop.
 - **Strip "delete before publishing" instruction blocks** after following their
   guidance. Many templates open with author instructions meant to be removed
   before the issue is filed; do what they ask, then cut the block.
-- **On a structure conflict, the team template wins.** `anchor` supplies the
+- **On a structure conflict, the team template wins.** anchor supplies the
   writing inside the template's sections; the prose discipline (why-first,
   terseness, define-don't-assume) still governs that writing.
 
-This is the team-shared half of `anchor`'s customization model: per-project
+This is the team-shared half of anchor's customization model: per-project
 knobs live in `git config anchor.*`, and issue structure lives in the forge's
 own template. See the [configuring guide](/guides/configuring).

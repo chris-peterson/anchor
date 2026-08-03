@@ -5,7 +5,7 @@
 
 name: anchor
 version: 1.1.2
-description: Git/forge skills for consistent and effective source control.
+description: "Consistency across the code-change lifecycle: issue, change request, review, release."
 author: chris-peterson
 repository: https://github.com/chris-peterson/anchor
 icon: docs/favicon.svg
@@ -29,16 +29,16 @@ suite:
       reason: alternate diff-review backend (anchor.reviewBackend=revdiff)
     - name: tack
       required: false
-      reason: resolves a named target repo through tack's repo db
+      reason: resolves a named target repo; records CRs and releases against a route
   # Activated by user-invoked skills (commit, prepare-review) and by ambient
   # rules injected at session start.
   activations: [user, session]
-  gloss: An anchor holds a boat in place. This holds your work in place.
+  gloss: One skill per step of a code change, from issue to release.
   pitch: "Nervous about keeping code you didn't write? It walks you through the diff first, then commits with a why-first message and opens the change request."
-  what: "Keeps your commits, change requests, and review cycles consistent — the same quality, formatting, and content every time, not reinvented per change."
+  what: "Keeps your issues, commits, change requests, reviews, and releases consistent — the same quality, formatting, and content every time, not reinvented per change."
   cmds:
     - ["/anchor:commit", "Review the changeset, then commit with a why-first message and push"]
-    - ["/anchor:prepare-review", "Rebase on main and open a draft change request"]
+    - ["/anchor:prepare-review", "Rebase on the default branch and open a draft change request"]
     - ["/anchor:resolve-feedback", "Work a CR's review threads to done, one by one"]
     - ["/anchor:merge", "Check the merge gates, wait on the pipeline, then land the CR and clean up"]
     - ["/anchor:release", "Work out what's shipping, recommend a version, draft the notes, publish"]

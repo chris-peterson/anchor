@@ -1,6 +1,6 @@
 # Loaded framing
 
-Reader-facing prose — commit messages, CR/MR descriptions, issue bodies, and any
+Reader-facing prose — commit messages, CR descriptions, issue bodies, and any
 doc or reply a human reads — should carry the facts and nothing else. Loaded
 framing (blame, hyperbole, self-judgement, defensive softeners) adds noise that
 prompts the reader to evaluate the *tone* instead of the *change*. The factual

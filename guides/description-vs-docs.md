@@ -24,7 +24,7 @@ is*. That content can be promoted into the repo's docs, but:
   propose it at most, and only when the content plainly documents standing
   behavior rather than the change.
 - **Adapt it for a long-lived home.** Strip review framing and drift-prone
-  markers ("new", "previously", references to the MR itself); make it
+  markers ("new", "previously", references to the CR itself); make it
   describe what *is*.
 - **Fold it into whichever commit is already in flight** — the fix commit
   when addressing feedback, the branch's commit when prepping the CR. It

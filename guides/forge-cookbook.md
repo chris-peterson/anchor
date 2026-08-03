@@ -230,7 +230,7 @@ glab api -X POST projects/:fullpath/merge_requests \
 glab mr update <iid> --assignee chris
 ```
 
-## MR / PR description update from a file
+## CR description update from a file
 
 Editing the body of an existing CR.
 
@@ -444,7 +444,7 @@ glab api -X PUT projects/:fullpath/issues/<iid> \
   -F "description=@/tmp/issue-body.aB3xKp.md"
 ```
 
-## Issue / MR comment from a file
+## Issue / CR comment from a file
 
 `glab issue note` / `glab mr note` only accept `-m <string>` or open an editor.
 Use the API form for a file-sourced comment:

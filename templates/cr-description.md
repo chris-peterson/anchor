@@ -31,7 +31,7 @@ guide](/guides/configuring) for the full key set.
 - What system/feature does this touch, and what does it do today?
 - What problem or need drove this change? Use the author's *why* from Step 2.
 - Link any ticket, incident, or design doc. Mention a tracker URL or a bare id
-  and `anchor` links it — expanding a bare id against `anchor.workTrackerBaseUri`.
+  and anchor links it — expanding a bare id against `anchor.workTrackerBaseUri`.
 
 **Two short paragraphs, and the reviewer should know what this CR does by the end
 of the first.** Orientation earns its words only as much as the reviewer needs to
@@ -142,8 +142,8 @@ no separate evidence row.
 
 ## Honoring a project's forge template
 
-The sections above are `anchor`'s default shape. When a project ships its own CR
-template, that template is the team's required scaffolding — `anchor` composes
+The sections above are anchor's default shape. When a project ships its own CR
+template, that template is the team's required scaffolding — anchor composes
 its prose **into** that shape rather than replacing it.
 
 `prepare-review` probes for one before drafting:
@@ -155,13 +155,13 @@ its prose **into** that shape rather than replacing it.
 
 When a template is found:
 
-- **Fill the sections it defines** with `anchor`'s prose, mapping `anchor`'s
+- **Fill the sections it defines** with anchor's prose, mapping anchor's
   Context and Review guide into whatever headings the template provides.
 - **Preserve the *reviewer-facing* structure verbatim — strip the *author-facing*
   scaffolding.** The test for every template line: is it there for the reviewer,
   or to guide *you* while authoring?
   - **Keep** — section headings, and checklists the approver acts on (a team
-    review-prep checklist is the team's wording, not `anchor`'s to reword or drop).
+    review-prep checklist is the team's wording, not anchor's to reword or drop).
   - **Strip** — a section's placeholder / helper text (`< Type your summary here >`,
     `(Paste any relevant logs…)`, `###### Summarize the reason…`), and the
     required / optional status annotations on its heading (`## Summary - (*Required*)`,
@@ -181,11 +181,11 @@ When a template is found:
   above* is checked below") or defensive softeners ("not a new capability",
   "purely additive"). State the fact that makes the box correct; don't describe the
   box.
-- **On a structure conflict, the team template wins.** `anchor` doesn't reorder
+- **On a structure conflict, the team template wins.** anchor doesn't reorder
   or rename the template's sections; it supplies the writing inside them. The prose
   discipline (criticality ordering, why-not-what, terseness) still governs that
   writing.
 
-This is the team-shared half of `anchor`'s customization model: per-project knobs
+This is the team-shared half of anchor's customization model: per-project knobs
 live in `git config anchor.*`, and CR structure lives in the forge's own
 template. See the [configuring guide](/guides/configuring).

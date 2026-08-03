@@ -33,10 +33,10 @@ Refs: https://app.clickup.com/t/8a1b2c3d
 A trailer is a `Key: value` footer line, set off from the body by a blank line.
 
 - **`Refs:`** — a work-tracker link. When you mention a ticket while committing,
-  `anchor` appends it: a full tracker URL is used as-is; a bare id is expanded
+  anchor appends it: a full tracker URL is used as-is; a bare id is expanded
   against `anchor.workTrackerBaseUri` (e.g. `8a1b2c3d` →
   `https://app.clickup.com/t/8a1b2c3d`). Mention nothing and there's no trailer.
-- **No attribution trailers.** `anchor` adds no `Co-Authored-By` and no
+- **No attribution trailers.** anchor adds no `Co-Authored-By` and no
   `Generated with Claude Code` line — see the *Omit AI attribution trailers*
   ambient rule.
 

@@ -1,4 +1,5 @@
 - [Home](/)
+- [What's new in 1.x](/whats-new)
 - [SPEC](/spec)
 - Skills
   - [commit](/skills/commit)

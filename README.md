@@ -1,48 +1,32 @@
 # anchor
 
-Git/forge skills for consistent and effective source control.
+Consistency across the code-change lifecycle: issue, change request, review, release.
 
 End-user docs: https://chris-peterson.github.io/anchor
 
-An anchor holds a vessel fast against drift. Here it holds *work* fast: it takes
-work-in-progress (tracked by [tack](https://github.com/chris-peterson/tack)),
-runs it through review ([moor](https://github.com/chris-peterson/moor)), and
-sets it down in source control — committed, described, and opened for
-review on the forge.
+This README is for working *on* anchor. What each skill does, how to configure
+it, and which review backends it supports live on the docs site.
 
 ## Repo layout
 
 ```text
-.claude-plugin/plugin.json   plugin manifest
+plugin.yml                   canonical descriptor — manifest, marketplace entry, docs previews
+.claude-plugin/plugin.json   generated from plugin.yml; never hand-edited
 skills/commit/               /anchor:commit — stage, test, review the changeset, then commit and push
-skills/prepare-review/        /anchor:prepare-review — open the CR on the pushed branch, rebase if behind, draft the description
+skills/prepare-review/       /anchor:prepare-review — open the CR on the pushed branch, rebase if behind, draft the description
 skills/resolve-feedback/     /anchor:resolve-feedback — fetch CR feedback; fix / reply / resolve each thread to resolution
 skills/merge/                /anchor:merge — check the merge gates (wait on the pipeline), merge the CR, delete the branch
 skills/release/              /anchor:release — establish the release model, recommend a version, draft notes, publish
-skills/pipeline/             /anchor:pipeline — work with a commit's forge pipeline; report state or watch until it settles
+skills/pipeline/             /anchor:pipeline — report a commit's forge pipeline state, or watch until it settles
 skills/issue/                /anchor:issue — gather the why/consumer/acceptance; file a new forge issue (or update a known one)
 skills/issues/               /anchor:issues — list and rank the issues assigned to you; recommend the next to work on
 rules/                       ambient rules a SessionStart hook injects into every session
 hooks/emit-rules.sh          the injecting hook (registered in hooks/hooks.json)
-scripts/review-diff.sh       launch the configured difftool through its review sidecar; print the verdict on stdout
-scripts/pipeline-status.sh   resolve / watch a commit's pipeline on the forge; print a normalized verdict on stdout
-scripts/release-recon.sh     the release facts in one pass: model, manifest + version, bump convention, shipping range
-scripts/look-ahead.sh        unpushed-commit count (bash-analyzer-safe helper)
-scripts/squash-check.sh      "is HEAD out for review?" gate for /commit's squash-vs-new-commit decision
-guides/                      load-bearing reference the skills/rules read at runtime (configuring, forge cookbook, markdown-gotchas, cr-formatting, description-vs-docs, changeset-scope, execute-quietly, loaded-framing, release-models, worktree-isolation)
-templates/                   the output shapes the skills produce (commit-message, cr-description, issue-description), read at runtime
+scripts/                     the helpers the skills shell out to — diff review, pipeline status, release recon, pre-flight state reads
+guides/                      reference the skills and rules read at runtime
+templates/                   the output shapes the skills produce, read at runtime
 docs/                        end-user docs site (docsify, GitHub Pages); skills/, rules/, guides/, templates/ are rendered in
 ```
-
-## Optional integrations
-
-The skills work standalone and light up further when these siblings are
-installed (each degrades gracefully when absent):
-
-- **[moor](https://github.com/chris-peterson/moor)** — the visual diff viewer the
-  `commit` skill launches. Absent → it falls back to `git difftool
-  --dir-diff` with your configured difftool, asking whether to revise or proceed
-  in place of moor's rejected-hunk feedback.
 
 ## Try the plugin locally
 

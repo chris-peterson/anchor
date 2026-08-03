@@ -5,8 +5,9 @@ description: Report a commit's forge pipeline state, or watch until it settles. 
 
 # Pipeline
 
-Work with the forge pipeline for a commit. The entry point for forge-pipeline
-operations; today it reports status and watches. Two needs, one skill:
+Report a commit's forge pipeline state, or watch until it settles. This is the
+entry point for forge-pipeline operations, and today those are the two it
+covers:
 
 - **Status (default)** — *"what's the pipeline doing?"* / *"get the latest
   pipeline."* A one-shot read: resolve the pipeline for the commit and report

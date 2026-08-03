@@ -1,10 +1,9 @@
 # anchor — Specification
 
-anchor is a set of Claude Code skills and ambient rules that carry
-work-in-progress through review and into source control — committing with
-why-first messages, opening and describing change requests, resolving review
-feedback, filing issues, and reporting pipelines — consistently across GitHub
-and GitLab.
+anchor is a set of Claude Code skills and ambient rules covering the code-change
+lifecycle — filing issues, committing with why-first messages, opening and
+describing change requests, resolving review feedback, reporting pipelines,
+merging, and releasing — consistently across GitHub and GitLab.
 
 Requirements use [EARS syntax](https://alistairmavin.com/ears) — each is one of:
 Ubiquitous (`The <system> shall …`), State-Driven (`While …`), Event-Driven
@@ -42,9 +41,10 @@ behavior, not an independent authority — review them against the source.
   decisive for the whole release path. Defined under REL.
 - **Worktree isolation** — running a write flow that targets a non-cwd repo in a
   dedicated git worktree, set up and torn down around the flow.
-- **tack** / **moor** — sibling plugins anchor integrates with when present
-  (repo resolution; visual diff review). Each is optional and degrades
-  gracefully when absent.
+- **tack** / **moor** / **revdiff** — sibling plugins anchor integrates with when
+  present (repo resolution and route bookkeeping; visual diff review; an
+  alternate terminal-native review backend). Each is optional, and the flow that
+  uses it falls back when absent.
 
 ## Requirements
 
@@ -450,8 +450,8 @@ this" nullability from SARIF's `notApplicable`.
 - **[REV-10]** Where the configured difftool does not speak the contract, the
   system shall emit `backend` `difftool`, `capabilities.producesVerdict` false,
   and verdict `no-verdict`, and ask the user directly.
-- **[REV-11]** Where the selected backend is absent, the system shall degrade
-  gracefully to a configured difftool or chat rather than fail.
+- **[REV-11]** Where the selected backend is absent, the system shall fall back to
+  a configured difftool or chat rather than fail.
 
 ### CONF — Configuration
 

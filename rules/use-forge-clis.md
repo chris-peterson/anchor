@@ -6,7 +6,7 @@ GitLab. Pick by the `origin` remote. Both CLIs reason reliably from explicit
 flags, and anchor's skills standardize on them.
 
 **The line is authoring vs. mechanical.** *Authoring* a forge artifact —
-composing the WHY-first prose a reader leads with — goes through the anchor
+composing the why-first prose a reader leads with — goes through the anchor
 skill that shapes it. `gh` / `glab` is for the *mechanical* and *query* half:
 viewing, listing, labeling, assigning, closing, status checks. The CLIs are the
 tool for the mechanical half, never a substitute for the skill on the authoring

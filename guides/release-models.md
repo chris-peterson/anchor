@@ -32,7 +32,7 @@ This sequence is deterministic â€” run it. Re-deriving "who owns the bump" by
 reading the workflow and whatever reusable workflow it calls spends a lot of
 reasoning on a settled process; the recon block already answered it.
 
-Five traps:
+The traps:
 
 - **Forge-generated notes poison the changelog.** The workflow proxies the
   release body verbatim, so a generated "what's changed" list lands a run of
@@ -132,7 +132,7 @@ publish step to run. Say so plainly, report what the range contains, and stop â€
 this is the correct outcome, not a gap. Where the merge triggers a deploy, the
 useful thing to add is the deploy's state, which the pipeline helper can report.
 
-## Two carve-outs that cut across every model
+## Carve-outs that cut across every model
 
 **A never-versioned repo is the author's call.** `RELEASE_VERSION_BUMPS=0` means
 the version has never moved (a manifest still at its scaffolded value). Starting

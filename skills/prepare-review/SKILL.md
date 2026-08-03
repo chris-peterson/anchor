@@ -1,9 +1,9 @@
 ---
 name: prepare-review
-description: Open the PR/MR on an already-pushed branch, rebase on the default branch if behind, and draft a description that tells reviewers WHY the change exists. Use when opening an MR/PR or creating a review.
+description: Open the PR/MR on an already-pushed branch, rebase on the default branch if behind, and draft a description that tells reviewers WHY the change exists. Use when opening a PR/MR or creating a review.
 ---
 
-# Create Review
+# Prepare Review
 
 Draft a description whose job is to convey *why* the change exists and *how* it addresses the current problem. The proposed code stands on its own — the diff shows *what* changed; the description supplies the *reason*. The rest routes reviewer attention in order of criticality so they get maximum value from whatever time they can spend.
 
@@ -133,7 +133,7 @@ The second run is on a pushed feature branch with a commit ahead; it auto-opens 
 
 (When `ON_DEFAULT_BRANCH=1`, the script doesn't auto-open either — but that routes through branch creation, not skip-deep-links; see above.)
 
-### Rebase on main when `BEHIND > 0`
+### Rebase on the default branch when `BEHIND > 0`
 
 `BEHIND=0` → skip this section. Otherwise the branch needs `origin/<default>` before it can merge — every conflict with intervening commits has to be resolved before the CR can land, and doing it now (while the change is fresh) is cheaper than after review when context has gone cold. Secondary: deep links anchor to lines in the *current* diff, so a behind-default branch points at content that won't compose cleanly at merge time. Ask:
 
