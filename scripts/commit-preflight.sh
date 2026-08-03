@@ -6,13 +6,18 @@
 # Fewer calls, less to narrate — the review preview comes sooner.
 #
 # It does NOT read the full staged diff: the model needs that verbatim to draft
-# the message, so the skill reads `git diff --cached` itself. Tests run earlier
-# (their output must show), so they stay out of here too.
+# the message, so the skill reads `git diff --cached` itself. Tests stay out too,
+# and run *after* this block: their output must show, and the runner is
+# discovered by the model so it can report progress and act on a failure. This
+# runs first because it's cheap and decides whether a suite needs running at all
+# — the push-existing and nothing-to-do routes have no commit to test.
 #
 # --repo / --worktree <path> retargets onto a checkout other than the cwd repo
 # (see scripts/lib/resolve-context.sh).
 #
 # Output (KEY=value on stdout):
+#   REPO_ROOT=<path>        the resolved target checkout, so the skill needs no
+#                           separate `git rev-parse --show-toplevel` call
 #   STAGED=<0|1>            1 == something is staged after `git add -A`
 #   STAT=<summary>          the `git diff --cached --stat` total line (empty if nothing staged)
 #   BRANCH=<name>           current branch (empty on detached HEAD)
@@ -67,6 +72,7 @@ config_json=$(git config --get-regexp '^anchor\.' 2>/dev/null \
   | jq -cRn '[inputs | capture("^(?<k>[^ ]+) (?<v>.*)$")] | map({(.k): .v}) | add // {}' \
   || echo '{}')
 
+echo "REPO_ROOT=$(git rev-parse --show-toplevel)"
 echo "STAGED=$staged"
 echo "STAT=$stat"
 echo "BRANCH=$branch"

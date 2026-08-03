@@ -39,6 +39,11 @@ printf 'change\n' > "$repo/a.txt"
 o=$(run)
 [ "$(val STAGED "$o")" = 1 ]              || fail "STAGED should be 1"
 [ -n "$(val STAT "$o")" ]                 || fail "STAT should be non-empty"
+# REPO_ROOT saves the skill a `git rev-parse --show-toplevel` call (UX-05).
+# Compared against git's own answer, not $repo: mktemp hands back a path through
+# a symlink on macOS, so the raw string wouldn't match the resolved one.
+[ "$(val REPO_ROOT "$o")" = "$(git -C "$repo" rev-parse --show-toplevel)" ] \
+  || fail "REPO_ROOT should be the resolved checkout; got $(val REPO_ROOT "$o")"
 [ "$(val BRANCH "$o")" = feat ]           || fail "BRANCH=feat"
 [ "$(val DEFAULT_BRANCH "$o")" = main ]   || fail "DEFAULT_BRANCH=main"
 [ "$(val ON_DEFAULT_BRANCH "$o")" = 0 ]   || fail "ON_DEFAULT_BRANCH=0 on feat"

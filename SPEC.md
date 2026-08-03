@@ -77,9 +77,10 @@ behavior, not an independent authority — review them against the source.
 ### CMT — Commit
 
 - **[CMT-01]** When `/anchor:commit` runs, the system shall run the project's
-  test suite before staging changes.
-- **[CMT-02]** If the test suite fails, then the system shall stop and not stage
-  or commit until it passes, including for pre-existing failures.
+  test suite after the pre-flight recon and before drafting a commit message,
+  discovering the runner itself so it can report progress and act on a failure.
+- **[CMT-02]** If the test suite fails, then the system shall stop and not commit
+  until it passes, including for pre-existing failures.
 - **[CMT-03]** Where no test runner is found, the system shall skip the test
   step silently.
 - **[CMT-04]** When staging, the system shall stage all changes with
@@ -114,9 +115,9 @@ behavior, not an independent authority — review them against the source.
 - **[CMT-15]** If the pre-commit review returns fix-now comments, then the system
   shall address them in the working tree, re-run tests, and re-review — committing
   only once the verdict is clean, rather than committing and then amending.
-- **[CMT-16]** *(retired in 1.0)* Formerly specified `/anchor:commit --preview`,
-  the look-only working-tree review. The default flow now reviews before
-  committing, so a standalone preview mode is redundant.
+- **[CMT-16]** Where the pre-flight recon reports nothing staged, the system shall
+  skip the test suite, since the push-existing and no-local-changes routes make no
+  commit and their commits were tested when they were made.
 - **[CMT-17]** If a `PreToolUse` hook blocks a commit on a substring inside the
   message body, then the system shall surface the conflict rather than use a
   temp-file workaround.

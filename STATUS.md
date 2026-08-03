@@ -6,7 +6,7 @@ Maintained by `/sextant:spec-status`.
 **Last audit:** 2026-07-28
 **Spec version:** root SPEC.md (unversioned)
 **Plugin version:** 1.0.1
-**Coverage:** 139 Covered, 0 Partial, 0 Missing/Contradicts
+**Coverage:** 140 Covered, 0 Partial, 0 Missing/Contradicts
 
 The implementation is the plugin itself — the skill prompts under
 `skills/`, the ambient rules under `rules/`, and the helper scripts under
@@ -21,7 +21,7 @@ draft to review against the implementation, not an audited ledger.
 | Prefix | Count | Status | Notes |
 |--------|------:|--------|-------|
 | TGT-01..09 | 9 | All Covered | Target resolution + worktree isolation — `scripts/{resolve-target,worktree}.sh`, each `skills/*/SKILL.md` "Target repo"; every skill routes a name argument through `resolve-target.sh` |
-| CMT-01..20 (16 retired) | 19 | All Covered | Review-first commit-and-push flow (1.0) — `skills/commit/SKILL.md`, `scripts/{commit,commit-preflight,look-ahead,squash-check}.sh` |
+| CMT-01..20 | 20 | All Covered | Review-first commit-and-push flow (1.0), recon before tests — `skills/commit/SKILL.md`, `scripts/{commit,commit-preflight,look-ahead,squash-check}.sh` |
 | PREP-01..15 | 15 | All Covered | `prepare-review`, pushed-branch only, opens the draft CR without pushing, reviews the description in the tool, verifies deep-link line parts — `skills/prepare-review/SKILL.md`, `scripts/{prepare-review,deep-links}.sh` |
 | FDBK-01..08 | 8 | All Covered | Fetch, triage, act on threads — `skills/resolve-feedback/SKILL.md` |
 | MRG-01..16 | 16 | All Covered | Gate checks (ready/mergeable/pipeline/approvals/threads), method choice, merge + cleanup — `skills/merge/SKILL.md`, `guides/forge-cookbook.md` |
@@ -135,8 +135,8 @@ Reworked the commit and review-request flow toward a 1.0 release. `/anchor:commi
 becomes review-first and commit-and-push: it reviews the pending changeset (working
 tree vs `HEAD`) before committing, then commits and pushes in one step (CMT-14/15
 rewritten, CMT-18/19 added); fix-now now edits the working tree and re-reviews
-rather than amending a committed checkpoint. The `--preview` mode is retired
-(CMT-16 removed). `prepare-review` keeps its name but is reworked to operate only
+rather than amending a committed checkpoint. The `--preview` mode is retired, and
+its requirement removed. `prepare-review` keeps its name but is reworked to operate only
 on an already-pushed branch — it opens the draft CR but never pushes and imposes
 no review gate (the pre-push review gate PREP-03/04 is retired); the push moved
 into `/anchor:commit`. RULE-04 and the Skill concept updated to match.
