@@ -2,10 +2,10 @@
 
 Consistency across the code-change lifecycle: issue, change request, review, release.
 
-anchor is one skill per step: file the issue, commit the work after a hunk-level
-review, open the change request, drive the review threads to done, merge, publish
-the release. The commit messages, descriptions, and release notes come out the
-same shape every time instead of reinvented per change.
+`anchor` is one skill per step: file the issue, commit the work after a
+change-by-change review, open the change request, drive the review threads to
+done, merge, publish the release. The commit messages, descriptions, and release
+notes come out the same shape every time instead of reinvented per change.
 
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
@@ -21,7 +21,7 @@ flowchart TD
 ## In action
 
 Tests pass, and `/anchor:commit` does the rest — staging, a why-first message,
-and a hunk-level review in moor where a rejected hunk comes back as a concrete
+and a code review in moor where a rejected change comes back as a concrete
 edit, not a vague "looks off":
 
 <div class="cw-session" data-cw-session="session"></div>
@@ -30,7 +30,7 @@ edit, not a vague "looks off":
 
 | Surface | What it does |
 |---|---|
-| [`/anchor:commit`](/skills/commit) | Confirm the repo, run tests, stage everything, write a why-first commit message, review the pending changeset hunk by hunk, then — once the review is clean — commit and push |
+| [`/anchor:commit`](/skills/commit) | Confirm the repo, run tests, stage everything, write a why-first commit message, review every change in the pending changeset, then — once the review is clean — commit and push |
 | [`/anchor:prepare-review`](/skills/prepare-review) | Rebase on the default branch if behind, open a draft change request on the already-pushed branch (assigned to you, source branch set to delete on merge), and draft a description that points a reviewer at the lines where their judgment is worth the most |
 | [`/anchor:resolve-feedback`](/skills/resolve-feedback) | Fetch the unresolved review threads on an open CR, triage each with you, then drive each to resolution — fix / reply / resolve |
 | [`/anchor:merge`](/skills/merge) | Land an approved CR once its gates are green — waiting on the pipeline if needed — then return to the default branch and delete the merged branch |
@@ -46,7 +46,7 @@ The two skills you reach for most, in motion:
 
 ## Quickstart
 
-anchor drives the forge through its official CLI, so the skills that touch a
+`anchor` drives the forge through its official CLI, so the skills that touch a
 change request, issue, pipeline, or release (`prepare-review`,
 `resolve-feedback`, `merge`, `release`, `pipeline`, `issue`, `issues`) need the
 one for your `origin` remote installed and authenticated with read+write scope.
@@ -84,13 +84,13 @@ glab auth login    # GitLab remotes
 ## Why these skills
 
 The diff already shows *what* changed. The expensive, easily-skipped parts are
-the ones a diff can't carry: a commit message that explains *why*, a hunk-level
-look before the change leaves your machine, and a CR description that points a
-reviewer at the lines where their attention pays off. anchor makes those the
+the ones a diff can't carry: a commit message that explains *why*, a code review
+before the change leaves your machine, and a CR description that points a
+reviewer at the lines where their attention pays off. `anchor` makes those the
 path of least resistance.
 
 - **commit** reviews the pending changeset before it commits, and feeds rejected
-  hunks back as concrete edits rather than vague "looks off" notes — nothing is
+  changes back as concrete edits rather than vague "looks off" notes — nothing is
   committed until the review is clean.
 - **prepare-review** writes for a reviewer who has never seen the system, leads
   with the *why*, and deep-links the critical path so a skim lands on what
@@ -107,13 +107,13 @@ present and is skipped when absent.
   [moor's `SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md).
   Without moor, review falls back to `git difftool --dir-diff` with your
   configured difftool — you still get a visual review, and the skill asks whether
-  to revise or proceed in place of moor's structured rejected-hunk feedback.
+  to revise or proceed in place of moor's structured rejection feedback.
 - **[revdiff](https://revdiff.com)** — an alternate review backend: a
   terminal-native diff reviewer (git, hg, and jj) selected with
   `git config anchor.reviewBackend revdiff`. It returns the same normalized
   review verdict as moor; its annotations come back ungraded, so the skill treats
   each as feedback to address and confirms the commit message itself. Because
-  revdiff is a TUI, selecting it needs the revdiff plugin installed — anchor uses
+  revdiff is a TUI, selecting it needs the revdiff plugin installed — `anchor` uses
   its terminal-overlay launcher to open the reviewer.
 - **[tack](https://github.com/chris-peterson/tack)** — the work tracker. Naming a
   repo you aren't sitting in (`/anchor:commit payments-api`) resolves through
@@ -126,7 +126,7 @@ present and is skipped when absent.
   things that moved
 - **Skills** — per-skill pages in the sidebar, sourced directly from each
   `SKILL.md`
-- [Configuring anchor](/guides/configuring) — extend the commit and CR output
+- [Configuring `anchor`](/guides/configuring) — extend the commit and CR output
   with `git config anchor.*` keys and your forge's own PR/MR template
 - [Forge cookbook](/guides/forge-cookbook) — the `gh` / `glab` invocations and
   etiquette the skills follow

@@ -58,7 +58,7 @@ If there's no unresolved feedback, mark remaining tasks `deleted`.
 
 ## Target repo and CR
 
-Resolve the repo as the other anchor skills do. **With a name argument**, resolve
+Resolve the repo as the other `anchor` skills do. **With a name argument**, resolve
 it through tack's repo db (`${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh <name>`, see the cookbook's
 "Resolving a named target repo"): `TARGET_VIA=tack` → use `TARGET_LOCAL` as the
 checkout — this skill writes commits, so it needs one; if `TARGET_LOCAL` is empty,

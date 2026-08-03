@@ -1,6 +1,6 @@
 # anchor — Specification
 
-anchor is a set of Claude Code skills and ambient rules covering the code-change
+`anchor` is a set of Claude Code skills and ambient rules covering the code-change
 lifecycle — filing issues, committing with why-first messages, opening and
 describing change requests, resolving review feedback, reporting pipelines,
 merging, and releasing — consistently across GitHub and GitLab.
@@ -34,14 +34,14 @@ behavior, not an independent authority — review them against the source.
 - **Squash gate** — the deterministic "is HEAD out for review?" decision
   (`squash-check.sh`) that governs squash-vs-new-commit.
 - **Deep link** — a line-anchored forge URL in a CR description that lands a
-  reviewer directly on the relevant hunk.
+  reviewer directly on the relevant change.
 - **Release model** — who owns the version bump for a repo: a CI workflow
   triggered by a published release or a tag push, a bump commit in the repo
   itself, or nobody (no version artifact). Resolved by `release-recon.sh` and
   decisive for the whole release path. Defined under REL.
 - **Worktree isolation** — running a write flow that targets a non-cwd repo in a
   dedicated git worktree, set up and torn down around the flow.
-- **tack** / **moor** / **revdiff** — sibling plugins anchor integrates with when
+- **tack** / **moor** / **revdiff** — sibling plugins `anchor` integrates with when
   present (repo resolution and route bookkeeping; visual diff review; an
   alternate terminal-native review backend). Each is optional, and the flow that
   uses it falls back when absent.
@@ -498,7 +498,7 @@ this" nullability from SARIF's `notApplicable`.
   decision through `/anchor:commit` rather than amend, rebase, or force-push ad
   hoc.
 - **[RULE-04]** The system shall use `gh`/`glab` for mechanical and query forge
-  operations, and route artifact *authoring* through the anchor skill — a CR
+  operations, and route artifact *authoring* through the `anchor` skill — a CR
   description through `/anchor:prepare-review`, an issue through `/anchor:issue`,
   release notes through `/anchor:release` — rather than a bare `create` /
   `--body` / `--generate-notes`.

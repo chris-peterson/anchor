@@ -4,7 +4,7 @@ Reader-facing prose — commit messages, CR descriptions, issue bodies, and any
 doc or reply a human reads — should carry the facts and nothing else. Loaded
 framing (blame, hyperbole, self-judgement, defensive softeners) adds noise that
 prompts the reader to evaluate the *tone* instead of the *change*. The factual
-claim usually survives the trim just fine, and reads cleaner for it. anchor's
+claim usually survives the trim just fine, and reads cleaner for it. `anchor`'s
 prose skills consult this guide for the tone discipline — `commit`,
 `prepare-review`, and `issue` all defer here.
 

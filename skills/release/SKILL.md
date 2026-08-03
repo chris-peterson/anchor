@@ -75,7 +75,7 @@ own tasks. Otherwise enumerate:
 
 ## Target repo and release state
 
-Resolve the repo as the other anchor skills do. **With a name argument**, resolve
+Resolve the repo as the other `anchor` skills do. **With a name argument**, resolve
 it through tack's repo db (`${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh <name>`,
 see the cookbook's "Resolving a named target repo"): `TARGET_VIA=tack` → use
 `TARGET_LOCAL` as the checkout — this skill reads git history and may commit, so it
@@ -232,7 +232,7 @@ own reply, then ask with `AskUserQuestion`. With no backend installed
 that same in-reply presentation.
 
 **Then confirm the publish explicitly, even after an `approved` review.** This is
-the one place anchor keeps a second gate: a CR description is editable, but a
+the one place `anchor` keeps a second gate: a CR description is editable, but a
 published release is public the instant it exists and its tag may be immutable.
 State the version, the tag, and the model's consequence, and take a yes/no:
 

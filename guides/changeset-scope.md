@@ -6,7 +6,7 @@ you're walking through in `/anchor:commit`'s review or resolving with
 as you can. Be surgical. Keep edits within the changeset's existing scope and
 resist pulling in pre-existing code unrelated to the change's purpose, even when
 a piece of feedback sits right next to it. Perfect scope isn't always reachable,
-but fewer touched lines is always the target. anchor's review skills consult
+but fewer touched lines is always the target. `anchor`'s review skills consult
 this guide whenever feedback would touch code the diff doesn't already own.
 
 ## Feedback invites overreach two ways

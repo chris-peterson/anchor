@@ -120,13 +120,13 @@ If a template exists, it's the team's required scaffolding — **compose into it
 
 ### Honor `anchor.*` config
 
-Read the project + global anchor keys once:
+Read the project + global `anchor.*` keys once:
 
 ```bash
 git config --get-regexp '^anchor\.' 2>/dev/null
 ```
 
-`--get-regexp` returns the names lowercased (`anchor.issuerules`); match them case-insensitively. Apply the keys relevant to an issue; absent keys keep anchor's defaults — never invent a value:
+`--get-regexp` returns the names lowercased (`anchor.issuerules`); match them case-insensitively. Apply the keys relevant to an issue; absent keys keep `anchor`'s defaults — never invent a value:
 
 - **`anchor.workTrackerBaseUri`** — when the author mentions a ticket (a full tracker URL, or a bare id), link it in the Context section: use a full URL as-is, or build `<base-uri><id>` from a bare id. No mention, no link.
 - **`anchor.issueRules`** — an extra standing rule layered onto every issue (the escape hatch for anything without a dedicated key).
@@ -140,7 +140,7 @@ Draft a concise imperative **title** (under 72 characters), then the body follow
 - **Lead with why, write for the unfamiliar reader** — the same ELI5 audience assumption `prepare-review` uses. Establish the system/business context in a sentence or two before the detail.
 - **Keep the approach about the plan, not the code** — what's being built and why the load-bearing decisions were made, not how every class is wired.
 - **Define unfamiliar terms with short callouts** (`> **Term?** …`), sparingly and only where a newcomer would be lost.
-- **Diagram only when it carries shape prose hides** — anchor's mermaid conventions (hand-drawn look, no `\n`/`<br>` in labels).
+- **Diagram only when it carries shape prose hides** — `anchor`'s mermaid conventions (hand-drawn look, no `\n`/`<br>` in labels).
 - **Same "what to avoid" discipline as a CR description** — no loaded framing (`${CLAUDE_PLUGIN_ROOT}/guides/loaded-framing.md`), no drift artifacts, no leaked deliberation, nothing the reader can already see.
 - **Watch the rendering gotchas** — the body is pasted into a markdown renderer; the bundled `${CLAUDE_PLUGIN_ROOT}/guides/markdown-gotchas.md` lists the traps (character escaping, nested fences, mermaid, `<details>`, tables in lists).
 
@@ -166,7 +166,7 @@ Then ask the user how to proceed with the `AskUserQuestion` tool. Use header `Di
 
 ### Yes (write)
 
-anchor assigns new issues to you. The canonical invocations — including the `glab api`-then-`glab issue update` two-step GitLab needs for a file-sourced body, and the update-from-file forms — live in the bundled forge cookbook (`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`), sections "Issue create" and "Issue description update from a file".
+`anchor` assigns new issues to you. The canonical invocations — including the `glab api`-then-`glab issue update` two-step GitLab needs for a file-sourced body, and the update-from-file forms — live in the bundled forge cookbook (`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`), sections "Issue create" and "Issue description update from a file".
 
 When a `tack` target resolved (see **Target repo**), retarget these off the cwd repo: add `-R <TARGET_PROJECT>` to the `gh issue` calls; on GitLab substitute the URL-encoded `TARGET_PROJECT` for `:fullpath` and add `--hostname <TARGET_HOST>` on the `glab api` calls, and `-R <TARGET_URL>` on `glab issue update`.
 

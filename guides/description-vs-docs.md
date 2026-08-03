@@ -3,7 +3,7 @@
 Where does explanatory content belong — the CR description, or the repo's
 docs? The two have different audiences and lifetimes: a description serves
 *this review* and is rarely read after merge; repo docs serve every future
-reader. anchor's skills consult this guide whenever the question comes up —
+reader. `anchor`'s skills consult this guide whenever the question comes up —
 while drafting a description, prepping a commit, or addressing feedback.
 
 ## Default: description content belongs to the review

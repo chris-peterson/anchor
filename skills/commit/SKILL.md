@@ -127,7 +127,7 @@ Keep the body free of loaded framing — temporal blame, size-minimizers, self-c
 
 ### Honor `anchor.*` config
 
-`ANCHOR_CONFIG` from Step 1's block holds the `anchor.*` keys as JSON (`{}` when none); the names come back lowercased (`anchor.worktrackerbaseuri`) — match case-insensitively. Apply the keys relevant to a commit; absent keys keep anchor's defaults — never invent a value:
+`ANCHOR_CONFIG` from Step 1's block holds the `anchor.*` keys as JSON (`{}` when none); the names come back lowercased (`anchor.worktrackerbaseuri`) — match case-insensitively. Apply the keys relevant to a commit; absent keys keep `anchor`'s defaults — never invent a value:
 
 - **`anchor.workTrackerBaseUri`** — when the user mentions a ticket (a full tracker URL, or a bare id), append a `Refs:` trailer (a footer line after a blank line, below the body): use a full URL as-is, or build `<base-uri><id>` from a bare id. Don't scrape the branch or prompt for a ticket — no mention, no trailer. Skip it for a trivial subject-only commit unless the user asks.
 - **`anchor.commitRules`** — an extra rule layered onto the default commit-message rules for this message (the escape hatch for anything without a dedicated key).
@@ -227,14 +227,14 @@ Act on the verdict:
 
 - **`approved`** → the changeset is clean; proceed to Step 5 to commit and push. If `comments` carries advisory entries (`fix-later` / `consider`), surface them — they don't gate the commit, but the user may want to act on them (now, or as a follow-up).
 - **`changes-requested`** → **do not commit.** List the blocking comments — the `fix-now` entries when `severitySource` is `graded`, or *every* comment when it's `inferred` (an ungraded backend can't tell you which block) — then loop back to Step 0: fix the commented lines in the working tree, re-run tests, and re-review. Surface any advisory (`fix-later` / `consider`) comments too. **If a comment's `body` is short** (e.g. "I don't get what this flag means") **and the cited line range contains more than one distinct change** (e.g. two flag additions in a usage block, two unrelated lines in the same range), ask the user which token the comment refers to before fixing — a one-second clarification beats several minutes of guessing wrong. Fix the commented lines themselves; don't expand into adjacent pre-existing code (`${CLAUDE_PLUGIN_ROOT}/guides/changeset-scope.md`).
-- **`incomplete`** → `Unreviewed hunks — what do you want to change?` Nothing is committed until the review is clean.
+- **`incomplete`** → `Unreviewed changes — what do you want to change?` Nothing is committed until the review is clean.
 - **`no-verdict`** → nothing is committed; read the cause from the result. When `backend` is `difftool` (or `capabilities.producesVerdict` is `false`), the change was **shown in a difftool that doesn't speak the contract** — report `Reviewed in your difftool — commit and push?` and act on the reply (proceed to Step 5 on approval). Otherwise the backend closed early or errored (see `raw.exitCode`) — report `Review closed without a verdict — what do you want to change?` If the output shows no difftool launched at all (no `diff.tool` set, or it points at a tool that isn't installed), that's a local git misconfiguration: surface it plainly so the user can fix their config or install a backend — don't substitute another tool.
 
 **The message is under review too.** If the result carries `editedFields` for the commit message (moor, when the reviewer edited it in-tool), use that edited text as the message in Step 5, overwrite the Step 2 message file with it. A `changes-requested` comment with `target: "commit-message"` is feedback on the message itself — revise the message and re-review. On a backend that can't round-trip an edited message (`capabilities.editableCommitMessage: false`, e.g. revdiff), keep the drafted message unless a comment asks to change it.
 
 ## Step 5: Commit and push
 
-Reached only on a clean review (or the message-only-amend exception, which has no tree change to review). anchor performs the commit **and** the push through one helper — `commit.sh` — rather than separate `git commit` / `git push` calls: it's a single allowlistable invocation, and it owns the push-variant plumbing (the `@{u}` / `origin/<default>` probes) so that logic never runs from skill prose.
+Reached only on a clean review (or the message-only-amend exception, which has no tree change to review). `anchor` performs the commit **and** the push through one helper — `commit.sh` — rather than separate `git commit` / `git push` calls: it's a single allowlistable invocation, and it owns the push-variant plumbing (the `@{u}` / `origin/<default>` probes) so that logic never runs from skill prose.
 
 The message file already exists — the one from Step 2, or the reviewer's edited version if Step 4 returned `editedFields`. For a **squash**, write a combined message covering both the prior commit and the new changes to that file first. Then launch the helper with the shape chosen in Step 3:
 

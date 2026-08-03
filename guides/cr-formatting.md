@@ -53,7 +53,7 @@ After the visualization choice, lean into markdown for the surrounding prose:
 ## Deep-link construction (Review guide)
 
 Always deep-link to the actual line, not just the file — reviewers should be one
-click away from the hunk you're pointing them at. **`FILE_LINKS` from
+click away from the change you're pointing them at. **`FILE_LINKS` from
 `prepare-review`'s Step 1 block is the whole prefix**, per changed file: the CR
 URL, the view path the anchor actually scrolls on, and the path-hash the forge
 renders (`sha1` on GitLab, `sha256` on GitHub —

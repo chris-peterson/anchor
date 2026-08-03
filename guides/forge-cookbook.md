@@ -1,7 +1,7 @@
 # Forge cookbook
 
 Canonical `gh` (GitHub) and `glab` (GitLab) invocations for the operations
-anchor's skills perform — creating and updating change requests (CRs: pull
+`anchor`'s skills perform — creating and updating change requests (CRs: pull
 requests on GitHub, merge requests on GitLab), filing issues, and posting
 review comments. Both CLIs reason more reliably from explicit flags than from
 guessing, so prefer these forms over re-deriving them.
@@ -33,7 +33,7 @@ against the wrong project):
 
 Derive `OWNER/REPO` and the host once from `git -C <path> remote get-url origin`.
 
-**anchor's helper scripts take `--repo <path>` (or `--worktree <path>`) instead.**
+**`anchor`'s helper scripts take `--repo <path>` (or `--worktree <path>`) instead.**
 `prepare-review.sh`, `squash-check.sh`, `look-ahead.sh`, `review-diff.sh`, and
 `pipeline-status.sh` `cd` into the given checkout for their (single-process) run,
 so every git/`gh`/`glab` call inside them targets it with no per-command flag —
@@ -122,9 +122,9 @@ bare, so it autolinks — and say it must merge first. On GitLab this *complemen
 the enforced block; on GitHub (or a GitLab fall-back) it's the only signal, so say
 plainly that ordering isn't enforced.
 
-## Defaults anchor applies
+## Defaults `anchor` applies
 
-When anchor creates a CR or an issue on your behalf, it applies these defaults.
+When `anchor` creates a CR or an issue on your behalf, it applies these defaults.
 They reflect a single-maintainer-friendly workflow; adjust per project as
 needed.
 
@@ -217,7 +217,7 @@ git branch --show-current            # → my-feature-branch
 
 # 2. Write the body to a unique temp path, then POST the MR.
 #    (No assignee here — glab api can't encode array fields; see the note
-#    under "Defaults anchor applies".)
+#    under "Defaults `anchor` applies".)
 glab api -X POST projects/:fullpath/merge_requests \
   -F title="MR title" \
   -F "description=@/tmp/cr-body.aB3xKp.md" \
@@ -286,7 +286,7 @@ requirement.
 ## Merge a CR
 
 Land an open CR into its target branch. Delete the source branch as part of the
-merge (`--delete-branch` / `--remove-source-branch`) — anchor sets this at create
+merge (`--delete-branch` / `--remove-source-branch`) — `anchor` sets this at create
 time, but pass it here too in case it wasn't. Guard the merge on the head SHA so a
 commit that landed after you last looked can't sneak in unreviewed
 (`--match-head-commit` / `--sha`).
@@ -546,7 +546,7 @@ gh api graphql -f query='mutation($id:ID!){
 ## CI / pipelines
 
 A commit's CI run goes by different names per forge: GitHub calls it a
-**workflow run** (the *Actions* tab), GitLab a **pipeline**. anchor uses
+**workflow run** (the *Actions* tab), GitLab a **pipeline**. `anchor` uses
 **pipeline** as the generic term for both — pick `gh run` on a GitHub origin,
 `glab` (the pipelines API) on a GitLab one. The `/anchor:pipeline` skill and its
 `${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh` helper wrap the invocations
@@ -639,7 +639,7 @@ the CR's **draft flag** — declared author intent, which is reliable in a way
 inferred engagement signals (note counts, reviewer lists) are not:
 
 - **Unpushed commits** — yours; amend, squash, and rebase freely.
-- **Pushed, CR still a draft** — mutable history is still the norm (anchor
+- **Pushed, CR still a draft** — mutable history is still the norm (`anchor`
   creates CRs as drafts for exactly this reason); amend and force-push with
   lease until it's marked ready.
 - **Pushed, CR marked ready** — follow-up changes land as **new commits**.

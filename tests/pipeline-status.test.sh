@@ -124,7 +124,7 @@ release_run() {
   cat <<JSON
 [ { "id": 3040, "name": "Release", "path": ".github/workflows/release.yml",
     "event": "release", "head_branch": "v1.1.0", "head_sha": "$sha",
-    "status": "${1:-completed}", "conclusion": "${2:-success}",
+    "status": "completed", "conclusion": "success",
     "created_at": "2026-07-28T21:44:21Z",
     "html_url": "https://github.com/acme/widget/actions/runs/3040" } ]
 JSON

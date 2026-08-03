@@ -1,8 +1,8 @@
 # What's new in 1.x
 
-Through 0.x, anchor stopped where the change request opened. You committed, you
+Through 0.x, `anchor` stopped where the change request opened. You committed, you
 pushed, you got a description written for a reviewer who had never seen the
-system — and then anchor was done, and landing and shipping were yours.
+system — and then `anchor` was done, and landing and shipping were yours.
 
 1.x covers those too. `/anchor:merge` lands the change; `/anchor:release`
 publishes what landed. Every step from a dirty working tree to a published
@@ -65,7 +65,7 @@ a single verdict, so the skills don't care which reviewer is installed.
 
 | Backend | How to select it | What it gives you |
 |---|---|---|
-| [moor](https://github.com/chris-peterson/moor) | the default | Hunk-level comments graded `fix-now` / `fix-later` / `consider`, and an editable commit message that round-trips |
+| [moor](https://github.com/chris-peterson/moor) | the default | Comments on individual changes, graded `fix-now` / `fix-later` / `consider`, and an editable commit message that round-trips |
 | [revdiff](https://revdiff.com) | `git config anchor.reviewBackend revdiff` | A terminal-native reviewer that also handles hg and jj. Annotations come back ungraded, so every one is treated as feedback to address |
 | your `git difftool` | neither plugin installed | A visual diff with no structured verdict, so the skill asks directly whether to revise or proceed |
 

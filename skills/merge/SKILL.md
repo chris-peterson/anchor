@@ -72,7 +72,7 @@ and do **not** create your own tasks. Otherwise enumerate:
 
 ## Target repo and CR
 
-Resolve the repo as the other anchor skills do. **With a name argument**, resolve
+Resolve the repo as the other `anchor` skills do. **With a name argument**, resolve
 it through tack's repo db (`${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh <name>`, see the cookbook's
 "Resolving a named target repo"): `TARGET_VIA=tack` → use `TARGET_LOCAL` as the
 checkout — this skill runs `git` post-merge (checkout, pull, branch delete), so it
@@ -262,7 +262,7 @@ the project/CR settings (and you re-read them) or names the method to use. On
 
 Run the merge for the chosen method (cookbook: "Merge a CR"). Delete the source
 branch as part of the merge where the forge supports it (`gh pr merge --delete-branch`
-/ GitLab `remove_source_branch` — anchor sets `--remove-source-branch` at create time,
+/ GitLab `remove_source_branch` — `anchor` sets `--remove-source-branch` at create time,
 but pass it here too in case it wasn't). This is a forge write:
 
 - On a **401/403 or other auth failure**, surface it and ask the user to refresh

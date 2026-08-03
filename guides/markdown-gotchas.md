@@ -4,7 +4,7 @@ Markdown that looks right in the source can render wrong — and the source
 gives no hint, so the mistake surfaces only once a renderer (GitHub, GitLab,
 the docs site) has its way with it. These are the recurring traps when
 authoring any rendered markdown: CR/issue bodies, review comments, and the
-guides on this site. anchor's skills consult this guide whenever they emit
+guides on this site. `anchor`'s skills consult this guide whenever they emit
 markdown a renderer will display.
 
 The fixes share a theme: a literal character that the renderer would read as

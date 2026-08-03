@@ -1,4 +1,4 @@
-# Route history rewrites through anchor
+# Route history rewrites through `anchor`
 
 When you're about to rewrite git history — `commit --amend`, a squash, a
 rebase, any force-push — don't do it ad-hoc: use `/anchor:commit`, which
@@ -18,7 +18,7 @@ whose pre-flight re-resolves it; raw `git commit --amend` /
   someone else authored is never a squash/amend target regardless of push
   state — land your work as a new commit.
 - **Pushed, CR still a draft** — mutable history is still the norm. Draft
-  is the author's declared "not under review yet" (anchor creates CRs as
+  is the author's declared "not under review yet" (`anchor` creates CRs as
   drafts for exactly this reason); amend and force-push with lease freely —
   but re-check it's *still* a draft at push time (per above); it stops being
   safe the instant it's marked ready.
