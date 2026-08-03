@@ -1,5 +1,42 @@
 # Changelog
 
+## 1.2.0
+
+## v1.2.0
+
+### Features
+
+- **`/anchor:commit` reads the repo before it runs your tests.** A run that turns
+  out to have nothing to commit — a push-only run, or a clean tree — no longer
+  waits on the full suite first to find that out. Where there's nothing staged the
+  suite is skipped outright, since those commits were tested when they were made.
+- **One less command before the flow starts.** The commit pre-flight reports the
+  checkout it resolved, so the skill no longer spends a separate call working out
+  which repo it's in.
+- Test-runner discovery stays with the agent rather than moving into a script, so a
+  slow suite still reports progress and a failure can be acted on in the same pass.
+
+### Fixes
+
+- **The "What's new in 1.x" page is reachable.** It was returning 404 — the page
+  was never tracked in the repo, so CI had nothing to deploy. It now ships, and is
+  linked from the sidebar and the home page.
+- The lint gate passes again. A test helper carried parameters no caller passed,
+  which GitHub's shellcheck reports and a newer local one doesn't.
+
+### Other
+
+- The description now names what anchor covers — issue, change request, review,
+  release — in place of "source control", which left out six of the eight skills.
+  The same line is used on the docs site, the marketplace entry, and both READMEs.
+- Docs prose is consistent about its own vocabulary: `anchor` renders as code, the
+  change-request term is used the same way throughout, and "hunk" is gone from the
+  pages a person reads (it stays where it names a git mechanism).
+- The home page and the "What's new" flow diagram cover the full lifecycle,
+  starting at the issue.
+- `SPEC.md` matches the reordered commit flow, and the spec ledger is current at
+  140 requirements.
+
 ## 1.1.2
 
 Fixes the publish step of `/anchor:release` on GitHub, where reaching for an abbreviated commit sha as the release target failed validation with an error that pointed at the tag.
