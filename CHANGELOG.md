@@ -2,8 +2,6 @@
 
 ## 1.2.0
 
-## v1.2.0
-
 ### Features
 
 - **`/anchor:commit` reads the repo before it runs your tests.** A run that turns
