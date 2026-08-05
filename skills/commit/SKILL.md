@@ -40,8 +40,9 @@ flowchart TD
         Review -->|changes-requested| FixReview["Fix working tree / message"]
     end
 
-    subgraph "Step 6: Commit & push"
-        CommitPush["commit.sh: commit + push"] --> Done([Committed and pushed])
+    subgraph "Step 6-7: Commit, push, watch"
+        CommitPush["commit.sh: commit + push"] --> Watch["pipeline-after-push.sh"]
+        Watch --> Done([Committed, pushed, pipeline reported])
     end
 
     %% Cross-subgraph edges live here, after every node is declared: mermaid
@@ -260,3 +261,20 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/commit.sh" --mode new --message-file <path>
 `commit.sh` picks the push variant itself — `-u origin <branch>` for a branch with no upstream, plain `git push` otherwise, `git push --force-with-lease` when you pass `--force-with-lease`. It also **refuses to commit onto the default branch** unless you pass `--allow-default-branch`; the Step 4 branch guard means you're normally already on a feature branch, so pass that flag only for the deliberate "commit to `<default>`" case the user chose there. Target a non-cwd checkout with `--repo <checkout>` / `--worktree <path>`, same as the other helpers.
 
 Read the helper's stdout — `COMMIT_SHA`, `BRANCH`, `PUSH_MODE`, and `PUSHED=ok` on success. Report the outcome and nothing more — `Committed <COMMIT_SHA>, pushed to <BRANCH>` — followed by any advisory `fix-later` / `consider` comments the review surfaced. If the push is rejected (non-fast-forward, protected branch, auth), `commit.sh` leaves git's error on stderr and exits non-zero; surface that and stop rather than retrying or force-pushing without the lease.
+
+## Step 7: Report the pipeline the push triggered
+
+The push is what starts CI, so this flow is holding the answer to whether the commit went green — don't leave the branch pushed-but-unverified and make the user think to ask. Reached only on a successful push (`PUSHED=ok`); a rejected push has no pipeline to watch.
+
+The watch blocks while it polls, so launch it as a **background** Bash call (`run_in_background: true`) immediately after reporting the commit, and read its stdout with the **BashOutput tool** when it completes:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill commit
+```
+
+Nothing about *whether* to watch is decided here — the helper owns it:
+
+- **`PIPELINE_WATCH=skipped`** → `PIPELINE_WATCH_REASON` says `config-off` (a config key turned it off) or `already-reported` (every run for this commit has been reported already). Either way there is nothing to report; end the flow silently.
+- **`PIPELINE_WATCH=ran`** → the same `KEY=value` lines `/anchor:pipeline` reads follow it. Report them following `${CLAUDE_PLUGIN_ROOT}/templates/pipeline-report.md`, including its "After a push" notes.
+
+Retarget it the way you retargeted `commit.sh` (`--repo` / `--worktree`). The commit is already reported, so this never holds the flow open — the pipeline report lands when the watch settles.

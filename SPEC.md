@@ -132,6 +132,9 @@ behavior, not an independent authority — review them against the source.
 - **[CMT-20]** The system shall decide the test gate from the runner's exit
   status, captured on its first invocation, rather than from its output, and shall
   not run the suite a second time to obtain that status.
+- **[CMT-21]** When the push succeeds, the system shall watch the pipeline it
+  triggered and report the outcome, rather than ending at the commit and leaving
+  the branch pushed but unverified.
 
 ### PREP — Prepare review
 
@@ -182,6 +185,9 @@ check.
   each deep link's line part against the working tree (`deep-links.sh --verify`)
   and re-point every line reported out-of-range, blank, outside a changed hunk,
   or anchored to a file the range doesn't touch.
+- **[PREP-16]** Once the description has landed, the system shall report the
+  branch's pipeline, which reports nothing where the CR's commit was already
+  reported and reports the new pipeline where a rebase force-push created one.
 
 ### FDBK — Resolve feedback
 
@@ -203,6 +209,10 @@ check.
   disposition includes resolve.
 - **[FDBK-08]** If a resolve call does not return `resolved`/`isResolved` true,
   then the system shall treat the resolution as not done.
+- **[FDBK-09]** When fix commits are pushed, the system shall watch the pipeline
+  they triggered while it replies and resolves, and shall report that pipeline in
+  the summary, so that feedback is not reported as addressed against an unverified
+  commit.
 
 ### MRG — Merge
 
@@ -373,6 +383,23 @@ backlog to pick the next one (the `issues` skill, ISS-07..12).
 - **[PIPE-09]** Where a caller gates on the forge's own merge checks rather than
   on the commit's overall CI state, the system shall report the commit's most
   recent run alone, without folding the commit's other runs into the verdict.
+- **[PIPE-10]** The system shall report every run for the commit together with
+  each run's jobs, whatever state the commit is in, so that the report says what
+  ran and not only whether it passed.
+- **[PIPE-11]** The system shall present that breakdown as a table, one row per
+  job, marking each row with an emoji for its normalized state that separates the
+  states wanting attention (failed, canceled) from the expected ones (success,
+  skipped, manual) and from the in-flight ones.
+- **[PIPE-12]** Where there is no pipeline to tabulate — no pipeline for the
+  commit, an unrecognized forge, or a single tracked job — the system shall
+  report in one line and draw no table.
+- **[PIPE-13]** When a skill has pushed a commit, the system shall watch the
+  pipeline that push triggered until it settles and report it, without the user
+  asking.
+- **[PIPE-14]** Where every run for a commit has already been reported, the
+  system shall not report them again, so that successive skills acting on one
+  commit produce one report; a run no report has covered — including one that
+  only opening the change request started — shall still be reported.
 
 ### REV — Review integration
 
@@ -470,6 +497,10 @@ this" nullability from SARIF's `notApplicable`.
 - **[CONF-05]** Where `anchor.commitRules`/`crRules`/`mrRules`/`prRules`/
   `issueRules` are set, the system shall layer them onto the relevant defaults,
   preferring forge-specific overrides.
+- **[CONF-06]** Where `anchor.watchPipelineAfterPush` or
+  `anchor.<skill>.watchPipelineAfterPush` is set, the system shall gate the
+  after-push pipeline watch on it, preferring the per-skill key; with neither
+  set, it shall watch.
 
 ### FORG — Forge integration & output
 
