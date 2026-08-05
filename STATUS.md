@@ -6,7 +6,7 @@ Maintained by `/sextant:spec-status`.
 **Last audit:** 2026-08-05
 **Spec version:** root SPEC.md (unversioned)
 **Plugin version:** 1.2.0
-**Coverage:** 149 Covered, 0 Partial, 0 Missing/Contradicts
+**Coverage:** 153 Covered, 0 Partial, 0 Missing/Contradicts
 
 The implementation is the plugin itself — the skill prompts under
 `skills/`, the ambient rules under `rules/`, and the helper scripts under
@@ -29,12 +29,19 @@ draft to review against the implementation, not an audited ledger.
 | ISS-01..12 | 12 | All Covered | Author one issue — gather intent, guard duplicates, draft, file (`skills/issue/SKILL.md`); list/scope/rank/recommend, read-only (`skills/issues/SKILL.md`) |
 | PIPE-01..14 | 14 | All Covered | Status/watch/job modes, commit-scoped resolution, per-workflow fold and the single-run opt-out; run/job breakdown tabulated with per-state emoji (PIPE-10..12) and watched once per commit after a push (PIPE-13..14) — `skills/pipeline/SKILL.md`, `skills/merge/SKILL.md` (PIPE-09), `templates/pipeline-report.md`, `scripts/{pipeline-status,pipeline-after-push}.sh`, `tests/pipeline-{status,after-push}.test.sh` |
 | REV-01..11 | 11 | All Covered | Tool-agnostic review contract — dispatcher `scripts/review-diff.sh` + adapters `scripts/review/{moor,revdiff}.sh`; consumers read the normalized verdict |
-| CONF-01..06 | 6 | All Covered | `anchor.*` key handling, including the per-skill after-push watch gate (CONF-06) — `guides/configuring.md`, `scripts/pipeline-after-push.sh` (`config_bool`), commit/prepare-review/issue config steps |
+| CONF-01..10 | 10 | All Covered | `anchor.*` key handling, including the per-skill after-push watch gate (CONF-06) and the CR-description verbosity dial, which abbreviates sections rather than removing them (CONF-07..10) — `guides/configuring.md`, `guides/cr-verbosity.md`, `templates/cr-description.md` (per-section "At lower verbosity"), `scripts/pipeline-after-push.sh` (`config_bool`), commit/prepare-review/issue config steps |
 | FORG-01..05 | 5 | All Covered | Template composition, body-file, markdown, auth — `templates/`, `guides/{forge-cookbook,markdown-gotchas}.md` |
 | RULE-01..05 | 5 | All Covered | SessionStart-injected rules — `hooks/emit-rules.sh`, `rules/*.md`; RULE-04 routes CR creation through `prepare-review` |
 | UX-01..05 | 5 | All Covered | Narration, orchestration, decision prompts, artifact visibility, recon-supplied values — cross-cutting, each `skills/*/SKILL.md`, `guides/execute-quietly.md` |
 
 ## Audit history
+
+### 2026-08-05 — CR description verbosity (CONF-07..10)
+
+Coverage 149 → 153, plugin version unchanged at 1.2.0. Four IDs for the
+`anchor.crVerbosity` dial. CONF-08 abbreviates prose and CONF-09 keeps section
+presence with the template's conditions and `reviewBudgetMins`, so the dial
+cannot cost coverage; the old CONF-09 (length-not-register) is now CONF-10.
 
 ### 2026-08-05 — Coverage refresh (spec-status)
 

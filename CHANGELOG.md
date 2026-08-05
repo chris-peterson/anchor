@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+### Features
+
+- **CR descriptions lean much shorter by default.** `anchor.crVerbosity` sets
+  where a description sits between brevity and thoroughness, as an integer from 1
+  to 100. It ships at `50`, so descriptions come out markedly briefer than in
+  1.2.0 without anyone configuring anything; `git config anchor.crVerbosity 100`
+  restores the old shape. `anchor.mrVerbosity` / `anchor.prVerbosity` override it
+  per forge, the way the `*Rules` keys already do. It's a balance point, not a
+  word budget — nothing is counted or truncated.
+- **A short description keeps every section a long one would have.** Verbosity
+  abbreviates; it never removes. Which sections a description has stays the
+  CR-description template's call, so a section that meets its condition is there
+  at every setting, down to its floor. Dropping sections is what
+  `anchor.reviewBudgetMins` does, and that it costs coverage is exactly why it
+  was the wrong lever for length.
+- **A calibration page you pick the number from.** One real changeset drafted at
+  `1`, `25`, `50`, `75`, and `100` — five independent drafts, each made with only
+  its own setting — so a number is something you choose by reading output rather
+  than by guessing at an adjective. It also documents what a low setting will
+  never cut: one sentence of *why*, and the Review guide's deep links.
+- The two length knobs now say plainly how they differ. `anchor.reviewBudgetMins`
+  decides *what a description covers*; `anchor.crVerbosity` decides *how much
+  prose the covered material gets*. Turning the budget down to get a shorter
+  description used to be the only lever, and it dropped content along with the
+  words.
+
 ## 1.2.0
 
 ### Features

@@ -128,6 +128,8 @@ present and is skipped when absent.
   `SKILL.md`
 - [Configuring `anchor`](/guides/configuring) — extend the commit and CR output
   with `git config anchor.*` keys and your forge's own PR/MR template
+- [CR verbosity, calibrated](/guides/cr-verbosity) — one changeset rendered at
+  five `anchor.crVerbosity` settings, for picking how long your descriptions run
 - [Forge cookbook](/guides/forge-cookbook) — the `gh` / `glab` invocations and
   etiquette the skills follow
 - [Release models](/guides/release-models) — the four ways a repo publishes, and

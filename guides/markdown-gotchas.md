@@ -73,6 +73,22 @@ fences, and lists inside show as raw text.
 </details>
 ```
 
+## The `<summary>` line itself takes HTML, not markdown
+
+The blank-line rule above buys you markdown in the *body*. The `<summary>` line
+is not part of that body — it's raw HTML, so markdown inside it is emitted
+verbatim. Backticks are the one that bites, because a summary is exactly where
+you want to name a setting, a flag, or a key:
+
+```text
+<summary>`100` — the full shape</summary>      ← renders the backticks literally
+<summary><code>100</code> — the full shape</summary>
+```
+
+Use the HTML tag for each construct you'd otherwise reach for: `<code>` for
+backticks, `<strong>` for `**bold**`, `<em>` for `*italic*`, `<a href="…">` for
+a link.
+
 ## Tables can't be indented under a list item
 
 A table indented beneath a list item renders unreliably in GFM. Keep tables

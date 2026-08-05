@@ -26,7 +26,9 @@ purely for readability.
 |---|---|---|
 | `anchor.workTrackerBaseUri` | `git config anchor.workTrackerBaseUri https://app.clickup.com/t/` | The base URL of your work tracker. When you mention a ticket, `commit` adds a `Refs:` trailer and `prepare-review` links it in the CR. See [Work-tracker references](#work-tracker-references). |
 | `anchor.reviewBackend` | `git config anchor.reviewBackend revdiff` | Which visual-review tool the skills launch: `moor` (default) or `revdiff`. Both return the same normalized review verdict; `revdiff` is a terminal-native reviewer that also handles hg/jj repos, while `moor` additionally grades comments, tracks which changes you have reviewed, and round-trips an edited commit message. Selecting `revdiff` needs the revdiff plugin installed — `anchor` delegates to its terminal-overlay launcher to open the TUI. How the chosen tool renders the diff is its own knob, not an `anchor.*` key: see [Review-backend config](#review-backend-config) (per backend: [`revdiff`](#review-backend-config-revdiff), [`moor`](#review-backend-config-moor)). |
-| `anchor.reviewBudgetMins` | `git config anchor.reviewBudgetMins 10` | How many minutes of focused attention you expect this CR to get. It's an *input*, not a length cap: a tight budget (≈5) makes `prepare-review` lead with the essentials and cut asides hard; a generous one (≈30) keeps more supporting context and depth. It steers *what to include*, not the tone — a tight budget is no license for punchy or marketing framing. Unset behaves like ≈10. |
+| `anchor.reviewBudgetMins` | `git config anchor.reviewBudgetMins 10` | How many minutes of focused attention you expect this CR to get. It's an *input*, not a length cap: a tight budget (≈5) makes `prepare-review` lead with the essentials and cut asides hard; a generous one (≈30) keeps more supporting context and depth. It steers *what to include*, not the tone — a tight budget is no license for punchy or marketing framing. Unset behaves like ≈10. For *how long* the result runs, see `crVerbosity` below and [Two length knobs](#two-length-knobs). |
+| `anchor.crVerbosity` | `git config anchor.crVerbosity 25` | Where a CR description sits between brevity and thoroughness, as an integer from 1 to 100. Unset behaves as `50`. It is not a word budget — nothing is counted or truncated; the number says how hard to lean on brevity when the two pull against each other. `100` is the [CR-description template](/templates/cr-description)'s full shape; below that the prose tightens, in the order the [verbosity guide](/guides/cr-verbosity) sets out. **It abbreviates sections, never removes them** — which sections a description has is the template's call, so one that meets its condition is present at every setting, down to its floor. It never cuts the *why* sentence or the Review guide's deep links, and it steers length only, never register. See the `mr`/`pr` overrides below. |
+| `anchor.mrVerbosity` / `anchor.prVerbosity` | `git config anchor.prVerbosity 25` | Forge-specific overrides of `crVerbosity`: `mrVerbosity` applies on GitLab, `prVerbosity` on GitHub. When set, the forge-specific key replaces `crVerbosity` for that forge; otherwise `crVerbosity` applies. |
 | `anchor.commitRules` | `git config anchor.commitRules "prefix the subject with the affected module"` | An extra rule layered onto `anchor`'s default commit-message rules, applied to every message it drafts. |
 | `anchor.issueRules` | `git config anchor.issueRules "always include an acceptance-criteria checklist"` | An extra rule layered onto `anchor`'s default issue rules, applied to every issue the `issue` skill drafts. |
 | `anchor.crRules` | `git config anchor.crRules "@-mention the on-call lead"` | An extra rule layered onto the default CR-description rules — the forge-agnostic default. See the `mr`/`pr` overrides below. |
@@ -52,6 +54,28 @@ commit trailer and a link in the CR description. Two forms work:
 
 If you don't mention a ticket, `anchor` leaves the trailer off — it won't prompt
 for one on every commit.
+
+### Two length knobs
+
+`reviewBudgetMins` and `crVerbosity` both make a description shorter, and they do
+it on different axes — which is why turning one down is not a substitute for the
+other:
+
+- **`reviewBudgetMins` decides what to include.** How many of the changeset's
+  topics survive into the description at all. Turn it down and you get fewer
+  things covered.
+- **`crVerbosity` decides how much prose those topics get.** Turn it down and you
+  get the same coverage, written shorter.
+
+Budget picks the content set; verbosity sets how much prose carries it.
+A tight budget at `crVerbosity 100` is a few topics explained in full; a generous
+budget at `crVerbosity 1` is broad coverage in telegraphic form. Reach for the
+budget when descriptions cover things you don't care about, and for verbosity
+when they cover the right things at too much length.
+
+Neither knob cuts below the floor — one sentence of *why*, and the Review guide's
+deep links. [The verbosity guide](/guides/cr-verbosity) renders one real changeset
+at five settings, which is the way to pick a number.
 
 ### Watching the pipeline after a push
 
@@ -124,11 +148,14 @@ moor takes no presentation flags (it reads only the title and the sidecar path
 
 ### Forge-specific overrides (`cr` / `mr` / `pr`)
 
-CR-rule keys follow a prefix convention: `cr` is the forge-agnostic default, and
-`mr` (GitLab) / `pr` (GitHub) override it when present. `prepare-review` picks the
-forge by the `origin` remote, uses the matching `mrRules` / `prRules` if set, and
-falls back to `crRules` otherwise. Set just `crRules` for one rule everywhere; add
-`mrRules` / `prRules` only where a forge needs something different.
+CR keys follow a prefix convention: `cr` is the forge-agnostic default, and `mr`
+(GitLab) / `pr` (GitHub) override it when present. `prepare-review` picks the
+forge by the `origin` remote, uses the matching `mr*` / `pr*` key if set, and
+falls back to the `cr*` one otherwise. It governs both pairs — `crRules` /
+`mrRules` / `prRules` and `crVerbosity` / `mrVerbosity` / `prVerbosity` — and
+resolves them independently, so a `prVerbosity` with no `prRules` overrides the
+length on GitHub and leaves the rules on `crRules`. Set just the `cr` key for one
+setting everywhere; add `mr` / `pr` only where a forge needs something different.
 
 ## Examples
 
@@ -136,8 +163,9 @@ falls back to `crRules` otherwise. Set just `crRules` for one rule everywhere; a
 # Point anchor at your work tracker so a mentioned bare id expands to a full link
 git config anchor.workTrackerBaseUri https://app.clickup.com/t/
 
-# This team reviews fast — keep CR descriptions lean
+# This team reviews fast — cover fewer topics, and write them shorter
 git config anchor.reviewBudgetMins 5
+git config anchor.crVerbosity 25
 
 # A standing rule on GitHub PRs only
 git config anchor.prRules "fill in the Risk & rollback section"
