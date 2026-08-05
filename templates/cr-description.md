@@ -19,12 +19,26 @@ future passes) scan for the canonical names. The numeric prefixes (`1.`, `2.`)
 in this file are template organization only; emit the bare name (`## Context`,
 `## Review guide`). Omit a section that doesn't apply; never rename one.
 
-**How much to write is configurable.** `anchor.reviewBudgetMins` is the minutes
-of focused review you expect this CR to get — a tight budget (≈5) leads with the
-essentials and cuts asides, a generous one keeps more depth. A standing rule can
-be added to every description via `anchor.crRules` (or `anchor.mrRules` /
-`anchor.prRules` to override it per forge). See the [configuring
+**How much to write is configurable, on two axes.** `anchor.reviewBudgetMins` is
+the minutes of focused review you expect this CR to get — it decides *what to
+include*, so a tight budget (≈5) leads with the essentials and cuts asides.
+`anchor.crVerbosity` (1–100, unset behaves as `50`) decides *how much prose* the
+included material gets — a balance point, not a word budget. A standing rule can
+be added to every description via `anchor.crRules`; `mr`/`pr`-prefixed keys
+override both `crRules` and `crVerbosity` per forge. See the [configuring
 guide](/guides/configuring) for the full key set.
+
+**This file decides which sections a description has; `crVerbosity` only decides
+how long each one runs.** The *(rare)* and *(conditional)* markers below are the
+gate, and they are the only gate — a section that meets its condition appears at
+every setting, including `1`, and one that doesn't appears at none. Verbosity
+abbreviates a section; it never removes one. (Removing a section removes
+information, which is what `reviewBudgetMins` is for.) Each section carries an
+**At lower verbosity** note saying what it sheds and what it keeps, and
+[the verbosity guide](/guides/cr-verbosity) renders one real changeset at five
+settings so the levels are calibrated against output rather than adjectives. Two
+things are never cut at any setting: **one sentence of *why***, and the **Review
+guide's deep links**.
 
 ## 1. Context *(first heading — target a 30–60 second read)*
 
@@ -53,6 +67,11 @@ Three patterns that pad Context without informing it:
   change; keep the analogy only if it's shorter than the plain statement.
 
 Padding Context to feel substantive is a failure mode, not thoroughness.
+
+**At lower verbosity.** The second paragraph folds into the first, then the first
+narrows to the problem and what the change does about it. Floor: the *why*
+sentence. Cutting past that leaves a description saying only *what*, which is the
+thing the diff already says.
 
 ## 2. Review guide
 
@@ -99,10 +118,22 @@ design decision lives. Always deep-link to the actual line — see
 For trivial changesets (a single file, a one-line fix), skip the tiered guide and
 just link the file and say what to look for.
 
+**At lower verbosity the links stay and the words around them shrink.** This is
+the section a low setting protects, because it's the highest value per minute a
+reviewer has. The clauses shorten to one line each; then the tier headings
+collapse into a single list and only the entries that genuinely route attention
+keep a clause. A bare deep link is a complete bullet — what a low setting must
+never do is drop links to stay short.
+
 ## 3. Approach & trade-offs *(rare — only when a reviewer would otherwise question the choice)*
 
 Key decisions and the alternatives you rejected: "I chose X over Y because Z."
 If you're defending against an objection no one raised, cut the section.
+
+**At lower verbosity.** The alternatives go first, then the reasoning, leaving
+the decision and one clause of why. Floor: a single sentence naming the choice.
+If the choice was contested enough to earn the section, a reviewer needs to know
+it was made — so the section stays even at `1`.
 
 ## 4. Testing *(rare — only when CI doesn't cover it and the reviewer needs to know)*
 
@@ -110,6 +141,11 @@ Mention testing only when it's *unusually* relevant to the reviewer's
 assessment: hard-to-test code paths, environments tested against beyond CI, or
 coverage decisions the reviewer might push back on. If the suite runs in CI,
 reviewers already assume it ran — don't repeat.
+
+**At lower verbosity.** Narrows to the gap itself — what CI doesn't cover —
+dropping the explanation of why it doesn't. Floor: one sentence. The bar for
+appearing at all is the *unusually relevant* test above, and the dial doesn't
+move that bar.
 
 ## 5. Validation *(conditional — when correctness is best shown by real-world use)*
 
@@ -139,6 +175,11 @@ fills this section. Record it as one or more evidence rows:
 Skip this section when the diff plus CI already settle correctness — an ordinary
 self-contained service or UI change ships its own production validation and needs
 no separate evidence row.
+
+**At lower verbosity.** The framing prose around the rows goes; the evidence rows
+themselves never do. Floor: the rows alone under the heading. This section
+carries *evidence* a reviewer cannot derive from the diff, so there is no setting
+at which shortening it means deleting it.
 
 ## Honoring a project's forge template
 

@@ -501,6 +501,23 @@ this" nullability from SARIF's `notApplicable`.
   `anchor.<skill>.watchPipelineAfterPush` is set, the system shall gate the
   after-push pipeline watch on it, preferring the per-skill key; with neither
   set, it shall watch.
+- **[CONF-07]** The system shall read `anchor.crVerbosity` as an integer from 1
+  to 100 setting where the CR description balances brevity against thoroughness
+  — not a word budget, and never a truncation point — preferring
+  `anchor.mrVerbosity`/`anchor.prVerbosity` for the forge in use; with none set,
+  it shall draft at `50`.
+- **[CONF-08]** When drafting at a verbosity below 100, the system shall shorten
+  by abbreviating prose — asides, then explanation down to each section's
+  load-bearing claim, then Review-guide clauses and tiers, then Context's second
+  paragraph — and shall not remove a section on account of verbosity.
+- **[CONF-09]** The system shall determine which sections a CR description
+  contains from the template's conditions and `anchor.reviewBudgetMins` alone,
+  and shall retain every such section at every verbosity, each abbreviated no
+  further than its floor: one sentence of why for Context, the deep links for the
+  Review guide.
+- **[CONF-10]** The system shall let `anchor.crVerbosity` steer length only,
+  keeping the register unchanged, and shall resolve it independently of
+  `anchor.reviewBudgetMins`, which steers what the description covers.
 
 ### FORG — Forge integration & output
 
