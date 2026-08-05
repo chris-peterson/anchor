@@ -1,5 +1,59 @@
 # Changelog
 
+## 1.3.0
+
+### Features
+
+- **A push now tells you whether CI went green.** `/anchor:commit`,
+  `/anchor:resolve-feedback`, and `/anchor:prepare-review` each watch the pipeline
+  their push triggered and report it, instead of ending at the push and leaving
+  the result for you to remember to check. It reports once per pipeline, so
+  opening a CR on a commit that was already reported stays quiet, and it stops at
+  a 30-minute ceiling rather than waiting on a pipeline that never settles. Turn
+  it off with `git config anchor.watchPipelineAfterPush false`, or per skill with
+  `anchor.<skill>.watchPipelineAfterPush`.
+- **Pipeline reports show every run and job, in every state.** A commit on GitHub
+  has one run per workflow; the report used to fold them into a single verdict and
+  break out jobs only on red, so a green report never said which workflows ran and
+  a blocked one never said which job held the gate. It's now a table with a row
+  per job and an emoji per state, with skipped and waiting split from failed since
+  neither is a failure.
+- **CR descriptions lean much shorter by default.** `anchor.crVerbosity` sets
+  where a description sits between brevity and thoroughness, as an integer from 1
+  to 100, and it ships at `50` — so descriptions come out markedly briefer than in
+  1.2.0 without anyone configuring anything. `git config anchor.crVerbosity 100`
+  restores the previous shape. `anchor.mrVerbosity` / `anchor.prVerbosity` override
+  it per forge, the way the `*Rules` keys already do. It's a balance point, not a
+  word budget: nothing is counted and nothing is truncated.
+- **A short description keeps every section a long one would have.** Verbosity
+  abbreviates; it never removes. Which sections a description has stays the
+  CR-description template's call, so a section that meets its condition is present
+  at every setting, down to its floor. Dropping sections is what
+  `anchor.reviewBudgetMins` does, and that it costs coverage is exactly why it was
+  the wrong lever for length.
+- **A calibration page you pick the verbosity number from.** One real changeset
+  drafted at `1`, `25`, `50`, `75`, and `100` — five independent drafts, each made
+  with only its own setting — so a number is something you choose by reading output
+  rather than by guessing at an adjective. It also records what a low setting never
+  cuts: one sentence of *why*, and the Review guide's deep links.
+- The two length knobs now say plainly how they differ.
+  `anchor.reviewBudgetMins` decides *what a description covers*;
+  `anchor.crVerbosity` decides *how much prose the covered material gets*. Turning
+  the budget down to get a shorter description was previously the only lever, and
+  it dropped content along with the words.
+
+### Fixes
+
+- A GitHub run that ends `stale` is reported as failed. It normalizes to `failed`
+  now; the previous mapping didn't match it, so such a run went unreported.
+
+### Other
+
+- The markdown-gotchas guide records that a `<summary>` line is raw HTML:
+  backticks inside it ship verbatim, and `<code>` is what renders.
+- The spec ledger covers the new behavior — 140 requirements at 1.2.0, 153 now,
+  across the pipeline report, the after-push watch, and the verbosity dial.
+
 ## 1.2.0
 
 ### Features
