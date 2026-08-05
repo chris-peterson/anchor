@@ -190,6 +190,17 @@ implied more than the flag does.
 Show the commit(s) for confirmation, then push (plain push — the branch only
 gains commits).
 
+That push starts a fresh pipeline on the fix, and telling the reviewer their
+feedback is addressed reads differently if it went red. Launch the watch as a
+**background** Bash call (`run_in_background: true`) so it polls while you carry
+on with 3c and 3d:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill resolve-feedback
+```
+
+Its verdict belongs in Step 4's summary; read it there.
+
 ### 3c. Reply on each thread
 
 Write each reply body to a unique temp file (`$(mktemp -u "${TMPDIR:-/tmp}/reply.XXXXXX").md`)
@@ -223,3 +234,10 @@ Report one line per thread: `#N <file:line> — <disposition> — <commit sha /
 reply posted / resolved>`, plus anything deferred and where it went. If any
 thread was skipped, say so — the next `/anchor:resolve-feedback` run picks it
 up.
+
+Then close with the pipeline. Read the watch launched in 3b with the
+**BashOutput tool**: `PIPELINE_WATCH=skipped` means a config key turned it off
+or the commit's runs were already reported — say nothing more. `PIPELINE_WATCH=ran` is
+followed by the lines `/anchor:pipeline` reads; report them following
+`${CLAUDE_PLUGIN_ROOT}/templates/pipeline-report.md`. If it hasn't settled yet,
+say the watch is still running and link the pipeline rather than waiting on it.

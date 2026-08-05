@@ -3,10 +3,10 @@
 Tracking status of the requirements declared in [`SPEC.md`](SPEC.md).
 Maintained by `/sextant:spec-status`.
 
-**Last audit:** 2026-08-03
+**Last audit:** 2026-08-05
 **Spec version:** root SPEC.md (unversioned)
-**Plugin version:** 1.1.2
-**Coverage:** 140 Covered, 0 Partial, 0 Missing/Contradicts
+**Plugin version:** 1.2.0
+**Coverage:** 149 Covered, 0 Partial, 0 Missing/Contradicts
 
 The implementation is the plugin itself — the skill prompts under
 `skills/`, the ambient rules under `rules/`, and the helper scripts under
@@ -21,20 +21,26 @@ draft to review against the implementation, not an audited ledger.
 | Prefix | Count | Status | Notes |
 |--------|------:|--------|-------|
 | TGT-01..09 | 9 | All Covered | Target resolution + worktree isolation — `scripts/{resolve-target,worktree}.sh`, each `skills/*/SKILL.md` "Target repo"; every skill routes a name argument through `resolve-target.sh` |
-| CMT-01..20 | 20 | All Covered | Review-first commit-and-push flow (1.0), recon before tests — `skills/commit/SKILL.md`, `scripts/{commit,commit-preflight,look-ahead,squash-check}.sh` |
-| PREP-01..15 | 15 | All Covered | `prepare-review`, pushed-branch only, opens the draft CR without pushing, reviews the description in the tool, verifies deep-link line parts — `skills/prepare-review/SKILL.md`, `scripts/{prepare-review,deep-links}.sh` |
-| FDBK-01..08 | 8 | All Covered | Fetch, triage, act on threads — `skills/resolve-feedback/SKILL.md` |
+| CMT-01..21 | 21 | All Covered | Review-first commit-and-push flow (1.0), recon before tests, pipeline watch after the push (CMT-21) — `skills/commit/SKILL.md`, `scripts/{commit,commit-preflight,look-ahead,squash-check,pipeline-after-push}.sh` |
+| PREP-01..16 | 16 | All Covered | `prepare-review`, pushed-branch only, opens the draft CR without pushing, reviews the description in the tool, verifies deep-link line parts, reports the branch's pipeline once the description lands (PREP-16) — `skills/prepare-review/SKILL.md`, `scripts/{prepare-review,deep-links,pipeline-after-push}.sh` |
+| FDBK-01..09 | 9 | All Covered | Fetch, triage, act on threads, watch the fix commit's pipeline into the summary (FDBK-09) — `skills/resolve-feedback/SKILL.md`, `scripts/pipeline-after-push.sh` |
 | MRG-01..16 | 16 | All Covered | Gate checks (ready/mergeable/pipeline/approvals/threads), method choice, merge + cleanup — `skills/merge/SKILL.md`, `guides/forge-cookbook.md` |
 | REL-01..20 | 20 | All Covered | Release-model detection, version recommendation, notes + review, per-model publish — `skills/release/SKILL.md`, `scripts/release-recon.sh`, `guides/release-models.md`, `guides/forge-cookbook.md` |
 | ISS-01..12 | 12 | All Covered | Author one issue — gather intent, guard duplicates, draft, file (`skills/issue/SKILL.md`); list/scope/rank/recommend, read-only (`skills/issues/SKILL.md`) |
-| PIPE-01..09 | 9 | All Covered | Status/watch/job modes, commit-scoped resolution, per-workflow fold and the single-run opt-out — `skills/pipeline/SKILL.md`, `skills/merge/SKILL.md` (PIPE-09), `scripts/pipeline-status.sh`, `tests/pipeline-status.test.sh` |
+| PIPE-01..14 | 14 | All Covered | Status/watch/job modes, commit-scoped resolution, per-workflow fold and the single-run opt-out; run/job breakdown tabulated with per-state emoji (PIPE-10..12) and watched once per commit after a push (PIPE-13..14) — `skills/pipeline/SKILL.md`, `skills/merge/SKILL.md` (PIPE-09), `templates/pipeline-report.md`, `scripts/{pipeline-status,pipeline-after-push}.sh`, `tests/pipeline-{status,after-push}.test.sh` |
 | REV-01..11 | 11 | All Covered | Tool-agnostic review contract — dispatcher `scripts/review-diff.sh` + adapters `scripts/review/{moor,revdiff}.sh`; consumers read the normalized verdict |
-| CONF-01..05 | 5 | All Covered | `anchor.*` key handling — `guides/configuring.md`, commit/prepare-review/issue config steps |
+| CONF-01..06 | 6 | All Covered | `anchor.*` key handling, including the per-skill after-push watch gate (CONF-06) — `guides/configuring.md`, `scripts/pipeline-after-push.sh` (`config_bool`), commit/prepare-review/issue config steps |
 | FORG-01..05 | 5 | All Covered | Template composition, body-file, markdown, auth — `templates/`, `guides/{forge-cookbook,markdown-gotchas}.md` |
 | RULE-01..05 | 5 | All Covered | SessionStart-injected rules — `hooks/emit-rules.sh`, `rules/*.md`; RULE-04 routes CR creation through `prepare-review` |
 | UX-01..05 | 5 | All Covered | Narration, orchestration, decision prompts, artifact visibility, recon-supplied values — cross-cutting, each `skills/*/SKILL.md`, `guides/execute-quietly.md` |
 
 ## Audit history
+
+### 2026-08-05 — Coverage refresh (spec-status)
+
+Last audit 2026-08-03 → 2026-08-05, plugin version 1.1.2 → 1.2.0; coverage 140 →
+149. Nine IDs added for the post-push pipeline report: PIPE-10..14, CMT-21,
+PREP-16, FDBK-09, CONF-06.
 
 ### 2026-08-03 — Coverage refresh (spec-status)
 

@@ -31,6 +31,8 @@ purely for readability.
 | `anchor.issueRules` | `git config anchor.issueRules "always include an acceptance-criteria checklist"` | An extra rule layered onto `anchor`'s default issue rules, applied to every issue the `issue` skill drafts. |
 | `anchor.crRules` | `git config anchor.crRules "@-mention the on-call lead"` | An extra rule layered onto the default CR-description rules — the forge-agnostic default. See the `mr`/`pr` overrides below. |
 | `anchor.mrRules` / `anchor.prRules` | `git config anchor.prRules "fill in the Risk & rollback section"` | Forge-specific overrides of `crRules`: `mrRules` applies on GitLab, `prRules` on GitHub. When set, the forge-specific key replaces `crRules` for that forge; otherwise `crRules` applies. |
+| `anchor.watchPipelineAfterPush` | `git config anchor.watchPipelineAfterPush false` | Whether a skill that pushes then watches the pipeline that push triggered and reports it. On by default, for every push-side skill (`commit`, `resolve-feedback`, `prepare-review`). See [Watching the pipeline after a push](#watching-the-pipeline-after-a-push). |
+| `anchor.<skill>.watchPipelineAfterPush` | `git config anchor.prepare-review.watchPipelineAfterPush false` | The same knob for one skill, overriding the umbrella key above. |
 
 Absent keys fall back to `anchor`'s defaults; the skills never invent a value for
 a key you haven't set.
@@ -50,6 +52,37 @@ commit trailer and a link in the CR description. Two forms work:
 
 If you don't mention a ticket, `anchor` leaves the trailer off — it won't prompt
 for one on every commit.
+
+### Watching the pipeline after a push
+
+A push is what starts CI, so the skill that pushed is the one holding the answer
+to whether the commit went green. `commit`, `resolve-feedback`, and
+`prepare-review` each watch that pipeline to a terminal state and report it as a
+table of runs and jobs.
+
+Two things bound it, both handled for you:
+
+- **One report per pipeline.** The skills gate on the runs already reported, so
+  a CR opened on the commit `commit` just pushed and reported doesn't report the
+  same pipeline a second time. A rebase, a follow-up commit, a re-run, or a
+  pipeline that only opening the CR starts (`on: pull_request`) are each a
+  pipeline nobody has seen, and get their own report.
+- **A bounded wait.** The watch stops at the poll ceiling
+  (`PIPELINE_WATCH_TIMEOUT`, 30 minutes by default) and reports the last state
+  with a link rather than waiting on a pipeline that never settles. A repo whose
+  CI doesn't run on push reports that no pipeline appeared.
+
+Turn it off per skill or across the board — most useful where one skill's report
+is the noisy one:
+
+```bash
+git config anchor.prepare-review.watchPipelineAfterPush false  # this skill only
+git config anchor.watchPipelineAfterPush false                 # every push-side skill
+```
+
+A per-skill key wins over the umbrella one in both directions, so an umbrella
+`false` plus `anchor.commit.watchPipelineAfterPush true` reports the commit you
+just made and nothing else.
 
 ### Review-backend config
 

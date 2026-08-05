@@ -64,7 +64,14 @@ case "$sub" in
                  | {databaseId: .id, status, conclusion,
                     headSha: .head_sha, url: .html_url} ]' "$GH_RUNS"
         ;;
-      view) jq -c '{jobs: .}' "$GH_JOBS" ;;
+      # `run view <id>` answers per run, so a fixture named for the run id wins
+      # over the shared one — that's what lets a breakdown assertion tell one
+      # run's jobs from another's.
+      view)
+        f="${GH_JOBS_DIR:-}/jobs-${2:-}.json"
+        [ -f "$f" ] || f="$GH_JOBS"
+        jq -c '{jobs: .}' "$f"
+        ;;
       *) echo "stub gh: unhandled run subcommand: ${1:-}" >&2; exit 1 ;;
     esac
     ;;
@@ -81,6 +88,7 @@ set -euo pipefail
 [ -n "${GLAB_ARGS_FILE:-}" ] && printf '%s\n' "$*" >> "$GLAB_ARGS_FILE"
 path="${2:-}"
 case "$path" in
+  */jobs*) jq -c '.' "$GLAB_JOBS" ;;
   *pipelines*)
     ref=""; sha=""
     case "$path" in *ref=*) ref="${path##*ref=}"; ref="${ref%%&*}" ;; esac
@@ -117,6 +125,7 @@ run() { bash "$status" --repo "$gh_repo" "$@"; }
 
 runs_fixture() { printf '%s' "$1" > "$work/runs.json"; GH_RUNS="$work/runs.json"; export GH_RUNS; }
 jobs_fixture() { printf '%s' "$1" > "$work/jobs.json"; GH_JOBS="$work/jobs.json"; export GH_JOBS; }
+run_jobs_fixture() { printf '%s' "$2" > "$work/jobs-$1.json"; GH_JOBS_DIR="$work"; export GH_JOBS_DIR; }
 
 # A run triggered by a published release: head_branch is the *tag*, head_sha is
 # the commit the tag was cut from — the shape the release skill has to watch.
@@ -202,9 +211,9 @@ settled_split=$(cat <<JSON
 JSON
 )
 runs_fixture "$settled_split"
-jobs_fixture '[ { "name": "unit", "conclusion": "failure",
+jobs_fixture '[ { "name": "unit", "status": "completed", "conclusion": "failure",
                   "url": "https://github.com/acme/widget/actions/runs/3010/job/1" },
-                { "name": "lint", "conclusion": "success",
+                { "name": "lint", "status": "completed", "conclusion": "success",
                   "url": "https://github.com/acme/widget/actions/runs/3010/job/2" } ]'
 o=$(run)
 [ "$(val PIPELINE_STATE "$o")" = "failed" ] \
@@ -281,11 +290,53 @@ run --workflow release.yml --job publish > /dev/null \
   || fail "a job-mode read that settled should exit 0"
 ok "job mode reports the tracked job and exits 0"
 
+# ===================== the breakdown covers every run, in every state ========
+# The verdict is a fold, so on its own it can't say what ran. PIPELINE_RUNS is
+# what the report tabulates: every workflow's run and every job under it,
+# whatever state the commit is in.
+runs_fixture "$settled_split"
+run_jobs_fixture 3040 '[ { "name": "style", "status": "completed", "conclusion": "success",
+                           "url": "https://github.com/acme/widget/actions/runs/3040/job/9" } ]'
+run_jobs_fixture 3010 '[ { "name": "unit", "status": "completed", "conclusion": "failure",
+                           "url": "https://github.com/acme/widget/actions/runs/3010/job/1" },
+                         { "name": "e2e", "status": "completed", "conclusion": "skipped",
+                           "url": "https://github.com/acme/widget/actions/runs/3010/job/2" } ]'
+o=$(run)
+b=$(val PIPELINE_RUNS "$o")
+[ "$(jq -r 'length' <<<"$b")" = "2" ] \
+  || fail "both of the commit's runs belong in the breakdown, not just the verdict's: $b"
+[ "$(jq -r '.[] | select(.workflow == "Lint") | .state' <<<"$b")" = "success" ] \
+  || fail "the run the fold passed over keeps its own state: $b"
+[ "$(jq -r '.[] | select(.workflow == "Lint") | .jobs[0].name' <<<"$b")" = "style" ] \
+  || fail "each run carries its own jobs: $b"
+[ "$(jq -r '.[] | select(.workflow == "Test") | .jobs[] | select(.name == "e2e") | .state' <<<"$b")" = "skipped" ] \
+  || fail "a skipped job is skipped, not failed: $b"
+ok "PIPELINE_RUNS carries every run for the commit with its own jobs"
+
+[[ "$(val PIPELINE_FAILED_JOBS "$o")" == *'"unit"'* ]] \
+  || fail "the failed-jobs line still names the verdict run's failures: $o"
+[[ "$(val PIPELINE_FAILED_JOBS "$o")" != *'"style"'* ]] \
+  || fail "a passing job from another run is not a failed job: $o"
+ok "PIPELINE_FAILED_JOBS still reports only the verdict run's failures"
+
+# A green commit is the case the old output was silent about — the table needs
+# rows there too, so the reader can see which workflows actually ran.
+runs_fixture "$(release_run)"
+run_jobs_fixture 3040 '[ { "name": "publish", "status": "completed", "conclusion": "success",
+                           "url": "https://github.com/acme/widget/actions/runs/3040/job/9" } ]'
+o=$(run)
+[ "$(val PIPELINE_STATE "$o")" = "success" ] || fail "expected a green commit: $o"
+[ "$(jq -r '.[0].jobs[0].name' <<<"$(val PIPELINE_RUNS "$o")")" = "publish" ] \
+  || fail "a green commit still gets a breakdown: $o"
+ok "the breakdown is emitted on success, not only on failure"
+
 # ===================== no run for this commit ================================
 runs_fixture '[]'
 o=$(run)
 [ "$(val PIPELINE_STATE "$o")" = "none" ] || fail "no runs for the commit is none: $o"
-ok "a commit with no runs reports none"
+[ -z "$(val PIPELINE_RUNS "$o")" ] \
+  || fail "with no pipeline there is nothing to tabulate: $o"
+ok "a commit with no runs reports none, with no breakdown"
 
 # ===================== GitLab: a tag pipeline resolves too ===================
 gl_repo=$(new_repo gadget "https://gitlab.example.com/acme/gadget.git")
@@ -307,5 +358,41 @@ ok "GitLab tag pipeline resolves for the commit under --branch main"
 grep -q 'ref=' "$GLAB_ARGS_FILE" \
   && fail "the pipelines lookup must not narrow by ref: $(cat "$GLAB_ARGS_FILE")"
 ok "the GitLab lookup asks by sha, not by ref"
+
+# ===================== GitLab: one pipeline, jobs grouped by stage ===========
+cat > "$work/gl-jobs.json" <<'JSON'
+[ { "name": "build", "stage": "build", "status": "success",
+    "web_url": "https://gitlab.example.com/acme/gadget/-/jobs/1" },
+  { "name": "deploy", "stage": "deploy", "status": "manual",
+    "web_url": "https://gitlab.example.com/acme/gadget/-/jobs/2" } ]
+JSON
+export GLAB_JOBS="$work/gl-jobs.json"
+
+o=$(bash "$status" --repo "$gl_repo" --branch main)
+b=$(val PIPELINE_RUNS "$o")
+[ "$(jq -r 'length' <<<"$b")" = "1" ] || fail "GitLab has one pipeline per commit: $b"
+[ "$(jq -r '.[0].jobs[] | select(.name == "deploy") | .stage' <<<"$b")" = "deploy" ] \
+  || fail "a GitLab job carries the stage that groups the table: $b"
+[ "$(jq -r '.[0].jobs[] | select(.name == "deploy") | .state' <<<"$b")" = "manual" ] \
+  || fail "a job awaiting a manual action is manual, not pending: $b"
+ok "the GitLab breakdown carries each job's stage and state"
+
+# A red pipeline still derives its failed jobs from the same breakdown — one
+# jobs call, not two.
+cat > "$work/pipes.json" <<JSON
+[ { "id": 772, "sha": "$gl_sha", "ref": "main", "status": "failed",
+    "web_url": "https://gitlab.example.com/acme/gadget/-/pipelines/772" } ]
+JSON
+cat > "$work/gl-jobs.json" <<'JSON'
+[ { "name": "test", "stage": "test", "status": "failed",
+    "web_url": "https://gitlab.example.com/acme/gadget/-/jobs/3" },
+  { "name": "lint", "stage": "test", "status": "success",
+    "web_url": "https://gitlab.example.com/acme/gadget/-/jobs/4" } ]
+JSON
+o=$(bash "$status" --repo "$gl_repo" --branch main)
+f=$(val PIPELINE_FAILED_JOBS "$o")
+[ "$(jq -r 'length' <<<"$f")" = "1" ] || fail "only the failed job is a failed job: $f"
+[ "$(jq -r '.[0].stage' <<<"$f")" = "test" ] || fail "the GitLab failed-job shape keeps its stage: $f"
+ok "GitLab failed jobs are derived from the breakdown, stage intact"
 
 echo "all pipeline-status tests passed"

@@ -29,6 +29,11 @@
 #                              about — a commit has one run per workflow
 #   PIPELINE_TIMEOUT=1         (watch mode only) the watch ceiling was hit before
 #                              a terminal state — PIPELINE_STATE holds the last seen
+#   PIPELINE_RUNS=<json>       every run for the commit with its jobs, in every
+#                              state: [{id, workflow, state, url,
+#                              jobs:[{name, stage, state, url}]}]. This is what
+#                              the report tabulates; PIPELINE_STATE stays the
+#                              headline verdict. Absent when there's no pipeline.
 #   PIPELINE_FAILED_JOBS=<json> (state==failed only) [{name, ...}] compact array
 #
 # With --job <name>, the script tracks a single named job inside the pipeline
@@ -106,6 +111,28 @@ ctx_resolve_repo
 # points at rather than to the tag object.
 [[ -n "$sha" ]]    || sha=$(git rev-parse "${branch}^{commit}")
 
+# Each forge's state vocabulary → the normalized one, as a jq def. Runs and jobs
+# answer with the same vocabulary on both forges, so every probe below shares
+# one mapping instead of restating it.
+JQ_GH_NORMALIZE='
+  def normalize:
+    if .status != "completed"
+    then (if .status == "queued" then "pending" else "running" end)
+    else ( { "success":"success", "failure":"failed", "timed_out":"failed",
+             "startup_failure":"failed", "cancelled":"canceled",
+             "skipped":"skipped", "action_required":"manual",
+             "neutral":"success", "stale":"failed" }[.conclusion] // "failed" )
+    end;
+'
+# GitLab statuses already match the normalized vocabulary for terminal states;
+# the map collapses the various in-flight ones to running/pending.
+JQ_GL_NORMALIZE='
+  def normalize:
+    ( { "success":"success", "failed":"failed", "canceled":"canceled",
+        "skipped":"skipped", "manual":"manual", "running":"running" }[.status]
+      // "pending" );
+'
+
 detect_forge() {
   local url
   url=$(git remote get-url origin 2>/dev/null || true)
@@ -135,15 +162,7 @@ probe_github() {
   local runs
   runs=$(gh api "repos/{owner}/{repo}/actions/runs?head_sha=$sha&per_page=100" 2>/dev/null) || runs=""
   [[ -n "$runs" ]] || { echo '{"state":"none"}'; return; }
-  jq -c --arg wf "$workflow" --arg single "$single_run" '
-    def normalize:
-      if .status != "completed"
-      then (if .status == "queued" then "pending" else "running" end)
-      else ( { "success":"success", "failure":"failed", "timed_out":"failed",
-               "startup_failure":"failed", "cancelled":"canceled",
-               "skipped":"skipped", "action_required":"manual",
-               "neutral":"success", "stale":"failed" }[.conclusion] // "failed" )
-      end;
+  jq -c --arg wf "$workflow" --arg single "$single_run" "$JQ_GH_NORMALIZE"'
     def severity:
       { "running":0, "pending":1, "failed":2, "canceled":3,
         "manual":4, "success":5, "skipped":6 }[.] // 7;
@@ -172,19 +191,14 @@ probe_gitlab() {
   local pipes
   pipes=$(glab api "projects/:fullpath/pipelines?sha=$sha&per_page=1" 2>/dev/null) || pipes=""
   [[ -n "$pipes" ]] || { echo '{"state":"none"}'; return; }
-  jq -c '
+  jq -c "$JQ_GL_NORMALIZE"'
     .[0] as $p
     | if $p == null then {state:"none"}
       else {
-        id:  ($p.id | tostring),
-        url: $p.web_url,
-        sha: $p.sha,
-        # GitLab statuses already match the normalized vocabulary for terminal
-        # states; collapse the various in-flight states to running/pending.
-        state:
-          ( { "success":"success", "failed":"failed", "canceled":"canceled",
-              "skipped":"skipped", "manual":"manual", "running":"running" }[$p.status]
-            // "pending" )
+        id:    ($p.id | tostring),
+        url:   $p.web_url,
+        sha:   $p.sha,
+        state: ($p | normalize)
       } end' <<<"$pipes"
 }
 
@@ -202,25 +216,79 @@ is_terminal() {
   esac
 }
 
-failed_jobs_github() {
+jobs_github() {
   local id="$1" jobs
   jobs=$(gh run view "$id" --json jobs 2>/dev/null) || { echo '[]'; return; }
-  jq -c '[ .jobs[]
-           | select(.conclusion == "failure" or .conclusion == "timed_out"
-                    or .conclusion == "startup_failure")
-           | {name, url} ]' <<<"$jobs"
+  jq -c "$JQ_GH_NORMALIZE"'
+    [ .jobs[] | {name, stage: "", url, state: normalize} ]' <<<"$jobs"
 }
 
-failed_jobs_gitlab() {
+jobs_gitlab() {
   local id="$1" jobs
   jobs=$(glab api "projects/:fullpath/pipelines/$id/jobs?per_page=100" 2>/dev/null) || { echo '[]'; return; }
-  jq -c '[ .[] | select(.status == "failed") | {name, stage, url: .web_url} ]' <<<"$jobs"
+  jq -c "$JQ_GL_NORMALIZE"'
+    [ .[] | {name, stage, url: .web_url, state: normalize} ]' <<<"$jobs"
 }
 
-failed_jobs() {
+# Every run for the commit, each with its jobs:
+#   [{id, workflow, state, url, jobs: [{name, stage, state, url}]}]
+#
+# This is what the report tabulates, so it covers every state rather than only
+# the failures: a green report says which workflows ran, and a blocked one says
+# which job holds the gate. On GitHub that means all of the commit's runs, not
+# just the one the fold's verdict came from — the fold answers "is it green",
+# the breakdown answers "what ran".
+#
+# Built once, when the result is emitted, rather than per poll: a watch costs
+# one extra round of calls, not one per iteration.
+runs_breakdown_github() {
+  local list acc='[]' rec rid runs
+  runs=$(gh api "repos/{owner}/{repo}/actions/runs?head_sha=$sha&per_page=100" 2>/dev/null) || { echo '[]'; return; }
+  list=$(jq -c --arg wf "$workflow" "$JQ_GH_NORMALIZE"'
+    [ .workflow_runs[]
+      | select($wf == "" or .path == $wf
+               or (.path | split("/") | last) == $wf or .name == $wf) ]
+    | group_by(.path)
+    | map(max_by([.created_at, .id])
+          | {id: (.id | tostring), workflow: .name, url: .html_url, state: normalize})
+    | sort_by(.workflow)' <<<"$runs")
+  while IFS= read -r rec; do
+    [[ -n "$rec" ]] || continue
+    rid=$(jq -r '.id' <<<"$rec")
+    acc=$(jq -c --argjson r "$rec" --argjson j "$(jobs_github "$rid")" \
+             '. + [ $r + {jobs: $j} ]' <<<"$acc")
+  done < <(jq -c '.[]' <<<"$list")
+  echo "$acc"
+}
+
+# One pipeline per commit on GitLab, so the breakdown is that pipeline plus its
+# jobs — the stage each job belongs to is what groups the table's rows.
+runs_breakdown_gitlab() {
+  local id="$1" state="$2" url="$3"
+  jq -nc --arg id "$id" --arg state "$state" --arg url "$url" \
+     --argjson jobs "$(jobs_gitlab "$id")" \
+     '[ {id: $id, workflow: "", state: $state, url: $url, jobs: $jobs} ]'
+}
+
+runs_breakdown() {
   case "$forge" in
-    github) failed_jobs_github "$1" ;;
-    gitlab) failed_jobs_gitlab "$1" ;;
+    github) runs_breakdown_github ;;
+    gitlab) runs_breakdown_gitlab "$@" ;;
+    *) echo '[]' ;;
+  esac
+}
+
+# The failed jobs of the run the verdict came from, read back out of the
+# breakdown so a red report costs no extra call. GitLab carries the stage;
+# GitHub has none to carry.
+failed_jobs() {
+  local breakdown="$1" id="$2"
+  case "$forge" in
+    github) jq -c --arg id "$id" \
+              '[ .[] | select(.id == $id) | .jobs[]
+                 | select(.state == "failed") | {name, url} ]' <<<"$breakdown" ;;
+    gitlab) jq -c '[ .[] | .jobs[]
+                     | select(.state == "failed") | {name, stage, url} ]' <<<"$breakdown" ;;
     *) echo '[]' ;;
   esac
 }
@@ -233,20 +301,13 @@ probe_job_github() {
   local runid="$1" jobname="$2" jobs
   jobs=$(gh run view "$runid" --json jobs 2>/dev/null) || jobs=""
   [[ -n "$jobs" ]] || { echo '{"state":"none"}'; return; }
-  jq -c --arg name "$jobname" '
+  jq -c --arg name "$jobname" "$JQ_GH_NORMALIZE"'
     ( [ .jobs[] | select(.name == $name) ] | sort_by(.databaseId) | last ) as $j
     | if $j == null then {state:"none"}
       else {
-        name: $j.name,
-        url:  $j.url,
-        state:
-          ( if $j.status != "completed"
-            then (if $j.status == "queued" then "pending" else "running" end)
-            else ( { "success":"success", "failure":"failed", "timed_out":"failed",
-                     "startup_failure":"failed", "cancelled":"canceled",
-                     "skipped":"skipped", "action_required":"manual",
-                     "neutral":"success", "stale":"failed" }[$j.conclusion] // "failed" )
-            end )
+        name:  $j.name,
+        url:   $j.url,
+        state: ($j | normalize)
       } end' <<<"$jobs"
 }
 
@@ -254,16 +315,13 @@ probe_job_gitlab() {
   local pid="$1" jobname="$2" jobs
   jobs=$(glab api "projects/:fullpath/pipelines/$pid/jobs?per_page=100" 2>/dev/null) || jobs=""
   [[ -n "$jobs" ]] || { echo '{"state":"none"}'; return; }
-  jq -c --arg name "$jobname" '
+  jq -c --arg name "$jobname" "$JQ_GL_NORMALIZE"'
     ( [ .[] | select(.name == $name) ] | sort_by(.id) | last ) as $j
     | if $j == null then {state:"none"}
       else {
-        name: $j.name,
-        url:  $j.web_url,
-        state:
-          ( { "success":"success", "failed":"failed", "canceled":"canceled",
-              "skipped":"skipped", "manual":"manual", "running":"running" }[$j.status]
-            // "pending" )
+        name:  $j.name,
+        url:   $j.web_url,
+        state: ($j | normalize)
       } end' <<<"$jobs"
 }
 
@@ -276,6 +334,8 @@ probe_job() {
 
 emit() {
   local state="$1" url="$2" id="$3" wf="$4" timed_out="${5:-}"
+  local breakdown=""
+  [[ -n "$id" ]] && breakdown=$(runs_breakdown "$id" "$state" "$url")
   echo "PIPELINE_FORGE=$forge"
   echo "PIPELINE_STATE=$state"
   echo "PIPELINE_URL=$url"
@@ -284,8 +344,11 @@ emit() {
   echo "PIPELINE_BRANCH=$branch"
   echo "PIPELINE_WORKFLOW=$wf"
   if [[ -n "$timed_out" ]]; then echo "PIPELINE_TIMEOUT=1"; fi
-  if [[ "$state" == "failed" && -n "$id" ]]; then
-    echo "PIPELINE_FAILED_JOBS=$(failed_jobs "$id")"
+  if [[ -n "$breakdown" ]]; then
+    echo "PIPELINE_RUNS=$breakdown"
+    if [[ "$state" == "failed" ]]; then
+      echo "PIPELINE_FAILED_JOBS=$(failed_jobs "$breakdown" "$id")"
+    fi
   fi
 }
 

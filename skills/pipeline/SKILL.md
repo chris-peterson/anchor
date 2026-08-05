@@ -163,8 +163,14 @@ The output is `KEY=value` lines:
 - `PIPELINE_URL` — the pipeline's web page (link it).
 - `PIPELINE_WORKFLOW` — on GitHub, the workflow whose run the verdict came from;
   empty on GitLab.
+- `PIPELINE_RUNS` — every run for the commit with its jobs, in every state:
+  `[{id, workflow, state, url, jobs: [{name, stage, state, url}]}]`. This is
+  what the report tabulates; `PIPELINE_STATE` stays the headline. Absent when
+  there's no pipeline (`none` / `absent`) and in `--job` mode, where the job
+  lines below carry the detail instead.
 - `PIPELINE_FAILED_JOBS` — present only when `PIPELINE_STATE=failed`: a JSON
-  array of `{name, url}` (GitHub) or `{name, stage, url}` (GitLab).
+  array of `{name, url}` (GitHub) or `{name, stage, url}` (GitLab), scoped to
+  the run the verdict came from.
 
 In `--job` mode the `PIPELINE_STATE`/`PIPELINE_URL` lines describe the parent
 pipeline for context, and three more lines carry the tracked job:
@@ -176,25 +182,22 @@ pipeline for context, and three more lines carry the tracked job:
 
 ## Report
 
-Map `PIPELINE_STATE` to exactly this and nothing more:
+Follow the report shape in `${CLAUDE_PLUGIN_ROOT}/templates/pipeline-report.md`:
+the headline from `PIPELINE_STATE`, then a table of every job in `PIPELINE_RUNS`
+with a per-state emoji. The template owns the *shape* — which emoji means what,
+the column set, the cases that get no table. Report that and nothing more.
 
-- **`success`** → `✓ Pipeline passed` with the `PIPELINE_URL`.
+The technique the shape doesn't cover:
+
+- **`failed`** → after the table, offer to look at a failed job's log if the
+  user wants to dig in. Don't fetch logs unprompted. `PIPELINE_FAILED_JOBS`
+  names the verdict run's failures; the table already carries the rest.
 - **`running` / `pending`** *(one-shot only — watch mode never returns here)* →
-  report that it's still in flight, with the `PIPELINE_URL`, and offer to watch.
-- **`failed`** → `✗ Pipeline failed`, then list each job from
-  `PIPELINE_FAILED_JOBS` (name, linked to its `url`), and the pipeline
-  `PIPELINE_URL`. Offer to look at a failed job's log if the user wants to dig
-  in — don't fetch logs unprompted.
-- **`canceled` / `skipped` / `manual`** → report the terminal state plainly with
-  the `PIPELINE_URL`. `manual` means the pipeline is blocked awaiting a manual
-  action — say so; it won't progress on its own.
-- **`none`** → no pipeline for this commit. Common causes: path/branch filters
-  excluded it, the commit isn't pushed, or the repo has no CI for this ref.
-  Under `--workflow`, it also means that workflow has no run for this commit —
-  check the name against the repo's workflow files before reporting a gap.
-  State that; don't treat it as a failure.
-- **`absent`** → the `origin` remote isn't GitHub or GitLab, so there's no
-  pipeline to report. Say so.
+  offer to watch.
+- **`none` under `--workflow`** → that workflow has no run for this commit.
+  Check the name against the repo's workflow files before reporting a gap; a
+  typo'd workflow name and a workflow that genuinely didn't run look identical
+  from here.
 - **`PIPELINE_TIMEOUT=1`** → the watch ceiling elapsed before a terminal state;
   report the last state and offer to keep watching (re-launch with a longer
   `--timeout`).
@@ -207,9 +210,10 @@ showing (check the name, or the stage is gated). Mention the parent
 `PIPELINE_STATE` only when it adds context (e.g. the pipeline failed elsewhere
 while this job passed).
 
-Name the workflow (`PIPELINE_WORKFLOW`) in the report whenever the run is what
+Name the workflow (`PIPELINE_WORKFLOW`) in the headline whenever the run is what
 the verdict turns on — a failure, an in-flight state, or a `--workflow` the
-caller asked for. On a plain pass, `✓ Pipeline passed` already says it.
+caller asked for. On a plain pass the table's own Workflow column already says
+it.
 
 In watch mode the report *is* the notification — the harness surfaces it when
 the background watch completes, so there's nothing to schedule or poll.
