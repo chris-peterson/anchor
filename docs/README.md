@@ -102,7 +102,7 @@ The skills run with nothing else installed. Each of these adds something when
 present and is skipped when absent.
 
 - **[moor](https://github.com/chris-peterson/moor)** — the default review
-  backend, a keyboard-driven diff viewer the skills launch. Its `MOOR_CONTEXT`
+  backend, a keyboard-driven diff viewer the skills launch. Its `REVIEW_CONTEXT`
   sidecar contract (the review-feedback channel) is defined in
   [moor's `SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md).
   Without moor, review falls back to `git difftool --dir-diff` with your

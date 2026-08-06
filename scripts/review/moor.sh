@@ -9,7 +9,7 @@
 #   review_title         the header title
 #   review_details_json  the header details, a JSON array of {label,value}
 #
-# moor's contract is a JSON sidecar named by MOOR_CONTEXT: the caller writes
+# moor's contract is a JSON sidecar named by REVIEW_CONTEXT: the caller writes
 # input.{title,details}, moor writes output.{exitCode,reviewer,comments,commitMessage}.
 # This adapter drives git's configured difftool (moor when it's set as diff.tool),
 # then maps that output onto the REV normalized result and prints:
@@ -37,7 +37,7 @@ emit_review() {
     # exit is the verdict, not a failure — the outcome lives in the sidecar.
     moor --context "$context_path" "$files_left" "$files_right" || true
   else
-    export MOOR_CONTEXT="$context_path"
+    export REVIEW_CONTEXT="$context_path"
     git difftool --no-prompt --dir-diff "$diff_range" || true
   fi
 

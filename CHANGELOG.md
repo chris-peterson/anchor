@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Review through moor now names the sidecar with `REVIEW_CONTEXT` instead of
+  `MOOR_CONTEXT`, matching the tool-neutral name moor itself adopts in its next
+  release. **This requires a moor newer than 0.16.0**: against 0.16.0 the sidecar
+  goes unread, so every review comes back `no-verdict` and the skills ask you to
+  decide in chat instead of reading moor's comments.
+
 ## 1.3.0
 
 ### Features

@@ -41,12 +41,12 @@ chmod +x "$bin/stub-launch-revdiff.sh"
 export ANCHOR_REVDIFF_LAUNCHER="$bin/stub-launch-revdiff.sh"
 
 # --- fake git difftool: captures the adapter's input sidecar (for asserting the
-# seeded header), then copies $MOOR_FIXTURE into the sidecar named by MOOR_CONTEXT
+# seeded header), then copies $MOOR_FIXTURE into the sidecar named by REVIEW_CONTEXT
 cat > "$bin/fake-difftool.sh" <<'EOF'
 #!/usr/bin/env bash
-[ -n "${MOOR_INPUT_CAPTURE:-}" ] && [ -n "${MOOR_CONTEXT:-}" ] && cp "$MOOR_CONTEXT" "$MOOR_INPUT_CAPTURE" 2>/dev/null
-if [ -n "${MOOR_FIXTURE:-}" ] && [ -n "${MOOR_CONTEXT:-}" ]; then
-  cat "$MOOR_FIXTURE" > "$MOOR_CONTEXT"
+[ -n "${MOOR_INPUT_CAPTURE:-}" ] && [ -n "${REVIEW_CONTEXT:-}" ] && cp "$REVIEW_CONTEXT" "$MOOR_INPUT_CAPTURE" 2>/dev/null
+if [ -n "${MOOR_FIXTURE:-}" ] && [ -n "${REVIEW_CONTEXT:-}" ]; then
+  cat "$MOOR_FIXTURE" > "$REVIEW_CONTEXT"
 fi
 exit 0
 EOF
