@@ -16,7 +16,7 @@ branch and drives each one to done.
 CR = change request: a pull request on GitHub, a merge request on GitLab.
 Pick the forge tool by the `origin` remote.
 
-**Don't narrate your work.** Every step below is an operating instruction, not a script to read aloud — follow the execute-quietly discipline: `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. For this skill, the only things worth surfacing are the resolved repo and CR in one line, each thread's triage, and what changed on it.
+**Don't narrate your work.** Every step below is an operating instruction, not a script to read aloud — follow the execute-quietly discipline: `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. For this skill, the only things worth surfacing are the resolved repo and CR in one line, each thread's triage, the reply bodies awaiting the user's approval in 3c, and what changed on each thread.
 
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
@@ -38,7 +38,10 @@ flowchart TD
     subgraph "Step 3: Act"
         Confirm -->|Proceed| Fix["Apply code changes"]
         Fix --> Tests["Run tests"] --> Commit["Commit + push"]
-        Commit --> Reply["Reply on threads"]
+        Commit --> Draft["Draft the replies"]
+        Draft --> Approve{Author approves wording?}
+        Approve -->|Edit| Draft
+        Approve -->|Post| Reply["Post on threads"]
         Reply --> Resolve["Resolve where addressed"]
     end
 
@@ -151,9 +154,9 @@ Disposition vocabulary:
 
 Then confirm with the author before acting (use `AskUserQuestion`, header
 `Triage`): **Proceed as proposed** / **Adjust** (they name the thread numbers
-and new dispositions) / **Abort**. Anything the author wants to argue or
-clarify happens here — replies are outward-facing writes; draft wording the
-author would stand behind.
+and new dispositions) / **Abort**. This gate settles what happens to each
+thread; the wording of what gets said goes to the author separately in 3c,
+once there are actual sentences to read.
 
 ## Step 3: Act
 
@@ -193,7 +196,7 @@ gains commits).
 That push starts a fresh pipeline on the fix, and telling the reviewer their
 feedback is addressed reads differently if it went red. Launch the watch as a
 **background** Bash call (`run_in_background: true`) so it polls while you carry
-on with 3c and 3d:
+on with 3c through 3e:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill resolve-feedback
@@ -201,11 +204,16 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill resolve-feed
 
 Its verdict belongs in Step 4's summary; read it there.
 
-### 3c. Reply on each thread
+### 3c. Draft each reply, then get the wording approved
 
-Write each reply body to a unique temp file (`$(mktemp -u "${TMPDIR:-/tmp}/reply.XXXXXX").md`)
-and post it into the *existing* thread — not as a new top-level comment (see
-the cookbook, "Reply to a review thread"). Reply content:
+A reply posts through the user's own token, so it lands under their name with
+nothing marking it as drafted by an agent. The reviewer reads it as the user
+talking. That makes the words the user's to approve before they go out: a fix
+they'd have written differently is still a fix, but a *sentence* they wouldn't
+have written is one they now have to own on a thread other people are reading.
+
+So draft every reply, show them, and post nothing until the user says the text
+is right. Reply content:
 
 - For fixes, the default is exactly this, and nothing more:
 
@@ -221,7 +229,35 @@ the cookbook, "Reply to a review thread"). Reply content:
   docs should say, prefer fixing that and replying with the pointer.
 - For defers: where the ask landed (issue/CR link).
 
-### 3d. Resolve
+Present them together, each body **verbatim** — the text as it will appear on
+the thread, not a paraphrase of it. A summary hides exactly the thing the user
+is being asked to approve:
+
+| # | Where | Reply |
+|---|-------|-------|
+| 1 | `src/deploy.sh:42` | addressed in [follow-up commit](<url>) |
+| 2 | `taskdef.yml:7` | Fargate would mean rebuilding the image on every deploy — the EC2 launch type keeps the layer cache warm. |
+
+Then ask with `AskUserQuestion` (header `Replies`): **Post as drafted** /
+**Edit** (they name the numbers and what to change; redraft and show the table
+again) / **Skip replying** (leave the threads for a later round). One gate for
+the whole set, not one per thread — the same approval asked N times reads as
+noise, and the user starts approving without reading.
+
+This is not the Step 2 gate. Step 2 settles *what happens to each thread*
+while the words are still unwritten; approving a disposition is not approving
+a sentence. A thread that comes back in feedback with a phrasing change never
+returns to triage — it stays here.
+
+### 3d. Post the approved replies
+
+Write each approved body to a unique temp file (`$(mktemp -u "${TMPDIR:-/tmp}/reply.XXXXXX").md`)
+and post it into the *existing* thread — not as a new top-level comment (see
+the cookbook, "Reply to a review thread"). Post what was approved: an
+improvement you notice while posting goes back through 3c, because the point of
+the gate is that nothing reaches the thread the user hasn't read.
+
+### 3e. Resolve
 
 Resolve exactly the threads whose disposition included *resolve* (cookbook:
 "Resolve / unresolve a review thread"). Verify each resolution call returned

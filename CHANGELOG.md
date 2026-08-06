@@ -4,6 +4,12 @@
 
 ### Changed
 
+- `resolve-feedback` shows you every reply body before it posts any of them, and
+  waits. Replies go out through your token, under your name, so a reviewer reads
+  them as you talking — approving a *disposition* in triage was never approval of
+  the sentences, which hadn't been written yet. One gate for the whole set:
+  post as drafted, edit the ones you want changed, or skip replying this round.
+
 - Review through moor now names the sidecar with `REVIEW_CONTEXT` instead of
   `MOOR_CONTEXT`, matching the tool-neutral name moor itself adopts in its next
   release. **This requires a moor newer than 0.16.0**: against 0.16.0 the sidecar
