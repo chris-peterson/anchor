@@ -571,3 +571,26 @@ this" nullability from SARIF's `notApplicable`.
 - **[UX-05]** Where a helper script can supply a value the skill would otherwise
   derive with its own commands (a path hash, a temp path), the system shall read it
   from the recon block rather than run those commands.
+
+### CONFIRM — Approval before publishing
+
+Everything the system publishes goes out under the user's credentials and in
+their name, with nothing marking it as drafted by an agent. These requirements
+govern what the user must have read before that happens.
+
+- **[CONFIRM-01]** When the system has drafted prose it will publish under the
+  user's identity — a commit message, a CR description, an issue body, a
+  review-thread reply, or release notes — it shall obtain the user's approval of
+  the exact text before publishing any of it.
+- **[CONFIRM-02]** The system shall present the text for that approval as
+  UX-04 requires: verbatim, in the reply or in a review tool, never as a
+  paraphrase and never as the output of a command it ran.
+- **[CONFIRM-03]** The system shall not treat approval of a plan, a disposition,
+  or a shape as approval of the words that later fill it; each is a separate
+  gate.
+- **[CONFIRM-04]** Where several such artifacts are drafted in one round, the
+  system shall gate them as one set rather than prompting per artifact.
+- **[CONFIRM-05]** If the user does not approve a drafted artifact, then the
+  system shall publish none of it and leave the target unchanged.
+- **[CONFIRM-06]** Where the user revises the text at the gate, the system shall
+  publish the revised text and shall re-present anything it changes afterward.

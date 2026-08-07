@@ -3,10 +3,10 @@
 Tracking status of the requirements declared in [`SPEC.md`](SPEC.md).
 Maintained by `/sextant:spec-status`.
 
-**Last audit:** 2026-08-05
+**Last audit:** 2026-08-06
 **Spec version:** root SPEC.md (unversioned)
-**Plugin version:** 1.2.0
-**Coverage:** 153 Covered, 0 Partial, 0 Missing/Contradicts
+**Plugin version:** 1.3.0
+**Coverage:** 159 Covered, 0 Partial, 0 Missing/Contradicts
 
 The implementation is the plugin itself — the skill prompts under
 `skills/`, the ambient rules under `rules/`, and the helper scripts under
@@ -33,8 +33,20 @@ draft to review against the implementation, not an audited ledger.
 | FORG-01..05 | 5 | All Covered | Template composition, body-file, markdown, auth — `templates/`, `guides/{forge-cookbook,markdown-gotchas}.md` |
 | RULE-01..05 | 5 | All Covered | SessionStart-injected rules — `hooks/emit-rules.sh`, `rules/*.md`; RULE-04 routes CR creation through `prepare-review` |
 | UX-01..05 | 5 | All Covered | Narration, orchestration, decision prompts, artifact visibility, recon-supplied values — cross-cutting, each `skills/*/SKILL.md`, `guides/execute-quietly.md` |
+| CONFIRM-01..06 | 6 | All Covered | Approval of the exact text before anything publishes under the user's name — commit message in the review tool (`skills/commit/SKILL.md` Step 5), CR description (`skills/prepare-review/SKILL.md` Steps 4-5), issue body (`skills/issue/SKILL.md`), thread replies (`skills/resolve-feedback/SKILL.md` 3c), release notes (`skills/release/SKILL.md`); CONFIRM-03 is the plan-is-not-prose distinction the reply gate rests on |
 
 ## Audit history
+
+### 2026-08-06 — Approval before publishing (CONFIRM-01..06)
+
+Last audit 2026-08-05 → 2026-08-06, plugin version 1.2.0 → 1.3.0; coverage 153 →
+159. `resolve-feedback` holding reply bodies for the author's approval was the
+prompt, but the gate isn't a feedback concern: every artifact anchor writes —
+commit message, CR description, issue body, reply, release notes — publishes
+under the user's credentials in their name. New CONFIRM category rather than an
+FDBK row, since FDBK-04 confirms dispositions and CONFIRM-03 is precisely that
+approving a disposition is not approving the prose. All six were already
+implemented across the five skills; this documents them.
 
 ### 2026-08-05 — CR description verbosity (CONF-07..10)
 
