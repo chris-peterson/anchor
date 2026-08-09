@@ -44,7 +44,7 @@ suite:
     - ["/anchor:release", "Work out what's shipping, recommend a version, draft the notes, publish"]
   # Skill-anchored previews of the two flagship skills, shown live on the docs
   # site; the session: below is the at-a-glance flow the hub also reads. Frames
-  # are lifted from real runs (moor rejections, the WHY prompt, the CR structure)
+  # are lifted from real runs (review rejections, the WHY prompt, the CR structure)
   # so the previews read as an actual session, not a script.
   # >>> shipyard:describe — generated from source by `shipyard gen-describe`; do not edit >>>
   describe:
@@ -70,8 +70,8 @@ suite:
       ac: "--ship"
       frames:
         - { t: you, text: "/anchor:commit" }
-        - { t: claude, text: "214 tests green, staged, message drafted — opening moor for a code review before I commit." }
-        - t: moor
+        - { t: claude, text: "214 tests green, staged, message drafted — opening the diff for a code review before I commit." }
+        - t: diff
           file: fare.js
           lines:
             - { ln: 22, text: "function fare(mins, crossesMidnight) {" }
@@ -79,7 +79,7 @@ suite:
             - { ln: 24, text: "const fare = Math.min(mins * RATE, DAILY_MAX)", add: true }
             - { ln: 25, text: "return fare" }
             - { ln: 26, text: "}" }
-          comment: { ln: 24, action: fix-now, body: "good fix — but DAILY_MAX is now defined here and in pricing.js; use the one source" }
+          comment: { ln: 24, body: "good fix — but DAILY_MAX is now defined here and in pricing.js; use the one source" }
         - { t: claude, text: "Addressed the rejection, re-reviewed clean, so committed 4a1f9c2 and pushed to fix-fare-cap. DAILY_MAX now imported from pricing.js, and I swept the two other call sites with the same duplication. Message leads with the overcharge, not the diff." }
     - label: "/anchor:prepare-review"
       ac: "--orient"
@@ -93,8 +93,8 @@ suite:
     - { t: you, text: "/anchor:commit" }
     - { t: claude, text: "No unpushed commits here, so this is a new commit. Running the suite before I stage anything." }
     - { t: cmd, cmd: "npm test", out: "Tests: 214 passed, 214 total" }
-    - { t: claude, text: "Green. Staged the fare-calc fix and drafted the message — opening moor for a code review before I commit." }
-    - t: moor
+    - { t: claude, text: "Green. Staged the fare-calc fix and drafted the message — opening the diff for a code review before I commit." }
+    - t: diff
       file: fare.js
       lines:
         - { ln: 22, text: "function fare(mins, crossesMidnight) {" }
@@ -102,7 +102,7 @@ suite:
         - { ln: 24, text: "const fare = Math.min(mins * RATE, DAILY_MAX)", add: true }
         - { ln: 25, text: "return fare" }
         - { ln: 26, text: "}" }
-      comment: { ln: 24, action: fix-now, body: "good fix — but DAILY_MAX is now defined here and in pricing.js; use the one source" }
+      comment: { ln: 24, body: "good fix — but DAILY_MAX is now defined here and in pricing.js; use the one source" }
     - { t: claude, text: "Addressed the rejection, re-reviewed clean, so committed 4a1f9c2 and pushed. DAILY_MAX pulled from pricing.js, and I swept every call site with the same duplication." }
 
 docs:
