@@ -21,12 +21,12 @@ marketplace:
 suite:
   group: waypoints
   dependencies:
-    - name: moor
-      required: false
-      reason: default diff-review backend
     - name: revdiff
       required: false
-      reason: alternate diff-review backend (anchor.reviewBackend=revdiff)
+      reason: default diff-review backend
+    - name: moor
+      required: false
+      reason: alternate diff-review backend (anchor.reviewBackend=moor)
     - name: tack
       required: false
       reason: resolves a named target repo; records CRs and releases against a route

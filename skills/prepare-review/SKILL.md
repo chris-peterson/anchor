@@ -309,10 +309,10 @@ The description gets pasted into a markdown renderer, so rendering bugs are user
 
 ### Open the review
 
-The description review runs when the configured review backend (`anchor.reviewBackend`, default [moor](https://github.com/chris-peterson/moor)) is installed. Check for it:
+The description review runs when the configured review backend (`anchor.reviewBackend`, default [revdiff](https://revdiff.com/)) is installed. Check for it:
 
 ```bash
-command -v "$(git config anchor.reviewBackend 2>/dev/null || echo moor)"
+command -v "$(git config anchor.reviewBackend 2>/dev/null || echo revdiff)"
 ```
 
 With a backend available, open the current description vs. the draft through the **dispatcher** — not the backend directly; the dispatcher builds the header and prints the normalized result on its stdout. The viewer blocks until closed, so launch as a **background** Bash call (`run_in_background: true`); a foreground call holds the turn open until the Bash timeout:

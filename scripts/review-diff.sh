@@ -6,7 +6,7 @@
 #   REVIEW_VERDICT=<approved|changes-requested|incomplete|no-verdict>
 #   REVIEW_OUTPUT=<normalized json>   (the REV contract; see SPEC.md "REV")
 #
-# The backend is `anchor.reviewBackend` (default `moor`); each adapter lives in
+# The backend is `anchor.reviewBackend` (default `revdiff`); each adapter lives in
 # scripts/review/<backend>.sh and defines emit_review, mapping the tool's native
 # output onto the normalized result. Range/header resolution is backend-agnostic
 # and stays here.
@@ -203,7 +203,7 @@ fi
 # --- Select the backend and delegate -----------------------------------------
 
 backend=$(git config anchor.reviewBackend 2>/dev/null || true)
-backend="${backend:-moor}"
+backend="${backend:-revdiff}"
 adapter="$(dirname "${BASH_SOURCE[0]}")/review/${backend}.sh"
 if [[ ! -r "$adapter" ]]; then
   echo "review-diff.sh: unknown review backend '$backend' (no adapter at $adapter). Set anchor.reviewBackend to moor or revdiff." >&2

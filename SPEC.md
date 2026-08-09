@@ -456,7 +456,7 @@ this" nullability from SARIF's `notApplicable`.
   background call and read its result with the BashOutput tool rather than `tail`
   or command substitution.
 - **[REV-03]** The system shall drive the backend named by
-  `anchor.reviewBackend` (default `moor`) through a per-backend adapter that maps
+  `anchor.reviewBackend` (default `revdiff`) through a per-backend adapter that maps
   the tool's native output onto the normalized result.
 - **[REV-04]** The system shall report the verdict as one of `approved`,
   `changes-requested`, `incomplete`, or `no-verdict`, mapped from the backend's

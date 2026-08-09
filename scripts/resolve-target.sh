@@ -26,7 +26,7 @@
 #   TARGET_CANDIDATES=<json>    [{key,url,local}] to disambiguate (ambiguous only)
 #   TARGET_URL=<url>            canonical https remote           (tack only)
 #   TARGET_FORGE=<github|gitlab|other>   picks the CLI            (tack only)
-#   TARGET_HOST=<host>          e.g. gitlab.getty.cloud (glab --hostname) (tack only)
+#   TARGET_HOST=<host>          e.g. gitlab.example.com (glab --hostname) (tack only)
 #   TARGET_PROJECT=<path>       full project path after the host, any depth
 #                               (gh -R owner/repo · glab :fullpath / -R)  (tack only)
 #   TARGET_LOCAL=<path>         locals[0], or empty when the repo has no known

@@ -230,7 +230,7 @@ own reply, then ask with `AskUserQuestion`. A result with **no parseable
 `REVIEW_VERDICT`** (empty stdout, stderr only — the dispatcher exited before
 reporting) reads the same way: say what the output showed and present the notes in
 your reply. With no backend installed
-(`command -v "$(git config anchor.reviewBackend 2>/dev/null || echo moor)"`), use
+(`command -v "$(git config anchor.reviewBackend 2>/dev/null || echo revdiff)"`), use
 that same in-reply presentation.
 
 **Then confirm the publish explicitly, even after an `approved` review.** This is

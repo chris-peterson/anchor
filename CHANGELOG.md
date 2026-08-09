@@ -4,6 +4,12 @@
 
 ### Changed
 
+- The default review backend is now `revdiff` instead of `moor`. Reviews open in
+  a terminal overlay next to the session rather than a separate GUI window, and
+  hg and jj repos get a review at all. Set `anchor.reviewBackend moor` to keep
+  the GUI reviewer, its per-hunk review tracking, and the in-tool commit-message
+  edit — nothing about that backend changed.
+
 - Review comments no longer carry a severity. moor stopped grading them, so the
   normalized contract drops `severitySource`, the per-comment `action`, and
   `capabilities.gradedSeverity`; the verdict alone decides whether feedback

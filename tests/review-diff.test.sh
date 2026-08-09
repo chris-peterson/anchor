@@ -86,7 +86,8 @@ json_of()    { sed -n 's/^REVIEW_OUTPUT=//p' <<<"$1"; }
 mkfix() { printf '%s' "$1" > "$work/fixture.json"; MOOR_FIXTURE="$work/fixture.json"; export MOOR_FIXTURE; }
 
 # ============================ moor adapter ================================
-# (default backend; exercised through files mode via the stub moor)
+# (exercised through files mode via the stub moor)
+git -C "$repo" config anchor.reviewBackend moor
 
 # approved + complete
 mkfix '{"output":{"exitCode":0,"reviewer":"Rev","comments":[]}}'
@@ -226,10 +227,10 @@ ok "revdiff: --previous translated to base/against refs"
 
 # ============================ backend selection ==========================
 git -C "$repo" config --unset anchor.reviewBackend
-mkfix '{"output":{"exitCode":0,"reviewer":"Rev","comments":[]}}'
+export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
 o=$(run --previous); j=$(json_of "$o")
-[ "$(jq -r .backend <<<"$j")" = moor ] || fail "default backend should be moor"
-ok "backend: defaults to moor when anchor.reviewBackend is unset"
+[ "$(jq -r .backend <<<"$j")" = revdiff ] || fail "default backend should be revdiff"
+ok "backend: defaults to revdiff when anchor.reviewBackend is unset"
 
 git -C "$repo" config anchor.reviewBackend bogus
 if run --previous 2>/dev/null; then fail "unknown backend should exit non-zero"; fi
