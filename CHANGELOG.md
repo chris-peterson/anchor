@@ -1,5 +1,55 @@
 # Changelog
 
+## 1.4.0
+
+### Changed
+
+- The default review backend is now `revdiff` instead of `moor`. Reviews open in
+  a terminal overlay next to the session rather than a separate GUI window, and
+  hg and jj repos get a review at all. Set `anchor.reviewBackend moor` to keep
+  the GUI reviewer, its per-hunk review tracking, and the in-tool commit-message
+  edit — nothing about that backend changed.
+
+- Review through moor now names the sidecar with `REVIEW_CONTEXT` instead of
+  `MOOR_CONTEXT`, matching the tool-neutral name moor itself adopts in its next
+  release. **This requires a moor newer than 0.16.0**: against 0.16.0 the sidecar
+  goes unread, so every review comes back `no-verdict` and the skills ask you to
+  decide in chat instead of reading moor's comments.
+
+- Review comments no longer carry a severity. moor stopped grading them, so the
+  normalized contract drops `severitySource`, the per-comment `action`, and
+  `capabilities.gradedSeverity`; the verdict alone decides whether feedback
+  blocks. In practice a `changes-requested` review now means *every* comment is
+  the ask, and an `approved` one with comments leaves them to you as follow-ups
+  — instead of two answers, a verdict and a per-comment tier, that could
+  disagree.
+
+- A review that reports nothing at all now halts instead of proceeding. When the
+  review dispatcher exits before printing a verdict — a missing `jq`, a bad
+  argument, a backend that died — its silence used to be indistinguishable from
+  success. `/anchor:commit`, `/anchor:prepare-review`, `/anchor:issue`, and
+  `/anchor:release` treat an unparseable or absent verdict as `no-verdict`:
+  nothing is committed, written, filed, or published, and they tell you what the
+  output did say.
+
+- `resolve-feedback` shows you every reply body before it posts any of them, and
+  waits. Replies go out through your token, under your name, so a reviewer reads
+  them as you talking — approving a *disposition* in triage was never approval of
+  the sentences, which hadn't been written yet. One gate for the whole set:
+  post as drafted, edit the ones you want changed, or skip replying this round.
+
+### Other
+
+- The requirements ledger gains a `CONFIRM` category, stating once that every
+  artifact anchor writes — commit message, CR description, issue body, thread
+  reply, release notes — is approved as written before it publishes under your
+  name. All six requirements describe behavior the skills already had; coverage
+  goes 153 → 160.
+
+- The docs site's review walkthrough renders a plain diff rather than one
+  backend's window, so it no longer presents moor as if it were the review step
+  itself.
+
 ## 1.3.0
 
 ### Features
