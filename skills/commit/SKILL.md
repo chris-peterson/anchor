@@ -68,8 +68,8 @@ the ceremony that buries the preview. Just run the steps.
 
 Review precedes the commit on purpose: the pending changeset (and the drafted
 message) are reviewed against `HEAD`, and only a clean verdict commits and pushes.
-A `fix-now` sends you back through tests and re-review rather than amending a
-commit that already exists.
+A `changes-requested` verdict sends you back through tests and re-review rather
+than amending a commit that already exists.
 
 ## Target repo
 
@@ -232,14 +232,15 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --local --message-file <comm
 When the background command completes, read its stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trip the command-substitution gate. The last lines carry the verdict (no separate file read):
 
 - `REVIEW_VERDICT` — `approved` · `changes-requested` · `incomplete` · `no-verdict`.
-- `REVIEW_OUTPUT` — compact JSON carrying `verdict`, `backend`, `severitySource`, `comments[]`, `editedFields[]`, `capabilities`, and `raw` (the REV contract, defined normatively in the plugin `SPEC.md`). Each comment is `{body, action, target, file?, startLine?, endLine?, side?}`: `action` is `fix-now` / `fix-later` / `consider` when the backend grades (`severitySource: "graded"`, e.g. moor) or `unspecified` when it doesn't (`severitySource: "inferred"`, e.g. revdiff); `target` is `line` / `file` / `changeset`.
+- `REVIEW_OUTPUT` — compact JSON carrying `verdict`, `backend`, `comments[]`, `editedFields[]`, `capabilities`, and `raw` (the REV contract, defined normatively in the plugin `SPEC.md`). Each comment is `{body, target, file?, startLine?, endLine?, side?}`, where `target` is `line` / `file` / `changeset`. Comments are ungraded: every one is feedback to address, and the verdict — not a per-comment tier — says whether it blocks.
 
 Act on the verdict:
 
-- **`approved`** → the changeset is clean; proceed to Step 6 to commit and push. If `comments` carries advisory entries (`fix-later` / `consider`), surface them — they don't gate the commit, but the user may want to act on them (now, or as a follow-up).
-- **`changes-requested`** → **do not commit.** List the blocking comments — the `fix-now` entries when `severitySource` is `graded`, or *every* comment when it's `inferred` (an ungraded backend can't tell you which block) — then loop back to Step 2: fix the commented lines in the working tree, re-run tests, and re-review. Surface any advisory (`fix-later` / `consider`) comments too. **If a comment's `body` is short** (e.g. "I don't get what this flag means") **and the cited line range contains more than one distinct change** (e.g. two flag additions in a usage block, two unrelated lines in the same range), ask the user which token the comment refers to before fixing — a one-second clarification beats several minutes of guessing wrong. Fix the commented lines themselves; don't expand into adjacent pre-existing code (`${CLAUDE_PLUGIN_ROOT}/guides/changeset-scope.md`).
+- **`approved`** → the changeset is clean; proceed to Step 6 to commit and push. If `comments` is non-empty, the reviewer approved *and* left feedback: surface it — the verdict says it doesn't gate the commit, but the user may want to act on it (now, or as a follow-up).
+- **`changes-requested`** → **do not commit.** List every comment — they're ungraded, so all of them are the ask — then loop back to Step 2: fix the commented lines in the working tree, re-run tests, and re-review. **If a comment's `body` is short** (e.g. "I don't get what this flag means") **and the cited line range contains more than one distinct change** (e.g. two flag additions in a usage block, two unrelated lines in the same range), ask the user which token the comment refers to before fixing — a one-second clarification beats several minutes of guessing wrong. Fix the commented lines themselves; don't expand into adjacent pre-existing code (`${CLAUDE_PLUGIN_ROOT}/guides/changeset-scope.md`).
 - **`incomplete`** → `Unreviewed changes — what do you want to change?` Nothing is committed until the review is clean.
 - **`no-verdict`** → nothing is committed; read the cause from the result. When `backend` is `difftool` (or `capabilities.producesVerdict` is `false`), the change was **shown in a difftool that doesn't speak the contract** — report `Reviewed in your difftool — commit and push?` and act on the reply (proceed to Step 6 on approval). Otherwise the backend closed early or errored (see `raw.exitCode`) — report `Review closed without a verdict — what do you want to change?` If the output shows no difftool launched at all (no `diff.tool` set, or it points at a tool that isn't installed), that's a local git misconfiguration: surface it plainly so the user can fix their config or install a backend — don't substitute another tool.
+- **No verdict line at all** — stdout is empty, holds only stderr text, or carries no parseable `REVIEW_VERDICT` → the dispatcher exited before it could report (a bad argument, an unreadable message file, a missing `jq`, a backend that died). **Treat this exactly as `no-verdict`: nothing is committed.** Report what the output did say and ask what to do — `The review didn't report a verdict: <what stdout/stderr showed>. Nothing committed. Fix the tooling, or review in chat?` An absent result is the one case where proceeding is most tempting and least defensible: it looks like nothing went wrong precisely because nothing was reported.
 
 **The message is under review too.** If the result carries `editedFields` for the commit message (moor, when the reviewer edited it in-tool), use that edited text as the message in Step 6, overwrite the Step 3 message file with it. A `changes-requested` comment with `target: "commit-message"` is feedback on the message itself — revise the message and re-review. On a backend that can't round-trip an edited message (`capabilities.editableCommitMessage: false`, e.g. revdiff), keep the drafted message unless a comment asks to change it.
 
@@ -260,7 +261,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/commit.sh" --mode new --message-file <path>
 
 `commit.sh` picks the push variant itself — `-u origin <branch>` for a branch with no upstream, plain `git push` otherwise, `git push --force-with-lease` when you pass `--force-with-lease`. It also **refuses to commit onto the default branch** unless you pass `--allow-default-branch`; the Step 4 branch guard means you're normally already on a feature branch, so pass that flag only for the deliberate "commit to `<default>`" case the user chose there. Target a non-cwd checkout with `--repo <checkout>` / `--worktree <path>`, same as the other helpers.
 
-Read the helper's stdout — `COMMIT_SHA`, `BRANCH`, `PUSH_MODE`, and `PUSHED=ok` on success. Report the outcome and nothing more — `Committed <COMMIT_SHA>, pushed to <BRANCH>` — followed by any advisory `fix-later` / `consider` comments the review surfaced. If the push is rejected (non-fast-forward, protected branch, auth), `commit.sh` leaves git's error on stderr and exits non-zero; surface that and stop rather than retrying or force-pushing without the lease.
+Read the helper's stdout — `COMMIT_SHA`, `BRANCH`, `PUSH_MODE`, and `PUSHED=ok` on success. Report the outcome and nothing more — `Committed <COMMIT_SHA>, pushed to <BRANCH>` — followed by any comments an `approved` review left unaddressed. If the push is rejected (non-fast-forward, protected branch, auth), `commit.sh` leaves git's error on stderr and exits non-zero; surface that and stop rather than retrying or force-pushing without the lease.
 
 ## Step 7: Report the pipeline the push triggered
 

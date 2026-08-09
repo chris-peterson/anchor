@@ -24,14 +24,14 @@
 # exposed launcher path) so this can call a supported interface instead — set
 # ANCHOR_REVDIFF_LAUNCHER to override discovery in the meantime.
 #
-# revdiff carries no severity, no per-hunk review state, and no commit-message
-# round-trip anchor consumes yet, so those dimensions are inferred/null/off; on
-# the revdiff backend the caller confirms the commit message itself. (The fork's
-# editable `(description)` output isn't parsed here yet — see the REV plan.)
+# revdiff carries no per-hunk review state and no commit-message round-trip
+# anchor consumes yet, so those dimensions are null/off; on the revdiff backend
+# the caller confirms the commit message itself. (The fork's editable
+# `(description)` output isn't parsed here yet — see the REV plan.)
 
-# revdiff annotates with diff-side markers but does not grade, track per-hunk
-# review, or round-trip an edited commit message / description.
-revdiff_caps='{"producesVerdict":true,"gradedSeverity":false,"perHunkReview":false,"editableCommitMessage":false,"editableDescription":false,"sideMarkers":true}'
+# revdiff annotates with diff-side markers but does not track per-hunk review or
+# round-trip an edited commit message / description.
+revdiff_caps='{"producesVerdict":true,"perHunkReview":false,"editableCommitMessage":false,"editableDescription":false,"sideMarkers":true}'
 
 # Resolve the terminal-overlay launcher: an explicit override (also the seam
 # tests use), else the newest launch-revdiff.sh in the revdiff plugin's cache.
@@ -82,7 +82,6 @@ revdiff_parse_comments() {
         | ($l[1:] | join("\n") | sub("^\\s+";"") | sub("\\s+$";"")) as $body
         | {
             body:$body,
-            action:"unspecified",
             target:$h.target,
             file:($h.file // null),
             startLine:($h.startLine // null),
@@ -104,7 +103,7 @@ emit_review() {
   if [[ -z "$launcher" || ! -x "$launcher" ]]; then
     echo "review-diff.sh: revdiff launcher not found (install the revdiff plugin, or set ANCHOR_REVDIFF_LAUNCHER)" >&2
     jq -cn --argjson caps "$revdiff_caps" '{
-      backend:"revdiff", verdict:"no-verdict", severitySource:"inferred",
+      backend:"revdiff", verdict:"no-verdict",
       reviewCompleteness:null, reviewer:null, comments:[], editedFields:[],
       capabilities:($caps + {producesVerdict:false}), raw:{exitCode:"absent"}}' \
       | { read -r out; echo "REVIEW_VERDICT=no-verdict"; echo "REVIEW_OUTPUT=$out"; }
@@ -167,7 +166,6 @@ emit_review() {
     {
       backend:"revdiff",
       verdict:$v,
-      severitySource:"inferred",
       reviewCompleteness:null,
       reviewer:null,
       comments:$comments,

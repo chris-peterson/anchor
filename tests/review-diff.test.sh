@@ -95,15 +95,16 @@ o=$(run --files "$repo/a.txt" "$repo/a.txt")
 j=$(json_of "$o")
 [ "$(jq -r .backend <<<"$j")" = moor ]              || fail "moor backend"
 [ "$(jq -r .reviewCompleteness <<<"$j")" = complete ] || fail "moor exit0 completeness"
-[ "$(jq -r .severitySource <<<"$j")" = graded ]     || fail "moor severitySource"
-[ "$(jq -r .capabilities.gradedSeverity <<<"$j")" = true ] || fail "moor caps.gradedSeverity"
-ok "moor: exit 0 -> approved, complete, graded"
+[ "$(jq -r 'has("severitySource")' <<<"$j")" = false ] || fail "moor still emits severitySource"
+[ "$(jq -r '.capabilities | has("gradedSeverity")' <<<"$j")" = false ] || fail "moor still emits caps.gradedSeverity"
+ok "moor: exit 0 -> approved, complete, ungraded"
 
-# changes-requested with a mapped line comment
+# changes-requested with a mapped line comment. The fixture carries a stray
+# `action` the way an older moor would; the mapping drops it (moor IM.OUT-02a).
 mkfix '{"output":{"exitCode":1,"reviewer":"Rev","comments":[{"body":"fix this","action":"fix-now","file":"a.txt","startLine":2,"endLine":2}]}}'
 o=$(run --files "$repo/a.txt" "$repo/a.txt"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = changes-requested ] || fail "moor exit1 verdict"
-[ "$(jq -r '.comments[0].action' <<<"$j")" = fix-now ] || fail "moor comment action"
+[ "$(jq -r '.comments[0] | has("action")' <<<"$j")" = false ] || fail "moor comment still carries action"
 [ "$(jq -r '.comments[0].target' <<<"$j")" = line ]    || fail "moor comment target=line"
 [ "$(jq -r '.comments[0].startLine' <<<"$j")" = 2 ]    || fail "moor comment startLine"
 [ "$(jq -r '.comments[0].side' <<<"$j")" = new ]       || fail "moor comment side=new"
@@ -162,7 +163,7 @@ export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""; o=$(run --previous); j=$(json_o
 [ "$(jq -r .backend <<<"$j")" = revdiff ]           || fail "revdiff backend"
 [ "$(jq '.comments|length' <<<"$j")" = 0 ]          || fail "revdiff rc0 no comments"
 [ "$(jq -r .reviewCompleteness <<<"$j")" = null ]   || fail "revdiff completeness=null"
-[ "$(jq -r .severitySource <<<"$j")" = inferred ]   || fail "revdiff severitySource=inferred"
+[ "$(jq -r 'has("severitySource")' <<<"$j")" = false ] || fail "revdiff still emits severitySource"
 [ "$(jq -r .capabilities.sideMarkers <<<"$j")" = true ] || fail "revdiff caps.sideMarkers"
 ok "revdiff: rc 0 -> approved, no comments, completeness null"
 
@@ -174,7 +175,7 @@ export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT="$md"; o=$(run --previous); j=$(js
 [ "$(jq -r '.comments[0].target' <<<"$j")" = line ] || fail "revdiff comment0 target=line"
 [ "$(jq -r '.comments[0].startLine' <<<"$j")" = 2 ] || fail "revdiff comment0 startLine=2"
 [ "$(jq -r '.comments[0].side' <<<"$j")" = new ]    || fail "revdiff comment0 side=new (+)"
-[ "$(jq -r '.comments[0].action' <<<"$j")" = unspecified ] || fail "revdiff comment0 action=unspecified"
+[ "$(jq -r '.comments[0] | has("action")' <<<"$j")" = false ] || fail "revdiff comment0 still carries action"
 [ "$(jq -r '.comments[0].body' <<<"$j")" = "use a constant here" ] || fail "revdiff comment0 body"
 [ "$(jq -r '.comments[1].target' <<<"$j")" = file ] || fail "revdiff comment1 target=file"
 [ "$(jq -r '.comments[1].file' <<<"$j")" = a.txt ]  || fail "revdiff comment1 file"

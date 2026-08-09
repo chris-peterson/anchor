@@ -11,7 +11,7 @@ this guide whenever feedback would touch code the diff doesn't already own.
 
 ## Feedback invites overreach two ways
 
-- **Fix-now comments with reasons** — moor's sidecar, fed back through
+- **A review comment with a reason** — the backend's sidecar, fed back through
   `/anchor:resolve-feedback`. Fix the lines the comment targets, not the adjacent
   pre-existing code they happen to sit next to.
 - **A direct ask while iterating** — "while you're in there, also change X." If

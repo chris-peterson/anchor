@@ -6,7 +6,7 @@ Maintained by `/sextant:spec-status`.
 **Last audit:** 2026-08-06
 **Spec version:** root SPEC.md (unversioned)
 **Plugin version:** 1.3.0
-**Coverage:** 159 Covered, 0 Partial, 0 Missing/Contradicts
+**Coverage:** 160 Covered, 0 Partial, 0 Missing/Contradicts
 
 The implementation is the plugin itself — the skill prompts under
 `skills/`, the ambient rules under `rules/`, and the helper scripts under
@@ -28,7 +28,7 @@ draft to review against the implementation, not an audited ledger.
 | REL-01..20 | 20 | All Covered | Release-model detection, version recommendation, notes + review, per-model publish — `skills/release/SKILL.md`, `scripts/release-recon.sh`, `guides/release-models.md`, `guides/forge-cookbook.md` |
 | ISS-01..12 | 12 | All Covered | Author one issue — gather intent, guard duplicates, draft, file (`skills/issue/SKILL.md`); list/scope/rank/recommend, read-only (`skills/issues/SKILL.md`) |
 | PIPE-01..14 | 14 | All Covered | Status/watch/job modes, commit-scoped resolution, per-workflow fold and the single-run opt-out; run/job breakdown tabulated with per-state emoji (PIPE-10..12) and watched once per commit after a push (PIPE-13..14) — `skills/pipeline/SKILL.md`, `skills/merge/SKILL.md` (PIPE-09), `templates/pipeline-report.md`, `scripts/{pipeline-status,pipeline-after-push}.sh`, `tests/pipeline-{status,after-push}.test.sh` |
-| REV-01..11 | 11 | All Covered | Tool-agnostic review contract — dispatcher `scripts/review-diff.sh` + adapters `scripts/review/{moor,revdiff}.sh`; consumers read the normalized verdict |
+| REV-01..12 | 12 | All Covered | Tool-agnostic review contract — dispatcher `scripts/review-diff.sh` + adapters `scripts/review/{moor,revdiff}.sh`; consumers read the normalized verdict, and treat an unparseable or absent one as no-verdict (REV-12) — `skills/{commit,prepare-review,issue,release}/SKILL.md` verdict sections |
 | CONF-01..10 | 10 | All Covered | `anchor.*` key handling, including the per-skill after-push watch gate (CONF-06) and the CR-description verbosity dial, which abbreviates sections rather than removing them (CONF-07..10) — `guides/configuring.md`, `guides/cr-verbosity.md`, `templates/cr-description.md` (per-section "At lower verbosity"), `scripts/pipeline-after-push.sh` (`config_bool`), commit/prepare-review/issue config steps |
 | FORG-01..05 | 5 | All Covered | Template composition, body-file, markdown, auth — `templates/`, `guides/{forge-cookbook,markdown-gotchas}.md` |
 | RULE-01..05 | 5 | All Covered | SessionStart-injected rules — `hooks/emit-rules.sh`, `rules/*.md`; RULE-04 routes CR creation through `prepare-review` |
@@ -36,6 +36,21 @@ draft to review against the implementation, not an audited ledger.
 | CONFIRM-01..06 | 6 | All Covered | Approval of the exact text before anything publishes under the user's name — commit message in the review tool (`skills/commit/SKILL.md` Step 5), CR description (`skills/prepare-review/SKILL.md` Steps 4-5), issue body (`skills/issue/SKILL.md`), thread replies (`skills/resolve-feedback/SKILL.md` 3c), release notes (`skills/release/SKILL.md`); CONFIRM-03 is the plan-is-not-prose distinction the reply gate rests on |
 
 ## Audit history
+
+### 2026-08-06 — Ungraded comments, and an absent verdict halts (REV-08, REV-12)
+
+Coverage 159 → 160. REV-12 added: a dispatcher that exits before printing
+`REVIEW_VERDICT` leaves silence, which every consumer now reads as `no-verdict`
+and verifies in chat rather than proceeding. REV-08 rewritten — moor stopped
+grading comments (its `IM.OUT-02a`: "Comments carry no severity field"), so
+`severitySource`, per-comment `action`, and `capabilities.gradedSeverity` are gone
+from the adapters, the skills, the tests, and the docs; whether feedback blocks is
+the verdict's answer alone. CMT-15 reworded off "fix-now comments" onto the
+verdict. The docs-site playback frames in `plugin.yml` keep `action: fix-now`:
+the marketplace session player dereferences `f.comment.action.replace(...)` with
+no guard, so dropping the field throws and the frame stops rendering. Removing it
+needs the player to tolerate its absence first — a change in the
+`claude-marketplace` repo, not this one.
 
 ### 2026-08-06 — Approval before publishing (CONFIRM-01..06)
 

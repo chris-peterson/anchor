@@ -49,9 +49,9 @@ flowchart TD
 
 This is the change underneath the rest of 1.0. `/anchor:commit` runs the tests,
 stages, drafts the message, and then opens the *pending* changeset — working tree
-versus `HEAD` — for review. Only a clean verdict commits, and a blocking comment
-edits the working tree and re-reviews rather than amending a checkpoint you've
-already made.
+versus `HEAD` — for review. Only a clean verdict commits; anything else edits the
+working tree and re-reviews rather than amending a checkpoint you've already
+made.
 
 The practical difference: there is no commit to walk back. Under the old flow, a
 review that found something left you amending, and an amend on a pushed branch is
@@ -65,13 +65,13 @@ a single verdict, so the skills don't care which reviewer is installed.
 
 | Backend | How to select it | What it gives you |
 |---|---|---|
-| [moor](https://github.com/chris-peterson/moor) | the default | Comments on individual changes, graded `fix-now` / `fix-later` / `consider`, and an editable commit message that round-trips |
-| [revdiff](https://revdiff.com) | `git config anchor.reviewBackend revdiff` | A terminal-native reviewer that also handles hg and jj. Annotations come back ungraded, so every one is treated as feedback to address |
+| [moor](https://github.com/chris-peterson/moor) | the default | Comments on individual changes, per-hunk review state, and an editable commit message that round-trips |
+| [revdiff](https://revdiff.com) | `git config anchor.reviewBackend revdiff` | A terminal-native reviewer that also handles hg and jj, with diff-side markers on each annotation |
 | your `git difftool` | neither plugin installed | A visual diff with no structured verdict, so the skill asks directly whether to revise or proceed |
 
-The contract between them — the four-value verdict, per-comment actions, and what
-a backend that can't answer a question reports instead of guessing — is the `REV`
-category in the [requirements](/spec).
+The contract between them — the four-value verdict, ungraded comments anchored to
+lines or files, and what a backend that can't answer a question reports instead of
+guessing — is the `REV` category in the [requirements](/spec).
 
 ## A release knows who owns the version bump
 

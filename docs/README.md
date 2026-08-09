@@ -111,8 +111,8 @@ present and is skipped when absent.
 - **[revdiff](https://revdiff.com)** — an alternate review backend: a
   terminal-native diff reviewer (git, hg, and jj) selected with
   `git config anchor.reviewBackend revdiff`. It returns the same normalized
-  review verdict as moor; its annotations come back ungraded, so the skill treats
-  each as feedback to address and confirms the commit message itself. Because
+  review verdict as moor, and marks which diff side each annotation sits on; it
+  carries no commit-message round-trip, so the skill confirms the message itself. Because
   revdiff is a TUI, selecting it needs the revdiff plugin installed — `anchor` uses
   its terminal-overlay launcher to open the reviewer.
 - **[tack](https://github.com/chris-peterson/tack)** — the work tracker. Naming a

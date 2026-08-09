@@ -112,9 +112,10 @@ behavior, not an independent authority — review them against the source.
   drafted commit message presented alongside the diff (not gated separately in
   chat) via the review wrapper, and shall not commit until the verdict is clean;
   an edited message the review returns (`editedFields`) is used for the commit.
-- **[CMT-15]** If the pre-commit review returns fix-now comments, then the system
-  shall address them in the working tree, re-run tests, and re-review — committing
-  only once the verdict is clean, rather than committing and then amending.
+- **[CMT-15]** If the pre-commit review returns `changes-requested`, then the
+  system shall address its comments in the working tree, re-run tests, and
+  re-review — committing only once the verdict is clean, rather than committing
+  and then amending.
 - **[CMT-16]** Where the pre-flight recon reports nothing staged, the system shall
   skip the test suite, since the push-existing and no-local-changes routes make no
   commit and their commits were tested when they were made.
@@ -419,12 +420,10 @@ this" nullability from SARIF's `notApplicable`.
 {
   backend:            "moor" | "revdiff" | "difftool",
   verdict:            "approved" | "changes-requested" | "incomplete" | "no-verdict",
-  severitySource:     "graded" | "inferred",
   reviewCompleteness: "complete" | "partial" | null,   // null = backend cannot say
   reviewer:           string | null,
   comments: [{
     body:        string,
-    action:      "fix-now" | "fix-later" | "consider" | "unspecified",
     target:      "line" | "file" | "changeset",
     file?:       string,        // present when target != changeset
     startLine?:  number,        // 1-based, inclusive; present when target == line
@@ -435,7 +434,7 @@ this" nullability from SARIF's `notApplicable`.
   }],
   editedFields: [{ target: "commit-message" | "description", original?: string, edited: string }],
   capabilities: {
-    producesVerdict: bool, gradedSeverity: bool, perHunkReview: bool,
+    producesVerdict: bool, perHunkReview: bool,
     editableCommitMessage: bool, editableDescription: bool, sideMarkers: bool
   },
   raw: { exitCode: number | "absent", output?: string }
@@ -470,9 +469,11 @@ this" nullability from SARIF's `notApplicable`.
 - **[REV-07]** The system shall represent a dimension a backend cannot express as
   `null` (e.g. `reviewCompleteness`) rather than a fabricated value, so a
   consumer distinguishes "unsupported" from "checked and found none".
-- **[REV-08]** The system shall record severity provenance: a backend that grades
-  its comments emits their `action` with `severitySource` `graded`; a backend
-  that does not emits `action` `unspecified` with `severitySource` `inferred`.
+- **[REV-08]** The system shall carry comments ungraded — no per-comment
+  severity, action, or priority field — and shall treat every comment a
+  `changes-requested` verdict accompanies as feedback to address. Whether
+  feedback blocks is the verdict's to say, so a per-comment tier would give a
+  consumer a second, disagreeing answer.
 - **[REV-09]** The system shall carry each comment's backend-verbatim text in
   `raw` so feedback the normalization cannot represent is not lost.
 - **[REV-10]** Where the configured difftool does not speak the contract, the
@@ -480,6 +481,12 @@ this" nullability from SARIF's `notApplicable`.
   and verdict `no-verdict`, and ask the user directly.
 - **[REV-11]** Where the selected backend is absent, the system shall fall back to
   a configured difftool or chat rather than fail.
+- **[REV-12]** If the dispatcher reports no parseable verdict — no
+  `REVIEW_VERDICT` line, empty output, or output the consumer cannot read — then
+  the system shall treat the review as `no-verdict`, halt the action the review
+  gates, and verify with the user in chat. Absent output is never approval; a
+  dispatcher that fails before reporting produces silence, which is
+  indistinguishable from success unless the consumer treats it as failure.
 
 ### CONF — Configuration
 

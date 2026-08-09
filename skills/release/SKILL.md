@@ -224,10 +224,12 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --files \
 
 It reads as all additions — expected; the notes are new. Map `REVIEW_VERDICT` as
 the other skills do: only `approved` proceeds; `changes-requested` means fold in
-the blocking comments (`fix-now` when `severitySource` is `graded`, every comment
-when it's `inferred`) and re-open; `incomplete` and `no-verdict` mean the reviewer
+every comment (they're ungraded) and re-open; `incomplete` and `no-verdict` mean the reviewer
 didn't grade it — report what happened and fall back to putting the notes in your
-own reply, then ask with `AskUserQuestion`. With no backend installed
+own reply, then ask with `AskUserQuestion`. A result with **no parseable
+`REVIEW_VERDICT`** (empty stdout, stderr only — the dispatcher exited before
+reporting) reads the same way: say what the output showed and present the notes in
+your reply. With no backend installed
 (`command -v "$(git config anchor.reviewBackend 2>/dev/null || echo moor)"`), use
 that same in-reply presentation.
 

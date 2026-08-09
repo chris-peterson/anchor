@@ -16,9 +16,11 @@
 #   REVIEW_VERDICT=<verdict>
 #   REVIEW_OUTPUT=<normalized json>
 
-# moor grades its comments, tracks per-hunk review, and round-trips an edited
-# commit message; it does not mark diff sides or edit the CR description.
-moor_caps='{"producesVerdict":true,"gradedSeverity":true,"perHunkReview":true,"editableCommitMessage":true,"editableDescription":false,"sideMarkers":false}'
+# moor tracks per-hunk review and round-trips an edited commit message; it does
+# not mark diff sides or edit the CR description. Its comments are ungraded
+# (moor's IM.OUT-02a): a comment is feedback to address, and the verdict — not a
+# per-comment tier — says whether it blocks.
+moor_caps='{"producesVerdict":true,"perHunkReview":true,"editableCommitMessage":true,"editableDescription":false,"sideMarkers":false}'
 
 # Consumes the review-request variables the dispatcher exports before sourcing
 # this adapter (review_mode, diff_range, files_left/right, review_title,
@@ -50,9 +52,9 @@ emit_review() {
     # writing one. Either way there is no contract verdict (REV-10).
     local out
     out=$(jq -cn '{
-      backend:"difftool", verdict:"no-verdict", severitySource:"inferred",
+      backend:"difftool", verdict:"no-verdict",
       reviewCompleteness:null, reviewer:null, comments:[], editedFields:[],
-      capabilities:{producesVerdict:false, gradedSeverity:false, perHunkReview:false,
+      capabilities:{producesVerdict:false, perHunkReview:false,
         editableCommitMessage:false, editableDescription:false, sideMarkers:false},
       raw:{exitCode:"absent"}}')
     echo "REVIEW_VERDICT=no-verdict"
@@ -70,13 +72,11 @@ emit_review() {
     | {
         backend:"moor",
         verdict:$verdict,
-        severitySource:"graded",
         reviewCompleteness:(if $ec==0 or $ec==1 then "complete"
                             elif $ec==2 then "partial" else null end),
         reviewer:(.reviewer // null),
         comments:((.comments // []) | map({
           body:(.body // ""),
-          action:(.action // "unspecified"),
           target:(if .target=="commit-message" then "changeset"
                   elif (.file and .startLine) then "line"
                   elif .file then "file" else "changeset" end),
