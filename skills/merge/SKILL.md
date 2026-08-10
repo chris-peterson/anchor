@@ -261,9 +261,10 @@ the project/CR settings (and you re-read them) or names the method to use. On
 ## Step 3: Merge
 
 Run the merge for the chosen method (cookbook: "Merge a CR"). Delete the source
-branch as part of the merge where the forge supports it (`gh pr merge --delete-branch`
-/ GitLab `remove_source_branch` — `anchor` sets `--remove-source-branch` at create time,
-but pass it here too in case it wasn't). This is a forge write:
+branch as part of the merge — `gh pr merge --delete-branch` / `glab mr merge
+--remove-source-branch`. On GitHub this is the only place the branch gets cleaned
+up unless the repo's `deleteBranchOnMerge` is on, since a PR carries no per-PR
+preference; on GitLab it repeats what the create call set. This is a forge write:
 
 - On a **401/403 or other auth failure**, surface it and ask the user to refresh
   credentials — do not retry or fall back (the fail-fast-on-auth rule).

@@ -91,6 +91,7 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 | `CURRENT_DESC_PATH` | the review's left-hand side in Step 4 (empty on `skip-deep-links`) |
 | `DESC_DRAFT_PATH` | where to write the drafted description in Step 4 — already `mktemp`'d, so don't make your own |
 | `TEMPLATE_PATH` | project CR template to compose into (Step 3) |
+| `DELETE_BRANCH_ON_MERGE` | `false` on a CR this run opened → name it and offer the remediation (see "Branch deletion on merge"); `unknown` → say nothing |
 | `ANCHOR_CONFIG` | `anchor.*` keys to apply (Step 3), as JSON |
 | `FILE_LINKS` | ready-to-use deep-link prefix per changed file, both forges (Step 3), as JSON — append the line part, never hash a path yourself |
 
@@ -132,6 +133,26 @@ The second run is on a pushed feature branch with a commit ahead; it auto-opens 
 - **User asks not to open one** — the repo merges direct to `main` without CRs, or the CLI's default forge instance is wrong for this repo. Re-run with `--no-open` to proceed URL-free; or, if they'd rather open the draft themselves, pause until they confirm one is open, then re-run so the script resolves its URL.
 
 (When `ON_DEFAULT_BRANCH=1`, the script doesn't auto-open either — but that routes through branch creation, not skip-deep-links; see above.)
+
+### Branch deletion on merge (`DELETE_BRANCH_ON_MERGE`)
+
+The two forges keep this in different places, so `anchor` can only set it on one of them. GitLab takes `remove_source_branch` per MR and the create call passes it. GitHub has **no per-PR field** — the only standing setting is repo-wide `deleteBranchOnMerge`, so a PR `anchor` opens carries no preference of its own. `/anchor:merge` passes `--delete-branch`, which covers the branch for merges that go through it; a merge from the web UI, a bare `gh pr merge`, or auto-merge leaves the branch behind.
+
+So when **this run opened the CR** (`CR_CREATED=1`) and `DELETE_BRANCH_ON_MERGE=false`, name the gap once and offer to close it. On a pre-existing CR (`CR_PREEXISTING=1`) or on `unknown`, say nothing — there's nothing this run decided.
+
+> The source branch won't be deleted when `#7` merges — GitHub carries no per-PR setting and this repo's *"Automatically delete head branches"* is off. `/anchor:merge` deletes it anyway; a merge from the web UI wouldn't. Turn the repo setting on? `[yes / no]`
+
+On `yes`, apply the forge's remediation and report what it did:
+
+```bash
+gh repo edit --delete-branch-on-merge                     # GitHub — repo-wide, needs admin
+glab api -X PUT projects/:fullpath/merge_requests/<iid> \
+  -F remove_source_branch=true                            # GitLab — this MR only
+```
+
+The GitHub form changes a setting for **every** PR in the repo, which is why it needs the user's yes rather than happening at create time. It needs admin on the repo; a 403 is an authorization failure — surface it and move on with the flow (the fail-fast-on-auth rule), since the branch still gets deleted by `/anchor:merge`. On `no`, proceed; don't re-ask on later runs.
+
+Prefer the `glab api` form over `glab mr update --remove-source-branch`, whose help describes it as a *toggle* — it would turn the flag back off on an MR that already has it.
 
 ### Rebase on the default branch when `BEHIND > 0`
 

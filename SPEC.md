@@ -189,6 +189,10 @@ check.
 - **[PREP-16]** Once the description has landed, the system shall report the
   branch's pipeline, which reports nothing where the CR's commit was already
   reported and reports the new pipeline where a rebase force-push created one.
+- **[PREP-17]** When the system opens a CR whose source branch will not be deleted
+  on merge, the system shall name the condition and offer the forge's remediation,
+  applying it only on the user's approval. An unreadable setting shall report as
+  unknown rather than as either state.
 
 ### FDBK — Resolve feedback
 

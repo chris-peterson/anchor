@@ -31,7 +31,7 @@ edit, not a vague "looks off":
 | Surface | What it does |
 |---|---|
 | [`/anchor:commit`](/skills/commit) | Confirm the repo, run tests, stage everything, write a why-first commit message, review every change in the pending changeset, then — once the review is clean — commit and push |
-| [`/anchor:prepare-review`](/skills/prepare-review) | Rebase on the default branch if behind, open a draft change request on the already-pushed branch (assigned to you, source branch set to delete on merge), and draft a description that points a reviewer at the lines where their judgment is worth the most |
+| [`/anchor:prepare-review`](/skills/prepare-review) | Rebase on the default branch if behind, open a draft change request on the already-pushed branch (assigned to you, with source-branch cleanup set where the forge takes it per CR), and draft a description that points a reviewer at the lines where their judgment is worth the most |
 | [`/anchor:resolve-feedback`](/skills/resolve-feedback) | Fetch the unresolved review threads on an open CR, triage each with you, then drive each to resolution — fix / reply / resolve |
 | [`/anchor:merge`](/skills/merge) | Land an approved CR once its gates are green — waiting on the pipeline if needed — then return to the default branch and delete the merged branch |
 | [`/anchor:release`](/skills/release) | Work out what has landed since the last release, recommend a semver bump, draft notes a *user* can read, and publish the way this repo publishes — a forge release where CI owns the bump, a bump commit where it doesn't |

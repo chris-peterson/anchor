@@ -132,7 +132,7 @@ needed.
 |---|---|---|
 | **Create CRs as draft** | `gh pr create --draft` | `glab mr create --draft` |
 | **Assign to yourself** | `--assignee @me` | `--assignee <username>` (see below) |
-| **Delete source branch after merge** | repo auto-delete setting, or `--delete-branch` at merge | `glab mr create --remove-source-branch` |
+| **Delete source branch after merge** | no per-PR field — the repo-wide `deleteBranchOnMerge`, plus `--delete-branch` at merge | `glab mr create --remove-source-branch` |
 | **Assign issues to yourself** | `gh issue create --assignee @me` | `glab issue update <iid> --assignee <username>` after an API-form create |
 
 GitLab has no `@me` shorthand. Capture your username once and reuse it
@@ -202,8 +202,20 @@ gh pr create \
   --assignee @me
 ```
 
-GitHub branch deletion on merge is a repo setting; if it's off, pass
-`--delete-branch` to `gh pr merge` at merge time.
+**GitHub has no per-PR branch-deletion preference** — `gh pr create` exposes no
+flag for it and the PR object carries no field, so the create call can't set what
+`glab mr create --remove-source-branch` sets on an MR. The standing setting is
+repo-wide:
+
+```bash
+gh repo view --json deleteBranchOnMerge     # read it
+gh repo edit --delete-branch-on-merge       # turn it on — every PR in the repo, needs admin
+```
+
+With it off, the branch survives any merge that doesn't pass `--delete-branch`
+(the web UI, a bare `gh pr merge`, auto-merge). `/anchor:prepare-review` reports
+the setting as `DELETE_BRANCH_ON_MERGE` and offers the repo edit; `/anchor:merge`
+passes `--delete-branch` regardless.
 
 ## MR create (GitLab)
 
@@ -229,6 +241,18 @@ glab api -X POST projects/:fullpath/merge_requests \
 # 3. Assign it to yourself (capture <iid> from step 2's response).
 glab mr update <iid> --assignee chris
 ```
+
+To set branch deletion on an MR that was opened without it, use the API form —
+`glab mr update --remove-source-branch` is documented as a *toggle*, so on an MR
+that already has the flag it turns it off:
+
+```bash
+glab api -X PUT projects/:fullpath/merge_requests/<iid> -F remove_source_branch=true
+```
+
+Reading it back: the MR object carries `should_remove_source_branch` (what the
+create/update set) and `force_remove_source_branch` (the project forcing it for
+every MR) — either one true means the branch goes.
 
 ## CR description update from a file
 
@@ -286,9 +310,10 @@ requirement.
 ## Merge a CR
 
 Land an open CR into its target branch. Delete the source branch as part of the
-merge (`--delete-branch` / `--remove-source-branch`) — `anchor` sets this at create
-time, but pass it here too in case it wasn't. Guard the merge on the head SHA so a
-commit that landed after you last looked can't sneak in unreviewed
+merge (`--delete-branch` / `--remove-source-branch`) — on GitHub this is the only
+place the branch gets cleaned up unless the repo-wide setting is on, and on GitLab
+it repeats what the create call set. Guard the merge on the head SHA so a commit
+that landed after you last looked can't sneak in unreviewed
 (`--match-head-commit` / `--sha`).
 
 ```bash

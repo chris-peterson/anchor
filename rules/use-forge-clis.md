@@ -15,10 +15,11 @@ follow-up fix).
 
 - **Writing or revising a CR description → `/anchor:prepare-review`**, never a
   bare `gh pr create` / `glab mr create` or a `--body` on an edit. A raw
-  `create` lands the CR non-draft, with no source-branch cleanup, the project
-  template's checklist left intact, and no Review guide; `prepare-review` sets the
-  draft flag and `--remove-source-branch`, composes the project template, and
-  drafts the canonical Review guide.
+  `create` lands the CR non-draft, with the project template's checklist left
+  intact and no Review guide; `prepare-review` sets the draft flag, composes the
+  project template, drafts the canonical Review guide, and reports whether the
+  source branch will be deleted on merge (`--remove-source-branch` on GitLab;
+  GitHub has only the repo-wide setting, so it offers to turn that on).
 - **Filing or updating an issue → `/anchor:issue`**, never a bare
   `gh issue create --body` / `glab issue create --description`. The skill leads
   the issue with *why* the work is needed, written for a reader who's never seen

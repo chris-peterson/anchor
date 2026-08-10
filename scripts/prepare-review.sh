@@ -65,6 +65,17 @@
 #   DESC_DRAFT_PATH=<path>       temp file the skill writes the drafted description
 #                                to (the review's right-hand side)
 #   TEMPLATE_PATH=<path>         project CR template, empty when none
+#   DELETE_BRANCH_ON_MERGE=<true|false|unknown>
+#                                will the resolved CR's source branch be deleted
+#                                when it merges, without /anchor:merge passing
+#                                --delete-branch? GitLab keeps this per MR
+#                                (should_remove_source_branch, or
+#                                force_remove_source_branch when the project
+#                                forces it); GitHub has no per-PR field at all,
+#                                so it reads the repo-wide deleteBranchOnMerge.
+#                                unknown == no CR resolved, no forge, or the read
+#                                failed — never collapsed into false, which the
+#                                skill would act on
 #   ANCHOR_CONFIG=<json>         {key: value} of anchor.* git config; {} when none
 #   FILE_LINKS=<json>            {path: deep-link prefix} per changed file, from
 #                                deep-links.sh — both forges; {} when no CR
@@ -162,7 +173,7 @@ fi
 
 # --- Resolve (or open) the CR ------------------------------------------------
 
-cr_url=""; cr_iid=""; cr_draft=""; cr_head=""; cr_desc=""
+cr_url=""; cr_iid=""; cr_draft=""; cr_head=""; cr_desc=""; cr_delete_branch=""
 cr_preexisting=0; cr_created=0
 
 # Pull a CR's url/iid/draft/headsha/description into the cr_* vars. Returns
@@ -182,6 +193,12 @@ resolve_cr() {
       cr_draft=$(jq -r '.draft // empty' <<<"$json")
       cr_head=$(jq -r '.sha // empty' <<<"$json")
       cr_desc=$(jq -r '.description // ""' <<<"$json")
+      # Per-MR on GitLab: the create call's --remove-source-branch, or the
+      # project forcing it for every MR.
+      cr_delete_branch=$(jq -r '
+        if (.should_remove_source_branch // false)
+           or (.force_remove_source_branch // false)
+        then "true" else "false" end' <<<"$json")
       ;;
     github)
       local json args=(--json "url,number,isDraft,headRefOid,body")
@@ -241,8 +258,10 @@ elif [[ "$forge" != "none" && "$on_default" -eq 0 ]]; then
     needs_push=1
   elif [[ "$auto_open" -eq 1 ]]; then
     # The branch is pushed (by /anchor:commit) and no CR is open yet. Open a draft
-    # against it — assigned to me, source branch deleted on merge — without
-    # pushing; the remote branch the create call targets already exists.
+    # against it — assigned to me — without pushing; the remote branch the create
+    # call targets already exists. Branch deletion on merge is per-MR on GitLab
+    # and repo-wide on GitHub, so only the GitLab create can set it; both report
+    # the resulting state via DELETE_BRANCH_ON_MERGE below.
     case "$forge" in
       gitlab)
         username=$(glab api user 2>/dev/null | jq -r '.username // empty' || true)
@@ -254,8 +273,8 @@ elif [[ "$forge" != "none" && "$on_default" -eq 0 ]]; then
         fi
         ;;
       github)
-        # Branch deletion on merge is a repo setting; pass --delete-branch to
-        # `gh pr merge` at merge time if it's off.
+        # `gh pr create` has no branch-deletion flag — GitHub carries no per-PR
+        # field for it.
         if ! create_err=$(gh pr create --draft --fill --assignee @me 2>&1); then
           echo "CR_CREATE_ERROR=gh pr create failed: $create_err"
           exit 1
@@ -272,6 +291,32 @@ elif [[ "$forge" != "none" && "$on_default" -eq 0 ]]; then
       exit 1
     fi
   fi
+fi
+
+# --- Will the source branch be deleted on merge? -----------------------------
+#
+# GitLab answers per MR (captured in resolve_cr). GitHub has no per-PR field, so
+# the only standing answer is the repo-wide setting — which is why a PR anchor
+# opens can't carry the preference the way an MR does, and why the skill names it
+# when it's off. Scoped to a resolved CR on both forges: with no CR there's
+# nothing for the skill to say.
+
+delete_branch_on_merge=unknown
+if [[ -n "$cr_url" ]]; then
+  case "$forge" in
+    github)
+      repo_json=$(gh repo view --json deleteBranchOnMerge 2>/dev/null || true)
+      setting=$(jq -r '.deleteBranchOnMerge | tostring' <<<"$repo_json" 2>/dev/null || true)
+      case "$setting" in
+        true|false) delete_branch_on_merge=$setting ;;
+      esac
+      ;;
+    gitlab)
+      case "$cr_delete_branch" in
+        true|false) delete_branch_on_merge=$cr_delete_branch ;;
+      esac
+      ;;
+  esac
 fi
 
 # --- Capture the current description (baseline for the Step 4 diff) ----------
@@ -365,5 +410,6 @@ echo "STATE=$state"
 echo "CURRENT_DESC_PATH=$current_desc_path"
 echo "DESC_DRAFT_PATH=$desc_draft_path"
 echo "TEMPLATE_PATH=$template_path"
+echo "DELETE_BRANCH_ON_MERGE=$delete_branch_on_merge"
 echo "ANCHOR_CONFIG=$anchor_cfg"
 echo "FILE_LINKS=$file_links"

@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- A PR opened on GitHub now reports whether its source branch will be deleted on
+  merge, and `/anchor:prepare-review` offers to turn the repo setting on. GitHub
+  carries no per-PR branch-deletion preference — only the repo-wide
+  `deleteBranchOnMerge` — so unlike a GitLab MR, which the create call sets
+  `--remove-source-branch` on, a PR carried nothing, and the branch survived any
+  merge that didn't go through `/anchor:merge`. The docs asserted the create step
+  had set it on both forges.
+
 ## 1.4.0
 
 ### Changed
