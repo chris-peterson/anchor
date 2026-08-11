@@ -3,10 +3,10 @@
 Tracking status of the requirements declared in [`SPEC.md`](SPEC.md).
 Maintained by `/sextant:spec-status`.
 
-**Last audit:** 2026-08-10
+**Last audit:** 2026-08-11
 **Spec version:** root SPEC.md (unversioned)
 **Plugin version:** 1.4.0
-**Coverage:** 161 Covered, 0 Partial, 0 Missing/Contradicts
+**Coverage:** 162 Covered, 0 Partial, 0 Missing/Contradicts
 
 The implementation is the plugin itself — the skill prompts under
 `skills/`, the ambient rules under `rules/`, and the helper scripts under
@@ -21,7 +21,7 @@ draft to review against the implementation, not an audited ledger.
 | Prefix | Count | Status | Notes |
 |--------|------:|--------|-------|
 | TGT-01..09 | 9 | All Covered | Target resolution + worktree isolation — `scripts/{resolve-target,worktree}.sh`, each `skills/*/SKILL.md` "Target repo"; every skill routes a name argument through `resolve-target.sh` |
-| CMT-01..21 | 21 | All Covered | Review-first commit-and-push flow (1.0), recon before tests, pipeline watch after the push (CMT-21) — `skills/commit/SKILL.md`, `scripts/{commit,commit-preflight,look-ahead,squash-check,pipeline-after-push}.sh` |
+| CMT-01..22 | 22 | All Covered | Review-first commit-and-push flow (1.0), recon before tests, pipeline watch after the push (CMT-21), and the direct-to-default choice described as landing without a CR rather than as bypassing review (CMT-22) — `skills/commit/SKILL.md`, `scripts/{commit,commit-preflight,look-ahead,squash-check,pipeline-after-push}.sh` |
 | PREP-01..17 | 17 | All Covered | `prepare-review`, pushed-branch only, opens the draft CR without pushing, reviews the description in the tool, verifies deep-link line parts, reports the branch's pipeline once the description lands (PREP-16), and names the source branch that won't be deleted on merge, offering the forge's remediation (PREP-17) — `skills/prepare-review/SKILL.md`, `scripts/{prepare-review,deep-links,pipeline-after-push}.sh`, `tests/prepare-review.test.sh` |
 | FDBK-01..09 | 9 | All Covered | Fetch, triage, act on threads, watch the fix commit's pipeline into the summary (FDBK-09) — `skills/resolve-feedback/SKILL.md`, `scripts/pipeline-after-push.sh` |
 | MRG-01..16 | 16 | All Covered | Gate checks (ready/mergeable/pipeline/approvals/threads), method choice, merge + cleanup — `skills/merge/SKILL.md`, `guides/forge-cookbook.md` |
@@ -36,6 +36,10 @@ draft to review against the implementation, not an audited ledger.
 | CONFIRM-01..06 | 6 | All Covered | Approval of the exact text before anything publishes under the user's name — commit message in the review tool (`skills/commit/SKILL.md` Step 5), CR description (`skills/prepare-review/SKILL.md` Steps 4-5), issue body (`skills/issue/SKILL.md`), thread replies (`skills/resolve-feedback/SKILL.md` 3c), release notes (`skills/release/SKILL.md`); CONFIRM-03 is the plan-is-not-prose distinction the reply gate rests on |
 
 ## Audit history
+
+### 2026-08-11 — Coverage refresh (spec-status)
+
+STATUS.md updated: +1 ID (CMT-22, Covered), 161 → 162.
 
 ### 2026-08-10 — Coverage refresh (spec-status)
 

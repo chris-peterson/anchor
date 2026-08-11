@@ -136,6 +136,11 @@ behavior, not an independent authority — review them against the source.
 - **[CMT-21]** When the push succeeds, the system shall watch the pipeline it
   triggered and report the outcome, rather than ending at the commit and leaving
   the branch pushed but unverified.
+- **[CMT-22]** When presenting the direct-to-default-branch choice, the system
+  shall describe it as landing the change without a CR, and shall not describe it
+  as skipping or bypassing review — the CMT-14 review of the diff and message runs
+  on both branch choices, so "review" without a qualifier reads to the user as the
+  look at the diff they are about to get either way.
 
 ### PREP — Prepare review
 

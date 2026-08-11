@@ -49,7 +49,7 @@ suite:
   # >>> shipyard:describe — generated from source by `shipyard gen-describe`; do not edit >>>
   describe:
     skills:
-      commit: Stage changes, run tests, review, then commit and push.
+      commit: Stage changes, run tests, review the diff and drafted commit message with the user, then commit and push once they approve.
       issue: File a new forge issue (or update an existing one) that leads with WHY the work is needed.
       issues: List and rank the forge issues assigned to you so you can pick what to work on next — ranked by soonest due date, then most recently updated.
       merge: Merge an approved change request once its gates are green — waiting on the pipeline if needed — then clean up the branch.
