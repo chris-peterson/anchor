@@ -550,6 +550,18 @@ this" nullability from SARIF's `notApplicable`.
 - **[FORG-05]** If a forge write fails with an auth error, then the system shall
   surface it and ask the user to refresh credentials rather than silently fall
   back to copy-only.
+- **[FORG-06]** Where a repo ships no CR template of its own, the system shall
+  compose into the one it inherits from the forge — a GitLab parent group or the
+  instance, or the owner's GitHub `.github` repo — and shall prefer a repo-local
+  template over any inherited one.
+- **[FORG-07]** Where a level holds more than one CR template, the system shall
+  select a `default.md` (case-insensitive), else the sole template, else ask the
+  author which to compose into, rather than selecting by glob or API order.
+- **[FORG-08]** If a CR-template lookup returns nothing or is permission-denied,
+  then the system shall fall through to the next level, and shall use its own
+  default shape only when no level supplies a template.
+- **[FORG-09]** Where `anchor.crTemplateRepo` names a repo, the system shall read
+  a CR template from it only after every forge-supplied level has declined.
 
 ### RULE — Ambient rules
 

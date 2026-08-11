@@ -187,12 +187,22 @@ The sections above are `anchor`'s default shape. When a project ships its own CR
 template, that template is the team's required scaffolding — `anchor` composes
 its prose **into** that shape rather than replacing it.
 
-`prepare-review` probes for one before drafting:
+`prepare-review` resolves one before drafting, most specific level first — the
+first level that answers wins, so a template the repo ships always beats an
+inherited one:
 
-- **GitLab:** `.gitlab/merge_request_templates/*.md` (respecting the configured
-  default when a project ships more than one)
-- **GitHub:** `.github/pull_request_template.md` or
-  `.github/PULL_REQUEST_TEMPLATE/*.md`
+- **GitLab:** the project's own default-description-template setting, then
+  `.gitlab/merge_request_templates/*.md`, then whatever the project *inherits*
+  from a parent group or the instance
+- **GitHub:** `pull_request_template.md` under `.github/`, the repo root, or
+  `docs/` (or a `PULL_REQUEST_TEMPLATE/` directory in any of the three), then the
+  same locations in the owner's `.github` repo
+- **Either forge:** the repo named by `anchor.crTemplateRepo`, as a backstop when
+  nothing above answers
+
+Where a level holds more than one template, `default.md` (case-insensitive) wins;
+failing that, the author is asked which to use, because shipping several is a
+deliberate choice.
 
 When a template is found:
 

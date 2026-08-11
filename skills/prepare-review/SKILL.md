@@ -90,7 +90,9 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 | `STATE` | `match` → proceed; anything else → surface and stop (see "Act on `STATE`") |
 | `CURRENT_DESC_PATH` | the review's left-hand side in Step 4 (empty on `skip-deep-links`) |
 | `DESC_DRAFT_PATH` | where to write the drafted description in Step 4 — already `mktemp`'d, so don't make your own |
-| `TEMPLATE_PATH` | project CR template to compose into (Step 3) |
+| `TEMPLATE_PATH` | the CR template to compose into (Step 3); empty when the hierarchy holds none, or when the pick needs the author |
+| `TEMPLATE_SOURCE` | which level answered — `local` / `project-settings` / `inherited` / `configured` / `ambiguous` / `none` |
+| `TEMPLATE_CANDIDATES` | `ambiguous` only — `[{name, path}]` for the author to pick from (see "Honor an existing forge template") |
 | `DELETE_BRANCH_ON_MERGE` | `false` on a CR this run opened → name it and offer the remediation (see "Branch deletion on merge"); `unknown` → say nothing |
 | `ANCHOR_CONFIG` | `anchor.*` keys to apply (Step 3), as JSON |
 | `FILE_LINKS` | ready-to-use deep-link prefix per changed file, both forges (Step 3), as JSON — append the line part, never hash a path yourself |
@@ -237,7 +239,11 @@ If the only open item is the WHY, ask:
 
 ### Honor an existing forge template
 
-`TEMPLATE_PATH` from Step 1's block names the project's CR template (`.gitlab/merge_request_templates/*.md` or `.github/pull_request_template.md`); empty means none. When set, it's the team's required scaffolding — **compose into it, don't replace it.** Fill the sections it defines; preserve the reviewer-facing structure (headings, approval checklists) verbatim while stripping author-facing scaffolding (a section's placeholder / helper text, dev-time reminder links); answer any justification checkbox with fact, not meta-commentary; and supply `anchor`'s prose where it leaves prose to the author. On a structure conflict the team template wins. The composition rules are documented in the "Honoring a project's forge template" section of `${CLAUDE_PLUGIN_ROOT}/templates/cr-description.md`.
+`TEMPLATE_PATH` from Step 1's block names the CR template the script resolved; empty means none was found, or the choice is yours to put to the author. `TEMPLATE_SOURCE` says which level answered — a repo-local file, the GitLab project's own setting, one `inherited` from a parent group / the instance / the owner's `.github` repo, or the `anchor.crTemplateRepo` backstop. The level makes no difference to how you compose: an inherited template is the team's scaffolding just as much as a committed one.
+
+**`TEMPLATE_SOURCE=ambiguous` — ask, don't pick.** The level holds several templates and none is a `default.md`, so `TEMPLATE_CANDIDATES` carries them as `[{name, path}]` and `TEMPLATE_PATH` is empty. Shipping more than one template is the team's deliberate choice, so put the names to the author with `AskUserQuestion` and compose into the one they choose. Never pick for them, and never fall back to `anchor`'s default narrative — the templates exist.
+
+When a template is resolved, it's the team's required scaffolding — **compose into it, don't replace it.** Fill the sections it defines; preserve the reviewer-facing structure (headings, approval checklists) verbatim while stripping author-facing scaffolding (a section's placeholder / helper text, dev-time reminder links); answer any justification checkbox with fact, not meta-commentary; and supply `anchor`'s prose where it leaves prose to the author. On a structure conflict the team template wins. The composition rules are documented in the "Honoring a project's forge template" section of `${CLAUDE_PLUGIN_ROOT}/templates/cr-description.md`.
 
 ### Honor `anchor.*` config
 
