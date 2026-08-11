@@ -1,6 +1,6 @@
 ---
 name: commit
-description: Stage changes, run tests, review, then commit and push. Use when work is ready to commit or push.
+description: Stage changes, run tests, review the diff and drafted commit message with the user, then commit and push once they approve. Use when work is ready to commit or push; the diff review is a step of this skill, so don't offer to show the changes as a separate step beforehand.
 ---
 
 # Commit and Push
@@ -155,12 +155,12 @@ Nothing is committed in this step — it settles *where* and *how* the commit la
 
 ### When on the default branch — create a feature branch first
 
-The commit **pushes** (Step 6), so landing directly on the default branch publishes to it. Step 1's block already resolved this: `ON_DEFAULT_BRANCH=1` (HEAD is `DEFAULT_BRANCH`) is the case to guard. **When it's `1`, don't commit onto the default branch** — a commit meant for review belongs on a feature branch, and pushing to the default branch directly is how work lands unreviewable. Offer the branch, named from the subject you just drafted:
+The commit **pushes** (Step 6), so landing directly on the default branch publishes to it. Step 1's block already resolved this: `ON_DEFAULT_BRANCH=1` (HEAD is `DEFAULT_BRANCH`) is the case to guard. **When it's `1`, don't commit onto the default branch** — a commit meant for a CR belongs on a feature branch, and pushing to the default branch directly lands the work with no CR for anyone else to review. Step 5 reviews the diff and the message on both paths; what the default branch skips is the CR, not the user's own look at the change — so describe this choice as landing without a CR, never as skipping or bypassing review. Offer the branch, named from the subject you just drafted:
 
 - **Slug the subject** — lowercase, non-alphanumeric runs → single hyphens, trim leading/trailing hyphens, cap ~50 chars. `Add retry to checkout` → `add-retry-to-checkout`.
 - Ask with `AskUserQuestion` (header `Branch`), recommended option first so the default lands on branch creation:
   1. **Create branch `<slug>`** *(recommended)* — `git checkout -b <slug>`, then the rest of the flow commits and pushes onto it.
-  2. **Commit to `<default>`** — the deliberate, explicit direct-to-default case (a release commit, a docs typo on `main`); the flow proceeds and pushes to the default branch. Never the default path.
+  2. **Commit to `<default>`** — the deliberate, explicit direct-to-default case (a release commit, a docs typo on `main`); the flow proceeds and pushes to the default branch, so the change lands without a CR. Never the default path.
   3. **Edit name** — take a name from the user, then `git checkout -b <that>`.
 
 Create the branch (when chosen) **before** the commit, so the commit lands — and pushes — on the feature branch. Once `/commit` pushes that branch, `prepare-review` opens the CR against it (it operates on an already-pushed branch and never pushes itself).
