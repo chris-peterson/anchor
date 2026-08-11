@@ -64,7 +64,19 @@
 #                                (baseline for the Step 4 review); empty when no CR
 #   DESC_DRAFT_PATH=<path>       temp file the skill writes the drafted description
 #                                to (the review's right-hand side)
-#   TEMPLATE_PATH=<path>         project CR template, empty when none
+#   TEMPLATE_PATH=<path>         the CR template to compose into, empty when the
+#                                hierarchy holds none or the pick needs the author.
+#                                Always absolute — the skill reads it from its own
+#                                cwd, which under --repo/--worktree isn't this one
+#   TEMPLATE_SOURCE=<local|project-settings|inherited|configured|ambiguous|none>
+#                                which level answered. inherited == a GitLab
+#                                parent group / the instance, or the owner's
+#                                GitHub .github repo; configured ==
+#                                anchor.crTemplateRepo; ambiguous == the level
+#                                holds several and TEMPLATE_CANDIDATES carries them
+#   TEMPLATE_CANDIDATES=<json>   [{name, path}] the author picks from when a level
+#                                holds several templates and none is default.md;
+#                                [] otherwise
 #   DELETE_BRANCH_ON_MERGE=<true|false|unknown>
 #                                will the resolved CR's source branch be deleted
 #                                when it merges, without /anchor:merge passing
@@ -346,21 +358,212 @@ elif [[ "$head_mismatch" -eq 1 ]]; then
 fi
 
 # --- Project CR template ------------------------------------------------------
+#
+# Resolution walks from most specific to least, and the first level that yields
+# a template wins — so a repo-local file still beats anything inherited:
+#
+#   GitLab   project setting -> repo-local files -> templates API -> crTemplateRepo
+#   GitHub   repo-local files -> the owner's .github repo -> crTemplateRepo
+#
+# Neither forge needs its namespace walked. GitLab's
+# `projects/:fullpath/templates/merge_requests` already answers with what the
+# project may *use*, a parent group's and the instance's templates included;
+# group templates live in one designated file-template project (a direct child
+# of the group), never in each ancestor's own
+# `.gitlab/merge_request_templates/`, so walking ancestors reads the wrong place
+# and finds nothing. GitHub has no hierarchy to walk at all — one `.github`
+# repo under the same owner, searched `.github/` -> root -> `docs/`.
+#
+# GitLab ranks its project-level "default description template" setting above
+# both file sources, so that is read first and is the one level that has no file
+# behind it. A level that 403s or answers nothing falls through to the next;
+# only an empty hierarchy leaves TEMPLATE_PATH unset.
+#
+# Within a level the pick is deterministic rather than whatever the glob or the
+# API returned first: `default.md` (case-insensitive), else the sole template,
+# else TEMPLATE_CANDIDATES for the skill to put to the author. Several templates
+# is a deliberate choice by the team, so the pick is the author's.
 
 template_path=""
+template_source=none
+template_candidates='[]'
+tpl_pick_path=""
+tpl_pick_candidates='[]'
+tpl_repo_cfg=$(git config --get anchor.crTemplateRepo 2>/dev/null || true)
+
+# Drop the directory and the .md suffix so `Default.md` and
+# `.github/PULL_REQUEST_TEMPLATE/default.md` both compare as `default`.
+tpl_name() { local n="${1##*/}"; printf '%s' "${n%.md}"; }
+
+# Choose one of the "name<TAB>path" lines on stdin, per the rule above.
+tpl_pick() {
+  local entries name path lower
+  tpl_pick_path=""
+  tpl_pick_candidates='[]'
+  entries=$(cat)
+  [[ -z "$entries" ]] && return 1
+  if [[ "$(wc -l <<<"$entries")" -eq 1 ]]; then
+    tpl_pick_path=${entries#*$'\t'}
+    return 0
+  fi
+  while IFS=$'\t' read -r name path; do
+    lower=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')
+    [[ "$lower" == default ]] && { tpl_pick_path=$path; return 0; }
+  done <<<"$entries"
+  while IFS=$'\t' read -r name path; do
+    tpl_pick_candidates=$(jq -c --arg n "$name" --arg p "$path" \
+      '. + [{name: $n, path: $p}]' <<<"$tpl_pick_candidates")
+  done <<<"$entries"
+  return 0
+}
+
+# Read "name<TAB>path" lines from stdin and land the level's outcome in the
+# template_* vars. Must be fed by redirection, never a pipe — the last stage of a
+# pipeline runs in a subshell, where the assignments would be discarded.
+tpl_resolve_from() {
+  local source=$1
+  tpl_pick || return 1
+  if [[ -n "$tpl_pick_path" ]]; then
+    template_path=$tpl_pick_path
+    template_source=$source
+    return 0
+  fi
+  if [[ "$tpl_pick_candidates" != '[]' ]]; then
+    template_candidates=$tpl_pick_candidates
+    template_source=ambiguous
+    return 0
+  fi
+  return 1
+}
+
+tpl_unresolved() { [[ "$template_source" == none ]]; }
+
+# Paths go out absolute. The script runs from inside the target checkout, but the
+# skill reading TEMPLATE_PATH does not — under --repo / --worktree its cwd is a
+# different repo entirely, where a repo-relative path resolves to nothing or, worse,
+# to a same-named file.
+tpl_local_gitlab() {
+  local f
+  for f in .gitlab/merge_request_templates/*.md; do
+    [[ -e $f ]] || continue
+    printf '%s\t%s\n' "$(tpl_name "$f")" "$PWD/$f"
+  done
+}
+
+# GitHub honors a single template at three paths and a directory of them at
+# three more, `.github/` first, then the root, then `docs/`. The first location
+# that holds anything is the answer; anchor read only the two `.github` ones
+# before.
+tpl_local_github() {
+  local f d out
+  for f in .github/pull_request_template.md pull_request_template.md \
+           docs/pull_request_template.md; do
+    [[ -f $f ]] && { printf '%s\t%s\n' "$(tpl_name "$f")" "$PWD/$f"; return 0; }
+  done
+  for d in .github/PULL_REQUEST_TEMPLATE PULL_REQUEST_TEMPLATE \
+           docs/PULL_REQUEST_TEMPLATE; do
+    out=""
+    for f in "$d"/*.md; do
+      [[ -e $f ]] || continue
+      out+="$(tpl_name "$f")"$'\t'"$PWD/$f"$'\n'
+    done
+    [[ -n "$out" ]] && { printf '%s' "$out"; return 0; }
+  done
+  return 1
+}
+
+# Write a GitLab template's body to a temp file and echo the path. The name is a
+# path segment, so it needs encoding — GitLab template names carry spaces
+# ("Merge Request.md" is a common one).
+tpl_fetch_gitlab() {
+  local project=$1 name=$2 path encoded
+  encoded=$(printf '%s' "$name" | jq -sRr @uri)
+  path="$(anchor_tmpfile cr-template)"
+  glab api "projects/${project}/templates/merge_requests/${encoded}" 2>/dev/null \
+    | jq -r '.content // empty' > "$path" || return 1
+  [[ -s "$path" ]] || return 1
+  printf '%s' "$path"
+}
+
+tpl_entries_gitlab_api() {
+  local project=$1 name path json
+  json=$(glab api "projects/${project}/templates/merge_requests" 2>/dev/null) || return 1
+  # The file-template project lists its own templates twice — once as the
+  # project's, once as the group's — so dedupe before counting them.
+  while IFS= read -r name; do
+    [[ -z "$name" ]] && continue
+    path=$(tpl_fetch_gitlab "$project" "$name") || continue
+    printf '%s\t%s\n' "$name" "$path"
+  done < <(jq -r '[.[].name] | unique | .[]' <<<"$json" 2>/dev/null)
+}
+
+# `Accept: application/vnd.github.raw` returns the file body directly, which
+# sidesteps decoding the API's base64 — GNU and BSD `base64` disagree on the
+# decode flag.
+tpl_fetch_github() {
+  local repo=$1 file=$2 path
+  path="$(anchor_tmpfile cr-template)"
+  gh api "repos/${repo}/contents/${file}" \
+    -H "Accept: application/vnd.github.raw" >"$path" 2>/dev/null || return 1
+  [[ -s "$path" ]] || return 1
+  printf '%s' "$path"
+}
+
+tpl_entries_github_repo() {
+  local repo=$1 f d out path names
+  gh api "repos/${repo}" >/dev/null 2>&1 || return 1
+  for f in .github/pull_request_template.md pull_request_template.md \
+           docs/pull_request_template.md; do
+    path=$(tpl_fetch_github "$repo" "$f") \
+      && { printf '%s\t%s\n' "$(tpl_name "$f")" "$path"; return 0; }
+  done
+  for d in .github/PULL_REQUEST_TEMPLATE PULL_REQUEST_TEMPLATE \
+           docs/PULL_REQUEST_TEMPLATE; do
+    names=$(gh api "repos/${repo}/contents/${d}" \
+      --jq '.[] | select(.type == "file") | .name' 2>/dev/null) || continue
+    out=""
+    while IFS= read -r f; do
+      [[ "$f" == *.md ]] || continue
+      path=$(tpl_fetch_github "$repo" "${d}/${f}") || continue
+      out+="$(tpl_name "$f")"$'\t'"$path"$'\n'
+    done <<<"$names"
+    [[ -n "$out" ]] && { printf '%s' "$out"; return 0; }
+  done
+  return 1
+}
+
 case "$forge" in
   gitlab)
-    for f in .gitlab/merge_request_templates/*.md; do
-      [[ -e $f ]] && { template_path=$f; break; }
-    done
+    settings_tpl=$(glab api "projects/:fullpath" 2>/dev/null \
+      | jq -r '.merge_requests_template // empty' 2>/dev/null || true)
+    if [[ -n "$settings_tpl" ]]; then
+      template_path="$(anchor_tmpfile cr-template)"
+      printf '%s' "$settings_tpl" > "$template_path"
+      template_source="project-settings"
+    fi
+    if tpl_unresolved; then
+      tpl_resolve_from local < <(tpl_local_gitlab) || true
+    fi
+    if tpl_unresolved; then
+      tpl_resolve_from inherited < <(tpl_entries_gitlab_api :fullpath) || true
+    fi
+    if tpl_unresolved && [[ -n "$tpl_repo_cfg" ]]; then
+      tpl_resolve_from configured \
+        < <(tpl_entries_gitlab_api "$(printf '%s' "$tpl_repo_cfg" | jq -sRr @uri)") || true
+    fi
     ;;
   github)
-    if [[ -f .github/pull_request_template.md ]]; then
-      template_path=.github/pull_request_template.md
-    else
-      for f in .github/PULL_REQUEST_TEMPLATE/*.md; do
-        [[ -e $f ]] && { template_path=$f; break; }
-      done
+    if tpl_unresolved; then
+      tpl_resolve_from local < <(tpl_local_github) || true
+    fi
+    if tpl_unresolved; then
+      owner=$(gh repo view --json owner --jq '.owner.login' 2>/dev/null || true)
+      if [[ -n "$owner" ]]; then
+        tpl_resolve_from inherited < <(tpl_entries_github_repo "${owner}/.github") || true
+      fi
+    fi
+    if tpl_unresolved && [[ -n "$tpl_repo_cfg" ]]; then
+      tpl_resolve_from configured < <(tpl_entries_github_repo "$tpl_repo_cfg") || true
     fi
     ;;
 esac
@@ -410,6 +613,8 @@ echo "STATE=$state"
 echo "CURRENT_DESC_PATH=$current_desc_path"
 echo "DESC_DRAFT_PATH=$desc_draft_path"
 echo "TEMPLATE_PATH=$template_path"
+echo "TEMPLATE_SOURCE=$template_source"
+echo "TEMPLATE_CANDIDATES=$template_candidates"
 echo "DELETE_BRANCH_ON_MERGE=$delete_branch_on_merge"
 echo "ANCHOR_CONFIG=$anchor_cfg"
 echo "FILE_LINKS=$file_links"

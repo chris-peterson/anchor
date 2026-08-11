@@ -254,6 +254,56 @@ Reading it back: the MR object carries `should_remove_source_branch` (what the
 create/update set) and `force_remove_source_branch` (the project forcing it for
 every MR) — either one true means the branch goes.
 
+## Resolving the CR template a project inherits
+
+The forges disagree about where an inherited template lives, and neither puts it
+where a namespace walk would look.
+
+**GitLab resolves the hierarchy for you.** One endpoint answers with every
+template the project may use — its own, its parent group's, and the instance's:
+
+```bash
+glab api projects/:fullpath/templates/merge_requests            # [{key, name}, …]
+glab api "projects/:fullpath/templates/merge_requests/<name>"   # {name, content}
+```
+
+Group templates live in a single **file-template project** the group designates
+(a direct child of the group, Premium and up) — *not* in each ancestor's own
+`.gitlab/merge_request_templates/`, so reading ancestors finds nothing. Two
+things to know about the listing: the name is a path segment and template names
+carry spaces (`Merge Request`), so percent-encode it; and the file-template
+project itself lists its templates **twice** (once as its own, once as the
+group's), so dedupe by name before counting.
+
+Above every file source sits the project's own default-description-template
+setting, which GitLab ranks first:
+
+```bash
+glab api projects/:fullpath | jq -r '.merge_requests_template'
+```
+
+**GitHub has no hierarchy** — one `.github` repo under the same owner, and it
+must be public. There's no resolved-template endpoint, so read the file
+directly, trying `.github/` then the root then `docs/` (the order GitHub itself
+searches). The raw `Accept` header returns the body without the contents API's
+base64, whose decode flag differs between GNU and BSD `base64`:
+
+```bash
+gh repo view --json owner --jq '.owner.login'
+gh api "repos/<owner>/.github/contents/.github/pull_request_template.md" \
+  -H "Accept: application/vnd.github.raw"
+```
+
+GitHub honors a template at six repo-local paths, not two:
+`pull_request_template.md` under `.github/`, the root, or `docs/`, and a
+`PULL_REQUEST_TEMPLATE/` directory in any of the three. GitHub has no
+`default.md` convention for that directory — the author picks via a `?template=`
+query parameter — while GitLab's `Default.md` is real and case-insensitive.
+
+A level that 403s is a miss, not an error: permissions on an ancestor or the
+instance are routinely tighter than on the project, so fall through to the next
+level rather than failing the run.
+
 ## CR description update from a file
 
 Editing the body of an existing CR.

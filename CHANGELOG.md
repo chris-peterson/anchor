@@ -2,7 +2,27 @@
 
 ## Unreleased
 
+### Added
+
+- `/anchor:prepare-review` now finds the CR template a repo *inherits* instead of
+  only one committed to the repo. Teams that keep a single template above their
+  repos — a GitLab parent group or the instance, an organization's GitHub
+  `.github` repo — were getting `anchor`'s default narrative and losing their
+  required sections, with nothing said about it. A repo's own template still
+  wins, and on GitLab the project's default-description-template setting outranks
+  both, matching GitLab's own precedence. Set `anchor.crTemplateRepo` to name a
+  repo to fall back on when the forge supplies nothing.
+
+- Where more than one template applies, `default.md` wins and otherwise you're
+  asked which to use. Previously whichever the glob returned first was composed
+  into, so a repo shipping `default.md` beside `hotfix.md` could get either one,
+  and which one differed by platform.
+
 ### Fixes
+
+- GitHub PR templates at the repo root, under `docs/`, and in a root or `docs/`
+  `PULL_REQUEST_TEMPLATE/` directory are now honored. GitHub accepts all six
+  locations; `anchor` read only the two under `.github/`.
 
 - A PR opened on GitHub now reports whether its source branch will be deleted on
   merge, and `/anchor:prepare-review` offers to turn the repo setting on. GitHub
