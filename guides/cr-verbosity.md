@@ -143,8 +143,8 @@ It ships at `50`, so descriptions come out markedly briefer than 1.2.0 for every
 
 **Ancillary**
 
-- `SPEC.md:504` — CONF-07..10: the key and its default, abbreviate-not-remove, section presence coming from the template plus budget alone, and length-not-register.
-- `STATUS.md:32` — coverage row, CONF-01..06 → CONF-01..10.
+- `SPEC.md:504` — CONFIG-07..10: the key and its default, abbreviate-not-remove, section presence coming from the template plus budget alone, and length-not-register.
+- `STATUS.md:32` — coverage row, CONFIG-01..06 → CONFIG-01..10.
 - `CHANGELOG.md:3` — the Unreleased entry, which is where the default-changes-for-everyone note has to be legible.
 - `docs/README.md:131`, `docs/_sidebar.md:20` — the new guide in both indexes.
 
@@ -203,7 +203,7 @@ It ships at `50`, so descriptions come out shorter for everyone who sets nothing
 
 **Ledger and nav** — skim only
 
-- `SPEC.md:504` — CONF-07..10
+- `SPEC.md:504` — CONFIG-07..10
 - `STATUS.md:32`
 - `CHANGELOG.md:7`
 - `docs/README.md:131`
@@ -243,7 +243,7 @@ No script changed — `prepare-review.sh` already collects every `anchor.*` key 
 - `guides/cr-verbosity.md:24` — new guide; the abbreviate-never-remove argument and the order the dial works down
 
 **Ancillary**
-- `SPEC.md:504` — CONF-07..10
+- `SPEC.md:504` — CONFIG-07..10
 - `CHANGELOG.md:3` — unreleased entry
 - `STATUS.md:32` — coverage row
 
@@ -278,7 +278,7 @@ The behavior is prompt text, so the shell suite under `tests/` doesn't reach it 
 - `templates/cr-description.md:71` — per-section "At lower verbosity" floors (also `:121`, `:133`, `:145`, `:179`)
 - `guides/cr-verbosity.md:24` — the abbreviation order the dial works down, and where each section stops
 - `guides/configuring.md:30` — new key rows; "Two length knobs" at `:58` separates the two axes
-- `SPEC.md:504` — CONF-07..10
+- `SPEC.md:504` — CONFIG-07..10
 - `CHANGELOG.md:7`, `docs/_sidebar.md:20`, `STATUS.md:29` — skim
 
 #### Approach & trade-offs

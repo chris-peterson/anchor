@@ -15,7 +15,7 @@
 # the index is the reviewed changeset. Staging here would pull in edits made
 # after the review. The message is read from a file (`--message-file`), never an
 # argument, so a message body never lands in the command line — the same reason
-# CMT-17 avoids inlining the message, and it keeps message text out of any
+# COMMIT-17 avoids inlining the message, and it keeps message text out of any
 # command log.
 #
 # --repo / --worktree <path> retargets onto a checkout other than the cwd repo
@@ -38,7 +38,7 @@
 #
 # Default-branch guard: refuses to commit/push onto the repo's default branch
 # unless --allow-default-branch is passed (the deliberate direct-to-default
-# case). This enforces CMT-19 in the script rather than trusting skill prose.
+# case). This enforces COMMIT-19 in the script rather than trusting skill prose.
 #
 # Output (KEY=value on stdout):
 #   COMMIT_SHA=<short-sha>      HEAD after the commit/amend (or the existing HEAD

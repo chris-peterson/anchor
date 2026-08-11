@@ -232,7 +232,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --local --message-file <comm
 When the background command completes, read its stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trip the command-substitution gate. The last lines carry the verdict (no separate file read):
 
 - `REVIEW_VERDICT` — `approved` · `changes-requested` · `incomplete` · `no-verdict`.
-- `REVIEW_OUTPUT` — compact JSON carrying `verdict`, `backend`, `comments[]`, `editedFields[]`, `capabilities`, and `raw` (the REV contract, defined normatively in the plugin `SPEC.md`). Each comment is `{body, target, file?, startLine?, endLine?, side?}`, where `target` is `line` / `file` / `changeset`. Comments are ungraded: every one is feedback to address, and the verdict — not a per-comment tier — says whether it blocks.
+- `REVIEW_OUTPUT` — compact JSON carrying `verdict`, `backend`, `comments[]`, `editedFields[]`, `capabilities`, and `raw` (the DIFF contract, defined normatively in the plugin `SPEC.md`). Each comment is `{body, target, file?, startLine?, endLine?, side?}`, where `target` is `line` / `file` / `changeset`. Comments are ungraded: every one is feedback to address, and the verdict — not a per-comment tier — says whether it blocks.
 
 Act on the verdict:
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# moor backend adapter for review-diff.sh (see SPEC.md "REV").
+# moor backend adapter for review-diff.sh (see SPEC.md "DIFF").
 #
 # Sourced by the dispatcher, which has already cd'd into the target repo and
 # resolved the review request into these variables:
@@ -12,7 +12,7 @@
 # moor's contract is a JSON sidecar named by REVIEW_CONTEXT: the caller writes
 # input.{title,details}, moor writes output.{exitCode,reviewer,comments,commitMessage}.
 # This adapter drives git's configured difftool (moor when it's set as diff.tool),
-# then maps that output onto the REV normalized result and prints:
+# then maps that output onto the DIFF normalized result and prints:
 #   REVIEW_VERDICT=<verdict>
 #   REVIEW_OUTPUT=<normalized json>
 
@@ -49,7 +49,7 @@ emit_review() {
   if [[ -z "$output" ]]; then
     # No sidecar output: a difftool that doesn't speak the contract showed the
     # diff (moor absent or not the configured tool), or moor closed without
-    # writing one. Either way there is no contract verdict (REV-10).
+    # writing one. Either way there is no contract verdict (DIFF-10).
     local out
     out=$(jq -cn '{
       backend:"difftool", verdict:"no-verdict",

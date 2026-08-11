@@ -103,7 +103,7 @@ jobs:
 
   review:
     # Exercises the review dispatcher and its moor/revdiff adapters against stub
-    # backends, asserting the normalized REV contract each emits.
+    # backends, asserting the normalized DIFF contract each emits.
     runs-on: ubuntu-latest
     defaults:
       run:
