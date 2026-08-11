@@ -25,6 +25,10 @@ flowchart TD
 | Drive review threads to done | [resolve-feedback](/skills/resolve-feedback) | 0.3.0 |
 | Land it once the gates are green | [merge](/skills/merge) | **1.0.0** |
 | Publish what landed | [release](/skills/release) | **1.1.0** |
+| Report whether the push went green, without being asked | [commit](/skills/commit), [resolve-feedback](/skills/resolve-feedback), [prepare-review](/skills/prepare-review) | **1.3.0** |
+| Show every drafted reply before any of them post | [resolve-feedback](/skills/resolve-feedback) | **1.4.0** |
+| Compose the CR template your group or org supplies, not just one in the repo | [prepare-review](/skills/prepare-review) | **1.5.0** |
+| Say whether the source branch survives the merge, and offer to fix it | [prepare-review](/skills/prepare-review) | **1.5.0** |
 
 ## Coming from 0.x? Three things moved
 
@@ -65,13 +69,13 @@ a single verdict, so the skills don't care which reviewer is installed.
 
 | Backend | How to select it | What it gives you |
 |---|---|---|
-| [moor](https://github.com/chris-peterson/moor) | the default | Comments on individual changes, per-hunk review state, and an editable commit message that round-trips |
-| [revdiff](https://revdiff.com) | `git config anchor.reviewBackend revdiff` | A terminal-native reviewer that also handles hg and jj, with diff-side markers on each annotation |
+| [revdiff](https://revdiff.com) | the default since 1.4.0 | A terminal-native reviewer that also handles hg and jj, with diff-side markers on each annotation |
+| [moor](https://github.com/chris-peterson/moor) | `git config anchor.reviewBackend moor` | Comments on individual changes, per-hunk review state, and an editable commit message that round-trips |
 | your `git difftool` | neither plugin installed | A visual diff with no structured verdict, so the skill asks directly whether to revise or proceed |
 
 The contract between them — the four-value verdict, ungraded comments anchored to
 lines or files, and what a backend that can't answer a question reports instead of
-guessing — is the `REV` category in the [requirements](/spec).
+guessing — is the `DIFF` category in the [requirements](/spec).
 
 ## A release knows who owns the version bump
 
@@ -89,20 +93,6 @@ The publish doesn't end at the create, either. Where the release fires a workflo
 the skill watches that run to a terminal state and pulls the commit it pushed back
 into your checkout — skip that and your tree is missing generated files, and the
 next push is rejected as non-fast-forward.
-
-## Also in 1.1.x
-
-- **A commit's CI run is found by the commit**, whatever ref triggered it. A run
-  fired by a published release carries the *tag* as its branch, which used to read
-  as "no pipeline for this commit."
-- **On GitHub, the verdict covers every workflow on a commit.** A commit that
-  triggers lint, test, and docs has three runs and no single "the pipeline";
-  `/anchor:pipeline` folds them — in-flight while any is going, red if any went
-  red. Scope it to one with `--workflow`.
-- **Descriptions get their deep links checked** before they ship. The line part of
-  an anchored link is hand-built, and a wrong one still resolves, so the forge
-  scrolls to a line the bullet isn't describing and nothing looks wrong. Each is
-  now read back against the working tree first.
 
 ## Full detail
 

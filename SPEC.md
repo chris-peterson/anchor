@@ -30,7 +30,7 @@ behavior, not an independent authority — review them against the source.
 - **Review contract** — the tool-agnostic result `review-diff.sh` returns: a
   `verdict` (`approved` · `changes-requested` · `incomplete` · `no-verdict`)
   plus normalized comments and capabilities, produced from the backend's native
-  output by a per-backend adapter (moor by default). Defined under REV.
+  output by a per-backend adapter (moor by default). Defined under DIFF.
 - **Squash gate** — the deterministic "is HEAD out for review?" decision
   (`squash-check.sh`) that governs squash-vs-new-commit.
 - **Deep link** — a line-anchored forge URL in a CR description that lands a
@@ -38,7 +38,7 @@ behavior, not an independent authority — review them against the source.
 - **Release model** — who owns the version bump for a repo: a CI workflow
   triggered by a published release or a tag push, a bump commit in the repo
   itself, or nobody (no version artifact). Resolved by `release-recon.sh` and
-  decisive for the whole release path. Defined under REL.
+  decisive for the whole release path. Defined under RELEASE.
 - **Worktree isolation** — running a write flow that targets a non-cwd repo in a
   dedicated git worktree, set up and torn down around the flow.
 - **tack** / **moor** / **revdiff** — sibling plugins `anchor` integrates with when
@@ -48,101 +48,101 @@ behavior, not an independent authority — review them against the source.
 
 ## Requirements
 
-### TGT — Target repo resolution
+### TARGET — Target repo resolution
 
-- **[TGT-01]** When a skill is invoked with a name argument, the system shall
+- **[TARGET-01]** When a skill is invoked with a name argument, the system shall
   resolve that name through tack's repo db before operating on any repo.
-- **[TGT-02]** When a skill is invoked with no argument, the system shall
+- **[TARGET-02]** When a skill is invoked with no argument, the system shall
   resolve the target repo from `git rev-parse --show-toplevel` of the working
   directory.
-- **[TGT-03]** The system shall re-resolve the target repo on every invocation
+- **[TARGET-03]** The system shall re-resolve the target repo on every invocation
   and shall not assume a previously resolved target carries forward.
-- **[TGT-04]** If tack resolves a name to multiple candidates, then the system
+- **[TARGET-04]** If tack resolves a name to multiple candidates, then the system
   shall present them and prompt the user to choose.
-- **[TGT-05]** If tack yields no match or is absent, then the system shall fall
+- **[TARGET-05]** If tack yields no match or is absent, then the system shall fall
   back to a case-insensitive substring match of the name against the basenames
   of git repos the session has touched.
-- **[TGT-06]** If the session touched more than one repo or edits landed outside
+- **[TARGET-06]** If the session touched more than one repo or edits landed outside
   the working directory, then the system shall state the resolved path and ask
   which repo to target.
-- **[TGT-07]** While operating on a repo other than the working directory, the
+- **[TARGET-07]** While operating on a repo other than the working directory, the
   system shall address it with `git -C` and helper `--repo`/`--worktree` flags
   rather than `cd`.
-- **[TGT-08]** Where a write flow targets a non-cwd repo, the system shall
+- **[TARGET-08]** Where a write flow targets a non-cwd repo, the system shall
   isolate the work in a dedicated git worktree and tear it down when the flow
   ends.
-- **[TGT-09]** If a commit-writing flow resolves a target that has no local
+- **[TARGET-09]** If a commit-writing flow resolves a target that has no local
   checkout, then the system shall stop rather than commit to the wrong location.
 
-### CMT — Commit
+### COMMIT — Commit
 
-- **[CMT-01]** When `/anchor:commit` runs, the system shall run the project's
+- **[COMMIT-01]** When `/anchor:commit` runs, the system shall run the project's
   test suite after the pre-flight recon and before drafting a commit message,
   discovering the runner itself so it can report progress and act on a failure.
-- **[CMT-02]** If the test suite fails, then the system shall stop and not commit
+- **[COMMIT-02]** If the test suite fails, then the system shall stop and not commit
   until it passes, including for pre-existing failures.
-- **[CMT-03]** Where no test runner is found, the system shall skip the test
+- **[COMMIT-03]** Where no test runner is found, the system shall skip the test
   step silently.
-- **[CMT-04]** When staging, the system shall stage all changes with
+- **[COMMIT-04]** When staging, the system shall stage all changes with
   `git add -A` and read the staged diff before drafting a message.
-- **[CMT-05]** If nothing is staged, then the system shall describe the most
+- **[COMMIT-05]** If nothing is staged, then the system shall describe the most
   recent unpushed commit, and shall stop if HEAD is already pushed or there are
   no local changes.
-- **[CMT-06]** The system shall write the commit message per the commit-message
+- **[COMMIT-06]** The system shall write the commit message per the commit-message
   template, spending effort on the why rather than the how.
-- **[CMT-07]** While HEAD is the default branch, the system shall offer to
+- **[COMMIT-07]** While HEAD is the default branch, the system shall offer to
   create a feature branch (slugged from the subject) before committing rather
   than commit directly to the default branch.
-- **[CMT-08]** When deciding whether to offer a squash, the system shall gate on
+- **[COMMIT-08]** When deciding whether to offer a squash, the system shall gate on
   whether HEAD is out for review via `squash-check.sh`.
-- **[CMT-09]** If HEAD was authored by another user, is the published
+- **[COMMIT-09]** If HEAD was authored by another user, is the published
   default-branch tip, or belongs to a ready CR, then the system shall commit as
   a new commit and shall not offer to squash.
-- **[CMT-10]** Where squashing is allowed, the system shall recommend squash for
+- **[COMMIT-10]** Where squashing is allowed, the system shall recommend squash for
   changes related to the prior commit and a new commit for unrelated changes.
-- **[CMT-11]** When a squash amends a pushed draft CR, the system shall follow
+- **[COMMIT-11]** When a squash amends a pushed draft CR, the system shall follow
   the amend with `git push --force-with-lease`.
-- **[CMT-12]** If squashing is not on the table, then the system shall not
+- **[COMMIT-12]** If squashing is not on the table, then the system shall not
   mention it or explain why it is unavailable.
-- **[CMT-13]** Where only the message (not the tree) of a ready CR's HEAD is
+- **[COMMIT-13]** Where only the message (not the tree) of a ready CR's HEAD is
   wrong, the system shall offer a message-only amend and let the user decide on
   the force-push.
-- **[CMT-14]** When changes are staged and a message is drafted, the system shall
+- **[COMMIT-14]** When changes are staged and a message is drafted, the system shall
   open a visual review of the pending changeset (working tree vs `HEAD`) with the
   drafted commit message presented alongside the diff (not gated separately in
   chat) via the review wrapper, and shall not commit until the verdict is clean;
   an edited message the review returns (`editedFields`) is used for the commit.
-- **[CMT-15]** If the pre-commit review returns `changes-requested`, then the
+- **[COMMIT-15]** If the pre-commit review returns `changes-requested`, then the
   system shall address its comments in the working tree, re-run tests, and
   re-review — committing only once the verdict is clean, rather than committing
   and then amending.
-- **[CMT-16]** Where the pre-flight recon reports nothing staged, the system shall
+- **[COMMIT-16]** Where the pre-flight recon reports nothing staged, the system shall
   skip the test suite, since the push-existing and no-local-changes routes make no
   commit and their commits were tested when they were made.
-- **[CMT-17]** If a `PreToolUse` hook blocks a commit on a substring inside the
+- **[COMMIT-17]** If a `PreToolUse` hook blocks a commit on a substring inside the
   message body, then the system shall surface the conflict rather than use a
   temp-file workaround.
-- **[CMT-18]** When the pre-commit review verdict is clean, the system shall
+- **[COMMIT-18]** When the pre-commit review verdict is clean, the system shall
   commit and push in one step, performed by a single helper (`commit.sh`) rather
   than as separate agent-run `git commit` / `git push` commands, and shall select
   the push variant (set-upstream / plain / force-with-lease) within that helper.
-- **[CMT-19]** If HEAD is the default branch when committing, then the system
+- **[COMMIT-19]** If HEAD is the default branch when committing, then the system
   shall create a feature branch first rather than push to the default branch, and
   the commit helper shall refuse to commit onto the default branch unless
   explicitly told the direct-to-default case was chosen.
-- **[CMT-20]** The system shall decide the test gate from the runner's exit
+- **[COMMIT-20]** The system shall decide the test gate from the runner's exit
   status, captured on its first invocation, rather than from its output, and shall
   not run the suite a second time to obtain that status.
-- **[CMT-21]** When the push succeeds, the system shall watch the pipeline it
+- **[COMMIT-21]** When the push succeeds, the system shall watch the pipeline it
   triggered and report the outcome, rather than ending at the commit and leaving
   the branch pushed but unverified.
-- **[CMT-22]** When presenting the direct-to-default-branch choice, the system
+- **[COMMIT-22]** When presenting the direct-to-default-branch choice, the system
   shall describe it as landing the change without a CR, and shall not describe it
-  as skipping or bypassing review — the CMT-14 review of the diff and message runs
+  as skipping or bypassing review — the COMMIT-14 review of the diff and message runs
   on both branch choices, so "review" without a qualifier reads to the user as the
   look at the diff they are about to get either way.
 
-### PREP — Prepare review
+### PREPARE — Prepare review
 
 The `prepare-review` skill: open (or refresh) a draft CR on an already-pushed
 branch and draft its description. Push happens in
@@ -150,268 +150,268 @@ branch and draft its description. Push happens in
 changeset analysis serves the description and Review guide, not a clean-verdict
 check.
 
-- **[PREP-01]** When `/anchor:prepare-review` runs, the system shall require
+- **[PREPARE-01]** When `/anchor:prepare-review` runs, the system shall require
   an already-pushed branch and gather the changeset via a single recon script,
   acting only on the keys it surfaces.
-- **[PREP-02]** If the branch is not yet pushed, then the system shall direct the
+- **[PREPARE-02]** If the branch is not yet pushed, then the system shall direct the
   user to `/anchor:commit` (which commits and pushes) rather than pushing itself.
-- **[PREP-03]** The system shall open a draft CR against the already-pushed branch
+- **[PREPARE-03]** The system shall open a draft CR against the already-pushed branch
   and shall not push.
-- **[PREP-04]** While the branch is behind the default branch, the system shall
+- **[PREPARE-04]** While the branch is behind the default branch, the system shall
   offer to rebase and, since the branch is already pushed, follow the rebase with
   `git push --force-with-lease` per the draft/ready gate.
-- **[PREP-05]** While a CR is a draft, the system shall force-push with lease
+- **[PREPARE-05]** While a CR is a draft, the system shall force-push with lease
   freely; while it is marked ready, the system shall ask before force-pushing.
-- **[PREP-06]** If local state does not match the CR head, then the system shall
+- **[PREPARE-06]** If local state does not match the CR head, then the system shall
   surface the mismatch and stop rather than draft.
-- **[PREP-07]** Before drafting, the system shall resolve open questions (why,
+- **[PREPARE-07]** Before drafting, the system shall resolve open questions (why,
   audience, scope, ordering, verification gaps) with the user rather than park
   them in the description.
-- **[PREP-08]** The system shall draft the description leading with why, for a
+- **[PREPARE-08]** The system shall draft the description leading with why, for a
   reader unfamiliar with the system, using the canonical section headings
   verbatim.
-- **[PREP-09]** Before drafting Context, the system shall run an anti-recency
+- **[PREPARE-09]** Before drafting Context, the system shall run an anti-recency
   check dispositioning recent iterations as centerpiece, footnote, or cut.
-- **[PREP-10]** The system shall deep-link Review-guide references to the specific
+- **[PREPARE-10]** The system shall deep-link Review-guide references to the specific
   changed lines rather than to files alone, building each link from the per-file
   prefix the recon block supplies (`FILE_LINKS`, from `deep-links.sh`) on both
   forges, and shall not hash a file path or assemble an anchor itself.
-- **[PREP-11]** If a claim about prior workflow or current state lacks a citable
+- **[PREPARE-11]** If a claim about prior workflow or current state lacks a citable
   source, then the system shall omit it from the description.
-- **[PREP-12]** Where a predecessor CR was captured, the system shall record the
+- **[PREPARE-12]** Where a predecessor CR was captured, the system shall record the
   ordering dependency in the description and, on GitLab, on the forge.
-- **[PREP-13]** When a drafted description is ready, the system shall present it
+- **[PREPARE-13]** When a drafted description is ready, the system shall present it
   to the user in a visual review (the current description vs. the draft, via the
   review wrapper) before any write prompt, and shall write it to the CR on a clean
   verdict without a further chat confirmation.
-- **[PREP-14]** If no review backend is installed, or no CR exists to diff
+- **[PREPARE-14]** If no review backend is installed, or no CR exists to diff
   against, then the system shall present the description as text in its own reply
   and offer write / copy-only / edit, defaulting to write.
-- **[PREP-15]** Before opening the description review, the system shall verify
+- **[PREPARE-15]** Before opening the description review, the system shall verify
   each deep link's line part against the working tree (`deep-links.sh --verify`)
   and re-point every line reported out-of-range, blank, outside a changed hunk,
   or anchored to a file the range doesn't touch.
-- **[PREP-16]** Once the description has landed, the system shall report the
+- **[PREPARE-16]** Once the description has landed, the system shall report the
   branch's pipeline, which reports nothing where the CR's commit was already
   reported and reports the new pipeline where a rebase force-push created one.
-- **[PREP-17]** When the system opens a CR whose source branch will not be deleted
+- **[PREPARE-17]** When the system opens a CR whose source branch will not be deleted
   on merge, the system shall name the condition and offer the forge's remediation,
   applying it only on the user's approval. An unreadable setting shall report as
   unknown rather than as either state.
 
-### FDBK — Resolve feedback
+### FEEDBACK — Resolve feedback
 
-- **[FDBK-01]** When `/anchor:resolve-feedback` runs, the system shall fetch every
+- **[FEEDBACK-01]** When `/anchor:resolve-feedback` runs, the system shall fetch every
   unresolved human-authored review thread on the open CR, including
   non-line-anchored change requests.
-- **[FDBK-02]** If there is no open CR or no unresolved feedback, then the system
+- **[FEEDBACK-02]** If there is no open CR or no unresolved feedback, then the system
   shall report that and stop.
-- **[FDBK-03]** If local state does not match the CR head, then the system shall
+- **[FEEDBACK-03]** If local state does not match the CR head, then the system shall
   surface the mismatch and stop.
-- **[FDBK-04]** When feedback exists, the system shall present all threads with
+- **[FEEDBACK-04]** When feedback exists, the system shall present all threads with
   proposed dispositions and confirm with the author before acting.
-- **[FDBK-05]** The system shall land review fixes as new commits and shall never
+- **[FEEDBACK-05]** The system shall land review fixes as new commits and shall never
   amend commits the reviewer has seen.
-- **[FDBK-06]** When committing fixes, the system shall run the test suite first
+- **[FEEDBACK-06]** When committing fixes, the system shall run the test suite first
   and block the push on failure.
-- **[FDBK-07]** When a thread is addressed, the system shall reply into the
+- **[FEEDBACK-07]** When a thread is addressed, the system shall reply into the
   existing thread citing the follow-up commit, and resolve only threads whose
   disposition includes resolve.
-- **[FDBK-08]** If a resolve call does not return `resolved`/`isResolved` true,
+- **[FEEDBACK-08]** If a resolve call does not return `resolved`/`isResolved` true,
   then the system shall treat the resolution as not done.
-- **[FDBK-09]** When fix commits are pushed, the system shall watch the pipeline
+- **[FEEDBACK-09]** When fix commits are pushed, the system shall watch the pipeline
   they triggered while it replies and resolves, and shall report that pipeline in
   the summary, so that feedback is not reported as addressed against an unverified
   commit.
 
-### MRG — Merge
+### MERGE — Merge
 
 Landing an approved CR into the default branch (the `merge` skill) — the terminal
 step after `prepare-review` opens the CR and `resolve-feedback` clears its threads.
 
-- **[MRG-01]** When `/anchor:merge` runs, the system shall resolve the target repo
+- **[MERGE-01]** When `/anchor:merge` runs, the system shall resolve the target repo
   and the open CR for the branch, and shall stop if there is no open CR or it is
   already merged or closed.
-- **[MRG-02]** If local state does not match the CR head, then the system shall
+- **[MERGE-02]** If local state does not match the CR head, then the system shall
   surface the mismatch and stop rather than merge.
-- **[MRG-03]** Before merging, the system shall check that the CR is marked ready,
+- **[MERGE-03]** Before merging, the system shall check that the CR is marked ready,
   mergeable, pipeline-passing, and approved, plus that review threads are resolved,
   stopping at the first blocking gate.
-- **[MRG-04]** If the CR is a draft, then the system shall not merge it silently and
+- **[MERGE-04]** If the CR is a draft, then the system shall not merge it silently and
   shall ask whether to mark it ready and proceed.
-- **[MRG-05]** If the CR conflicts with or is behind its target branch, then the
+- **[MERGE-05]** If the CR conflicts with or is behind its target branch, then the
   system shall stop and route to a rebase via `/anchor:prepare-review` rather than
   attempt the merge.
-- **[MRG-06]** While the pipeline is still running, the system shall watch it to a
+- **[MERGE-06]** While the pipeline is still running, the system shall watch it to a
   terminal state rather than return control for the user to re-ask.
-- **[MRG-07]** If the pipeline failed, was canceled, or is blocked awaiting a manual
+- **[MERGE-07]** If the pipeline failed, was canceled, or is blocked awaiting a manual
   action, then the system shall stop and report the failed jobs rather than merge.
-- **[MRG-08]** If required approvals are missing, then the system shall stop and
+- **[MERGE-08]** If required approvals are missing, then the system shall stop and
   report what is outstanding, pointing at `/anchor:resolve-feedback` when changes
   were requested.
-- **[MRG-09]** Where a repo has no approval rules and where the commit has no
+- **[MERGE-09]** Where a repo has no approval rules and where the commit has no
   pipeline, the system shall treat that gate as not applicable rather than a failure.
-- **[MRG-10]** When unresolved human-authored review threads remain, the system shall
+- **[MERGE-10]** When unresolved human-authored review threads remain, the system shall
   surface them and confirm before merging, offering to hand off to
   `/anchor:resolve-feedback`.
-- **[MRG-11]** The system shall merge with a commit-preserving merge commit
+- **[MERGE-11]** The system shall merge with a commit-preserving merge commit
   (`--no-ff`) by default and shall change the method only where the project or CR is
   configured for a different one, rather than from a judgment about the commit
   history — GitLab's `merge_method` / `squash_option` and the MR's squash flag,
   GitHub's allowed strategies.
-- **[MRG-12]** The system shall preview the resolved merge method and confirm before
+- **[MERGE-12]** The system shall preview the resolved merge method and confirm before
   merging without offering a method menu, and shall squash only where the forge is
   configured to.
-- **[MRG-13]** When merging, the system shall use the forge CLI, delete the source
+- **[MERGE-13]** When merging, the system shall use the forge CLI, delete the source
   branch, and guard the merge on the CR head SHA.
-- **[MRG-14]** If a forge write fails with an auth error, then the system shall
+- **[MERGE-14]** If a forge write fails with an auth error, then the system shall
   surface it and ask the user to refresh credentials rather than retry or fall back.
-- **[MRG-15]** After a successful merge, the system shall return the local checkout
+- **[MERGE-15]** After a successful merge, the system shall return the local checkout
   to the default branch, pull the merged result, and delete the merged local branch.
-- **[MRG-16]** Where a tack route is bound to the session, the system shall mark the
+- **[MERGE-16]** Where a tack route is bound to the session, the system shall mark the
   tack done and record the CR as its deliverable after merging.
 
-### REL — Release
+### RELEASE — Release
 
 Publishing what has landed (the `release` skill) — the step after `merge`, always
 invoked explicitly. The **release model** decides the whole path, so it is
 established before anything is proposed or written.
 
-- **[REL-01]** When `/anchor:release` runs, the system shall resolve the target
+- **[RELEASE-01]** When `/anchor:release` runs, the system shall resolve the target
   repo and gather the release state via a single recon script, acting only on the
   keys it surfaces.
-- **[REL-02]** The system shall establish the repo's release model —
+- **[RELEASE-02]** The system shall establish the repo's release model —
   `release-triggered`, `tag-triggered`, `bump-commit`, or `no-version-artifact` —
   before recommending a version or editing any file.
-- **[REL-03]** The system shall detect a release-triggered model from the CI
+- **[RELEASE-03]** The system shall detect a release-triggered model from the CI
   workflow's trigger block rather than from a `release` key appearing anywhere in
   the file, so a job named `release` is not read as a trigger.
-- **[REL-04]** While the release model is `release-triggered` or `tag-triggered`,
+- **[RELEASE-04]** While the release model is `release-triggered` or `tag-triggered`,
   the system shall not bump the version manifest, regenerate it, or edit the
   changelog, because the workflow owns those.
-- **[REL-05]** Where the release model is `no-version-artifact`, the system shall
+- **[RELEASE-05]** Where the release model is `no-version-artifact`, the system shall
   report what the range contains and stop rather than manufacture a version or a
   publish step.
-- **[REL-06]** If no commits have landed since the last release, then the system
+- **[RELEASE-06]** If no commits have landed since the last release, then the system
   shall report the last release as current and stop.
-- **[REL-07]** The system shall anchor the shipping range on the latest version
+- **[RELEASE-07]** The system shall anchor the shipping range on the latest version
   tag, falling back to the most recent commit that changed the version, then to
   the root commit.
-- **[REL-08]** The system shall classify the range as breaking changes, features,
+- **[RELEASE-08]** The system shall classify the range as breaking changes, features,
   fixes, and other, and recommend a semver bump from that classification.
-- **[REL-09]** If the version has never been bumped, then the system shall present
+- **[RELEASE-09]** If the version has never been bumped, then the system shall present
   starting versioning as the author's decision rather than default to a bump.
-- **[REL-10]** If the current version already has a changelog section, then the
+- **[RELEASE-10]** If the current version already has a changelog section, then the
   system shall treat that version as shipped — confirming the next version and
   not rewriting the shipped section's notes.
-- **[REL-11]** The system shall write notes describing each change's effect on
+- **[RELEASE-11]** The system shall write notes describing each change's effect on
   someone using the project, and shall pass them to every consumer by file rather
   than as an inline string.
-- **[REL-12]** Where the notes are published as a release body, the system shall
+- **[RELEASE-12]** Where the notes are published as a release body, the system shall
   present them in a visual review before publishing and shall not publish on a
   verdict other than approved.
-- **[REL-13]** The system shall confirm the publish with the author even after an
+- **[RELEASE-13]** The system shall confirm the publish with the author even after an
   approved review, because a published release is immediately public and its tag
   may be immutable.
-- **[REL-14]** The system shall not publish forge-generated notes in place of the
+- **[RELEASE-14]** The system shall not publish forge-generated notes in place of the
   categorized notes it drafted.
-- **[REL-15]** When a publish fires a release workflow, the system shall watch
+- **[RELEASE-15]** When a publish fires a release workflow, the system shall watch
   that workflow to a terminal state and then fast-forward the local checkout onto
   the commit it pushed, performing that pull rather than offering it.
-- **[REL-16]** Where the version manifest is generated from a canonical
+- **[RELEASE-16]** Where the version manifest is generated from a canonical
   descriptor, the system shall bump the descriptor and regenerate rather than edit
   the manifest.
-- **[REL-17]** Where the release model is `bump-commit`, the system shall shape
+- **[RELEASE-17]** Where the release model is `bump-commit`, the system shall shape
   the bump commit to the repo's prior convention and land it through
   `/anchor:commit` rather than running git commit and push itself.
-- **[REL-18]** Where a changelog holds an accruing Unreleased section, the system
+- **[RELEASE-18]** Where a changelog holds an accruing Unreleased section, the system
   shall retitle it to the new version rather than insert a new section above it.
-- **[REL-19]** The system shall not cascade from a merge into a release;
+- **[RELEASE-19]** The system shall not cascade from a merge into a release;
   `/anchor:merge` shall name `release` as the next step without invoking it.
-- **[REL-20]** Where a tack route is bound to the session, the system shall attach
+- **[RELEASE-20]** Where a tack route is bound to the session, the system shall attach
   the release URL to the route's tack as a link.
 
-### ISS — Issues
+### ISSUES — Issues
 
-Authoring a single issue (the `issue` skill, ISS-01..06) and surveying the
-backlog to pick the next one (the `issues` skill, ISS-07..12).
+Authoring a single issue (the `issue` skill, ISSUES-01..06) and surveying the
+backlog to pick the next one (the `issues` skill, ISSUES-07..12).
 
-- **[ISS-01]** When invoked with an issue reference, the system shall update that
+- **[ISSUES-01]** When invoked with an issue reference, the system shall update that
   issue against its current body as baseline; otherwise it shall create a new
   issue.
-- **[ISS-02]** Before drafting, the system shall gather the why, consumer, and
+- **[ISSUES-02]** Before drafting, the system shall gather the why, consumer, and
   acceptance criteria from the author.
-- **[ISS-03]** Where creating a new issue and it is unclear whether the need is
+- **[ISSUES-03]** Where creating a new issue and it is unclear whether the need is
   already tracked, the system shall offer to survey issues via the `issues` skill
   rather than searching the forge itself, and shall switch to the update path if
   the need turns out to be already tracked.
-- **[ISS-04]** If the author has no approach in mind, then the system shall file
+- **[ISSUES-04]** If the author has no approach in mind, then the system shall file
   a problem statement without inventing one.
-- **[ISS-05]** When writing a new issue, the system shall assign it to the
+- **[ISSUES-05]** When writing a new issue, the system shall assign it to the
   author.
-- **[ISS-06]** The system shall lead the issue with why and write for a reader
+- **[ISSUES-06]** The system shall lead the issue with why and write for a reader
   unfamiliar with the system.
-- **[ISS-07]** The system shall list forge issues for a target repo, defaulting
+- **[ISSUES-07]** The system shall list forge issues for a target repo, defaulting
   to the issues assigned to the invoking user in the open state.
-- **[ISS-08]** The system shall interpret the invocation query to refine scope
+- **[ISSUES-08]** The system shall interpret the invocation query to refine scope
   (assignee, label, state), keeping the default view when the query does not call
   for something else.
-- **[ISS-09]** The system shall rank the listed issues by soonest due date first,
+- **[ISSUES-09]** The system shall rank the listed issues by soonest due date first,
   then by most recently updated, with issues lacking a due date sorted after those
   with one.
-- **[ISS-10]** Where the forge has no per-issue due date (GitHub), the system
+- **[ISSUES-10]** Where the forge has no per-issue due date (GitHub), the system
   shall use the issue's milestone due date as its due date, and treat it as absent
   otherwise.
-- **[ISS-11]** The system shall present the ranked issues and recommend the
+- **[ISSUES-11]** The system shall present the ranked issues and recommend the
   top-ranked one as the next to work on, offering to open it for viewing.
-- **[ISS-12]** The system shall not write to the forge; its output is limited to
+- **[ISSUES-12]** The system shall not write to the forge; its output is limited to
   listing, ranking, and opening an issue for viewing.
 
-### PIPE — Pipeline
+### CI — Pipeline
 
-- **[PIPE-01]** When `/anchor:pipeline` runs without a watch request, the system
+- **[CI-01]** When `/anchor:pipeline` runs without a watch request, the system
   shall report the commit's current pipeline state once.
-- **[PIPE-02]** When the ask is to wait or be notified, the system shall watch the
+- **[CI-02]** When the ask is to wait or be notified, the system shall watch the
   pipeline in the background until it settles, then report.
-- **[PIPE-03]** If watch is requested while HEAD is unpushed, then the system
+- **[CI-03]** If watch is requested while HEAD is unpushed, then the system
   shall tell the user and ask whether to push first or watch the current remote
   tip.
-- **[PIPE-04]** When a pipeline has failed, the system shall list each failed job
+- **[CI-04]** When a pipeline has failed, the system shall list each failed job
   linked to its page and offer logs rather than fetch them unprompted.
-- **[PIPE-05]** Where a specific job is named, the system shall report or watch
+- **[CI-05]** Where a specific job is named, the system shall report or watch
   just that job.
-- **[PIPE-06]** If the origin remote is not a recognized forge, then the system
+- **[CI-06]** If the origin remote is not a recognized forge, then the system
   shall report that there is no pipeline to show.
-- **[PIPE-07]** The system shall resolve a pipeline by the commit it ran on,
+- **[CI-07]** The system shall resolve a pipeline by the commit it ran on,
   independent of the ref that triggered it, so that a run fired by a published
   release or a pushed tag — which carries the tag as its branch — resolves for
   that commit.
-- **[PIPE-08]** Where a forge reports several runs for one commit (GitHub's one
+- **[CI-08]** Where a forge reports several runs for one commit (GitHub's one
   run per workflow), the system shall report a single verdict over them — each
   workflow's latest attempt, then the least-settled and worst-off run — and shall
   accept a named workflow to scope the verdict to one run.
-- **[PIPE-09]** Where a caller gates on the forge's own merge checks rather than
+- **[CI-09]** Where a caller gates on the forge's own merge checks rather than
   on the commit's overall CI state, the system shall report the commit's most
   recent run alone, without folding the commit's other runs into the verdict.
-- **[PIPE-10]** The system shall report every run for the commit together with
+- **[CI-10]** The system shall report every run for the commit together with
   each run's jobs, whatever state the commit is in, so that the report says what
   ran and not only whether it passed.
-- **[PIPE-11]** The system shall present that breakdown as a table, one row per
+- **[CI-11]** The system shall present that breakdown as a table, one row per
   job, marking each row with an emoji for its normalized state that separates the
   states wanting attention (failed, canceled) from the expected ones (success,
   skipped, manual) and from the in-flight ones.
-- **[PIPE-12]** Where there is no pipeline to tabulate — no pipeline for the
+- **[CI-12]** Where there is no pipeline to tabulate — no pipeline for the
   commit, an unrecognized forge, or a single tracked job — the system shall
   report in one line and draw no table.
-- **[PIPE-13]** When a skill has pushed a commit, the system shall watch the
+- **[CI-13]** When a skill has pushed a commit, the system shall watch the
   pipeline that push triggered until it settles and report it, without the user
   asking.
-- **[PIPE-14]** Where every run for a commit has already been reported, the
+- **[CI-14]** Where every run for a commit has already been reported, the
   system shall not report them again, so that successive skills acting on one
   commit produce one report; a run no report has covered — including one that
   only opening the change request started — shall still be reported.
 
-### REV — Review integration
+### DIFF — Review integration
 
 Diff review is tool-agnostic. Each review skill launches review through one
 dispatcher (`review-diff.sh`), which resolves the diff range, drives the
@@ -459,108 +459,108 @@ this" nullability from SARIF's `notApplicable`.
 | `incomplete` | exit 2 | — | not every hunk was reviewed (moor-only) |
 | `no-verdict` | exit 3 / absent | exit 1 | no usable verdict — the cause (closed early, tool error, or a difftool that does not speak the contract) is read from `raw.exitCode` and `capabilities.producesVerdict` |
 
-- **[REV-01]** The system shall launch diff review through the dispatcher, never
+- **[DIFF-01]** The system shall launch diff review through the dispatcher, never
   raw `git difftool`, so the result is normalized and the verdict is populated.
-- **[REV-02]** While a review runs, the system shall launch the dispatcher as a
+- **[DIFF-02]** While a review runs, the system shall launch the dispatcher as a
   background call and read its result with the BashOutput tool rather than `tail`
   or command substitution.
-- **[REV-03]** The system shall drive the backend named by
+- **[DIFF-03]** The system shall drive the backend named by
   `anchor.reviewBackend` (default `revdiff`) through a per-backend adapter that maps
   the tool's native output onto the normalized result.
-- **[REV-04]** The system shall report the verdict as one of `approved`,
+- **[DIFF-04]** The system shall report the verdict as one of `approved`,
   `changes-requested`, `incomplete`, or `no-verdict`, mapped from the backend's
   native signal per the verdict table.
-- **[REV-05]** If the verdict is anything other than `approved`, then the system
+- **[DIFF-05]** If the verdict is anything other than `approved`, then the system
   shall not treat the review as approval.
-- **[REV-06]** Where the verdict is `no-verdict`, the system shall read its cause
+- **[DIFF-06]** Where the verdict is `no-verdict`, the system shall read its cause
   from `raw.exitCode` and `capabilities.producesVerdict` and ask the user rather
   than proceeding.
-- **[REV-07]** The system shall represent a dimension a backend cannot express as
+- **[DIFF-07]** The system shall represent a dimension a backend cannot express as
   `null` (e.g. `reviewCompleteness`) rather than a fabricated value, so a
   consumer distinguishes "unsupported" from "checked and found none".
-- **[REV-08]** The system shall carry comments ungraded — no per-comment
+- **[DIFF-08]** The system shall carry comments ungraded — no per-comment
   severity, action, or priority field — and shall treat every comment a
   `changes-requested` verdict accompanies as feedback to address. Whether
   feedback blocks is the verdict's to say, so a per-comment tier would give a
   consumer a second, disagreeing answer.
-- **[REV-09]** The system shall carry each comment's backend-verbatim text in
+- **[DIFF-09]** The system shall carry each comment's backend-verbatim text in
   `raw` so feedback the normalization cannot represent is not lost.
-- **[REV-10]** Where the configured difftool does not speak the contract, the
+- **[DIFF-10]** Where the configured difftool does not speak the contract, the
   system shall emit `backend` `difftool`, `capabilities.producesVerdict` false,
   and verdict `no-verdict`, and ask the user directly.
-- **[REV-11]** Where the selected backend is absent, the system shall fall back to
+- **[DIFF-11]** Where the selected backend is absent, the system shall fall back to
   a configured difftool or chat rather than fail.
-- **[REV-12]** If the dispatcher reports no parseable verdict — no
+- **[DIFF-12]** If the dispatcher reports no parseable verdict — no
   `REVIEW_VERDICT` line, empty output, or output the consumer cannot read — then
   the system shall treat the review as `no-verdict`, halt the action the review
   gates, and verify with the user in chat. Absent output is never approval; a
   dispatcher that fails before reporting produces silence, which is
   indistinguishable from success unless the consumer treats it as failure.
 
-### CONF — Configuration
+### CONFIG — Configuration
 
-- **[CONF-01]** When drafting a commit, CR, or issue, the system shall read
+- **[CONFIG-01]** When drafting a commit, CR, or issue, the system shall read
   project and global `anchor.*` git config keys, matching names
   case-insensitively.
-- **[CONF-02]** If an `anchor.*` key is absent, then the system shall keep its
+- **[CONFIG-02]** If an `anchor.*` key is absent, then the system shall keep its
   default and shall not invent a value.
-- **[CONF-03]** Where the user mentions a ticket and `anchor.workTrackerBaseUri`
+- **[CONFIG-03]** Where the user mentions a ticket and `anchor.workTrackerBaseUri`
   is set, the system shall add a Refs trailer/link built from the base URI and
   id; with no mention, it shall add none.
-- **[CONF-04]** Where `anchor.reviewBudgetMins` is set, the system shall let it
+- **[CONFIG-04]** Where `anchor.reviewBudgetMins` is set, the system shall let it
   steer how aggressively the description is trimmed, without changing the
   register.
-- **[CONF-05]** Where `anchor.commitRules`/`crRules`/`mrRules`/`prRules`/
+- **[CONFIG-05]** Where `anchor.commitRules`/`crRules`/`mrRules`/`prRules`/
   `issueRules` are set, the system shall layer them onto the relevant defaults,
   preferring forge-specific overrides.
-- **[CONF-06]** Where `anchor.watchPipelineAfterPush` or
+- **[CONFIG-06]** Where `anchor.watchPipelineAfterPush` or
   `anchor.<skill>.watchPipelineAfterPush` is set, the system shall gate the
   after-push pipeline watch on it, preferring the per-skill key; with neither
   set, it shall watch.
-- **[CONF-07]** The system shall read `anchor.crVerbosity` as an integer from 1
+- **[CONFIG-07]** The system shall read `anchor.crVerbosity` as an integer from 1
   to 100 setting where the CR description balances brevity against thoroughness
   — not a word budget, and never a truncation point — preferring
   `anchor.mrVerbosity`/`anchor.prVerbosity` for the forge in use; with none set,
   it shall draft at `50`.
-- **[CONF-08]** When drafting at a verbosity below 100, the system shall shorten
+- **[CONFIG-08]** When drafting at a verbosity below 100, the system shall shorten
   by abbreviating prose — asides, then explanation down to each section's
   load-bearing claim, then Review-guide clauses and tiers, then Context's second
   paragraph — and shall not remove a section on account of verbosity.
-- **[CONF-09]** The system shall determine which sections a CR description
+- **[CONFIG-09]** The system shall determine which sections a CR description
   contains from the template's conditions and `anchor.reviewBudgetMins` alone,
   and shall retain every such section at every verbosity, each abbreviated no
   further than its floor: one sentence of why for Context, the deep links for the
   Review guide.
-- **[CONF-10]** The system shall let `anchor.crVerbosity` steer length only,
+- **[CONFIG-10]** The system shall let `anchor.crVerbosity` steer length only,
   keeping the register unchanged, and shall resolve it independently of
   `anchor.reviewBudgetMins`, which steers what the description covers.
 
-### FORG — Forge integration & output
+### FORGE — Forge integration & output
 
-- **[FORG-01]** Where the project ships a CR or issue template, the system shall
+- **[FORGE-01]** Where the project ships a CR or issue template, the system shall
   compose into it — filling its sections, preserving reviewer-facing structure
   verbatim, and stripping author-facing scaffolding.
-- **[FORG-02]** If a GitHub issue template is a structured `.yml` form, then the
+- **[FORGE-02]** If a GitHub issue template is a structured `.yml` form, then the
   system shall surface it for the author to fill in the web UI rather than
   compose prose into it.
-- **[FORG-03]** The system shall pass multi-line bodies to the forge by file
+- **[FORGE-03]** The system shall pass multi-line bodies to the forge by file
   (`--body-file` / `-F description=@`) rather than inline escaped strings.
-- **[FORG-04]** The system shall verify markdown rendering against the known forge
+- **[FORGE-04]** The system shall verify markdown rendering against the known forge
   gotchas before presenting a description or issue body.
-- **[FORG-05]** If a forge write fails with an auth error, then the system shall
+- **[FORGE-05]** If a forge write fails with an auth error, then the system shall
   surface it and ask the user to refresh credentials rather than silently fall
   back to copy-only.
-- **[FORG-06]** Where a repo ships no CR template of its own, the system shall
+- **[FORGE-06]** Where a repo ships no CR template of its own, the system shall
   compose into the one it inherits from the forge — a GitLab parent group or the
   instance, or the owner's GitHub `.github` repo — and shall prefer a repo-local
   template over any inherited one.
-- **[FORG-07]** Where a level holds more than one CR template, the system shall
+- **[FORGE-07]** Where a level holds more than one CR template, the system shall
   select a `default.md` (case-insensitive), else the sole template, else ask the
   author which to compose into, rather than selecting by glob or API order.
-- **[FORG-08]** If a CR-template lookup returns nothing or is permission-denied,
+- **[FORGE-08]** If a CR-template lookup returns nothing or is permission-denied,
   then the system shall fall through to the next level, and shall use its own
   default shape only when no level supplies a template.
-- **[FORG-09]** Where `anchor.crTemplateRepo` names a repo, the system shall read
+- **[FORGE-09]** Where `anchor.crTemplateRepo` names a repo, the system shall read
   a CR template from it only after every forge-supplied level has declined.
 
 ### RULE — Ambient rules

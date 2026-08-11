@@ -5,7 +5,7 @@
 # Drives the real dispatcher against stub backends: a stub `moor` (files mode)
 # and a fake git difftool (range mode) that write a fixture sidecar, and a stub
 # `revdiff` that writes fixture markdown and exits with a chosen code. Asserts
-# the normalized REV contract each adapter emits. Requires jq.
+# the normalized DIFF contract each adapter emits. Requires jq.
 set -euo pipefail
 
 # Hermetic: ignore the user's global/system git config so backend selection is

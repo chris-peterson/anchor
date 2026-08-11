@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# revdiff backend adapter for review-diff.sh (see SPEC.md "REV").
+# revdiff backend adapter for review-diff.sh (see SPEC.md "DIFF").
 #
 # Sourced by the dispatcher, which has already cd'd into the target repo and
 # resolved the review request into these variables:
@@ -27,7 +27,7 @@
 # revdiff carries no per-hunk review state and no commit-message round-trip
 # anchor consumes yet, so those dimensions are null/off; on the revdiff backend
 # the caller confirms the commit message itself. (The fork's editable
-# `(description)` output isn't parsed here yet — see the REV plan.)
+# `(description)` output isn't parsed here yet — see the DIFF plan.)
 
 # revdiff annotates with diff-side markers but does not track per-hunk review or
 # round-trip an edited commit message / description.
@@ -51,7 +51,7 @@ revdiff_launcher() {
   printf '%s\n' "${matches[@]}" | sort -V | tail -1
 }
 
-# Parse revdiff's markdown annotations into the REV comments array. Each block is
+# Parse revdiff's markdown annotations into the DIFF comments array. Each block is
 #   ## <file> (file-level)         | ## <file>:<line> (+|-)  | ## <file>:<a>-<b> (+|-)
 # followed by a possibly multi-line body. revdiff space-prefixes any body line
 # that begins with "## " so it never looks like a header.
@@ -139,7 +139,7 @@ emit_review() {
 
   # The fork echoes the seeded --description back as a `(description)` block on
   # quit (and would carry an edited message there). The description round-trip
-  # isn't consumed yet (see the REV plan), so drop those blocks and derive the
+  # isn't consumed yet (see the DIFF plan), so drop those blocks and derive the
   # verdict from real code comments only — otherwise a seeded message would
   # always read as changes-requested. TODO: when the round-trip lands, route a
   # changed `(description)` to editedFields[commit-message] instead of dropping.

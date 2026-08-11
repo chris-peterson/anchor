@@ -4,7 +4,7 @@
 # launch-and-normalize to that backend's adapter, which prints the result on
 # stdout so the caller acts on a single command's output:
 #   REVIEW_VERDICT=<approved|changes-requested|incomplete|no-verdict>
-#   REVIEW_OUTPUT=<normalized json>   (the REV contract; see SPEC.md "REV")
+#   REVIEW_OUTPUT=<normalized json>   (the DIFF contract; see SPEC.md "DIFF")
 #
 # The backend is `anchor.reviewBackend` (default `revdiff`); each adapter lives in
 # scripts/review/<backend>.sh and defines emit_review, mapping the tool's native
@@ -17,7 +17,7 @@
 #     bash review-diff.sh --local --message-file <path>
 #       also seeds the drafted commit message (subject as headline, body as prose)
 #       into the review, so the reviewer reviews the message with the diff and can
-#       edit it in-tool; the edit comes back as editedFields (see SPEC.md "REV").
+#       edit it in-tool; the edit comes back as editedFields (see SPEC.md "DIFF").
 #   --previous   previous changeset — the last commit vs its parent:
 #     bash review-diff.sh --previous    -> HEAD~1...HEAD
 #   --full       full diff — the whole branch vs the default branch, the way a
