@@ -1,11 +1,10 @@
 # <img src="favicon.svg" alt="anchor" width="64" height="64" style="vertical-align: middle"> anchor
 
-Consistency across the code-change lifecycle: issue, change request, review, release.
+[](_home.md ':include')
 
-`anchor` is one skill per step: file the issue, commit the work after a
-change-by-change review, open the change request, drive the review threads to
-done, merge, publish the release. The commit messages, descriptions, and release
-notes come out the same shape every time instead of reinvented per change.
+## The lifecycle
+
+Which skill carries a change from one state to the next:
 
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
@@ -26,20 +25,6 @@ edit, not a vague "looks off":
 
 <div class="cw-session" data-cw-session="session"></div>
 
-## Interface
-
-| Surface | What it does |
-|---|---|
-| [`/anchor:commit`](/skills/commit) | Confirm the repo, run tests, stage everything, write a why-first commit message, review every change in the pending changeset, then — once the review is clean — commit and push |
-| [`/anchor:prepare-review`](/skills/prepare-review) | Rebase on the default branch if behind, open a draft change request on the already-pushed branch (assigned to you, with source-branch cleanup set where the forge takes it per CR), and draft a description that points a reviewer at the lines where their judgment is worth the most |
-| [`/anchor:resolve-feedback`](/skills/resolve-feedback) | Fetch the unresolved review threads on an open CR, triage each with you, then drive each to resolution — fix / reply / resolve |
-| [`/anchor:merge`](/skills/merge) | Land an approved CR once its gates are green — waiting on the pipeline if needed — then return to the default branch and delete the merged branch |
-| [`/anchor:release`](/skills/release) | Work out what has landed since the last release, recommend a semver bump, draft notes a *user* can read, and publish the way this repo publishes — a forge release where CI owns the bump, a bump commit where it doesn't |
-| [`/anchor:pipeline`](/skills/pipeline) | Report a commit's forge pipeline state, or watch until it settles — passed, failed with the failed jobs named, or no pipeline |
-| [`/anchor:issue`](/skills/issue) | Gather the *why*, the consumer, and acceptance criteria, then draft and file (or update) a forge issue — composing into the project's issue template when one exists |
-| [`/anchor:issues`](/skills/issues) | List and rank the forge issues assigned to you so you can pick what to work on next — by soonest due date, then most recently updated |
-| [Ambient rules](/ambient-rules) | A SessionStart hook injects the invariants that have to hold when no skill is invoked — how history may be rewritten, forge work going through `gh` / `glab`, and no AI attribution trailers |
-
 The two skills you reach for most, in motion:
 
 <div class="cw-session" data-cw-session="examples"></div>
@@ -59,14 +44,7 @@ gh auth login      # GitHub remotes
 glab auth login    # GitLab remotes
 ```
 
-1. **Install the plugin.**
-
-   ```bash
-   claude plugin marketplace add chris-peterson/claude-marketplace
-   claude plugin install anchor@chris-peterson
-   ```
-
-2. **Make some changes**, then commit with a reviewed, *why*-first message.
+1. **Make some changes**, then commit with a reviewed, *why*-first message.
    `/anchor:commit` reviews the pending changeset, then commits and pushes once
    the review is clean:
 
@@ -74,7 +52,7 @@ glab auth login    # GitLab remotes
    /anchor:commit
    ```
 
-3. **Open it for review.** On the already-pushed branch, draft the
+2. **Open it for review.** On the already-pushed branch, draft the
    change-request description and open the draft CR:
 
    ```text
@@ -101,20 +79,20 @@ path of least resistance.
 The skills run with nothing else installed. Each of these adds something when
 present and is skipped when absent.
 
-- **[moor](https://github.com/chris-peterson/moor)** — the default review
-  backend, a keyboard-driven diff viewer the skills launch. Its `REVIEW_CONTEXT`
-  sidecar contract (the review-feedback channel) is defined in
-  [moor's `SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md).
-  Without moor, review falls back to `git difftool --dir-diff` with your
-  configured difftool — you still get a visual review, and the skill asks whether
-  to revise or proceed in place of moor's structured rejection feedback.
-- **[revdiff](https://revdiff.com)** — an alternate review backend: a
-  terminal-native diff reviewer (git, hg, and jj) selected with
-  `git config anchor.reviewBackend revdiff`. It returns the same normalized
-  review verdict as moor, and marks which diff side each annotation sits on; it
-  carries no commit-message round-trip, so the skill confirms the message itself. Because
-  revdiff is a TUI, selecting it needs the revdiff plugin installed — `anchor` uses
-  its terminal-overlay launcher to open the reviewer.
+- **[revdiff](https://revdiff.com)** — the backend the skills reach for unless
+  you say otherwise: a terminal-native diff reviewer (git, hg, and jj) that
+  returns a normalized verdict and marks which diff side each annotation sits on.
+  It carries no commit-message round-trip, so the skill confirms the message
+  itself. Because revdiff is a TUI, it needs the revdiff plugin installed —
+  `anchor` opens it through that plugin's terminal-overlay launcher.
+- **[moor](https://github.com/chris-peterson/moor)** — the alternate backend,
+  selected with `git config anchor.reviewBackend moor`: a keyboard-driven diff
+  viewer whose `REVIEW_CONTEXT` sidecar contract (the review-feedback channel) is
+  defined in [moor's `SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md).
+  Its adapter drives `git difftool --dir-diff`, which is also what you get with
+  no diff viewer installed at all — a visual review through whatever difftool git
+  resolves, shown without a verdict, so the skill asks whether to revise or
+  proceed.
 - **[tack](https://github.com/chris-peterson/tack)** — the work tracker. Naming a
   repo you aren't sitting in (`/anchor:commit payments-api`) resolves through
   tack's repo database, and when a tack route is bound to the session, `merge`
@@ -124,6 +102,8 @@ present and is skipped when absent.
 
 - [What's new in 1.x](/whats-new) — the steps added since 0.x, and the three
   things that moved
+- [Ambient rules](/ambient-rules) — the invariants the SessionStart hook injects
+  when no skill is invoked, in the form the agent receives them
 - **Skills** — per-skill pages in the sidebar, sourced directly from each
   `SKILL.md`
 - [Configuring `anchor`](/guides/configuring) — extend the commit and CR output

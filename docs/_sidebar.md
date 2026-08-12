@@ -11,6 +11,7 @@
   - [issue](/skills/issue)
   - [issues](/skills/issues)
 - [Ambient rules](/ambient-rules)
+- [Hooks](/hooks)
 - Templates
   - [Commit message](/templates/commit-message)
   - [CR description](/templates/cr-description)

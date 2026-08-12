@@ -23,7 +23,9 @@ suite:
   dependencies:
     - name: revdiff
       required: false
-      reason: default diff-review backend
+      reason: preferred diff-review backend
+      # revdiff documents itself off the hub, so its link can't be derived.
+      url: https://revdiff.com
     - name: moor
       required: false
       reason: alternate diff-review backend (anchor.reviewBackend=moor)
