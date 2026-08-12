@@ -20,7 +20,7 @@ just describe       # resync plugin.yml's suite.describe from skills/rules/hooks
 just docs           # render the docs site and serve it locally
 
 bash tests/<name>.test.sh                                  # one suite
-shellcheck hooks/*.sh scripts/*.sh scripts/review/*.sh tests/*.sh
+shellcheck hooks/*.sh scripts/*.sh scripts/anchor scripts/review/*.sh tests/*.sh
 ```
 
 There is no aggregate test target: each `tests/*.test.sh` is its own CI job

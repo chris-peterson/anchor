@@ -21,5 +21,7 @@ jobs:
       # and lint standalone (they carry their own SC2154 disable for the
       # dispatcher-exported vars). Gates at the default severity (info and up) —
       # the scripts are a zero-finding baseline, so any new finding fails.
+      # scripts/anchor is named explicitly: it's the CLI users invoke, so it
+      # carries no .sh extension and no glob here reaches it.
       - name: shellcheck
-        run: shellcheck hooks/*.sh scripts/*.sh scripts/review/*.sh tests/*.sh
+        run: shellcheck hooks/*.sh scripts/*.sh scripts/anchor scripts/review/*.sh tests/*.sh

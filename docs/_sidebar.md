@@ -20,6 +20,7 @@
   - [Issue description](/templates/issue-description)
 - Guides
   - [Configuring anchor](/guides/configuring)
+  - [The anchor CLI](/guides/cli)
   - [CR verbosity, calibrated](/guides/cr-verbosity)
   - [Forge cookbook](/guides/forge-cookbook)
   - [Markdown gotchas](/guides/markdown-gotchas)
