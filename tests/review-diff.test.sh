@@ -62,6 +62,13 @@ exit 0
 EOF
 chmod +x "$bin/moor"
 
+# --- stub revdiff: never executed (the adapter drives the launcher), but the
+# resolver looks the tool up on PATH, so the suite has to carry one to test
+# against a machine that has revdiff rather than whatever the host happens to
+# have installed.
+printf '#!/usr/bin/env bash\nexit 0\n' > "$bin/revdiff"
+chmod +x "$bin/revdiff"
+
 export PATH="$bin:$PATH"
 
 # --- a git repo with a HEAD~1...HEAD diff to review -------------------------
@@ -235,5 +242,47 @@ ok "backend: defaults to revdiff when anchor.reviewBackend is unset"
 git -C "$repo" config anchor.reviewBackend bogus
 if run --previous 2>/dev/null; then fail "unknown backend should exit non-zero"; fi
 ok "backend: unknown backend exits non-zero"
+git -C "$repo" config --unset anchor.reviewBackend
+
+# ================== backend resolution against installed tools ============
+# The resolver only considers tools that are there, so these run under a PATH
+# built for the case: a system PATH carries neither viewer, and `only` carries
+# moor alone.
+only="$work/only"; mkdir -p "$only"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$only/moor"; chmod +x "$only/moor"
+system_path="/usr/bin:/bin"
+
+pb() { ( cd "$repo" && PATH="$1" bash "$dispatch" --print-backend ); }
+
+o=$(pb "$bin:$PATH")
+grep -qx 'REVIEW_BACKEND=revdiff' <<<"$o" || fail "revdiff installed -> want revdiff, got: $o"
+ok "backend: prefers revdiff when its tool is installed"
+
+o=$(pb "$only:$system_path")
+grep -qx 'REVIEW_BACKEND=moor' <<<"$o" || fail "revdiff absent -> want moor, got: $o"
+ok "backend: substitutes an installed viewer when the preferred tool is absent"
+
+# With nothing to stand in, the probe still names what was asked for — the
+# degradation below is the run's business, not a claim that moor is installed.
+o=$(pb "$system_path")
+grep -qx 'REVIEW_BACKEND=revdiff' <<<"$o"     || fail "no viewer -> want the configured name, got: $o"
+grep -qx 'REVIEW_BACKEND_AVAILABLE=0' <<<"$o" || fail "no viewer -> want AVAILABLE=0, got: $o"
+ok "backend: with nothing installed the probe reports the preference, unavailable"
+
+# The run itself degrades: moor's adapter drives git's difftool, and with no
+# sidecar written the result is the difftool contract rather than a hard stop.
+unset MOOR_FIXTURE
+o=$( cd "$repo" && PATH="$system_path" bash "$dispatch" --previous )
+[ "$(jq -r .backend <<<"$(json_of "$o")")" = difftool ] \
+  || fail "no viewer -> want a difftool review, got: $(json_of "$o")"
+ok "backend: no viewer installed degrades the run to git's difftool"
+
+# editor is selectable but never substituted in, so an absent viewer doesn't
+# turn a changeset review into an editor buffer.
+git -C "$repo" config anchor.reviewBackend editor
+o=$(pb "$system_path")
+grep -qx 'REVIEW_BACKEND=editor' <<<"$o" || fail "editor configured -> want editor, got: $o"
+git -C "$repo" config --unset anchor.reviewBackend
+ok "backend: editor stays selected and is never substituted in"
 
 echo "# all checks passed"

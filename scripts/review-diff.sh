@@ -97,18 +97,26 @@ backend_installed() {
   [[ "$1" == "editor" ]] || command -v "$1" >/dev/null 2>&1
 }
 
+# The configured backend, or an installed viewer standing in for it. Nothing
+# installed leaves the name as configured — the probe reports that alongside
+# REVIEW_BACKEND_AVAILABLE=0, so a caller still learns what was asked for.
+#
+# Substitution stays among the diff viewers. `editor` remains selectable but
+# never automatic: it edits one drafted artifact rather than showing a
+# changeset, so standing in for an absent revdiff would answer a different
+# question than the caller asked.
+installed_backend() {
+  local configured="$1" candidate
+  if backend_installed "$configured"; then printf '%s' "$configured"; return; fi
+  for candidate in revdiff moor; do
+    if backend_installed "$candidate"; then printf '%s' "$candidate"; return; fi
+  done
+  printf '%s' "$configured"
+}
+
 if [[ "$print_backend" == "1" ]]; then
   configured=$(resolve_backend)
-  backend="$configured"
-  # Substitute only among the diff viewers. `editor` stays selectable but never
-  # automatic: it edits one drafted artifact rather than showing a changeset, so
-  # standing in for an absent revdiff would answer a different question than the
-  # caller asked.
-  if ! backend_installed "$backend"; then
-    for candidate in revdiff moor; do
-      if backend_installed "$candidate"; then backend="$candidate"; break; fi
-    done
-  fi
+  backend=$(installed_backend "$configured")
   echo "REVIEW_BACKEND=$backend"
   if backend_installed "$backend"; then
     echo "REVIEW_BACKEND_AVAILABLE=1"
@@ -265,12 +273,20 @@ fi
 
 # --- Select the backend and delegate -----------------------------------------
 
+# The configured name is validated before substitution, so a typo in the config
+# still fails loudly rather than being silently replaced by an installed viewer.
 backend=$(resolve_backend)
 adapter="$(dirname "${BASH_SOURCE[0]}")/review/${backend}.sh"
 if [[ ! -r "$adapter" ]]; then
   echo "review-diff.sh: unknown review backend '$backend' (no adapter at $adapter). Set anchor.reviewBackend to editor, moor, or revdiff." >&2
   exit 64
 fi
+backend=$(installed_backend "$backend")
+# An adapter whose tool is absent can only report that absence, so a machine
+# with no viewer installed reviews through moor's adapter instead — it drives
+# `git difftool --dir-diff`, which degrades to whatever difftool git resolves.
+backend_installed "$backend" || backend=moor
+adapter="$(dirname "${BASH_SOURCE[0]}")/review/${backend}.sh"
 
 # The review-request contract the sourced adapter reads. Exported so the
 # adapter (sourced below) counts as a consumer — it runs in this same shell.

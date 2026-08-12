@@ -79,12 +79,13 @@ path of least resistance.
 The skills run with nothing else installed. Each of these adds something when
 present and is skipped when absent.
 
-- **[revdiff](https://revdiff.com)** — the backend the skills reach for unless
-  you say otherwise: a terminal-native diff reviewer (git, hg, and jj) that
-  returns a normalized verdict and marks which diff side each annotation sits on.
-  It carries no commit-message round-trip, so the skill confirms the message
-  itself. Because revdiff is a TUI, it needs the revdiff plugin installed —
-  `anchor` opens it through that plugin's terminal-overlay launcher.
+- **[revdiff](https://revdiff.com)** — the backend the skills reach for when
+  it's installed and you haven't said otherwise: a terminal-native diff reviewer
+  (git, hg, and jj) that returns a normalized verdict and marks which diff side
+  each annotation sits on. It carries no commit-message round-trip, so the skill
+  confirms the message itself. Because revdiff is a TUI, `anchor` opens it
+  through the revdiff plugin's terminal-overlay launcher, so that plugin has to
+  be installed too.
 - **[moor](https://github.com/chris-peterson/moor)** — the alternate backend,
   selected with `git config anchor.reviewBackend moor`: a keyboard-driven diff
   viewer whose `REVIEW_CONTEXT` sidecar contract (the review-feedback channel) is

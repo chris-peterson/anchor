@@ -497,8 +497,12 @@ column below `changes-requested` is empty rather than mapped to some exit code.
 - **[DIFF-10]** Where the configured difftool does not speak the contract, the
   system shall emit `backend` `difftool`, `capabilities.producesVerdict` false,
   and verdict `no-verdict`, and ask the user directly.
-- **[DIFF-11]** Where the selected backend is absent, the system shall fall back to
-  a configured difftool or chat rather than fail.
+- **[DIFF-11]** The system shall resolve the backend against the tools that are
+  installed: where the preferred backend's tool is absent, it shall substitute an
+  installed diff viewer, and where none is installed it shall degrade to git's
+  configured difftool rather than fail. Substitution shall stay among the diff
+  viewers — `editor` remains selectable but never automatic, since it edits one
+  drafted artifact rather than showing a changeset.
 - **[DIFF-12]** If the dispatcher reports no parseable verdict — no
   `REVIEW_VERDICT` line, empty output, or output the consumer cannot read — then
   the system shall treat the review as `no-verdict`, halt the action the review
@@ -595,9 +599,11 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   each step widens the artifact's audience.
 - **[CONFIG-15]** Where `anchor.<skill>.reviewBackend` is set, the system shall
   select that skill's review backend from it, preferring it over
-  `anchor.reviewBackend` in both directions; with neither set, it shall use
-  `revdiff`. Which shape suits an artifact varies, so the choice is per skill
-  rather than one switch for the plugin.
+  `anchor.reviewBackend` in both directions; with neither set, it shall prefer
+  `revdiff`. The preference names a tool, not a guarantee that it is present —
+  what a run uses is settled against what is installed (DIFF-11). Which shape
+  suits an artifact varies, so the choice is per skill rather than one switch
+  for the plugin.
 
 ### FORGE — Forge integration & output
 

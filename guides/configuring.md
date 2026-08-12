@@ -28,7 +28,7 @@ The four verbosity dials are listed in lifecycle order, and they descend:
 
 | Key | Default | What that gets you |
 |---|---|---|
-| `anchor.reviewBackend` | `revdiff` | The terminal-native reviewer opens the diff; `moor` opens a GUI window instead, and `editor` opens the drafted text in your editor. |
+| `anchor.reviewBackend` | `revdiff` | The terminal-native reviewer opens the diff; `moor` opens a GUI window instead, and `editor` opens the drafted text in your editor. The value is a preference among installed tools: with the named one absent, an installed viewer stands in, and with none installed the diff opens in git's configured difftool. |
 | `anchor.<skill>.reviewBackend` | the umbrella key | A skill reviews in the backend above until you give that skill its own. |
 | `anchor.reviewBudgetMins` | `10` | Descriptions are written for ten minutes of focused review — enough for the change and the topics around it. |
 | `anchor.issueVerbosity` | `75` | Issue bodies run long: the people who pick the work up need the context in the issue. |
