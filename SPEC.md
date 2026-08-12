@@ -428,10 +428,12 @@ this" nullability from SARIF's `notApplicable`.
 
 ```
 {
-  // the three selectable backends, then the value emitted when a difftool
-  // that does not speak the contract showed the diff (DIFF-10) — a report,
-  // not a choice, which is why it is last rather than ranked among them
-  backend:            "revdiff" | "moor" | "editor" | "difftool",
+  // the selectable backends, then the value the `git` adapter emits when a
+  // difftool that does not speak the contract showed the diff (DIFF-10) — a
+  // report, not a choice, which is why it is last rather than ranked among
+  // them. The adapter is named for what it drives, the value for the case a
+  // consumer branches on, so `git` produces `difftool`.
+  backend:            "revdiff" | "moor" | "editor" | "git" | "difftool",
   verdict:            "approved" | "changes-requested" | "incomplete" | "no-verdict",
   reviewCompleteness: "complete" | "partial" | null,   // null = backend cannot say
   reviewer:           string | null,
@@ -499,10 +501,11 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   and verdict `no-verdict`, and ask the user directly.
 - **[DIFF-11]** The system shall resolve the backend against the tools that are
   installed: where the preferred backend's tool is absent, it shall substitute an
-  installed diff viewer, and where none is installed it shall degrade to git's
-  configured difftool rather than fail. Substitution shall stay among the diff
-  viewers — `editor` remains selectable but never automatic, since it edits one
-  drafted artifact rather than showing a changeset.
+  installed diff viewer, and where none is installed it shall degrade to the
+  `git` adapter, which drives git's configured difftool, rather than fail.
+  Substitution shall stay among the diff viewers — `editor` remains selectable
+  but never automatic, since it edits one drafted artifact rather than showing a
+  changeset.
 - **[DIFF-12]** If the dispatcher reports no parseable verdict — no
   `REVIEW_VERDICT` line, empty output, or output the consumer cannot read — then
   the system shall treat the review as `no-verdict`, halt the action the review
@@ -531,6 +534,14 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   whenever it substituted another, and shall launch nothing. It shall not
   substitute the editor backend for an absent diff viewer, which would answer a
   different question than the caller asked.
+- **[DIFF-18]** The system shall drive git's difftool through a `git` adapter of
+  its own rather than through another backend's, so no backend name stands for
+  both a tool the user selects and the fallback nobody selects. If git resolves
+  no difftool — neither `diff.tool` nor `merge.tool` is set — then the system
+  shall report that and launch nothing, rather than enter git's vimdiff default,
+  which blocks where no terminal can answer it; where a configured backend's own
+  tool is what is missing, the system shall keep that backend so its report names
+  the absent tool.
 
 ### CONFIG — Configuration
 

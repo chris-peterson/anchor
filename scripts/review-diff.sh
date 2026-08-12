@@ -278,14 +278,20 @@ fi
 backend=$(resolve_backend)
 adapter="$(dirname "${BASH_SOURCE[0]}")/review/${backend}.sh"
 if [[ ! -r "$adapter" ]]; then
-  echo "review-diff.sh: unknown review backend '$backend' (no adapter at $adapter). Set anchor.reviewBackend to editor, moor, or revdiff." >&2
+  echo "review-diff.sh: unknown review backend '$backend' (no adapter at $adapter). Set anchor.reviewBackend to editor, git, moor, or revdiff." >&2
   exit 64
 fi
 backend=$(installed_backend "$backend")
-# An adapter whose tool is absent can only report that absence, so a machine
-# with no viewer installed reviews through moor's adapter instead — it drives
-# `git difftool --dir-diff`, which degrades to whatever difftool git resolves.
-backend_installed "$backend" || backend=moor
+# A machine with no viewer installed reviews through the `git` adapter, which
+# drives `git difftool --dir-diff` so the diff still opens in whatever tool git
+# resolves. Only when git has one: with `diff.tool` and `merge.tool` both unset,
+# `git difftool` falls back to vimdiff, which blocks forever where there is no
+# terminal to answer it. Absent that, keep the configured adapter — it names the
+# tool that is missing, which is more use than a generic no-verdict.
+if ! backend_installed "$backend" && \
+   { git config --get diff.tool >/dev/null 2>&1 || git config --get merge.tool >/dev/null 2>&1; }; then
+  backend=git
+fi
 adapter="$(dirname "${BASH_SOURCE[0]}")/review/${backend}.sh"
 
 # The review-request contract the sourced adapter reads. Exported so the
