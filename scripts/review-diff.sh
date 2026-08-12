@@ -6,7 +6,8 @@
 #   REVIEW_VERDICT=<approved|changes-requested|incomplete|no-verdict>
 #   REVIEW_OUTPUT=<normalized json>   (the DIFF contract; see SPEC.md "DIFF")
 #
-# The backend is `anchor.reviewBackend` (default `revdiff`); each adapter lives in
+# The backend is `anchor.<skill>.reviewBackend` when the caller passed --skill,
+# else `anchor.reviewBackend` (default `revdiff`); each adapter lives in
 # scripts/review/<backend>.sh and defines emit_review, mapping the tool's native
 # output onto the normalized result. Range/header resolution is backend-agnostic
 # and stays here.
@@ -42,19 +43,81 @@
 
 set -euo pipefail
 
-# --repo / --worktree <path> (leading, before the mode) retargets the git range /
-# difftool onto a checkout other than the cwd repo (see
-# scripts/lib/resolve-context.sh). The --files mode takes absolute paths, so this
-# is only meaningful for the git-range modes.
+# Leading flags, before the mode:
+#   --repo / --worktree <path>  retargets the git range / difftool onto a
+#     checkout other than the cwd repo (see scripts/lib/resolve-context.sh). The
+#     --files mode takes absolute paths, so this is only meaningful for the
+#     git-range modes.
+#   --skill <name>  names the invoking skill, which selects the backend
+#     (anchor.<skill>.reviewBackend over anchor.reviewBackend) and tells an
+#     adapter which artifact is under review.
+#   --backend <name>  drive this backend, ignoring the config keys — what a
+#     caller passes back after probing with --print-backend, so the review runs
+#     in the tool the probe said was there.
+#   --print-backend  report which backend a review would run in, and exit
+#     without launching anything — the probe a skill runs before deciding
+#     whether a visual review is available at all. It considers only *installed*
+#     tools, so what it names is something the caller can actually open:
+#       REVIEW_BACKEND=<name>              what to pass to --backend
+#       REVIEW_BACKEND_AVAILABLE=0|1       0 = nothing usable is installed
+#       REVIEW_BACKEND_CONFIGURED=<name>   only when config asked for another
 # shellcheck source=lib/resolve-context.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 CTX_REPO=""
 CTX_WORKTREE=""
-case "${1:-}" in
-  --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
-  --worktree) CTX_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
-esac
+review_skill=""
+backend_override=""
+print_backend=0
+while true; do
+  case "${1:-}" in
+    --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
+    --worktree) CTX_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
+    --skill)    review_skill="${2:?--skill needs a name}"; shift 2 ;;
+    --backend)  backend_override="${2:?--backend needs a name}"; shift 2 ;;
+    --print-backend) print_backend=1; shift ;;
+    *) break ;;
+  esac
+done
 ctx_resolve_repo
+
+# Which shape suits an artifact varies — a commit message is a natural editor
+# artifact, a CR description whose deep links want checking against the diff
+# reads better in a diff viewer — so the key resolves per skill first, the way
+# anchor.<skill>.watchPipelineAfterPush does.
+resolve_backend() {
+  local b="$backend_override"
+  [[ -n "$b" || -z "$review_skill" ]] || b=$(git config "anchor.${review_skill}.reviewBackend" 2>/dev/null || true)
+  [[ -n "$b" ]] || b=$(git config anchor.reviewBackend 2>/dev/null || true)
+  printf '%s' "${b:-revdiff}"
+}
+
+# The editor backend opens whatever editor git resolves, so it has no binary of
+# its own to look for; the others are named after theirs.
+backend_installed() {
+  [[ "$1" == "editor" ]] || command -v "$1" >/dev/null 2>&1
+}
+
+if [[ "$print_backend" == "1" ]]; then
+  configured=$(resolve_backend)
+  backend="$configured"
+  # Substitute only among the diff viewers. `editor` stays selectable but never
+  # automatic: it edits one drafted artifact rather than showing a changeset, so
+  # standing in for an absent revdiff would answer a different question than the
+  # caller asked.
+  if ! backend_installed "$backend"; then
+    for candidate in revdiff moor; do
+      if backend_installed "$candidate"; then backend="$candidate"; break; fi
+    done
+  fi
+  echo "REVIEW_BACKEND=$backend"
+  if backend_installed "$backend"; then
+    echo "REVIEW_BACKEND_AVAILABLE=1"
+  else
+    echo "REVIEW_BACKEND_AVAILABLE=0"
+  fi
+  [[ "$backend" == "$configured" ]] || echo "REVIEW_BACKEND_CONFIGURED=$configured"
+  exit 0
+fi
 
 # Resolve "the whole branch vs the default branch" range. Tries the symbolic
 # origin/HEAD first, then the conventional origin/main and origin/master.
@@ -202,17 +265,17 @@ fi
 
 # --- Select the backend and delegate -----------------------------------------
 
-backend=$(git config anchor.reviewBackend 2>/dev/null || true)
-backend="${backend:-revdiff}"
+backend=$(resolve_backend)
 adapter="$(dirname "${BASH_SOURCE[0]}")/review/${backend}.sh"
 if [[ ! -r "$adapter" ]]; then
-  echo "review-diff.sh: unknown review backend '$backend' (no adapter at $adapter). Set anchor.reviewBackend to moor or revdiff." >&2
+  echo "review-diff.sh: unknown review backend '$backend' (no adapter at $adapter). Set anchor.reviewBackend to editor, moor, or revdiff." >&2
   exit 64
 fi
 
 # The review-request contract the sourced adapter reads. Exported so the
 # adapter (sourced below) counts as a consumer — it runs in this same shell.
 export review_mode diff_range files_left files_right review_title review_details_json
+export message_file review_skill
 
 # shellcheck source=/dev/null
 source "$adapter"

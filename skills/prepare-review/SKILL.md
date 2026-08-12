@@ -336,16 +336,21 @@ The description gets pasted into a markdown renderer, so rendering bugs are user
 
 ### Open the review
 
-The description review runs when the configured review backend (`anchor.reviewBackend`, default [revdiff](https://revdiff.com/)) is installed. Check for it:
+The description review runs when a review backend is installed. Ask the dispatcher which one — it resolves this skill's key over the umbrella one, and considers only tools that are actually installed, so the name it returns is one you can open:
 
 ```bash
-command -v "$(git config anchor.reviewBackend 2>/dev/null || echo revdiff)"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --print-backend
 ```
+
+- `REVIEW_BACKEND_AVAILABLE=0` — nothing usable is installed; skip to the chat presentation below.
+- `REVIEW_BACKEND_CONFIGURED` present — the configured tool isn't installed and the probe found another. Say which one you're opening in one line, so a `revdiff` that turns out to be missing isn't discovered as a surprise window.
+
+Pass what it returned to the launch (`--backend <REVIEW_BACKEND>`) so the review opens in the tool the probe found rather than re-resolving the config.
 
 With a backend available, open the current description vs. the draft through the **dispatcher** — not the backend directly; the dispatcher builds the header and prints the normalized result on its stdout. The viewer blocks until closed, so launch as a **background** Bash call (`run_in_background: true`); a foreground call holds the turn open until the Bash timeout:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --files \
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --backend <REVIEW_BACKEND> --files \
   <CURRENT_DESC_PATH> <DESC_DRAFT_PATH> \
   --title 'CR description' \
   --detail branch=<BRANCH> --detail CR=<CR_URL>
@@ -357,7 +362,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --files \
 
 When the background command completes, read its stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trips the command-substitution gate. The last lines carry `REVIEW_VERDICT` (`approved` / `changes-requested` / `incomplete` / `no-verdict`) and `REVIEW_OUTPUT` (compact JSON — the DIFF contract in `SPEC.md`). **Don't read silence as success** — only `approved` is approval:
 
-- **`approved`** — write the draft to the CR (see "Write it" below). The reviewer read the description and signed off; a second chat gate asking the same question is the ceremony this step exists to remove. Surface any comments an approving review still left, after the write.
+- **`approved`** — write the draft to the CR (see "Write it" below). The reviewer read the description and signed off; a second chat gate asking the same question is the ceremony this step exists to remove. Surface any comments an approving review still left, after the write. If the result carries `editedFields` with `target: "description"` (the `editor` backend, where the saved buffer *is* the description), **that text is what you write** — adopt it verbatim rather than re-drafting from it, and don't re-present it for approval; the user just typed it.
 - **`changes-requested`** — each entry in `REVIEW_OUTPUT.comments` is `{body, target, file?, startLine?, endLine?, side?}`, where `body` is the inline feedback. Comments are ungraded, so fold in every one, then re-open the review on the revised draft. Echo the comments back first (the review-feedback table in `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`) so the user knows they landed.
 - **`incomplete`** — the reviewer closed with changes unreviewed: a partial pass, not approval. Ask what they want to change, then re-review.
 - **`no-verdict`** — the review **did not complete**. `backend: "difftool"` (or `capabilities.producesVerdict: false`) means a difftool with no contract showed the description; otherwise the backend closed early or errored (see `raw.exitCode`). Either way the user *may* have seen it and definitely didn't grade it: report what happened, then fall back to the chat presentation below. Don't silently retry — the same failure recurs.

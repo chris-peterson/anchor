@@ -4,6 +4,26 @@
 
 ### Added
 
+- An **`editor` review backend**, for when you already know the sentence you want
+  and would rather type it than describe it. Every `anchor` skill that drafts
+  prose hands it to you before it lands, and until now the only way to change it
+  was to *comment* and have `anchor` rewrite from the comments. Set
+  `anchor.reviewBackend editor` and the draft opens in your editor instead, with
+  the change under review below a scissors line the way `git commit --verbose`
+  works. What you save is the artifact — taken verbatim, not re-drafted from.
+  Empty the buffer and nothing is committed, filed, or published.
+
+- **A backend per artifact**: `anchor.<skill>.reviewBackend` overrides
+  `anchor.reviewBackend` for one skill, the way `anchor.<skill>.watchPipelineAfterPush`
+  already does. Which shape suits an artifact varies — a commit message is a
+  natural editor artifact, while a CR description whose deep links want checking
+  against the diff reads better in a diff viewer:
+
+  ```bash
+  git config anchor.reviewBackend revdiff        # diffs in the TUI
+  git config anchor.commit.reviewBackend editor  # commit messages in $EDITOR
+  ```
+
 - The length dial CR descriptions have had now covers every artifact `anchor`
   writes: `anchor.issueVerbosity` (default `75`), `anchor.commitVerbosity`
   (`50`), and `anchor.releaseVerbosity` (`10`) join `anchor.crVerbosity`. The
@@ -22,6 +42,12 @@
   key's own description, which meant reading the whole table to find them.
 
 ### Changed
+
+- A review now opens in a tool that's actually installed. `anchor` resolves the
+  backend against what's on your machine, so naming one you haven't installed
+  gets you the diff viewer you do have, said in one line, instead of a review
+  that reports nothing. The `editor` backend is never substituted in — it edits
+  one drafted artifact rather than showing a changeset.
 
 - CR descriptions draft at `anchor.crVerbosity` `25` rather than `50` when you
   set nothing, so they come out shorter without anyone configuring anything.

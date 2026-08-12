@@ -224,14 +224,17 @@ call and read its stdout with the **BashOutput tool**; `tail` / `$(...)` trips t
 command-substitution gate:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --files \
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill release --files \
   <RELEASE_NOTES_BASELINE> <RELEASE_NOTES_PATH> \
   --title 'Release notes' \
   --detail version=<NEW_VERSION> --detail range=<RELEASE_RANGE>
 ```
 
 It reads as all additions — expected; the notes are new. Map `REVIEW_VERDICT` as
-the other skills do: only `approved` proceeds; `changes-requested` means fold in
+the other skills do: only `approved` proceeds — and where it carries `editedFields`
+with `target: "release-notes"` (the `editor` backend, whose saved buffer *is* the
+notes), publish that text verbatim rather than re-drafting from it;
+`changes-requested` means fold in
 every comment (they're ungraded) and re-open; `incomplete` and `no-verdict` mean the reviewer
 didn't grade it — report what happened and fall back to putting the notes in your
 own reply, then ask with `AskUserQuestion`. A result with **no parseable

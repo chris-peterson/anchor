@@ -28,7 +28,8 @@ The four verbosity dials are listed in lifecycle order, and they descend:
 
 | Key | Default | What that gets you |
 |---|---|---|
-| `anchor.reviewBackend` | `revdiff` | The terminal-native reviewer opens the diff; `moor` opens a GUI window instead. |
+| `anchor.reviewBackend` | `revdiff` | The terminal-native reviewer opens the diff; `moor` opens a GUI window instead, and `editor` opens the drafted text in your editor. |
+| `anchor.<skill>.reviewBackend` | the umbrella key | A skill reviews in the backend above until you give that skill its own. |
 | `anchor.reviewBudgetMins` | `10` | Descriptions are written for ten minutes of focused review — enough for the change and the topics around it. |
 | `anchor.issueVerbosity` | `75` | Issue bodies run long: the people who pick the work up need the context in the issue. |
 | `anchor.commitVerbosity` | `50` | Commit bodies run to the why plus the context the diff doesn't show. |
@@ -54,7 +55,8 @@ each row.
 | Key | Example | Effect |
 |---|---|---|
 | `anchor.workTrackerBaseUri` | `git config anchor.workTrackerBaseUri https://app.clickup.com/t/` | The base URL of your work tracker. When you mention a ticket, `commit` adds a `Refs:` trailer and `prepare-review` links it in the CR. See [Work-tracker references](#work-tracker-references). |
-| `anchor.reviewBackend` | `git config anchor.reviewBackend moor` | Which visual-review tool the skills launch: `revdiff` or `moor`. Both return the same normalized review verdict; `revdiff` is a terminal-native reviewer that also handles hg/jj repos, while `moor` additionally tracks which changes you have reviewed and round-trips an edited commit message. `revdiff` needs the revdiff plugin installed — `anchor` delegates to its terminal-overlay launcher to open the TUI; select `moor` where you'd rather review in a GUI window. How the chosen tool renders the diff is its own knob, not an `anchor.*` key: see [Review-backend config](#review-backend-config) (per backend: [`revdiff`](#review-backend-config-revdiff), [`moor`](#review-backend-config-moor)). |
+| `anchor.reviewBackend` | `git config anchor.reviewBackend moor` | Which review tool the skills launch: `revdiff`, `moor`, or `editor`. All three return the same normalized review verdict. `revdiff` is a terminal-native reviewer that also handles hg/jj repos, while `moor` additionally tracks which changes you have reviewed and round-trips an edited commit message; `revdiff` needs the revdiff plugin installed — `anchor` delegates to its terminal-overlay launcher to open the TUI — and `moor` reviews in a GUI window. `editor` is the other shape of the step: instead of commenting on the draft, you edit it. How the chosen tool renders the diff is its own knob, not an `anchor.*` key: see [Review-backend config](#review-backend-config) (per backend: [`revdiff`](#review-backend-config-revdiff), [`moor`](#review-backend-config-moor), [`editor`](#review-backend-config-editor)). |
+| `anchor.<skill>.reviewBackend` | `git config anchor.commit.reviewBackend editor` | The same choice for one skill, overriding the umbrella key above. See [A backend per artifact](#a-backend-per-artifact). |
 | `anchor.reviewBudgetMins` | `git config anchor.reviewBudgetMins 10` | How many minutes of focused attention you expect this CR to get. It's an *input*, not a length cap: a tight budget (≈5) makes `prepare-review` lead with the essentials and cut asides hard; a generous one (≈30) keeps more supporting context and depth. It steers *what to include*, not the tone — a tight budget is no license for punchy or marketing framing. For *how long* the result runs, see `crVerbosity` below and [Length knobs](#length-knobs). |
 | `anchor.issueVerbosity` | `git config anchor.issueVerbosity 100` | Where an issue body sits between brevity and thoroughness. It sits highest of the four because the audience is the people who'll do the work, and what reads as detail to anyone else saves them a conversation. Below `100` the prose tightens in order — callouts, then the approach's explanation down to its load-bearing decisions, then Context's second paragraph. **Acceptance criteria are never abbreviated**: they say what done means, so they're the issue's floor the way the deep links are the CR's. |
 | `anchor.commitVerbosity` | `git config anchor.commitVerbosity 25` | The same dial applied to the commit message body. Below `100` the body tightens in order — asides, then the decisions-and-alternatives prose, then the context paragraph — down to a floor of one sentence of *why*. The subject line's format rules and the `Refs:` trailer stand at every setting, and a trivial change still earns a subject-only message. |
@@ -191,6 +193,76 @@ can miss the one `anchor` opens. See
 
 moor takes no presentation flags (it reads only the title and the sidecar path
 `anchor` gives it), so there's nothing to configure on that side.
+
+#### Review-backend config: `editor`
+
+The `editor` backend uses whatever editor git uses, so the knob is git's own:
+
+```bash
+git config core.editor "code --wait"   # or set VISUAL / EDITOR
+```
+
+A GUI editor has to **block** — `--wait` on VS Code, `-w` on Sublime and
+TextMate. Without it the editor returns the instant it opens and `anchor` reads
+an untouched draft as one you approved.
+
+A *terminal* editor needs a terminal, and the session `anchor` runs in has none,
+so it opens one: a tmux popup inside tmux, an iTerm2 window on macOS. Anywhere
+else, point `ANCHOR_EDITOR_LAUNCHER` at a script that takes the file path and
+opens your editor on it, blocking until it closes. `ANCHOR_EDITOR_TIMEOUT`
+(default 1800s) bounds how long `anchor` waits on a window that never closes.
+
+`anchor` deliberately ignores a `GIT_EDITOR` set to `true` — the way an agent
+harness keeps git from opening editors. Honoring it would open nothing, change
+nothing, and read as approval.
+
+### A backend per artifact
+
+Which shape suits an artifact varies. A commit message is a natural editor
+artifact — you usually know the sentence you want. A CR description whose deep
+links want checking against the diff reads better in a diff viewer. So the
+backend resolves per skill, the umbrella key setting the default:
+
+```bash
+git config anchor.reviewBackend revdiff        # diffs in the TUI
+git config anchor.commit.reviewBackend editor  # commit messages in $EDITOR
+```
+
+`anchor.commit.*`, `anchor.prepare-review.*`, `anchor.issue.*`, and
+`anchor.release.*` cover the four artifacts `anchor` drafts. A per-skill key wins
+in both directions, so an umbrella `editor` plus
+`anchor.prepare-review.reviewBackend revdiff` edits everything but the CR
+description.
+
+**What `editor` does with the draft.** It opens the artifact in a buffer with the
+change under review below a scissors line, the way `git commit --verbose` does:
+
+```text
+Add retry to checkout
+
+The gateway drops idle connections, so the first call after …
+------------------------ >8 ------------------------
+Everything below this line is ignored. Save to accept the text above;
+empty it to abort, and nothing this review gates will happen.
+```
+
+Whatever you save above that line **is** the artifact — `anchor` takes it
+verbatim rather than re-drafting from it. Empty the buffer (or exit non-zero,
+vim's `:cq`) and the flow halts with nothing committed, filed, or published.
+Unlike `git commit`, lines beginning with `#` are kept: three of the four
+artifacts are markdown, where `#` is a heading.
+
+**When the tool you named isn't installed.** `anchor` asks which backend a review
+can actually open before it opens one, and considers only installed tools — so a
+`revdiff` you haven't installed yet gets you the diff viewer you *do* have, named
+in one line rather than discovered as a surprise window. `editor` is never
+substituted in: it edits one drafted artifact rather than showing a changeset, so
+standing in for an absent diff viewer would answer a different question.
+
+An editor carries one artifact, so it has nothing to show for a review that is a
+diff on its own — `/anchor:commit`'s push-existing path, where there are
+unpushed commits and no drafted message. That review halts and names the key to
+change rather than passing a diff nobody saw.
 
 ### Forge-specific overrides (`cr` / `mr` / `pr`)
 
