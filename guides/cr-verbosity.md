@@ -2,8 +2,13 @@
 
 `anchor.crVerbosity` is an integer from 1 to 100 setting where a CR description
 sits between brevity and thoroughness. `100` is the shape the
-[CR-description template](/templates/cr-description) describes in full; the
-default of `50` leans well toward the brief end of it.
+[CR-description template](/templates/cr-description) describes in full, and
+unset behaves as `25`, well toward the brief end of it.
+
+`anchor` runs the same dial over four artifacts, and their defaults descend as
+the audience widens — issue `75`, commit `50`, CR `25`, release `10`. A CR sits
+third because reviewers read it working through a queue. The
+[configuring guide](/guides/configuring#defaults) has all four.
 
 **It isn't a word budget.** No count is being hit, nothing is truncated at a
 limit, and two changesets at the same setting will run to different lengths — a
@@ -92,6 +97,10 @@ This page's own changeset, drafted five times. Each draft came from a separate
 agent given the diff, the template, and one setting, with no sight of what the
 others produced. The prose is unedited.
 
+That changeset is the one that added the dial, back when it shipped at `50` — so
+several renderings say so in their own text. Read them as samples of *length* at
+a setting; the default they describe has since moved to `25`.
+
 The sections barely move — which is the point. What changes is how much is said
 inside them:
 
@@ -117,7 +126,7 @@ independent passes — the dial itself never moves it.
 
 `prepare-review` drafts CR descriptions, and how much it writes is steered by `git config anchor.*` keys. Until now the only key that touched length was `anchor.reviewBudgetMins` — the minutes of focused review you expect a CR to get. But the budget decides *what a description covers*: turn it down to get fewer words and you also lose topics. Descriptions were running too long, and a team that wanted the same coverage written shorter had nothing to set. This adds `anchor.crVerbosity`, an integer from 1 to 100 for where a description sits between brevity and thoroughness, as a second axis that resolves independently of the budget. Closes #47.
 
-It ships at `50`, so descriptions come out markedly briefer than 1.2.0 for everyone who configures nothing, and `git config anchor.crVerbosity 100` restores the old shape. `anchor.mrVerbosity` / `anchor.prVerbosity` override it per forge exactly as the `*Rules` keys already do. There's no script plumbing in the changeset — `prepare-review.sh` already collects every `anchor.*` key into `ANCHOR_CONFIG` — so the whole change is prose across the template, the skill, and the guides, plus a new calibration page for picking a number.
+It ships at `50`, so descriptions come out markedly briefer than 1.2.0 for everyone who configures nothing, and `git config anchor.crVerbosity 100` restores the old shape. `anchor.mrVerbosity` / `anchor.prVerbosity` override it per forge exactly as the `*Rules` keys already do. `prepare-review.sh` already collects every `anchor.*` key into `ANCHOR_CONFIG`, so the changeset is prose across the template, the skill, and the guides, plus a new calibration page for picking a number.
 
 #### Review guide
 
@@ -221,7 +230,7 @@ No script changed — `prepare-review.sh` already collects every `anchor.*` key 
 
 </details>
 
-### `50` — the default
+### `50`
 
 <details>
 <summary>each section down to its load-bearing claim</summary>
@@ -262,7 +271,7 @@ The behavior is prompt text, so the shell suite under `tests/` doesn't reach it 
 
 </details>
 
-### `25`
+### `25` — the default
 
 <details>
 <summary>a sentence or two per section; Review guide flattens</summary>

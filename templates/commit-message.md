@@ -44,5 +44,12 @@ A trailer is a `Key: value` footer line, set off from the body by a blank line.
 
 `anchor.commitRules` adds a standing rule to every message — e.g.
 `git config anchor.commitRules "prefix the subject with the affected module"`.
+
+`anchor.commitVerbosity` (1–100, unset behaves as `50`) decides how much prose
+the **body** gets — a balance point, not a word budget. Below `100` the body
+sheds asides first, then the decisions-and-alternatives prose, then the context
+paragraph, down to a floor of one sentence of *why*. The subject rules above and
+the `Refs:` trailer are off the dial: they hold at every setting.
+
 See the [configuring guide](/guides/configuring) for the full key set (and the
 CR-side `crRules` / `mrRules` / `prRules`).

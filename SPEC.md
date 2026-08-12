@@ -521,7 +521,7 @@ this" nullability from SARIF's `notApplicable`.
   to 100 setting where the CR description balances brevity against thoroughness
   — not a word budget, and never a truncation point — preferring
   `anchor.mrVerbosity`/`anchor.prVerbosity` for the forge in use; with none set,
-  it shall draft at `50`.
+  it shall draft at `25`.
 - **[CONFIG-08]** When drafting at a verbosity below 100, the system shall shorten
   by abbreviating prose — asides, then explanation down to each section's
   load-bearing claim, then Review-guide clauses and tiers, then Context's second
@@ -534,6 +534,34 @@ this" nullability from SARIF's `notApplicable`.
 - **[CONFIG-10]** The system shall let `anchor.crVerbosity` steer length only,
   keeping the register unchanged, and shall resolve it independently of
   `anchor.reviewBudgetMins`, which steers what the description covers.
+- **[CONFIG-11]** The system shall read `anchor.commitVerbosity` as an integer
+  from 1 to 100 setting where the commit message body balances brevity against
+  thoroughness; with none set, it shall draft at `50`. It shall shorten by
+  abbreviating the body — asides, then the decision and alternatives prose, then
+  the context paragraph — down to a floor of one sentence of why, and shall leave
+  the subject line's format rules and the `Refs:` trailer untouched at every
+  setting.
+- **[CONFIG-12]** The system shall read `anchor.issueVerbosity` as an integer
+  from 1 to 100 setting where the issue body balances brevity against
+  thoroughness; with none set, it shall draft at `75`. It shall shorten by
+  abbreviating prose — callouts, then the approach's explanation down to its
+  load-bearing decisions, then Context's second paragraph — down to a floor of
+  one sentence of why per section, and shall never drop or condense an acceptance
+  criterion, which states what done means and is the issue's contract rather than
+  its prose.
+- **[CONFIG-13]** The system shall read `anchor.releaseVerbosity` as an integer
+  from 1 to 100 setting where the release notes balance brevity against
+  thoroughness; with none set, it shall draft at `10`. It shall shorten by
+  abbreviating prose — rationale, then the consequences a user can infer, then
+  each entry down to its floor of the change stated as its effect on someone
+  using the project — and shall keep every entry and every breaking-change
+  migration step at each setting.
+- **[CONFIG-14]** The system shall apply every verbosity key to length alone —
+  abbreviating a section rather than removing it, and keeping the register
+  unchanged at every setting — and shall clamp an out-of-range or non-integer
+  value into the 1–100 band, saying so once, rather than refusing to draft. The
+  defaults shall descend along the lifecycle — issue, commit, CR, release — as
+  each step widens the artifact's audience.
 
 ### FORGE — Forge integration & output
 

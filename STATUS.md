@@ -3,10 +3,10 @@
 Tracking status of the requirements declared in [`SPEC.md`](SPEC.md).
 Maintained by `/sextant:spec-status`.
 
-**Last audit:** 2026-08-11
+**Last audit:** 2026-08-12
 **Spec version:** root SPEC.md (unversioned)
-**Plugin version:** 1.4.0
-**Coverage:** 162 Covered, 0 Partial, 0 Missing/Contradicts
+**Plugin version:** 1.5.0
+**Coverage:** 170 Covered, 0 Partial, 0 Missing/Contradicts
 
 The implementation is the plugin itself — the skill prompts under
 `skills/`, the ambient rules under `rules/`, and the helper scripts under
@@ -29,13 +29,20 @@ draft to review against the implementation, not an audited ledger.
 | ISSUES-01..12 | 12 | All Covered | Author one issue — gather intent, guard duplicates, draft, file (`skills/issue/SKILL.md`); list/scope/rank/recommend, read-only (`skills/issues/SKILL.md`) |
 | CI-01..14 | 14 | All Covered | Status/watch/job modes, commit-scoped resolution, per-workflow fold and the single-run opt-out; run/job breakdown tabulated with per-state emoji (CI-10..12) and watched once per commit after a push (CI-13..14) — `skills/pipeline/SKILL.md`, `skills/merge/SKILL.md` (CI-09), `templates/pipeline-report.md`, `scripts/{pipeline-status,pipeline-after-push}.sh`, `tests/pipeline-{status,after-push}.test.sh` |
 | DIFF-01..12 | 12 | All Covered | Tool-agnostic review contract — dispatcher `scripts/review-diff.sh` + adapters `scripts/review/{moor,revdiff}.sh`; consumers read the normalized verdict, and treat an unparseable or absent one as no-verdict (DIFF-12) — `skills/{commit,prepare-review,issue,release}/SKILL.md` verdict sections |
-| CONFIG-01..10 | 10 | All Covered | `anchor.*` key handling, including the per-skill after-push watch gate (CONFIG-06) and the CR-description verbosity dial, which abbreviates sections rather than removing them (CONFIG-07..10) — `guides/configuring.md`, `guides/cr-verbosity.md`, `templates/cr-description.md` (per-section "At lower verbosity"), `scripts/pipeline-after-push.sh` (`config_bool`), commit/prepare-review/issue config steps |
+| CONFIG-01..14 | 14 | All Covered | `anchor.*` key handling, including the per-skill after-push watch gate (CONFIG-06) and a verbosity dial per artifact — CR (CONFIG-07..10), commit message body (CONFIG-11), issue body (CONFIG-12), release notes (CONFIG-13) — each abbreviating sections rather than removing them, with the cross-artifact invariants, the clamp, and the audience-widens-as-the-default-descends ordering in CONFIG-14 — `guides/configuring.md` (Defaults table), `guides/cr-verbosity.md`, `templates/{cr-description,commit-message,issue-description}.md` ("At lower verbosity"), `scripts/pipeline-after-push.sh` (`config_bool`), commit/prepare-review/issue/release config steps, `tests/config-defaults.test.sh` (the documented defaults agree across SPEC, guide, skills, templates) |
 | FORGE-01..09 | 9 | All Covered | Template composition, body-file, markdown, auth — `templates/`, `guides/{forge-cookbook,markdown-gotchas}.md`; template resolution across the forge's own inheritance with a deterministic per-level pick and the `anchor.crTemplateRepo` backstop (FORGE-06..09) — `scripts/prepare-review.sh`, `tests/prepare-review.test.sh` |
 | RULE-01..05 | 5 | All Covered | SessionStart-injected rules — `hooks/emit-rules.sh`, `rules/*.md`; RULE-04 routes CR creation through `prepare-review` |
 | UX-01..05 | 5 | All Covered | Narration, orchestration, decision prompts, artifact visibility, recon-supplied values — cross-cutting, each `skills/*/SKILL.md`, `guides/execute-quietly.md` |
 | CONFIRM-01..06 | 6 | All Covered | Approval of the exact text before anything publishes under the user's name — commit message in the review tool (`skills/commit/SKILL.md` Step 5), CR description (`skills/prepare-review/SKILL.md` Steps 4-5), issue body (`skills/issue/SKILL.md`), thread replies (`skills/resolve-feedback/SKILL.md` 3c), release notes (`skills/release/SKILL.md`); CONFIRM-03 is the plan-is-not-prose distinction the reply gate rests on |
 
 ## Audit history
+
+### 2026-08-12 — A verbosity dial per artifact (CONFIG-11..14)
+
+STATUS.md updated: +4 IDs (CONFIG-11..14, Covered), 166 → 170; plugin version
+1.4.0 → 1.5.0. CONFIG-07's default moved 50 → 25 with no coverage change. The
+header count also corrected: it read 162 against a category table that already
+summed to 166.
 
 ### 2026-08-11 — Coverage refresh (spec-status)
 

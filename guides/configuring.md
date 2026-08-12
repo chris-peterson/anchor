@@ -16,29 +16,58 @@ two surfaces, neither of which commits an `anchor`-specific file to your repo:
   `prepare-review` detects and composes into it — put the team review-prep
   checklist there.
 
+## Defaults
+
+What `anchor` does when you've set nothing. Every value here is what the skills
+draft against out of the box, so this table is the one place to look before
+deciding a key is worth setting.
+
+The four verbosity dials are listed in lifecycle order, and they descend:
+`issueVerbosity` `75` → `commitVerbosity` `50` → `crVerbosity` `25` →
+`releaseVerbosity` `10`. See [Length knobs](#length-knobs) for why.
+
+| Key | Default | What that gets you |
+|---|---|---|
+| `anchor.reviewBackend` | `revdiff` | The terminal-native reviewer opens the diff; `moor` opens a GUI window instead. |
+| `anchor.reviewBudgetMins` | `10` | Descriptions are written for ten minutes of focused review — enough for the change and the topics around it. |
+| `anchor.issueVerbosity` | `75` | Issue bodies run long: the people who pick the work up need the context in the issue. |
+| `anchor.commitVerbosity` | `50` | Commit bodies run to the why plus the context the diff doesn't show. |
+| `anchor.crVerbosity` | `25` | CR descriptions stay near the brief end — a reviewer on a deadline wants pointing, not explaining. |
+| `anchor.releaseVerbosity` | `10` | Release notes run to each change as its effect on someone using the project, and stop. |
+| `anchor.mrVerbosity` / `anchor.prVerbosity` | `anchor.crVerbosity` | No forge split — GitLab and GitHub get the same length until you set one. |
+| `anchor.watchPipelineAfterPush` | `true` | Every push-side skill watches the pipeline that push started and reports it. |
+| `anchor.<skill>.watchPipelineAfterPush` | the umbrella key | A skill follows the setting above until you give that skill its own. |
+| `anchor.workTrackerBaseUri` | none | Mentioning a bare ticket id gets you no link — mention a full URL, or set this. |
+| `anchor.commitRules` / `issueRules` / `crRules` / `mrRules` / `prRules` | none | The default commit, issue, and CR rules apply with nothing layered on. |
+| `anchor.crTemplateRepo` | none | Template resolution stops at what the repo and the forge supply. |
+
+Absent keys keep these; the skills never invent a value for a key you haven't
+set.
+
 ## Keys
 
 Keys use git's standard camelCase convention (like `init.defaultBranch` or
 `commit.gpgSign`). git stores and matches them case-insensitively, so the case is
-purely for readability.
+purely for readability. Defaults are in the table above rather than repeated in
+each row.
 
 | Key | Example | Effect |
 |---|---|---|
 | `anchor.workTrackerBaseUri` | `git config anchor.workTrackerBaseUri https://app.clickup.com/t/` | The base URL of your work tracker. When you mention a ticket, `commit` adds a `Refs:` trailer and `prepare-review` links it in the CR. See [Work-tracker references](#work-tracker-references). |
-| `anchor.reviewBackend` | `git config anchor.reviewBackend moor` | Which visual-review tool the skills launch: `revdiff` (default) or `moor`. Both return the same normalized review verdict; `revdiff` is a terminal-native reviewer that also handles hg/jj repos, while `moor` additionally tracks which changes you have reviewed and round-trips an edited commit message. The default needs the revdiff plugin installed — `anchor` delegates to its terminal-overlay launcher to open the TUI; select `moor` where you'd rather review in a GUI window. How the chosen tool renders the diff is its own knob, not an `anchor.*` key: see [Review-backend config](#review-backend-config) (per backend: [`revdiff`](#review-backend-config-revdiff), [`moor`](#review-backend-config-moor)). |
-| `anchor.reviewBudgetMins` | `git config anchor.reviewBudgetMins 10` | How many minutes of focused attention you expect this CR to get. It's an *input*, not a length cap: a tight budget (≈5) makes `prepare-review` lead with the essentials and cut asides hard; a generous one (≈30) keeps more supporting context and depth. It steers *what to include*, not the tone — a tight budget is no license for punchy or marketing framing. Unset behaves like ≈10. For *how long* the result runs, see `crVerbosity` below and [Two length knobs](#two-length-knobs). |
-| `anchor.crVerbosity` | `git config anchor.crVerbosity 25` | Where a CR description sits between brevity and thoroughness, as an integer from 1 to 100. Unset behaves as `50`. It is not a word budget — nothing is counted or truncated; the number says how hard to lean on brevity when the two pull against each other. `100` is the [CR-description template](/templates/cr-description)'s full shape; below that the prose tightens, in the order the [verbosity guide](/guides/cr-verbosity) sets out. **It abbreviates sections, never removes them** — which sections a description has is the template's call, so one that meets its condition is present at every setting, down to its floor. It never cuts the *why* sentence or the Review guide's deep links, and it steers length only, never register. See the `mr`/`pr` overrides below. |
+| `anchor.reviewBackend` | `git config anchor.reviewBackend moor` | Which visual-review tool the skills launch: `revdiff` or `moor`. Both return the same normalized review verdict; `revdiff` is a terminal-native reviewer that also handles hg/jj repos, while `moor` additionally tracks which changes you have reviewed and round-trips an edited commit message. `revdiff` needs the revdiff plugin installed — `anchor` delegates to its terminal-overlay launcher to open the TUI; select `moor` where you'd rather review in a GUI window. How the chosen tool renders the diff is its own knob, not an `anchor.*` key: see [Review-backend config](#review-backend-config) (per backend: [`revdiff`](#review-backend-config-revdiff), [`moor`](#review-backend-config-moor)). |
+| `anchor.reviewBudgetMins` | `git config anchor.reviewBudgetMins 10` | How many minutes of focused attention you expect this CR to get. It's an *input*, not a length cap: a tight budget (≈5) makes `prepare-review` lead with the essentials and cut asides hard; a generous one (≈30) keeps more supporting context and depth. It steers *what to include*, not the tone — a tight budget is no license for punchy or marketing framing. For *how long* the result runs, see `crVerbosity` below and [Length knobs](#length-knobs). |
+| `anchor.issueVerbosity` | `git config anchor.issueVerbosity 100` | Where an issue body sits between brevity and thoroughness. It sits highest of the four because the audience is the people who'll do the work, and what reads as detail to anyone else saves them a conversation. Below `100` the prose tightens in order — callouts, then the approach's explanation down to its load-bearing decisions, then Context's second paragraph. **Acceptance criteria are never abbreviated**: they say what done means, so they're the issue's floor the way the deep links are the CR's. |
+| `anchor.commitVerbosity` | `git config anchor.commitVerbosity 25` | The same dial applied to the commit message body. Below `100` the body tightens in order — asides, then the decisions-and-alternatives prose, then the context paragraph — down to a floor of one sentence of *why*. The subject line's format rules and the `Refs:` trailer stand at every setting, and a trivial change still earns a subject-only message. |
+| `anchor.crVerbosity` | `git config anchor.crVerbosity 50` | Where a CR description sits between brevity and thoroughness, as an integer from 1 to 100. It is not a word budget — nothing is counted or truncated; the number says how hard to lean on brevity when the two pull against each other. `100` is the [CR-description template](/templates/cr-description)'s full shape; below that the prose tightens, in the order the [verbosity guide](/guides/cr-verbosity) sets out. **It abbreviates sections, never removes them** — which sections a description has is the template's call, so one that meets its condition is present at every setting, down to its floor. It never cuts the *why* sentence or the Review guide's deep links, and it steers length only, never register. See the `mr`/`pr` overrides below. |
 | `anchor.mrVerbosity` / `anchor.prVerbosity` | `git config anchor.prVerbosity 25` | Forge-specific overrides of `crVerbosity`: `mrVerbosity` applies on GitLab, `prVerbosity` on GitHub. When set, the forge-specific key replaces `crVerbosity` for that forge; otherwise `crVerbosity` applies. |
+| `anchor.releaseVerbosity` | `git config anchor.releaseVerbosity 40` | The same dial applied to release notes. It sits lowest of the four: the audience is everyone using the project, and most of them are reading to find out whether this release affects them. Below `100` the notes shed rationale first, then the consequences a reader can infer, down to a floor of each change stated as its effect on someone using the project. **Every entry survives at every setting**, as do a breaking change's migration steps — the dial shortens entries, it doesn't drop them. |
 | `anchor.commitRules` | `git config anchor.commitRules "prefix the subject with the affected module"` | An extra rule layered onto `anchor`'s default commit-message rules, applied to every message it drafts. |
 | `anchor.issueRules` | `git config anchor.issueRules "always include an acceptance-criteria checklist"` | An extra rule layered onto `anchor`'s default issue rules, applied to every issue the `issue` skill drafts. |
 | `anchor.crTemplateRepo` | `git config anchor.crTemplateRepo my-group/ci-templates` | A repo holding the CR template to use when neither this repo nor the forge's own inheritance supplies one. `prepare-review` reads it last, so it never overrides a template the team already ships. Give it as `group/project` on GitLab or `owner/repo` on GitHub; the template is looked for in that repo's usual locations. |
 | `anchor.crRules` | `git config anchor.crRules "@-mention the on-call lead"` | An extra rule layered onto the default CR-description rules — the forge-agnostic default. See the `mr`/`pr` overrides below. |
 | `anchor.mrRules` / `anchor.prRules` | `git config anchor.prRules "fill in the Risk & rollback section"` | Forge-specific overrides of `crRules`: `mrRules` applies on GitLab, `prRules` on GitHub. When set, the forge-specific key replaces `crRules` for that forge; otherwise `crRules` applies. |
-| `anchor.watchPipelineAfterPush` | `git config anchor.watchPipelineAfterPush false` | Whether a skill that pushes then watches the pipeline that push triggered and reports it. On by default, for every push-side skill (`commit`, `resolve-feedback`, `prepare-review`). See [Watching the pipeline after a push](#watching-the-pipeline-after-a-push). |
+| `anchor.watchPipelineAfterPush` | `git config anchor.watchPipelineAfterPush false` | Whether a skill that pushes then watches the pipeline that push triggered and reports it. Applies to every push-side skill (`commit`, `resolve-feedback`, `prepare-review`). See [Watching the pipeline after a push](#watching-the-pipeline-after-a-push). |
 | `anchor.<skill>.watchPipelineAfterPush` | `git config anchor.prepare-review.watchPipelineAfterPush false` | The same knob for one skill, overriding the umbrella key above. |
-
-Absent keys fall back to `anchor`'s defaults; the skills never invent a value for
-a key you haven't set.
 
 ### Work-tracker references
 
@@ -56,11 +85,27 @@ commit trailer and a link in the CR description. Two forms work:
 If you don't mention a ticket, `anchor` leaves the trailer off — it won't prompt
 for one on every commit.
 
-### Two length knobs
+### Length knobs
 
-`reviewBudgetMins` and `crVerbosity` both make a description shorter, and they do
-it on different axes — which is why turning one down is not a substitute for the
-other:
+Each artifact has its own verbosity dial, and the four defaults descend along the
+lifecycle:
+
+| | Dial | Default | Written for |
+|---|---|---:|---|
+| Issue | `anchor.issueVerbosity` | `75` | the few people who'll do the work |
+| Commit | `anchor.commitVerbosity` | `50` | whoever lands here later, bisecting or reading `git log` |
+| CR | `anchor.crVerbosity` | `25` | reviewers, working through a queue |
+| Release | `anchor.releaseVerbosity` | `10` | everyone using the project |
+
+Each step out from the work widens the audience and narrows what they came for,
+so brevity is warranted further out. The paragraph of background that saves the
+implementer a conversation is the paragraph a release-notes reader skims past to
+find whether this affects them. Set one to reshape one artifact; the four resolve
+independently.
+
+On CRs a second knob crosses that one. `reviewBudgetMins` and `crVerbosity` both
+make a description shorter, and they do it on different axes — which is why
+turning one down is not a substitute for the other:
 
 - **`reviewBudgetMins` decides what to include.** How many of the changeset's
   topics survive into the description at all. Turn it down and you get fewer

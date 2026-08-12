@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- The length dial CR descriptions have had now covers every artifact `anchor`
+  writes: `anchor.issueVerbosity` (default `75`), `anchor.commitVerbosity`
+  (`50`), and `anchor.releaseVerbosity` (`10`) join `anchor.crVerbosity`. The
+  defaults descend along the lifecycle because each step out widens the
+  audience — an issue is written for the few people who'll do the work, release
+  notes for everyone using the project — and the background that saves the first
+  reader a conversation is what the last one skims past.
+
+  Each dial abbreviates prose rather than dropping content: a commit's subject
+  rules and `Refs:` trailer hold at every setting, an issue's acceptance criteria
+  are never condensed, and every release-note entry survives with its
+  breaking-change migration steps intact.
+
+- A **Defaults** table opens the configuring guide, listing what each `anchor.*`
+  key does when you've set nothing. The values used to be a clause inside each
+  key's own description, which meant reading the whole table to find them.
+
+### Changed
+
+- CR descriptions draft at `anchor.crVerbosity` `25` rather than `50` when you
+  set nothing, so they come out shorter without anyone configuring anything.
+  `git config anchor.crVerbosity 50` restores the previous length.
+
 ## 1.5.0
 
 ### Added

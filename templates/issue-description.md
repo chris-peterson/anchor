@@ -18,6 +18,17 @@ project's forge template](#honoring-a-projects-forge-template) below). A standin
 rule can be layered onto every issue via `anchor.issueRules`. See the
 [configuring guide](/guides/configuring) for the full key set.
 
+**How much to write is configurable.** `anchor.issueVerbosity` (1–100, unset
+behaves as `75`) decides how much prose the sections below get — a balance point,
+not a word budget. It runs highest of `anchor`'s four verbosity defaults, which
+descend as the audience widens (issue, commit, CR, release): an issue is written
+for the people who'll do the work, so context earns its place here. Below `100` the
+prose sheds callouts first, then the approach's explanation down to its
+load-bearing decisions, then Considerations to one sentence per concern, then
+Context's second paragraph. It abbreviates a section; it never removes one — that
+call belongs to this file and to the team's template. **Acceptance criteria stay
+whole at every setting**: they're the contract for what done means, not prose.
+
 ## 1. Context *(first heading)*
 
 - What is being added or changed, and **why**? Lead with the why — the reader
@@ -62,6 +73,10 @@ Given a signed-in user whose session has expired
 When they submit the checkout form
 Then they're redirected to re-authenticate and the cart is preserved
 ```
+
+**Verbosity never touches this section.** Every criterion the work has to meet is
+in the issue at `1` as it is at `100` — dropping one changes what the issue asks
+for, which is a different thing from writing it shorter.
 
 ## 4. Considerations *(optional)*
 

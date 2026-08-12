@@ -193,6 +193,14 @@ Use the categories from Step 2 as `###` sections, omitting empty ones, under a
 heading naming the new version. Where a breaking change is present, its section
 goes first and says what the consumer must change.
 
+### Honor `anchor.*` config
+
+Read the project + global keys once — `git config --get-regexp '^anchor\.' 2>/dev/null` — and match the names case-insensitively (`--get-regexp` lowercases them). Absent keys keep `anchor`'s defaults; never invent a value.
+
+- **`anchor.releaseVerbosity`** — an integer 1–100 setting where the notes sit between brevity and thoroughness. **Unset behaves as `10`** — the lowest of `anchor`'s four verbosity defaults, which descend as the audience widens (issue `75` → commit `50` → CR `25` → release `10`). Release notes have the widest audience of anything `anchor` writes, and most of that audience is reading to find out whether this release affects them. Clamp an out-of-range or non-integer value into the 1–100 band and say so once rather than failing the draft.
+
+  **It shortens entries; it never drops one.** Every change in scope has its bullet at `1` as it does at `100`, and a breaking change keeps its migration steps at every setting — a reader who never learns a change shipped is a reader the notes failed. Work down this order and stop where the draft balances where the setting asks: the rationale for a change → the consequences a reader can infer from the effect you already stated → each bullet down to its floor, the change as its effect on someone using the project. At the default that floor is most of what's left, which is the intent.
+
 Two conventions to honor: the loaded-framing discipline in
 `${CLAUDE_PLUGIN_ROOT}/guides/loaded-framing.md` (notes state what changed, not
 how hard it was or how little it touched), and the forge's markdown quirks in

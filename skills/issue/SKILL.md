@@ -130,6 +130,9 @@ git config --get-regexp '^anchor\.' 2>/dev/null
 
 - **`anchor.workTrackerBaseUri`** — when the author mentions a ticket (a full tracker URL, or a bare id), link it in the Context section: use a full URL as-is, or build `<base-uri><id>` from a bare id. No mention, no link.
 - **`anchor.issueRules`** — an extra standing rule layered onto every issue (the escape hatch for anything without a dedicated key).
+- **`anchor.issueVerbosity`** — an integer 1–100 setting where the issue body sits between brevity and thoroughness. **Unset behaves as `75`** — the highest of `anchor`'s four verbosity defaults, which descend as the audience widens (issue `75` → commit `50` → CR `25` → release `10`). An issue's audience is the few people who'll do the work, and background that would pad a release note saves them a conversation here. **It is not a word budget** — nothing is counted or truncated. Clamp an out-of-range or non-integer value into the 1–100 band and say so once rather than failing the draft.
+
+  **It abbreviates sections; it never removes one.** Which sections an issue has is the template's call — `anchor`'s own shape, or the team's when the project ships one — and a section that earns its place is present at every setting. Work down this order and stop where the draft balances where the setting asks: callouts and asides → the Proposed approach's explanation, down to its load-bearing decisions → Considerations, down to one sentence per concern → Context's second paragraph, then the first down to its *why* sentence. **Acceptance criteria are never abbreviated at any setting**: they state what done means, so they're the issue's floor the way deep links are a CR description's. A low setting buys fewer words, not louder ones.
 
 `anchor.reviewBudgetMins` does not apply to issues. See `${CLAUDE_PLUGIN_ROOT}/guides/configuring.md` for the full key set.
 

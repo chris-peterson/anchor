@@ -22,7 +22,7 @@ in this file are template organization only; emit the bare name (`## Context`,
 **How much to write is configurable, on two axes.** `anchor.reviewBudgetMins` is
 the minutes of focused review you expect this CR to get — it decides *what to
 include*, so a tight budget (≈5) leads with the essentials and cuts asides.
-`anchor.crVerbosity` (1–100, unset behaves as `50`) decides *how much prose* the
+`anchor.crVerbosity` (1–100, unset behaves as `25`) decides *how much prose* the
 included material gets — a balance point, not a word budget. A standing rule can
 be added to every description via `anchor.crRules`; `mr`/`pr`-prefixed keys
 override both `crRules` and `crVerbosity` per forge. See the [configuring

@@ -142,6 +142,9 @@ Keep the body free of loaded framing — temporal blame, size-minimizers, self-c
 
 - **`anchor.workTrackerBaseUri`** — when the user mentions a ticket (a full tracker URL, or a bare id), append a `Refs:` trailer (a footer line after a blank line, below the body): use a full URL as-is, or build `<base-uri><id>` from a bare id. Don't scrape the branch or prompt for a ticket — no mention, no trailer. Skip it for a trivial subject-only commit unless the user asks.
 - **`anchor.commitRules`** — an extra rule layered onto the default commit-message rules for this message (the escape hatch for anything without a dedicated key).
+- **`anchor.commitVerbosity`** — an integer 1–100 setting where the message *body* sits between brevity and thoroughness. **Unset behaves as `50`**: the why, plus the context the diff doesn't carry. **It is not a word budget** — nothing is counted or truncated, and two changesets at the same setting run to different lengths. Clamp an out-of-range or non-integer value into the 1–100 band and say so once rather than failing the draft.
+
+  Apply it to the body alone. **The subject line is not on the dial** — its format rules (imperative, ≤50 chars, no trailing period) are the template's and hold at every setting, and so does the `Refs:` trailer. Work down this order and stop where the draft balances where the setting asks: asides and the clause qualifying a claim nobody disputes → the decisions-and-alternatives prose, down to the decision itself → the context paragraph, down to its *why* sentence. The floor is one sentence of why; a trivial change still earns the subject-only message the template allows, which is a judgment about the change, not a verbosity setting.
 
 See `${CLAUDE_PLUGIN_ROOT}/guides/configuring.md` for the full key set.
 

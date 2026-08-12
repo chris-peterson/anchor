@@ -16,14 +16,22 @@ prose skills consult this guide for the tone discipline — `commit`,
   - Bad: *"The serializer has always omitted file and line attributes."*
   - Better: *"The serializer omits file and line attributes."*
 
-- **Minimizing qualifiers about size.** Anything that leads with the change's
-  small footprint, whether an adjective (*"one short block"*, *"a tiny fix"*,
-  *"trivial change"*) or a count used as a framing device (*"one line, in …"*,
-  *"just a one-liner"*, *"only N lines"*). Even on a genuinely small diff, lead
-  with *where* the change is, not *how little* it is — the reader can see the
-  diff, and being told it's small primes them to under-scrutinize.
+- **Minimizing qualifiers about size or scope.** Anything that leads with the
+  change's small footprint, whether an adjective (*"one short block"*, *"a tiny
+  fix"*, *"trivial change"*), a count used as a framing device (*"one line, in
+  …"*, *"just a one-liner"*, *"only N lines"*), or a totalizing claim that the
+  change amounts to just one kind of thing (*"the whole change is prose"*,
+  *"that's the entire change"*, *"it's all just config"*). Even on a genuinely
+  small diff, lead with *where* the change is, not *how little* it is — the
+  reader can see the diff, and being told it's small primes them to
+  under-scrutinize. The totalizing form does that and asserts completeness on
+  top of it: it tells the reader there is nothing else to go looking for, which
+  is the reviewer's finding to make.
   - Bad: *"The fix is one short block in `CreateTestCaseElement`."*
   - Better: *"This change adds a block in `CreateTestCaseElement`."*
+  - Bad: *"No script plumbing needed, so the whole change is prose."*
+  - Better: *"`prepare-review.sh` already collects every `anchor.*` key, so the
+    changeset is prose across the template, the skill, and the guides."*
 
 - **Self-congratulatory adverbs.** Adverbs that judge your own code's
   correctness: *"correctly omits"*, *"properly handles"*, *"rightly returns"*.

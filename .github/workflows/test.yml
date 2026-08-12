@@ -101,6 +101,19 @@ jobs:
       - name: pipeline after push
         run: bash tests/pipeline-after-push.test.sh
 
+  config-defaults:
+    # The three verbosity defaults are restated across SPEC.md, the configuring
+    # guide's Defaults table, two skill prompts, and two templates — nothing
+    # reads them back at run time, so this is what keeps the six in agreement.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+      - name: documented defaults agree
+        run: bash tests/config-defaults.test.sh
+
   review:
     # Exercises the review dispatcher and its moor/revdiff adapters against stub
     # backends, asserting the normalized DIFF contract each emits.
