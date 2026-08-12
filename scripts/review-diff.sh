@@ -36,6 +36,10 @@
 #   bash review-diff.sh <diff-range>
 #     e.g. bash review-diff.sh HEAD                   # working tree vs HEAD
 #     e.g. bash review-diff.sh HEAD~1...HEAD          # explicit commit range
+#   A git-range review takes the same --title / --detail overrides as --files.
+#   The computed header describes the *local* HEAD, which is the wrong subject
+#   when the range is somebody else's change request fetched into this checkout
+#   — /anchor:review passes the CR's own title and facts instead.
 #
 # Files mode — review two arbitrary paths (no git range required), e.g. an old
 # vs. proposed CR description. Domain-agnostic: pass the header text yourself.
@@ -188,7 +192,24 @@ if [[ "${1:-}" == "--files" ]]; then
     esac
   done
 else
-  # Git-range modes: resolve the range and the header style.
+  # Git-range modes: resolve the range and the header style. Header overrides
+  # are collected first so they can be applied after the defaults are computed.
+  override_title=""
+  override_details_json=""
+  args=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --title)  override_title="${2:?--title needs a value}"; shift 2 ;;
+      --detail)
+        pair="${2:?--detail needs label=value}"; shift 2
+        override_details_json=$(jq -c --arg l "${pair%%=*}" --arg v "${pair#*=}" \
+          '. + [{label:$l, value:$v}]' <<<"${override_details_json:-[]}")
+        ;;
+      *) args+=("$1"); shift ;;
+    esac
+  done
+  set -- "${args[@]+"${args[@]}"}"
+
   if [[ "${1:-}" == "--commit" ]]; then
     diff_range=$(determine_commit_range) || {
       echo "review-diff.sh: could not determine a diff range (no upstream tracking branch and no origin/main or origin/master)" >&2
@@ -269,6 +290,12 @@ else
         {label:"commit",value:$c},{label:"author",value:$a},{label:"range",value:$r}]
        + (if $b == "" then [] else [{label:"body",value:$b}] end)')
   fi
+
+  # An override replaces the computed value rather than merging with it: the
+  # computed header describes a different subject entirely, so keeping half of
+  # it would attribute the range to the wrong commit.
+  [[ -n "$override_title" ]] && review_title="$override_title"
+  [[ -n "$override_details_json" ]] && review_details_json="$override_details_json"
 fi
 
 # --- Select the backend and delegate -----------------------------------------

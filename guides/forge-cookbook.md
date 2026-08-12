@@ -531,6 +531,21 @@ glab api -X POST "projects/:fullpath/merge_requests/<iid>/notes" \
 
 `gh` accepts a file directly: `gh pr comment <num> --body-file <path>`.
 
+## Fetch a CR's head without checking it out
+
+Both forges publish every CR head under a read-only ref namespace on `origin`,
+so reviewing someone else's change needs no extra remote, no branch checkout,
+and works when the CR came from a fork:
+
+```bash
+git fetch origin "+refs/pull/<num>/head:refs/anchor-review/<num>"            # GitHub
+git fetch origin "+refs/merge-requests/<iid>/head:refs/anchor-review/<iid>"  # GitLab
+```
+
+Diff it with the three-dot form against the base the forge reports
+(`baseRefOid` / `diff_refs.base_sha`), which resolves the merge base rather than
+mixing in commits that landed on the target branch since.
+
 ## Line-anchored MR discussion (GitLab)
 
 `glab mr note` posts a general discussion. To anchor a comment to a specific
@@ -567,6 +582,58 @@ glab api -X POST projects/:fullpath/merge_requests/<iid>/discussions \
 Verify the returned note is `"type": "DiffNote"` with a populated `position` —
 a `DiscussionNote` with `position: null` means the position was dropped and the
 comment landed unanchored.
+
+## Line-anchored PR review comment (GitHub)
+
+The counterpart to the GitLab form above: `line` plus `side` replace GitLab's
+`position` object, and `commit_id` carries the SHA the anchor pins to. `body`,
+`commit_id`, and `path` are required; `position` still exists but is deprecated
+in favor of `line`.
+
+```bash
+gh api -X POST "repos/<owner>/<repo>/pulls/<num>/comments" \
+  -F "body=@/tmp/finding.aB3xKp.md" \
+  -f "commit_id=<head-sha>" -f "path=path/to/file.ext" \
+  -F "line=42" -f "side=RIGHT"          # RIGHT = the new side, LEFT = the old
+```
+
+For a range, add `-F "start_line=<first>" -f "start_side=RIGHT"`; `line` is then
+the *last* line of the range.
+
+## Batch a whole review into one notification (GitHub)
+
+Posting N comments individually sends the author N notifications. The reviews
+endpoint takes them as one submission instead — its `body` becomes the review's
+summary, and `event: COMMENT` leaves comments without recording an approval or a
+change request. **Omitting `event` is not the same thing**: it leaves the review
+`PENDING`, visible only to its author until separately submitted.
+
+```bash
+cat > /tmp/review.xY1mP3.json <<'EOF'
+{
+  "commit_id": "<head-sha>",
+  "body": "the summary that leads the review",
+  "event": "COMMENT",
+  "comments": [
+    {"path": "src/cache.js", "line": 42, "side": "RIGHT", "body": "…"}
+  ]
+}
+EOF
+
+gh api -X POST "repos/<owner>/<repo>/pulls/<num>/reviews" --input /tmp/review.xY1mP3.json
+```
+
+GitLab has no batch equivalent — each thread is its own POST to `discussions`.
+
+## File-level comments: why `anchor` doesn't use them
+
+Both forges accept a comment scoped to a whole file rather than a line, and the
+two are not equally specified: GitHub documents `subject_type: file` (with `line`
+then not required), while GitLab lists `file` among `position_type`'s allowed
+values without saying what the rest of the position must hold. Using one and not
+the other would make the same review render differently depending on where the
+CR lives, so `/anchor:review` anchors to lines and routes everything else into
+the summary comment.
 
 ## List unresolved review threads
 

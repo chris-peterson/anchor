@@ -12,7 +12,8 @@ flowchart TD
     Need["work to do"] -->|issue| Filed["issue on the forge"]
     Filed -->|commit| Pushed["reviewed and pushed"]
     Pushed -->|prepare-review| Open["change request open"]
-    Open -->|resolve-feedback| Cleared["review threads cleared"]
+    Open -->|review| Reviewed["findings on the CR"]
+    Reviewed -->|resolve-feedback| Cleared["review threads cleared"]
     Cleared -->|merge| Landed["landed"]
     Landed -->|release| Shipped["published version"]
 ```
@@ -32,7 +33,7 @@ The two skills you reach for most, in motion:
 ## Quickstart
 
 `anchor` drives the forge through its official CLI, so the skills that touch a
-change request, issue, pipeline, or release (`prepare-review`,
+change request, issue, pipeline, or release (`prepare-review`, `review`,
 `resolve-feedback`, `merge`, `release`, `pipeline`, `issue`, `issues`) need the
 one for your `origin` remote installed and authenticated with read+write scope.
 `commit` works without it. Install
@@ -117,5 +118,6 @@ present and is skipped when absent.
   which one owns the version bump
 - **Templates** — the output shapes the skills produce:
   [commit message](/templates/commit-message),
-  [CR description](/templates/cr-description), and
+  [CR description](/templates/cr-description),
+  [review document](/templates/cr-review), and
   [issue description](/templates/issue-description)
