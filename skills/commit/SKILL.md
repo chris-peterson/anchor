@@ -220,17 +220,19 @@ If a commit attempt in Step 6 is rejected by a `PreToolUse` hook citing a substr
 
 ## Step 5: Review the pending changeset
 
-Before committing, open the pending changeset — the working tree vs `HEAD`, the exact changes Step 6 will commit — in a visual review, **with the drafted message shown alongside it**. Launch the **dispatcher** in `--local` mode with `--message-file` (the message file from Step 3) — **not** raw `git difftool`. It stages everything so the index equals the working tree, diffs it against `HEAD`, seeds the drafted message (subject as the headline, body as prose) plus a repo/branch/summary header, drives the configured review backend (`anchor.reviewBackend`, default revdiff), and — once it closes — prints the normalized result on its own stdout. So you review the message and the diff *together* — no separate chat gate — and on moor you can edit the message in the tool (it returns as `editedFields`). Raw `git difftool` bypasses the header and the verdict.
+Before committing, open the pending changeset — the working tree vs `HEAD`, the exact changes Step 6 will commit — in a visual review, **with the drafted message shown alongside it**. Launch the **dispatcher** in `--local` mode with `--message-file` (the message file from Step 3) — **not** raw `git difftool`. It stages everything so the index equals the working tree, diffs it against `HEAD`, seeds the drafted message (subject as the headline, body as prose) plus a repo/branch/summary header, drives this skill's configured review backend (`anchor.commit.reviewBackend`, else `anchor.reviewBackend` — see the configuring guide's Defaults table), and — once it closes — prints the normalized result on its own stdout. So you review the message and the diff *together* — no separate chat gate — and on moor you can edit the message in the tool (it returns as `editedFields`). Raw `git difftool` bypasses the header and the verdict.
 
 **Launch as a background call** (`run_in_background: true`): the dispatcher blocks until the review closes, so a foreground call would hold the turn open until the Bash timeout.
 
 **Don't announce the launch.** The backend puts the diff on screen itself — a terminal overlay (revdiff) or its own window (moor) — so the user can see it. A line saying the review is open, and what's in it, describes what the tool is already showing. The next thing you say is the verdict (or what the review asked for).
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --local --message-file <commit-msg-path>
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill commit --local --message-file <commit-msg-path>
 ```
 
-(On the **push-existing** path from Step 1 — nothing staged, unpushed commits to push — there's no drafted message; review those commits instead of the working tree: `review-diff.sh --commit`.)
+`--skill commit` is what lets this skill's backend differ from the rest — `anchor.commit.reviewBackend` over `anchor.reviewBackend` — so pass it on every launch below.
+
+(On the **push-existing** path from Step 1 — nothing staged, unpushed commits to push — there's no drafted message; review those commits instead of the working tree: `review-diff.sh --skill commit --commit`. That path is a diff with no drafted artifact, so on the `editor` backend it returns `no-verdict` naming the key to change — report that rather than pushing unreviewed.)
 
 When the background command completes, read its stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trip the command-substitution gate. The last lines carry the verdict (no separate file read):
 
@@ -245,7 +247,7 @@ Act on the verdict:
 - **`no-verdict`** → nothing is committed; read the cause from the result. When `backend` is `difftool` (or `capabilities.producesVerdict` is `false`), the change was **shown in a difftool that doesn't speak the contract** — report `Reviewed in your difftool — commit and push?` and act on the reply (proceed to Step 6 on approval). Otherwise the backend closed early or errored (see `raw.exitCode`) — report `Review closed without a verdict — what do you want to change?` If the output shows no difftool launched at all (no `diff.tool` set, or it points at a tool that isn't installed), that's a local git misconfiguration: surface it plainly so the user can fix their config or install a backend — don't substitute another tool.
 - **No verdict line at all** — stdout is empty, holds only stderr text, or carries no parseable `REVIEW_VERDICT` → the dispatcher exited before it could report (a bad argument, an unreadable message file, a missing `jq`, a backend that died). **Treat this exactly as `no-verdict`: nothing is committed.** Report what the output did say and ask what to do — `The review didn't report a verdict: <what stdout/stderr showed>. Nothing committed. Fix the tooling, or review in chat?` An absent result is the one case where proceeding is most tempting and least defensible: it looks like nothing went wrong precisely because nothing was reported.
 
-**The message is under review too.** If the result carries `editedFields` for the commit message (moor, when the reviewer edited it in-tool), use that edited text as the message in Step 6, overwrite the Step 3 message file with it. A `changes-requested` comment with `target: "commit-message"` is feedback on the message itself — revise the message and re-review. On a backend that can't round-trip an edited message (`capabilities.editableCommitMessage: false`, e.g. revdiff), keep the drafted message unless a comment asks to change it.
+**The message is under review too.** If the result carries `editedFields` for the commit message — moor, when the reviewer edited it in-tool, or the `editor` backend, where the saved buffer *is* the message — use that edited text as the message in Step 6, overwrite the Step 3 message file with it. Adopt it verbatim: it's the user's own wording, not a comment to draft from. A `changes-requested` comment with `target: "commit-message"` is feedback on the message itself — revise the message and re-review. On a backend that can't round-trip an edited message (`capabilities.editableCommitMessage: false`, e.g. revdiff), keep the drafted message unless a comment asks to change it.
 
 ## Step 6: Commit and push
 

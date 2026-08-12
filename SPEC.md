@@ -30,7 +30,7 @@ behavior, not an independent authority — review them against the source.
 - **Review contract** — the tool-agnostic result `review-diff.sh` returns: a
   `verdict` (`approved` · `changes-requested` · `incomplete` · `no-verdict`)
   plus normalized comments and capabilities, produced from the backend's native
-  output by a per-backend adapter (moor by default). Defined under DIFF.
+  output by a per-backend adapter (revdiff by default). Defined under DIFF.
 - **Squash gate** — the deterministic "is HEAD out for review?" decision
   (`squash-check.sh`) that governs squash-vs-new-commit.
 - **Deep link** — a line-anchored forge URL in a CR description that lands a
@@ -416,7 +416,8 @@ backlog to pick the next one (the `issues` skill, ISSUES-07..12).
 Diff review is tool-agnostic. Each review skill launches review through one
 dispatcher (`review-diff.sh`), which resolves the diff range, drives the
 configured backend, and normalizes the tool's native output to the contract
-below via a per-backend adapter. moor is the default backend. The shape borrows
+below via a per-backend adapter. Which backend, and its default, is CONFIG-15's
+to say — stated once there rather than restated per consumer. The shape borrows
 its two axes — an outcome `verdict` kept separate from a per-comment `action` —
 from SARIF (`result.kind` vs `result.level`) and reviewdog; its verdict names
 from GitHub's pull-request review states; and its "the backend cannot express
@@ -427,7 +428,10 @@ this" nullability from SARIF's `notApplicable`.
 
 ```
 {
-  backend:            "moor" | "revdiff" | "difftool",
+  // the three selectable backends, then the value emitted when a difftool
+  // that does not speak the contract showed the diff (DIFF-10) — a report,
+  // not a choice, which is why it is last rather than ranked among them
+  backend:            "revdiff" | "moor" | "editor" | "difftool",
   verdict:            "approved" | "changes-requested" | "incomplete" | "no-verdict",
   reviewCompleteness: "complete" | "partial" | null,   // null = backend cannot say
   reviewer:           string | null,
@@ -441,7 +445,8 @@ this" nullability from SARIF's `notApplicable`.
     suggestion?: string,        // proposed replacement for the anchored range
     raw?:        string         // the backend's verbatim comment text
   }],
-  editedFields: [{ target: "commit-message" | "description", original?: string, edited: string }],
+  editedFields: [{ target: "commit-message" | "description" | "issue-body" | "release-notes",
+                   original?: string, edited: string }],
   capabilities: {
     producesVerdict: bool, perHunkReview: bool,
     editableCommitMessage: bool, editableDescription: bool, sideMarkers: bool
@@ -452,21 +457,25 @@ this" nullability from SARIF's `notApplicable`.
 
 **Verdict mapping:**
 
-| `verdict` | moor | revdiff | meaning |
-|---|---|---|---|
-| `approved` | exit 0 | exit 0 | clean — proceed |
-| `changes-requested` | exit 1 | exit 10 | blocking feedback to address |
-| `incomplete` | exit 2 | — | not every hunk was reviewed (moor-only) |
-| `no-verdict` | exit 3 / absent | exit 1 | no usable verdict — the cause (closed early, tool error, or a difftool that does not speak the contract) is read from `raw.exitCode` and `capabilities.producesVerdict` |
+| `verdict` | moor | revdiff | editor | meaning |
+|---|---|---|---|---|
+| `approved` | exit 0 | exit 0 | saved, changed or not | clean — proceed |
+| `changes-requested` | exit 1 | exit 10 | — | blocking feedback to address |
+| `incomplete` | exit 2 | — | — | not every hunk was reviewed (moor-only) |
+| `no-verdict` | exit 3 / absent | exit 1 | buffer emptied, or a non-zero exit | no usable verdict — the cause (closed early, tool error, an aborted edit, or a difftool that does not speak the contract) is read from `raw.exitCode` and `capabilities.producesVerdict` |
+
+The `editor` backend has no `changes-requested` row because it returns text, not
+comments: an editor's whole answer is the revised artifact, which is why the
+column below `changes-requested` is empty rather than mapped to some exit code.
 
 - **[DIFF-01]** The system shall launch diff review through the dispatcher, never
   raw `git difftool`, so the result is normalized and the verdict is populated.
 - **[DIFF-02]** While a review runs, the system shall launch the dispatcher as a
   background call and read its result with the BashOutput tool rather than `tail`
   or command substitution.
-- **[DIFF-03]** The system shall drive the backend named by
-  `anchor.reviewBackend` (default `revdiff`) through a per-backend adapter that maps
-  the tool's native output onto the normalized result.
+- **[DIFF-03]** The system shall drive the backend CONFIG-15 selects through a
+  per-backend adapter that maps the tool's native output onto the normalized
+  result.
 - **[DIFF-04]** The system shall report the verdict as one of `approved`,
   `changes-requested`, `incomplete`, or `no-verdict`, mapped from the backend's
   native signal per the verdict table.
@@ -496,6 +505,28 @@ this" nullability from SARIF's `notApplicable`.
   gates, and verify with the user in chat. Absent output is never approval; a
   dispatcher that fails before reporting produces silence, which is
   indistinguishable from success unless the consumer treats it as failure.
+- **[DIFF-13]** Where the selected backend is `editor`, the system shall open the
+  drafted artifact in the user's editor with the change under review below a
+  scissors line, adopt the saved text verbatim as the artifact, and return it in
+  `editedFields` rather than re-drafting from it. It shall not strip lines
+  beginning with `#`, which are headings in the markdown artifacts it carries.
+- **[DIFF-14]** If the editor returns an empty artifact, or exits non-zero, then
+  the system shall report `no-verdict` and shall publish nothing the review
+  gated.
+- **[DIFF-15]** Where the editor backend is selected for a review that has no
+  drafted artifact, the system shall report `no-verdict` naming the
+  configuration that resolves it, rather than reporting a diff it cannot show as
+  reviewed.
+- **[DIFF-16]** The system shall resolve the editor as git resolves it
+  (`core.editor`, then `VISUAL`, then `EDITOR`), and shall treat a no-op editor
+  supplied by the environment as unset, so a review that opened nothing is never
+  read as approval.
+- **[DIFF-17]** When asked to report the backend rather than run a review, the
+  system shall consider only installed tools, emit the one a review would open
+  along with whether anything usable is installed, name the configured backend
+  whenever it substituted another, and shall launch nothing. It shall not
+  substitute the editor backend for an absent diff viewer, which would answer a
+  different question than the caller asked.
 
 ### CONFIG — Configuration
 
@@ -562,6 +593,11 @@ this" nullability from SARIF's `notApplicable`.
   value into the 1–100 band, saying so once, rather than refusing to draft. The
   defaults shall descend along the lifecycle — issue, commit, CR, release — as
   each step widens the artifact's audience.
+- **[CONFIG-15]** Where `anchor.<skill>.reviewBackend` is set, the system shall
+  select that skill's review backend from it, preferring it over
+  `anchor.reviewBackend` in both directions; with neither set, it shall use
+  `revdiff`. Which shape suits an artifact varies, so the choice is per skill
+  rather than one switch for the plugin.
 
 ### FORGE — Forge integration & output
 

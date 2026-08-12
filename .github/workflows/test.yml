@@ -129,3 +129,5 @@ jobs:
           git config --global user.name "CI"
       - name: review dispatcher + adapters
         run: bash tests/review-diff.test.sh
+      - name: editor backend + per-skill backend key
+        run: bash tests/review-editor.test.sh
