@@ -1,11 +1,18 @@
 #!/usr/bin/env bash
 # git-difftool backend adapter for review-diff.sh (see SPEC.md "DIFF").
 #
-# The stand-in for a machine with no diff viewer installed: it drives whatever
-# tool git resolves, so the changes still reach the screen. That tool speaks no
-# contract of its own, so the result is always the DIFF-10 shape — backend
-# `difftool`, `producesVerdict` false, verdict `no-verdict` — and the caller
-# asks the user directly.
+# Drives whatever tool git resolves, so the changes reach the screen. That tool
+# speaks no contract of its own, so the result is always the DIFF-10 shape —
+# backend `difftool`, `producesVerdict` false, verdict `no-verdict` — and the
+# caller asks the user directly.
+#
+# Selectable, never automatic. This was the bottom rung of the install ladder
+# until the rung was measured against what it produces: a difftool review ends
+# in the same chat question a missing viewer would have asked, having first
+# shown the user a diff nobody can grade. Asking "you saw it — approve?" off the
+# back of that is the rubber stamp the verdict contract exists to prevent, so a
+# machine with no viewer now reaches the fallback ladder directly
+# (guides/review-fallback.md) and this adapter runs only when asked for by name.
 #
 # The emitted `backend` is `difftool` rather than `git`: the adapter is named
 # for what it drives, the contract value names the case a consumer branches on,
@@ -48,9 +55,7 @@ git_emit() {
 emit_review() {
   # With neither key set, `git difftool` falls back to vimdiff, which waits on a
   # terminal that a CI job hasn't got — the run hangs until it is cancelled
-  # instead of reporting. Say so rather than launching into it. The dispatcher
-  # normally keeps the configured adapter in this case (so it can name its own
-  # missing tool); this guard covers a deliberate anchor.reviewBackend=git.
+  # instead of reporting. Say so rather than launching into it.
   if ! git config --get diff.tool >/dev/null 2>&1 && \
      ! git config --get merge.tool >/dev/null 2>&1; then
     echo "review-diff.sh: no difftool configured (set diff.tool or merge.tool, or install a review backend)" >&2

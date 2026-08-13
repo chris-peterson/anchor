@@ -164,9 +164,12 @@ differently from its siblings, because here the reviewer's comments are the
   Name what went unseen and re-open the viewer. Do not build a document over it:
   this verdict is exactly the rubber-stamp the step exists to prevent.
 - **`no-verdict`** — the review did not complete (`backend: "difftool"` or
-  `capabilities.producesVerdict: false` means a difftool with no contract showed
-  it; otherwise read `raw.exitCode`). Say what happened and ask whether the user
-  read the changes, rather than assuming either answer.
+  `capabilities.producesVerdict: false` means the user selected
+  `anchor.reviewBackend git` and their difftool showed it; otherwise read
+  `raw.exitCode`). Say what happened in one line, then walk the changeset rung of
+  `${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md` — file by file, in your reply.
+  Don't ask whether the user read the changes: this step's product *is* the
+  reading, so an answer either way leaves you with no findings to carry forward.
 - **No verdict line at all** — treat as `no-verdict`; absent output is never a
   completed review.
 

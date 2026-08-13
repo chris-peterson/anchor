@@ -553,11 +553,13 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   and verdict `no-verdict`, and ask the user directly.
 - **[DIFF-11]** The system shall resolve the backend against the tools that are
   installed: where the preferred backend's tool is absent, it shall substitute an
-  installed diff viewer, and where none is installed it shall degrade to the
-  `git` adapter, which drives git's configured difftool, rather than fail.
-  Substitution shall stay among the diff viewers — `editor` remains selectable
-  but never automatic, since it edits one drafted artifact rather than showing a
-  changeset.
+  installed diff viewer, and where none is installed it shall keep the configured
+  backend, whose report names the tool that is missing, and hand the flow to the
+  fallback ladder (DIFF-20). Substitution shall stay among the diff viewers:
+  `editor` and `git` are selectable but never automatic — `editor` edits one
+  drafted artifact rather than showing a changeset, and `git` shows a changeset
+  it cannot grade. Either standing in for an absent viewer would answer a
+  different question than the caller asked.
 - **[DIFF-12]** If the dispatcher reports no parseable verdict — no
   `REVIEW_VERDICT` line, empty output, or output the consumer cannot read — then
   the system shall treat the review as `no-verdict`, halt the action the review
@@ -585,19 +587,31 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   along with whether anything usable is installed, name the configured backend
   whenever it substituted another, and shall launch nothing. It shall not
   substitute the editor backend for an absent diff viewer, which would answer a
-  different question than the caller asked.
+  different question than the caller asked. It shall additionally report, on its
+  own axis, whether an editor review would reach an editor — resolvable per
+  DIFF-16 *and* with somewhere to open it — since the editor is a rung the
+  fallback ladder offers rather than a viewer the probe selects, and offering it
+  where a launch would reach nothing dead-ends the user in a host error.
 - **[DIFF-18]** The system shall drive git's difftool through a `git` adapter of
   its own rather than through another backend's, so no backend name stands for
-  both a tool the user selects and the fallback nobody selects. If git resolves
-  no difftool — neither `diff.tool` nor `merge.tool` is set — then the system
-  shall report that and launch nothing, rather than enter git's vimdiff default,
-  which blocks where no terminal can answer it; where a configured backend's own
-  tool is what is missing, the system shall keep that backend so its report names
-  the absent tool.
+  two tools. If git resolves no difftool — neither `diff.tool` nor `merge.tool`
+  is set — then the system shall report that and launch nothing, rather than
+  enter git's vimdiff default, which blocks where no terminal can answer it.
 - **[DIFF-19]** Where a git-range review's subject is not the local `HEAD`, the
   system shall accept a caller-supplied title and detail rows and use them in
   place of the computed header, so a range fetched from another author's change
   request is not labelled with the reviewer's own last commit.
+- **[DIFF-20]** Where a review is ungraded — nothing usable installed, or a
+  result that is `no-verdict`, `incomplete`, or carries no parseable verdict —
+  the system shall offer a rung that produces a real answer rather than a
+  question that treats the launch as one. It shall not ask whether a shown diff
+  is approved: a window that opened is not evidence it was read, and the two
+  cases are indistinguishable. For a drafted artifact it shall surface the
+  draft's own file path and, where DIFF-17 reports an editor is reachable, offer
+  the editor backend, whose saved buffer returns a graded result through
+  DIFF-13. Its floor shall be reading the change in the conversation — the
+  artifact in full, or a changeset walked file by file — never a summary
+  standing in for the change, since approval of a summary grades the summary.
 
 ### CONFIG — Configuration
 

@@ -236,13 +236,16 @@ with `target: "release-notes"` (the `editor` backend, whose saved buffer *is* th
 notes), publish that text verbatim rather than re-drafting from it;
 `changes-requested` means fold in
 every comment (they're ungraded) and re-open; `incomplete` and `no-verdict` mean the reviewer
-didn't grade it — report what happened and fall back to putting the notes in your
-own reply, then ask with `AskUserQuestion`. A result with **no parseable
-`REVIEW_VERDICT`** (empty stdout, stderr only — the dispatcher exited before
-reporting) reads the same way: say what the output showed and present the notes in
-your reply. With no backend installed
-(`command -v "$(git config anchor.reviewBackend 2>/dev/null || echo revdiff)"`), use
-that same in-reply presentation.
+didn't grade it. A result with **no parseable `REVIEW_VERDICT`** (empty stdout,
+stderr only — the dispatcher exited before reporting) reads the same way, and so
+does a probe reporting nothing installed.
+
+Every ungraded case takes the ladder in
+`${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md`: say what happened in one line,
+link the drafted notes file, offer the editor rung when the probe reported
+`REVIEW_EDITOR_AVAILABLE=1`, and otherwise put the notes in your own reply and ask
+with `AskUserQuestion`. The notes are a drafted document, so the document rungs
+apply and the changeset walkthrough doesn't.
 
 **Then confirm the publish explicitly, even after an `approved` review.** This is
 the one place `anchor` keeps a second gate: a CR description is editable, but a

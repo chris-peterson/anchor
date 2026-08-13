@@ -269,28 +269,19 @@ grep -qx 'REVIEW_BACKEND=revdiff' <<<"$o"     || fail "no viewer -> want the con
 grep -qx 'REVIEW_BACKEND_AVAILABLE=0' <<<"$o" || fail "no viewer -> want AVAILABLE=0, got: $o"
 ok "backend: with nothing installed the probe reports the preference, unavailable"
 
-# The run itself degrades: the `git` adapter drives git's difftool, and since
-# that tool speaks no contract the result is the difftool shape (DIFF-10)
-# rather than a hard stop.
+# The run keeps the configured adapter, whose report names the tool that is
+# missing. It does not slide into git's difftool: `diff.tool` is set here, so
+# the only thing stopping that is the rule, and a difftool review would report
+# `difftool` / no-verdict having shown a diff nobody can grade — the rung the
+# skill's fallback ladder replaced.
 unset MOOR_FIXTURE
 o=$( cd "$repo" && PATH="$system_path" bash "$dispatch" --previous )
-[ "$(jq -r .backend <<<"$(json_of "$o")")" = difftool ] \
-  || fail "no viewer -> want a difftool review, got: $(json_of "$o")"
-ok "backend: no viewer installed degrades the run to git's difftool"
-
-# ...but only when git has one to open. With diff.tool and merge.tool unset,
-# `git difftool` falls back to vimdiff, which blocks where there is no terminal
-# to answer it — a CI job hangs until it is cancelled rather than failing. The
-# configured adapter runs instead and reports its own tool's absence.
-git -C "$repo" config --unset diff.tool
-o=$( cd "$repo" && PATH="$system_path" bash "$dispatch" --previous )
 [ "$(jq -r .backend <<<"$(json_of "$o")")" = revdiff ] \
-  || fail "no difftool configured -> want the configured adapter, got: $(json_of "$o")"
-git -C "$repo" config diff.tool faketool
-ok "backend: with no difftool configured either, the run never launches one"
+  || fail "no viewer -> want the configured adapter, got: $(json_of "$o")"
+ok "backend: no viewer installed keeps the configured adapter, never a difftool"
 
-# `git` is a selectable backend, not only the stand-in — and selecting it with
-# no difftool configured reports rather than dropping into a blocking vimdiff.
+# `git` is selectable, just never automatic — and selecting it with no difftool
+# configured reports rather than dropping into a blocking vimdiff.
 git -C "$repo" config anchor.reviewBackend git
 git -C "$repo" config --unset diff.tool
 o=$( cd "$repo" && PATH="$system_path" bash "$dispatch" --previous 2>/dev/null )

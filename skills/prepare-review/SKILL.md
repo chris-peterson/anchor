@@ -342,8 +342,9 @@ The description review runs when a review backend is installed. Ask the dispatch
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --print-backend
 ```
 
-- `REVIEW_BACKEND_AVAILABLE=0` — nothing usable is installed; skip to the chat presentation below.
+- `REVIEW_BACKEND_AVAILABLE=0` — nothing usable is installed; skip to the fallback ladder below.
 - `REVIEW_BACKEND_CONFIGURED` present — the configured tool isn't installed and the probe found another. Say which one you're opening in one line, so a `revdiff` that turns out to be missing isn't discovered as a surprise window.
+- `REVIEW_EDITOR_AVAILABLE=0|1` — whether the fallback ladder may offer the editor rung. Carry it forward; it costs nothing here and it's the difference between offering a route that works and one that dead-ends.
 
 Pass what it returned to the launch (`--backend <REVIEW_BACKEND>`) so the review opens in the tool the probe found rather than re-resolving the config.
 
@@ -365,14 +366,16 @@ When the background command completes, read its stdout with the **BashOutput too
 - **`approved`** — write the draft to the CR (see "Write it" below). The reviewer read the description and signed off; a second chat gate asking the same question is the ceremony this step exists to remove. Surface any comments an approving review still left, after the write. If the result carries `editedFields` with `target: "description"` (the `editor` backend, where the saved buffer *is* the description), **that text is what you write** — adopt it verbatim rather than re-drafting from it, and don't re-present it for approval; the user just typed it.
 - **`changes-requested`** — each entry in `REVIEW_OUTPUT.comments` is `{body, target, file?, startLine?, endLine?, side?}`, where `body` is the inline feedback. Comments are ungraded, so fold in every one, then re-open the review on the revised draft. Echo the comments back first (the review-feedback table in `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`) so the user knows they landed.
 - **`incomplete`** — the reviewer closed with changes unreviewed: a partial pass, not approval. Ask what they want to change, then re-review.
-- **`no-verdict`** — the review **did not complete**. `backend: "difftool"` (or `capabilities.producesVerdict: false`) means a difftool with no contract showed the description; otherwise the backend closed early or errored (see `raw.exitCode`). Either way the user *may* have seen it and definitely didn't grade it: report what happened, then fall back to the chat presentation below. Don't silently retry — the same failure recurs.
-- **No verdict line at all** — stdout empty, only stderr text, or no parseable `REVIEW_VERDICT`: the dispatcher exited before reporting (bad argument, missing `jq`, a backend that died). Treat it as `no-verdict` — say what the output did show, and fall back to the chat presentation below. Nothing is written to the CR on an unverified result.
+- **`no-verdict`** — the review **did not complete**. `backend: "difftool"` (or `capabilities.producesVerdict: false`) means a difftool with no contract showed the description; otherwise the backend closed early or errored (see `raw.exitCode`). Either way the user *may* have seen it and definitely didn't grade it: report what happened, then take the fallback ladder below. Don't silently retry — the same failure recurs.
+- **No verdict line at all** — stdout empty, only stderr text, or no parseable `REVIEW_VERDICT`: the dispatcher exited before reporting (bad argument, missing `jq`, a backend that died). Treat it as `no-verdict` — say what the output did show, and take the fallback ladder below. Nothing is written to the CR on an unverified result.
 
-### When there's no review backend (or no CR yet)
+### When the review didn't grade it (or there's no CR yet)
 
-Two cases land here: no backend is installed, and the `skip-deep-links` path where `CURRENT_DESC_PATH` is empty because no CR exists.
+Three cases land here: no backend is installed, a review that came back without a usable verdict, and the `skip-deep-links` path where `CURRENT_DESC_PATH` is empty because no CR exists.
 
-**Put the description in your own message.** Paste the full body into a fenced code block in the reply — running `git diff --no-index` (or any other command) does *not* show it to the user: a Bash tool's output goes to you, and the terminal collapses it to a `+80 lines` stub they'd have to expand. Approving off the back of that is approving blind. Then ask how to proceed with the `AskUserQuestion` tool, header `Disposition`, options in this order:
+Walk the ladder in `${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md` — link the draft at `DESC_DRAFT_PATH`, offer the editor rung when the probe reported `REVIEW_EDITOR_AVAILABLE=1`, and otherwise put the full body in a fenced block in your reply. This skill's artifact is a drafted document, so the changeset walkthrough doesn't apply; the document rungs do.
+
+Then ask how to proceed with the `AskUserQuestion` tool, header `Disposition`, options in this order:
 
 - **Yes (write)** *(default)* — push the description to the open CR.
 - **No (copy only)** — leave it for the user to paste into the web UI themselves.

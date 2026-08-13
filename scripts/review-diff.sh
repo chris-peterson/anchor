@@ -65,8 +65,15 @@ set -euo pipefail
 #       REVIEW_BACKEND=<name>              what to pass to --backend
 #       REVIEW_BACKEND_AVAILABLE=0|1       0 = nothing usable is installed
 #       REVIEW_BACKEND_CONFIGURED=<name>   only when config asked for another
+#       REVIEW_EDITOR_AVAILABLE=0|1        1 = --backend editor would reach an
+#         editor. Reported on its own axis because it answers a different
+#         question: not "which viewer shows the changeset" but "can the user be
+#         handed the drafted artifact to edit" — the rung a skill offers when
+#         the viewer is missing or died (see guides/review-fallback.md).
 # shellcheck source=lib/resolve-context.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
+# shellcheck source=lib/review-editor.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/review-editor.sh"
 CTX_REPO=""
 CTX_WORKTREE=""
 review_skill=""
@@ -97,6 +104,12 @@ resolve_backend() {
 
 # The editor backend opens whatever editor git resolves, so it has no binary of
 # its own to look for; the others are named after theirs.
+#
+# This stays a PATH question for the run path on purpose. An editor backend that
+# cannot reach an editor still belongs to the editor adapter, whose `no-verdict`
+# names the missing piece — degrading it to a difftool would answer the diff
+# question when the caller asked the artifact one. The probe below asks the
+# sharper `anchor_editor_available` instead, since it is deciding what to offer.
 backend_installed() {
   [[ "$1" == "editor" ]] || command -v "$1" >/dev/null 2>&1
 }
@@ -105,10 +118,11 @@ backend_installed() {
 # installed leaves the name as configured — the probe reports that alongside
 # REVIEW_BACKEND_AVAILABLE=0, so a caller still learns what was asked for.
 #
-# Substitution stays among the diff viewers. `editor` remains selectable but
-# never automatic: it edits one drafted artifact rather than showing a
-# changeset, so standing in for an absent revdiff would answer a different
-# question than the caller asked.
+# Substitution stays among the diff viewers. `editor` and `git` are both
+# selectable but never automatic, for the same reason from two directions:
+# `editor` edits one drafted artifact rather than showing a changeset, and
+# `git` shows a changeset nobody can grade. Either standing in for an absent
+# revdiff would answer a different question than the caller asked.
 installed_backend() {
   local configured="$1" candidate
   if backend_installed "$configured"; then printf '%s' "$configured"; return; fi
@@ -121,13 +135,22 @@ installed_backend() {
 if [[ "$print_backend" == "1" ]]; then
   configured=$(resolve_backend)
   backend=$(installed_backend "$configured")
+  editor_available=0
+  anchor_editor_available && editor_available=1
   echo "REVIEW_BACKEND=$backend"
-  if backend_installed "$backend"; then
+  if [[ "$backend" == "editor" ]]; then
+    # Selected, so its own reachability is the answer to "is anything usable
+    # here" — a configured editor backend with nowhere to open an editor is as
+    # unavailable as an absent viewer, and saying otherwise sends the caller to
+    # launch a review that reports a host problem instead of showing anything.
+    echo "REVIEW_BACKEND_AVAILABLE=$editor_available"
+  elif backend_installed "$backend"; then
     echo "REVIEW_BACKEND_AVAILABLE=1"
   else
     echo "REVIEW_BACKEND_AVAILABLE=0"
   fi
   [[ "$backend" == "$configured" ]] || echo "REVIEW_BACKEND_CONFIGURED=$configured"
+  echo "REVIEW_EDITOR_AVAILABLE=$editor_available"
   exit 0
 fi
 
@@ -309,16 +332,12 @@ if [[ ! -r "$adapter" ]]; then
   exit 64
 fi
 backend=$(installed_backend "$backend")
-# A machine with no viewer installed reviews through the `git` adapter, which
-# drives `git difftool --dir-diff` so the diff still opens in whatever tool git
-# resolves. Only when git has one: with `diff.tool` and `merge.tool` both unset,
-# `git difftool` falls back to vimdiff, which blocks forever where there is no
-# terminal to answer it. Absent that, keep the configured adapter — it names the
-# tool that is missing, which is more use than a generic no-verdict.
-if ! backend_installed "$backend" && \
-   { git config --get diff.tool >/dev/null 2>&1 || git config --get merge.tool >/dev/null 2>&1; }; then
-  backend=git
-fi
+# A machine with no viewer installed keeps the configured adapter, whose report
+# names the tool that is missing. It does not degrade into git's difftool: that
+# review cannot produce a verdict, so it ends in the same chat question an
+# absent viewer would have asked, having first shown a diff nobody can grade —
+# and "you saw it, approve?" is the rubber stamp the contract exists to prevent.
+# The skill's fallback ladder (guides/review-fallback.md) is the rung below.
 adapter="$(dirname "${BASH_SOURCE[0]}")/review/${backend}.sh"
 
 # The review-request contract the sourced adapter reads. Exported so the
