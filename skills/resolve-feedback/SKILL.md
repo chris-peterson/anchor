@@ -217,8 +217,8 @@ is right. Reply content:
 
 - For fixes, the default is exactly this, and nothing more:
 
-  ```markdown
-  addressed in [follow-up commit](<commit-url>)
+  ```text
+  addressed in <commit-url>
   ```
 
   The commit message and diff carry the detail; restating it in the thread
@@ -235,7 +235,7 @@ is being asked to approve:
 
 | # | Where | Reply |
 |---|-------|-------|
-| 1 | `src/deploy.sh:42` | addressed in [follow-up commit](<url>) |
+| 1 | `src/deploy.sh:42` | addressed in <url> |
 | 2 | `taskdef.yml:7` | Fargate would mean rebuilding the image on every deploy — the EC2 launch type keeps the layer cache warm. |
 
 Then ask with `AskUserQuestion` (header `Replies`): **Post as drafted** /
