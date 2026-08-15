@@ -3,3 +3,8 @@ hooks:
   - event: SessionStart
     command: 'bash "${CLAUDE_PLUGIN_ROOT}/hooks/emit-rules.sh"'
     description: Emits the plugin's ambient rules into the agent's context.
+  - event: SessionStart
+    command: 'bash "${CLAUDE_PLUGIN_ROOT}/hooks/check-cli-freshness.sh"'
+    description: >-
+      Reports when the anchor wrapper on PATH is older than the installed
+      plugin, since install-cli bakes in the path it ran from.

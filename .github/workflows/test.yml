@@ -114,6 +114,22 @@ jobs:
       - name: documented defaults agree
         run: bash tests/config-defaults.test.sh
 
+  anchor-cli:
+    # Exercises scripts/anchor: the stream contract (one JSON object on stdout,
+    # diagnostics on stderr), the exit codes, the completion parity guard, and
+    # install-cli's three .zshrc states against a scratch HOME. Also covers the
+    # freshness hook, whose whole job is noticing a wrapper a plugin update left
+    # behind — a case no other test can reach, since nothing else knows the
+    # wrapper's version is a snapshot.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+      - name: CLI entrypoint, completion parity, and freshness hook
+        run: bash tests/anchor-cli.test.sh
+
   review:
     # Exercises the review dispatcher and its moor/revdiff adapters against stub
     # backends, asserting the normalized DIFF contract each emits.

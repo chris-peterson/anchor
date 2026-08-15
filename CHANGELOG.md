@@ -24,6 +24,18 @@
   git config anchor.commit.reviewBackend editor  # commit messages in $EDITOR
   ```
 
+- A command line: `anchor diff <left> <right>` reviews any two files or
+  directories in the review tool you've configured, and prints the verdict and
+  the reviewer's comments as JSON. The review the skills launch was previously
+  reachable only from a skill, so a hook, a shell, or another agent with two
+  files to compare had to re-derive the invocation or go without. Add a header
+  with `--title` and repeatable `--detail label=value`. Reachable as
+  `/anchor:anchor` in a session, and as `anchor` from a shell once installed.
+
+- `anchor install-cli` puts the CLI on PATH and installs zsh tab completion in the
+  same step, and a SessionStart hook tells you when a plugin update has left that
+  wrapper on an older build. See [the CLI guide](https://chris-peterson.github.io/anchor/#/guides/cli).
+
 - The length dial CR descriptions have had now covers every artifact `anchor`
   writes: `anchor.issueVerbosity` (default `75`), `anchor.commitVerbosity`
   (`50`), and `anchor.releaseVerbosity` (`10`) join `anchor.crVerbosity`. The
