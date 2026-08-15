@@ -1,19 +1,18 @@
 #!/usr/bin/env bash
 # The DIFF-10 result: a difftool put the change on screen and graded nothing.
 #
-# Sourced, not executed. Two adapters land on this shape and it has to be the
-# same object from both:
+# Sourced, not executed. Reached from `scripts/review/moor.sh` when the sidecar
+# comes back empty: that adapter drives `git difftool` to get to moor, so a moor
+# that is absent, or that is not git's configured `diff.tool`, leaves a plain
+# difftool on screen and nothing to map.
 #
-#   scripts/review/git.sh   the tool git resolves speaks no contract, so this is
-#                           the only result it can produce
-#   scripts/review/moor.sh  the sidecar came back empty — moor is absent, or is
-#                           not git's configured diff.tool, so what ran was a
-#                           plain difftool
-#
-# Consumers branch on `backend: "difftool"` to take the fallback ladder
+# No backend selects this — DIFF-18 keeps the difftool off the menu, so it is
+# only ever a report of what happened. It lives in a lib rather than inline in
+# moor's adapter because the shape is the contract's (DIFF-10), not moor's, and
+# the next adapter to reach the same dead end has to emit the identical object:
+# consumers branch on `backend: "difftool"` to take the fallback ladder
 # (guides/review-fallback.md) rather than to ask whether the shown diff is
-# approved. A second hand-written copy that drifted would strand one adapter's
-# callers on a rung they were never offered.
+# approved.
 
 anchor_difftool_caps='{"producesVerdict":false,"perHunkReview":false,"editableCommitMessage":false,"editableDescription":false,"sideMarkers":false}'
 

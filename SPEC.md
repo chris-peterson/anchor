@@ -480,12 +480,11 @@ this" nullability from SARIF's `notApplicable`.
 
 ```
 {
-  // the selectable backends, then the value the `git` adapter emits when a
-  // difftool that does not speak the contract showed the diff (DIFF-10) — a
-  // report, not a choice, which is why it is last rather than ranked among
-  // them. The adapter is named for what it drives, the value for the case a
-  // consumer branches on, so `git` produces `difftool`.
-  backend:            "revdiff" | "moor" | "editor" | "git" | "difftool",
+  // the selectable backends, then the value emitted when a difftool that does
+  // not speak the contract showed the diff (DIFF-10) — a report of what
+  // happened, not a choice, which is why it is last rather than ranked among
+  // them. No backend selects it: DIFF-18 keeps the difftool off the menu.
+  backend:            "revdiff" | "moor" | "editor" | "difftool",
   verdict:            "approved" | "changes-requested" | "incomplete" | "no-verdict",
   reviewCompleteness: "complete" | "partial" | null,   // null = backend cannot say
   reviewer:           string | null,
@@ -548,18 +547,20 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   consumer a second, disagreeing answer.
 - **[DIFF-09]** The system shall carry each comment's backend-verbatim text in
   `raw` so feedback the normalization cannot represent is not lost.
-- **[DIFF-10]** Where the configured difftool does not speak the contract, the
-  system shall emit `backend` `difftool`, `capabilities.producesVerdict` false,
-  and verdict `no-verdict`, and ask the user directly.
+- **[DIFF-10]** If a launch reaches a difftool that does not speak the contract —
+  moor's adapter drives `git difftool` to reach moor, so an absent moor, or one
+  that is not git's configured `diff.tool`, leaves a plain difftool on screen —
+  then the system shall emit `backend` `difftool`, `capabilities.producesVerdict`
+  false, and verdict `no-verdict`, and hand the flow to the fallback ladder
+  (DIFF-20) rather than asking whether the shown diff is approved.
 - **[DIFF-11]** The system shall resolve the backend against the tools that are
   installed: where the preferred backend's tool is absent, it shall substitute an
   installed diff viewer, and where none is installed it shall keep the configured
   backend, whose report names the tool that is missing, and hand the flow to the
   fallback ladder (DIFF-20). Substitution shall stay among the diff viewers:
-  `editor` and `git` are selectable but never automatic — `editor` edits one
-  drafted artifact rather than showing a changeset, and `git` shows a changeset
-  it cannot grade. Either standing in for an absent viewer would answer a
-  different question than the caller asked.
+  `editor` is selectable but never automatic, since it edits one drafted
+  artifact rather than showing a changeset, and standing in for an absent viewer
+  would answer a different question than the caller asked.
 - **[DIFF-12]** If the dispatcher reports no parseable verdict — no
   `REVIEW_VERDICT` line, empty output, or output the consumer cannot read — then
   the system shall treat the review as `no-verdict`, halt the action the review
@@ -592,11 +593,13 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   DIFF-16 *and* with somewhere to open it — since the editor is a rung the
   fallback ladder offers rather than a viewer the probe selects, and offering it
   where a launch would reach nothing dead-ends the user in a host error.
-- **[DIFF-18]** The system shall drive git's difftool through a `git` adapter of
-  its own rather than through another backend's, so no backend name stands for
-  two tools. If git resolves no difftool — neither `diff.tool` nor `merge.tool`
-  is set — then the system shall report that and launch nothing, rather than
-  enter git's vimdiff default, which blocks where no terminal can answer it.
+- **[DIFF-18]** The system shall not offer git's difftool as a selectable review
+  backend. A difftool puts the changeset on screen and speaks no contract, so its
+  review ends exactly where an absent viewer's would — except the user has now
+  read something, which makes "you saw it, approve?" the natural next question
+  and a rubber stamp the likely answer. Every route below a real viewer is the
+  fallback ladder (DIFF-20); where a difftool nonetheless reaches the screen as
+  another backend's transport, DIFF-10 governs the result.
 - **[DIFF-19]** Where a git-range review's subject is not the local `HEAD`, the
   system shall accept a caller-supplied title and detail rows and use them in
   place of the computed header, so a range fetched from another author's change

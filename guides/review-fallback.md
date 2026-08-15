@@ -21,10 +21,12 @@ converts a tooling failure into an approval, which is the one outcome the
 verdict contract exists to prevent. Ask about the **content**, never about the
 window.
 
-This is why a difftool is not a rung. It can put a diff on screen, but it speaks
-no contract, so its review ends here regardless — one screen later, with the
-user primed to say yes. `anchor.reviewBackend git` still selects it for anyone
-who wants it; nothing degrades into it.
+This is why a difftool is not a rung, and no longer a backend either (DIFF-18).
+It can put a diff on screen, but it speaks no contract, so its review ends here
+regardless — one screen later, with the user primed to say yes. One can still
+reach the screen as moor's transport, when moor is absent or isn't git's
+`diff.tool`; that arrives as `backend: "difftool"` and belongs on this ladder
+like any other ungraded result.
 
 ## Rung 1 — hand over the artifact
 

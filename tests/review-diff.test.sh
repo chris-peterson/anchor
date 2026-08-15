@@ -280,20 +280,18 @@ o=$( cd "$repo" && PATH="$system_path" bash "$dispatch" --previous )
   || fail "no viewer -> want the configured adapter, got: $(json_of "$o")"
 ok "backend: no viewer installed keeps the configured adapter, never a difftool"
 
-# `git` is selectable, just never automatic — and selecting it with no difftool
-# configured reports rather than dropping into a blocking vimdiff.
+# `git` is not a backend at all (DIFF-18): a changeset shown without a verdict
+# invites "you saw it, approve?", so the difftool is off the menu entirely and
+# asking for it fails the same way any other typo does.
 git -C "$repo" config anchor.reviewBackend git
-git -C "$repo" config --unset diff.tool
-o=$( cd "$repo" && PATH="$system_path" bash "$dispatch" --previous 2>/dev/null )
-j=$(json_of "$o")
-[ "$(jq -r .backend <<<"$j")" = difftool ] \
-  || fail "git backend -> want the difftool contract shape, got: $j"
-[ "$(jq -r .capabilities.producesVerdict <<<"$j")" = false ] \
-  || fail "git backend -> difftool speaks no contract, so producesVerdict must be false: $j"
-grep -qx 'REVIEW_VERDICT=no-verdict' <<<"$o" || fail "git backend -> want no-verdict, got: $o"
-git -C "$repo" config diff.tool faketool
+rc=0
+o=$( cd "$repo" && PATH="$system_path" bash "$dispatch" --previous 2>&1 ) || rc=$?
+[ "$rc" -eq 64 ] || fail "git backend -> want exit 64 for an unknown backend, got $rc: $o"
+grep -q "unknown review backend 'git'" <<<"$o" \
+  || fail "git backend -> want the unknown-backend error naming it, got: $o"
+! grep -q 'REVIEW_VERDICT=' <<<"$o" || fail "git backend -> nothing should be reviewed, got: $o"
 git -C "$repo" config --unset anchor.reviewBackend
-ok "backend: git is selectable, and reports instead of launching a difftool git lacks"
+ok "backend: git is not selectable — the difftool is off the menu (DIFF-18)"
 
 # editor is selectable but never substituted in, so an absent viewer doesn't
 # turn a changeset review into an editor buffer.

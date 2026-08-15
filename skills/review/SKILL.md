@@ -136,8 +136,23 @@ umbrella one and considers only installed tools:
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill review --print-backend
 ```
 
-Then launch it as a **background** Bash call (`run_in_background: true`) — the
-viewer blocks until closed:
+Two answers mean **don't launch** — this skill's subject is a changeset, and
+neither reaches one:
+
+- **`REVIEW_BACKEND_AVAILABLE=0`** — nothing usable is installed.
+- **`REVIEW_BACKEND=editor`** — the editor backend edits a single drafted
+  artifact and refuses a diff-only review (DIFF-15), so launching it reports a
+  configuration error instead of showing the CR. Name the key that selected it
+  (`anchor.review.reviewBackend`, else the umbrella `anchor.reviewBackend`) and
+  say this skill needs a viewer; `REVIEW_EDITOR_AVAILABLE` is about a different
+  question and doesn't rescue it here.
+
+Either way, go to the changeset rung of
+`${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md` — file by file, in your reply —
+rather than launching into a refusal.
+
+Otherwise launch it as a **background** Bash call (`run_in_background: true`) —
+the viewer blocks until closed:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill review \
@@ -163,10 +178,12 @@ differently from its siblings, because here the reviewer's comments are the
 - **`incomplete`** — the backend is telling you not every hunk was reviewed.
   Name what went unseen and re-open the viewer. Do not build a document over it:
   this verdict is exactly the rubber-stamp the step exists to prevent.
-- **`no-verdict`** — the review did not complete (`backend: "difftool"` or
-  `capabilities.producesVerdict: false` means the user selected
-  `anchor.reviewBackend git` and their difftool showed it; otherwise read
-  `raw.exitCode`). Say what happened in one line, then walk the changeset rung of
+- **`no-verdict`** — the review did not complete. `backend: "difftool"` (or
+  `capabilities.producesVerdict: false`) means a plain difftool showed it, which
+  is what moor's adapter falls through to when moor isn't there;
+  `backend: "editor"` means the editor backend was selected anyway and refused
+  the changeset (DIFF-15), which the probe above catches first; otherwise read
+  `raw.exitCode`. Say what happened in one line, then walk the changeset rung of
   `${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md` — file by file, in your reply.
   Don't ask whether the user read the changes: this step's product *is* the
   reading, so an answer either way leaves you with no findings to carry forward.

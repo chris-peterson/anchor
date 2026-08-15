@@ -118,11 +118,10 @@ backend_installed() {
 # installed leaves the name as configured — the probe reports that alongside
 # REVIEW_BACKEND_AVAILABLE=0, so a caller still learns what was asked for.
 #
-# Substitution stays among the diff viewers. `editor` and `git` are both
-# selectable but never automatic, for the same reason from two directions:
-# `editor` edits one drafted artifact rather than showing a changeset, and
-# `git` shows a changeset nobody can grade. Either standing in for an absent
-# revdiff would answer a different question than the caller asked.
+# Substitution stays among the diff viewers. `editor` is selectable but never
+# automatic: it edits one drafted artifact rather than showing a changeset, so
+# standing in for an absent revdiff would answer a different question than the
+# caller asked.
 installed_backend() {
   local configured="$1" candidate
   if backend_installed "$configured"; then printf '%s' "$configured"; return; fi
@@ -328,16 +327,16 @@ fi
 backend=$(resolve_backend)
 adapter="$(dirname "${BASH_SOURCE[0]}")/review/${backend}.sh"
 if [[ ! -r "$adapter" ]]; then
-  echo "review-diff.sh: unknown review backend '$backend' (no adapter at $adapter). Set anchor.reviewBackend to editor, git, moor, or revdiff." >&2
+  echo "review-diff.sh: unknown review backend '$backend' (no adapter at $adapter). Set anchor.reviewBackend to editor, moor, or revdiff." >&2
   exit 64
 fi
 backend=$(installed_backend "$backend")
 # A machine with no viewer installed keeps the configured adapter, whose report
-# names the tool that is missing. It does not degrade into git's difftool: that
-# review cannot produce a verdict, so it ends in the same chat question an
-# absent viewer would have asked, having first shown a diff nobody can grade —
-# and "you saw it, approve?" is the rubber stamp the contract exists to prevent.
-# The skill's fallback ladder (guides/review-fallback.md) is the rung below.
+# names the tool that is missing. There is nothing below it to degrade into —
+# git's difftool was retired as a backend (DIFF-18) because a changeset shown
+# without a verdict invites "you saw it, approve?", which is the rubber stamp the
+# contract exists to prevent. The skill's fallback ladder
+# (guides/review-fallback.md) is the rung below.
 adapter="$(dirname "${BASH_SOURCE[0]}")/review/${backend}.sh"
 
 # The review-request contract the sourced adapter reads. Exported so the
