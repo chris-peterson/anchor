@@ -242,10 +242,8 @@ does a probe reporting nothing installed.
 
 Every ungraded case takes the ladder in
 `${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md`: say what happened in one line,
-link the drafted notes file, offer the editor rung when the probe reported
-`REVIEW_EDITOR_AVAILABLE=1`, and otherwise put the notes in your own reply and ask
-with `AskUserQuestion`. The notes are a drafted document, so the document rungs
-apply and the changeset walkthrough doesn't.
+then walk it with the drafted notes as the artifact. The notes are a drafted
+document, so the document rungs apply and the changeset walk doesn't.
 
 **Then confirm the publish explicitly, even after an `approved` review.** This is
 the one place `anchor` keeps a second gate: a CR description is editable, but a

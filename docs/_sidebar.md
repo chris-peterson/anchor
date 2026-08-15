@@ -16,7 +16,7 @@
 - Templates
   - [Commit message](/templates/commit-message)
   - [CR description](/templates/cr-description)
-  - [Review document](/templates/cr-review)
+  - [CR review](/templates/cr-review)
   - [Issue description](/templates/issue-description)
 - Guides
   - [Configuring anchor](/guides/configuring)

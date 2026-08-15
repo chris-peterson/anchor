@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Functional test for scripts/review-cr.sh, plus the git-range header overrides
-# review-diff.sh grew for it (DIFF-18).
+# review-diff.sh grew for it (DIFF-19).
 #
 # The interesting behavior is all about reviewing a change *this checkout is not
 # on*: the head arrives through the forge's CR ref namespace rather than a
@@ -157,7 +157,7 @@ findings="$(key "$out" FINDINGS_PATH)"
   || fail "GitHub: findings file should start empty"
 ok "GitHub: seeds a findings file carrying the pinned head"
 
-# --- The header overrides review-diff.sh grew for this (DIFF-18) -------------
+# --- The header overrides review-diff.sh grew for this (DIFF-19) -------------
 range="$(key "$out" DIFF_RANGE)"
 # Drive the dispatcher far enough to build the header, through a stub adapter
 # that prints what it was handed instead of launching anything. The dispatcher
@@ -185,7 +185,7 @@ hdr=$(cd "$repo" && bash "$work/fake-scripts/review-diff.sh" --backend dump "$ra
   || fail "range mode ignored --detail"
 [[ "$(jq -r '[.[] | select(.label == "commit")] | length' <<<"$(key "$hdr" DETAILS)")" == 0 ]] \
   || fail "overridden details still carry the local commit's rows"
-ok "review-diff: git-range --title/--detail replace the local-HEAD header (DIFF-18)"
+ok "review-diff: git-range --title/--detail replace the local-HEAD header (DIFF-19)"
 
 hdr=$(cd "$repo" && bash "$work/fake-scripts/review-diff.sh" --backend dump "$range")
 [[ "$(jq -r '[.[] | select(.label == "commit")] | length' <<<"$(key "$hdr" DETAILS)")" == 1 ]] \

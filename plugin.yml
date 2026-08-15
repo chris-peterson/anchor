@@ -60,7 +60,7 @@ suite:
       prepare-review: Open the PR/MR on an already-pushed branch, rebase on the default branch if behind, and draft a description that tells reviewers WHY the change exists.
       release: Cut a release for what has landed — recommend a semver bump, draft the notes, and drive the repo's own publish path.
       resolve-feedback: Fetch an open CR's review feedback and drive each thread to resolution — fix, reply, resolve.
-      review: Review someone else's open change request — fetch it, read every change in the diff viewer, build a review document, then post the findings as inline threads once the exact text is approved.
+      review: Review someone else's open change request — fetch it, read every change in the diff viewer, write up the findings, then post them as inline threads once the exact text is approved.
     rules:
       omit-attribution-trailers: Omit AI attribution trailers
       rewrite-history-through-anchor: Route history rewrites through `anchor`

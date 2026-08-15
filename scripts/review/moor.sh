@@ -15,6 +15,11 @@
 # then maps that output onto the DIFF normalized result and prints:
 #   REVIEW_VERDICT=<verdict>
 #   REVIEW_OUTPUT=<normalized json>
+#
+# With no sidecar to map, what ran was a plain difftool — the git adapter's case,
+# whose result comes from the lib both adapters share.
+# shellcheck source=../lib/review-difftool.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/review-difftool.sh"
 
 # moor tracks per-hunk review and round-trips an edited commit message; it does
 # not mark diff sides or edit the CR description. Its comments are ungraded
@@ -49,16 +54,9 @@ emit_review() {
   if [[ -z "$output" ]]; then
     # No sidecar output: a difftool that doesn't speak the contract showed the
     # diff (moor absent or not the configured tool), or moor closed without
-    # writing one. Either way there is no contract verdict (DIFF-10).
-    local out
-    out=$(jq -cn '{
-      backend:"difftool", verdict:"no-verdict",
-      reviewCompleteness:null, reviewer:null, comments:[], editedFields:[],
-      capabilities:{producesVerdict:false, perHunkReview:false,
-        editableCommitMessage:false, editableDescription:false, sideMarkers:false},
-      raw:{exitCode:"absent"}}')
-    echo "REVIEW_VERDICT=no-verdict"
-    echo "REVIEW_OUTPUT=$out"
+    # writing one. Either way this is the git adapter's case, so it emits the
+    # git adapter's result (DIFF-10).
+    anchor_difftool_emit
     return
   fi
 

@@ -18,12 +18,6 @@
 # for what it drives, the contract value names the case a consumer branches on,
 # and DIFF-10 fixed that value before this file existed.
 #
-# This role used to belong to moor's adapter, which drives `git difftool` on its
-# way to reading moor's sidecar and so degraded into it for free. That made
-# `moor` mean two things — a backend the user selects, and the fallback nobody
-# selects — and the reason line 294 of the dispatcher read oddly. Splitting them
-# leaves moor's adapter meaning only moor.
-#
 # Sourced by the dispatcher, which has already cd'd into the target repo and
 # resolved the review request into these variables:
 #   review_mode          "range" | "files"
@@ -33,21 +27,11 @@
 # It reads no header: `git difftool` has nowhere to put a title or detail rows,
 # which is part of what makes this a degraded review rather than a peer of the
 # other backends.
-
-# Nothing here can produce a verdict, so the capabilities are false across the
-# board rather than optimistic about the tool that happens to be configured.
-git_caps='{"producesVerdict":false,"perHunkReview":false,"editableCommitMessage":false,"editableDescription":false,"sideMarkers":false}'
-
-git_emit() {
-  local reason="$1"
-  local out
-  out=$(jq -cn --argjson caps "$git_caps" --arg ec "$reason" '{
-    backend:"difftool", verdict:"no-verdict",
-    reviewCompleteness:null, reviewer:null, comments:[], editedFields:[],
-    capabilities:$caps, raw:{exitCode:$ec}}')
-  echo "REVIEW_VERDICT=no-verdict"
-  echo "REVIEW_OUTPUT=$out"
-}
+#
+# The result itself is the shared DIFF-10 shape, since moor's adapter reaches it
+# too whenever its sidecar comes back empty.
+# shellcheck source=../lib/review-difftool.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/review-difftool.sh"
 
 # Consumes the review-request variables the dispatcher exports before sourcing
 # this adapter; shellcheck can't follow that cross-file.
@@ -59,7 +43,7 @@ emit_review() {
   if ! git config --get diff.tool >/dev/null 2>&1 && \
      ! git config --get merge.tool >/dev/null 2>&1; then
     echo "review-diff.sh: no difftool configured (set diff.tool or merge.tool, or install a review backend)" >&2
-    git_emit "absent"
+    anchor_difftool_emit
     return
   fi
 
@@ -70,7 +54,5 @@ emit_review() {
     git difftool --no-prompt --dir-diff "$diff_range" || true
   fi
 
-  # The exit status is the difftool's, not a verdict — a tool that speaks no
-  # contract cannot say whether the change is good, only that it closed.
-  git_emit "absent"
+  anchor_difftool_emit
 }

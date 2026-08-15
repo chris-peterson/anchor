@@ -61,10 +61,9 @@ The floor, and the only rung that needs nothing installed. What it looks like
 depends on what was under review.
 
 **A drafted document** — put the full body in a fenced block in your reply.
-Running a command does not show it to anyone: a Bash tool's output goes to you,
-and the terminal collapses it to a `+80 lines` stub the user would have to
-expand. Then ask with `AskUserQuestion`, header `Disposition`: write it · copy
-only · edit.
+Running a command that prints it shows the user nothing, for the reasons
+[execute-quietly](/guides/execute-quietly) sets out. Then ask with
+`AskUserQuestion`, header `Disposition`: write it · copy only · edit.
 
 **A changeset** — walk the hunks. Not one question over a diff the user never
 saw, and not a dump of `git diff` either: go file by file, and for each, say

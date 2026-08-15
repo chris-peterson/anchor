@@ -373,7 +373,7 @@ When the background command completes, read its stdout with the **BashOutput too
 
 Three cases land here: no backend is installed, a review that came back without a usable verdict, and the `skip-deep-links` path where `CURRENT_DESC_PATH` is empty because no CR exists.
 
-Walk the ladder in `${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md` — link the draft at `DESC_DRAFT_PATH`, offer the editor rung when the probe reported `REVIEW_EDITOR_AVAILABLE=1`, and otherwise put the full body in a fenced block in your reply. This skill's artifact is a drafted document, so the changeset walkthrough doesn't apply; the document rungs do.
+Walk the ladder in `${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md` with `DESC_DRAFT_PATH` as the artifact. This skill's artifact is a drafted document, so the changeset walk doesn't apply; the document rungs do.
 
 Then ask how to proceed with the `AskUserQuestion` tool, header `Disposition`, options in this order:
 

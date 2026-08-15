@@ -90,19 +90,20 @@ loose=$(jq -c "[.comments[] | select($anchorable | not)]" "$findings")
 anchored_count=$(jq 'length' <<<"$anchored")
 
 # The summary body is the prose plus every finding that could not be anchored,
-# each named with its file so the author can still find what it is about.
-build_summary() {
-  jq -r --argjson loose "$loose" '
-    (.summary // "") as $prose
-    | ($loose | map(
-        "- " + (if (.file // "") != "" then "**" + .file + "** — " else "" end) + .body
-      ) | join("\n")) as $rest
-    | if $rest == "" then $prose
-      else ($prose | if . == "" then "" else . + "\n\n" end)
-           + "**Not anchored to a line:**\n\n" + $rest
-      end
-  ' "$findings"
-}
+# each named with its file so the author can still find what it is about. It is
+# a pure function of the findings file, so it is rendered once here and every
+# consumer — the preview, the standalone comment, the batched review's body —
+# reads that one string rather than re-rendering and risking a disagreement.
+summary=$(jq -r --argjson loose "$loose" '
+  (.summary // "") as $prose
+  | ($loose | map(
+      "- " + (if (.file // "") != "" then "**" + .file + "** — " else "" end) + .body
+    ) | join("\n")) as $rest
+  | if $rest == "" then $prose
+    else ($prose | if . == "" then "" else . + "\n\n" end)
+         + "**Not anchored to a line:**\n\n" + $rest
+    end
+' "$findings")
 
 # --- Preview ------------------------------------------------------------------
 
@@ -115,7 +116,6 @@ if [[ "$mode" == preview ]]; then
   else
     jq -r 'to_entries[] | "### \(.key + 1). \(.value.file):\(.value.startLine)\(if (.value.endLine // .value.startLine) != .value.startLine then "-" + ((.value.endLine)|tostring) else "" end) (\(.value.side // "new"))\n\n\(.value.body)\n"' <<<"$anchored"
   fi
-  summary=$(build_summary)
   echo "## Summary comment"
   echo
   if [[ -z "$summary" ]]; then echo "_none_"; else printf '%s\n' "$summary"; fi
@@ -157,11 +157,10 @@ posted_inline=0
 posted_summary=0
 
 post_summary() {
-  local body path
-  body=$(build_summary)
-  [[ -n "$body" ]] || return 0
+  local path
+  [[ -n "$summary" ]] || return 0
   path=$(anchor_tmpfile "cr-review-summary")
-  printf '%s\n' "$body" > "$path"
+  printf '%s\n' "$summary" > "$path"
   case "$forge" in
     github) gh pr comment "$cr_iid" -R "$project" --body-file "$path" >/dev/null ;;
     gitlab) gl_api -X POST "projects/${gl_project}/merge_requests/${cr_iid}/notes" \
@@ -172,18 +171,17 @@ post_summary() {
 
 # One inline thread, from a single findings entry passed as compact JSON.
 post_one() {
-  local entry="$1" path payload file start end side
-  file=$(jq -r '.file' <<<"$entry")
-  start=$(jq -r '.startLine' <<<"$entry")
-  end=$(jq -r '.endLine // .startLine' <<<"$entry")
-  side=$(jq -r '.side // "new"' <<<"$entry")
-  path=$(anchor_tmpfile "cr-review-note")
-  jq -r '.body' <<<"$entry" > "$path"
+  local entry="$1" path payload file start end gh_side
+  # gh_side is GitHub's LEFT/RIGHT, which the contract's old/new maps onto; it
+  # comes out of the same pass as the anchor so the two can't disagree.
+  IFS=$'\t' read -r file start end gh_side < <(jq -r '
+    [.file, .startLine, (.endLine // .startLine),
+     (if (.side // "new") == "old" then "LEFT" else "RIGHT" end)] | @tsv' <<<"$entry")
 
   case "$forge" in
     github)
-      # side is LEFT/RIGHT on GitHub; the contract's old/new maps onto it.
-      local gh_side="RIGHT"; [[ "$side" == old ]] && gh_side="LEFT"
+      path=$(anchor_tmpfile "cr-review-note")
+      jq -r '.body' <<<"$entry" > "$path"
       local args=(-X POST "repos/${project}/pulls/${cr_iid}/comments"
                   -F "body=@${path}" -f "commit_id=${pinned}" -f "path=${file}"
                   -F "line=${end}" -f "side=${gh_side}")
@@ -194,14 +192,15 @@ post_one() {
       # A flat -F "position[...]" is silently dropped and the note lands
       # unanchored, so the position goes in as one JSON document.
       payload=$(anchor_tmpfile "cr-review-discussion" json)
-      jq -n --rawfile body "$path" \
-        --arg base "$base_sha" --arg start_sha "$start_sha" --arg head "$pinned" \
-        --arg path "$file" --argjson line "$end" --arg side "$side" '
-        {body: $body,
-         position: ({position_type: "text", base_sha: $base,
-                     start_sha: $start_sha, head_sha: $head,
-                     new_path: $path, old_path: $path}
-                    + (if $side == "old" then {old_line: $line} else {new_line: $line} end))}
+      jq -n --argjson e "$entry" \
+        --arg base "$base_sha" --arg start_sha "$start_sha" --arg head "$pinned" '
+        ($e.endLine // $e.startLine) as $line
+        | {body: $e.body,
+           position: ({position_type: "text", base_sha: $base,
+                       start_sha: $start_sha, head_sha: $head,
+                       new_path: $e.file, old_path: $e.file}
+                      + (if ($e.side // "new") == "old"
+                         then {old_line: $line} else {new_line: $line} end))}
       ' > "$payload"
       local out
       out=$(gl_api -X POST "projects/${gl_project}/merge_requests/${cr_iid}/discussions" \
@@ -225,20 +224,19 @@ elif [[ "$forge" == github && "$anchored_count" -gt 0 ]]; then
   # One batched review rather than N notifications. The review's own body is the
   # summary, so the separate summary comment is not also posted.
   payload=$(anchor_tmpfile "cr-review-batch" json)
-  jq -n --arg commit "$pinned" --arg body "$(build_summary)" --argjson c "$anchored" '
+  jq -n --arg commit "$pinned" --arg body "$summary" --argjson c "$anchored" '
     {commit_id: $commit, body: $body, event: "COMMENT",
-     comments: [$c[] | {path: .file,
-                        line: (.endLine // .startLine),
-                        side: (if (.side // "new") == "old" then "LEFT" else "RIGHT" end)}
-                       + (if (.endLine // .startLine) != .startLine
-                          then {start_line: .startLine,
-                                start_side: (if (.side // "new") == "old" then "LEFT" else "RIGHT" end)}
-                          else {} end)
-                       + {body: .body}]}
+     comments: [$c[]
+       | (.endLine // .startLine) as $last
+       | (if (.side // "new") == "old" then "LEFT" else "RIGHT" end) as $side
+       | {path: .file, line: $last, side: $side, body: .body}
+         + (if $last != .startLine
+            then {start_line: .startLine, start_side: $side}
+            else {} end)]}
   ' > "$payload"
   gh api -X POST "repos/${project}/pulls/${cr_iid}/reviews" --input "$payload" >/dev/null
   posted_inline="$anchored_count"
-  [[ -n "$(build_summary)" ]] && posted_summary=1
+  [[ -n "$summary" ]] && posted_summary=1
 else
   while read -r entry; do
     [[ -z "$entry" ]] && continue

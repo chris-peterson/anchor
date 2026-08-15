@@ -225,7 +225,7 @@ on that CR once the user approves the wording.
   changes the user has seen.
 - **[REVIEW-06]** If the backend reports the review as `incomplete`, then the
   system shall name what went unreviewed and re-open the review rather than
-  build a review document over it. A `reviewCompleteness` of `null` shall be
+  write findings over it. A `reviewCompleteness` of `null` shall be
   read as unmeasured, never as complete.
 - **[REVIEW-07]** When the backend returns `changes-requested`, the system shall
   treat its comments as the review's findings and carry each one's wording

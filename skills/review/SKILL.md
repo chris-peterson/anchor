@@ -1,6 +1,6 @@
 ---
 name: review
-description: Review someone else's open change request — fetch it, read every change in the diff viewer, build a review document, then post the findings as inline threads once the exact text is approved. Use when reviewing a PR/MR, or when a teammate sends a CR number or URL to look at.
+description: Review someone else's open change request — fetch it, read every change in the diff viewer, write up the findings, then post them as inline threads once the exact text is approved. Use when reviewing a PR/MR, or when a teammate sends a CR number or URL to look at.
 ---
 
 # Review
@@ -25,8 +25,8 @@ the forge tool by the resolved CR, not by the working directory's `origin`.
 **Don't narrate your work.** Every step below is an operating instruction —
 follow the execute-quietly discipline:
 `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. The only things worth
-surfacing are the resolved CR in one line, the questions in Step 2, the review
-document, and what landed where.
+surfacing are the resolved CR in one line, the questions in Step 2, the drafted
+findings, and what landed where.
 
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
@@ -47,7 +47,7 @@ flowchart TD
 
     subgraph "Step 4-5: Draft and approve"
         Complete -->|Yes| Doc["Merge annotations + findings"]
-        Doc --> Show["Show the review document"]
+        Doc --> Show["Show the drafted findings"]
         Show --> Gate{Approved?}
         Gate -->|Revise| Doc
         Gate -->|Keep local| Local([Review stays in the session])
@@ -177,7 +177,7 @@ differently from its siblings, because here the reviewer's comments are the
 *unmeasured*, not *complete*. The obligation this step carries is the one you
 control: hand the viewer the entire `DIFF_RANGE`, every time.
 
-## Step 4: Build the review document
+## Step 4: Write up the findings
 
 Write the findings to `FINDINGS_PATH` as JSON, then read it back rendered. The
 entries use the DIFF contract's comment shape, so a comment the user typed in
@@ -209,7 +209,7 @@ plumbing — target to diff to findings to threads on the right lines — and
 deliberately doesn't ship a code-quality rubric. Read the change against the
 description's claims, and weight the reviewer's own annotations above your own.
 
-Render the document and revise it with the user until it says what they mean:
+Render the review and revise it with the user until it says what they mean:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-post.sh" --preview --findings <FINDINGS_PATH>
@@ -231,7 +231,7 @@ Then ask with `AskUserQuestion` (header `Post`):
 - **Post one at a time** — walk the numbered findings, confirming each; skip any
   the user drops.
 - **Keep it local** — the review stays in the session. This is a finished
-  outcome; say where the document is and stop.
+  outcome; say where the findings file is and stop.
 
 A revision at this gate re-renders and comes back here. Approval of one round is
 not approval of the next.

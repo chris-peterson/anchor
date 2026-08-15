@@ -61,12 +61,19 @@ anchor_editor_host() {
   printf ''
 }
 
-# Would an editor review reach an editor: one resolves, and a host exists to
-# open it in. An explicit launcher owns the editor choice, so it stands in for
-# the config the same way the adapter treats it.
+# Is there an editor to open at all, given the already-resolved editor $1: git
+# named one, or an explicit launcher owns the choice and stands in for the
+# config. Takes the resolved value so the probe below and the adapter — which
+# has it in hand and must not disagree — ask the same question.
+anchor_editor_named() {
+  [[ -n "${1:-}" || -n "${ANCHOR_EDITOR_LAUNCHER:-}" ]]
+}
+
+# Would an editor review reach an editor: one is named, and a host exists to
+# open it in.
 anchor_editor_available() {
   local ed
   ed=$(anchor_editor_resolve)
-  [[ -n "$ed" || -n "${ANCHOR_EDITOR_LAUNCHER:-}" ]] || return 1
+  anchor_editor_named "$ed" || return 1
   [[ -n "$(anchor_editor_host "$ed")" ]]
 }

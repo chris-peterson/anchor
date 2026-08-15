@@ -173,10 +173,13 @@ git rev-parse --verify --quiet "$cr_head^{commit}" >/dev/null 2>&1 \
 
 # The base is on the target branch, which a shallow or stale checkout may not
 # have. Fetching it by SHA needs uploadpack.allowReachableSHA1InWant, so fetch
-# the ref the CR targets instead and let the three-dot range find the merge base.
-git fetch --quiet origin 2>/dev/null || true
+# every ref and let the three-dot range find the merge base — but only once the
+# base has turned out to be missing, since an up-to-date checkout is the common
+# case and that fetch walks the whole remote.
 if ! git rev-parse --verify --quiet "$cr_base^{commit}" >/dev/null 2>&1; then
-  die "the CR's base commit ${cr_base} is not in this checkout — fetch the target branch and re-run"
+  git fetch --quiet origin 2>/dev/null || true
+  git rev-parse --verify --quiet "$cr_base^{commit}" >/dev/null 2>&1 \
+    || die "the CR's base commit ${cr_base} is not in this checkout — fetch the target branch and re-run"
 fi
 
 diff_range="${cr_base}...${cr_head}"
@@ -189,7 +192,9 @@ findings_path=$(anchor_tmpfile "cr-review-findings" json)
 
 printf '%s\n' "$cr_desc" > "$desc_path"
 git diff "$diff_range" > "$diff_path"
-changed_files=$(git diff --name-only "$diff_range" | grep -c . || true)
+# Counted off the diff just written rather than by re-walking the range: one
+# header per changed file, and a `+diff --git` inside a hunk can't match.
+changed_files=$(grep -c '^diff --git ' "$diff_path" || true)
 
 # Seeded rather than left empty so the skill writes findings into a file whose
 # shape review-post.sh already accepts, and a review that finds nothing is a

@@ -171,8 +171,7 @@ emit_review() {
 
   local ed
   ed=$(anchor_editor_resolve)
-  # An explicit launcher owns the editor choice, so it stands in for the config.
-  if [[ -z "$ed" && -z "${ANCHOR_EDITOR_LAUNCHER:-}" ]]; then
+  if ! anchor_editor_named "$ed"; then
     echo "review-diff.sh: no editor configured — set core.editor, VISUAL, or EDITOR." >&2
     editor_emit no-verdict absent "no editor configured"
     return

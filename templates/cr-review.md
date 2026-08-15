@@ -1,45 +1,28 @@
-# Review document template
+# CR review
 
-The shape of a review: what the document holds, what a single finding says, and
-where each finding ends up on the change request. The `review` skill owns the
-*technique* — resolving the CR, driving the diff viewer, gating the post. This
-file owns the *shape*, so it's the place to edit as your preferences evolve.
+What a review should say: what the summary carries, what a single finding says,
+and where each finding ends up on the change request. The `review` skill owns
+the *technique* — resolving the CR, driving the diff viewer, gating the post —
+and `scripts/review-post.sh` renders the text itself from the findings file. What
+is left is the judgment those two can't supply, so this is the file to edit as
+your preferences evolve.
 
 A review's raw material is someone else's change and the reason they gave for
 it. The author already wrote *why* in the description; the review's job is to
 say whether the diff is a good answer to that why, and to put each specific
 remark on the line it is about.
 
-**A review document is local until you say otherwise.** It is drafted, read, and
-revised in the session, and reaching the CR is a separate act the author of the
-review approves. Reviewing without posting is a finished outcome, not an
-abandoned one.
+**A review is local until you say otherwise.** It is drafted, read, and revised
+in the session, and reaching the CR is a separate act the author of the review
+approves. Reviewing without posting is a finished outcome, not an abandoned one.
 
-## The document
+## The summary
 
-```markdown
-## <CR title>  (<forge ref> · <author>)
-
-<Summary — the overall read, two or three sentences.>
-
-### Findings
-
-1. `<path>:<line>` — <what is wrong or worth asking, and why it matters>
-2. `<path>:<line>` — …
-
-### Not anchored to a line
-
-- <a remark about the changeset as a whole, or about a file>
-```
-
-The **Summary** is the part the author reads first and the only part that
-survives if they read nothing else. Say whether the change does what its
-description claims, and name the one thing most worth their attention. It is not
-a verdict — recording approval or requesting changes on the forge is the human
-reviewer's own act, never the skill's.
-
-**Findings** are numbered so they can be discussed and posted individually. The
-number is the document's, not the forge's.
+The part the author reads first, and the only part that survives if they read
+nothing else. Say whether the change does what its description claims, and name
+the one thing most worth their attention. It is not a verdict — recording
+approval or requesting changes on the forge is the human reviewer's own act,
+never the skill's.
 
 ## What a finding says
 
@@ -75,6 +58,9 @@ reviewer talking.
 a line is still the remark; it moves to the summary comment rather than
 disappearing. Both forges take line anchors the same way, so which findings can
 be anchored does not depend on where the CR lives.
+
+The preview numbers the anchored findings so they can be discussed and posted
+one at a time. That number is the preview's, not the forge's.
 
 ## Findings the reviewer typed themselves
 
