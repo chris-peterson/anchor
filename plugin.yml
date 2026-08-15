@@ -19,6 +19,7 @@ marketplace:
 
 # → marketplace SPA; keys mirror the SPA's PLUGINS object.
 suite:
+  cli: true
   group: waypoints
   dependencies:
     - name: revdiff
