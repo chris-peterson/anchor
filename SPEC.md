@@ -17,8 +17,9 @@ behavior, not an independent authority — review them against the source.
 ## Concepts
 
 - **Skill** — a user-invocable command the plugin exposes: `/anchor:commit`,
-  `/anchor:prepare-review`, `/anchor:resolve-feedback`, `/anchor:merge`,
-  `/anchor:release`, `/anchor:issue`, `/anchor:issues`, `/anchor:pipeline`.
+  `/anchor:prepare-review`, `/anchor:review`, `/anchor:resolve-feedback`,
+  `/anchor:merge`, `/anchor:release`, `/anchor:issue`, `/anchor:issues`,
+  `/anchor:pipeline`.
 - **Forge** — GitHub or GitLab, selected by the `origin` remote; drives the CLI
   choice (`gh` for GitHub, `glab` for GitLab).
 - **CR (change request)** — a pull request on GitHub or a merge request on
@@ -198,6 +199,57 @@ check.
   on merge, the system shall name the condition and offer the forge's remediation,
   applying it only on the user's approval. An unreadable setting shall report as
   unknown rather than as either state.
+
+### REVIEW — Review someone else's change request
+
+The `review` skill: the reviewer's side of the seam `prepare-review` and
+`resolve-feedback` sit on either end of. It takes a CR nobody in this session
+wrote, produces findings anchored to files and lines, and lands them as threads
+on that CR once the user approves the wording.
+
+- **[REVIEW-01]** When `/anchor:review` runs, the system shall resolve the target
+  repo as the other skills do and gather the CR via a single recon script,
+  acting only on the keys it surfaces.
+- **[REVIEW-02]** The system shall resolve the change request from a number, a
+  URL, a source branch, or the current branch, on either forge, and shall take
+  the forge from the resolved CR rather than from the working directory's
+  `origin`.
+- **[REVIEW-03]** Where the resolved CR is not open, is still a draft, or was
+  written by the invoking user, the system shall name that condition and confirm
+  before continuing, rather than spending review attention on a change nobody
+  asked to have reviewed.
+- **[REVIEW-04]** The system shall read the CR's description before its diff, and
+  shall treat what the description does not account for as a finding.
+- **[REVIEW-05]** The system shall present the CR's entire diff range in a review
+  backend, unfiltered and without a skip path, so that findings are made against
+  changes the user has seen.
+- **[REVIEW-06]** If the backend reports the review as `incomplete`, then the
+  system shall name what went unreviewed and re-open the review rather than
+  write findings over it. A `reviewCompleteness` of `null` shall be
+  read as unmeasured, never as complete.
+- **[REVIEW-07]** When the backend returns `changes-requested`, the system shall
+  treat its comments as the review's findings and carry each one's wording
+  verbatim, rather than as feedback blocking the flow.
+- **[REVIEW-08]** The system shall anchor each finding to a file and a line where
+  it has one, and shall fold a finding it cannot anchor into the summary comment
+  rather than dropping it.
+- **[REVIEW-09]** The system shall obtain the user's approval of the exact text
+  of every thread and of the summary comment before posting any of them, and
+  shall present that text as the rendering the post is built from.
+- **[REVIEW-10]** Where the user declines to post, the system shall report the
+  review as complete and local, rather than as an abandoned flow.
+- **[REVIEW-11]** The system shall pin the CR head SHA when it fetches the diff,
+  re-read it before posting, and refuse to post on a mismatch, so that no
+  comment anchors to a line the reviewed diff no longer has.
+- **[REVIEW-12]** The system shall post either every approved finding at once or
+  one named finding at a time, batching the whole-review case into a single
+  forge submission where the forge provides one.
+- **[REVIEW-13]** The system shall not record a forge review verdict — approving
+  or requesting changes as a CR state — and shall report that act as the user's,
+  naming the invocation.
+- **[REVIEW-14]** The system shall build the previewed text and the posted text
+  from one findings document through one code path, so that what the user
+  approved is what lands.
 
 ### FEEDBACK — Resolve feedback
 
@@ -428,9 +480,10 @@ this" nullability from SARIF's `notApplicable`.
 
 ```
 {
-  // the three selectable backends, then the value emitted when a difftool
-  // that does not speak the contract showed the diff (DIFF-10) — a report,
-  // not a choice, which is why it is last rather than ranked among them
+  // the selectable backends, then the value emitted when a difftool that does
+  // not speak the contract showed the diff (DIFF-10) — a report of what
+  // happened, not a choice, which is why it is last rather than ranked among
+  // them. No backend selects it: DIFF-18 keeps the difftool off the menu.
   backend:            "revdiff" | "moor" | "editor" | "difftool",
   verdict:            "approved" | "changes-requested" | "incomplete" | "no-verdict",
   reviewCompleteness: "complete" | "partial" | null,   // null = backend cannot say
@@ -494,15 +547,20 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   consumer a second, disagreeing answer.
 - **[DIFF-09]** The system shall carry each comment's backend-verbatim text in
   `raw` so feedback the normalization cannot represent is not lost.
-- **[DIFF-10]** Where the configured difftool does not speak the contract, the
-  system shall emit `backend` `difftool`, `capabilities.producesVerdict` false,
-  and verdict `no-verdict`, and ask the user directly.
+- **[DIFF-10]** If a launch reaches a difftool that does not speak the contract —
+  moor's adapter drives `git difftool` to reach moor, so an absent moor, or one
+  that is not git's configured `diff.tool`, leaves a plain difftool on screen —
+  then the system shall emit `backend` `difftool`, `capabilities.producesVerdict`
+  false, and verdict `no-verdict`, and hand the flow to the fallback ladder
+  (DIFF-20) rather than asking whether the shown diff is approved.
 - **[DIFF-11]** The system shall resolve the backend against the tools that are
   installed: where the preferred backend's tool is absent, it shall substitute an
-  installed diff viewer, and where none is installed it shall degrade to git's
-  configured difftool rather than fail. Substitution shall stay among the diff
-  viewers — `editor` remains selectable but never automatic, since it edits one
-  drafted artifact rather than showing a changeset.
+  installed diff viewer, and where none is installed it shall keep the configured
+  backend, whose report names the tool that is missing, and hand the flow to the
+  fallback ladder (DIFF-20). Substitution shall stay among the diff viewers:
+  `editor` is selectable but never automatic, since it edits one drafted
+  artifact rather than showing a changeset, and standing in for an absent viewer
+  would answer a different question than the caller asked.
 - **[DIFF-12]** If the dispatcher reports no parseable verdict — no
   `REVIEW_VERDICT` line, empty output, or output the consumer cannot read — then
   the system shall treat the review as `no-verdict`, halt the action the review
@@ -530,7 +588,33 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   along with whether anything usable is installed, name the configured backend
   whenever it substituted another, and shall launch nothing. It shall not
   substitute the editor backend for an absent diff viewer, which would answer a
-  different question than the caller asked.
+  different question than the caller asked. It shall additionally report, on its
+  own axis, whether an editor review would reach an editor — resolvable per
+  DIFF-16 *and* with somewhere to open it — since the editor is a rung the
+  fallback ladder offers rather than a viewer the probe selects, and offering it
+  where a launch would reach nothing dead-ends the user in a host error.
+- **[DIFF-18]** The system shall not offer git's difftool as a selectable review
+  backend. A difftool puts the changeset on screen and speaks no contract, so its
+  review ends exactly where an absent viewer's would — except the user has now
+  read something, which makes "you saw it, approve?" the natural next question
+  and a rubber stamp the likely answer. Every route below a real viewer is the
+  fallback ladder (DIFF-20); where a difftool nonetheless reaches the screen as
+  another backend's transport, DIFF-10 governs the result.
+- **[DIFF-19]** Where a git-range review's subject is not the local `HEAD`, the
+  system shall accept a caller-supplied title and detail rows and use them in
+  place of the computed header, so a range fetched from another author's change
+  request is not labelled with the reviewer's own last commit.
+- **[DIFF-20]** Where a review is ungraded — nothing usable installed, or a
+  result that is `no-verdict`, `incomplete`, or carries no parseable verdict —
+  the system shall offer a rung that produces a real answer rather than a
+  question that treats the launch as one. It shall not ask whether a shown diff
+  is approved: a window that opened is not evidence it was read, and the two
+  cases are indistinguishable. For a drafted artifact it shall surface the
+  draft's own file path and, where DIFF-17 reports an editor is reachable, offer
+  the editor backend, whose saved buffer returns a graded result through
+  DIFF-13. Its floor shall be reading the change in the conversation — the
+  artifact in full, or a changeset walked file by file — never a summary
+  standing in for the change, since approval of a summary grades the summary.
 
 ### CONFIG — Configuration
 

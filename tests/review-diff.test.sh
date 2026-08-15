@@ -269,13 +269,29 @@ grep -qx 'REVIEW_BACKEND=revdiff' <<<"$o"     || fail "no viewer -> want the con
 grep -qx 'REVIEW_BACKEND_AVAILABLE=0' <<<"$o" || fail "no viewer -> want AVAILABLE=0, got: $o"
 ok "backend: with nothing installed the probe reports the preference, unavailable"
 
-# The run itself degrades: moor's adapter drives git's difftool, and with no
-# sidecar written the result is the difftool contract rather than a hard stop.
+# The run keeps the configured adapter, whose report names the tool that is
+# missing. It does not slide into git's difftool: `diff.tool` is set here, so
+# the only thing stopping that is the rule, and a difftool review would report
+# `difftool` / no-verdict having shown a diff nobody can grade — the rung the
+# skill's fallback ladder replaced.
 unset MOOR_FIXTURE
 o=$( cd "$repo" && PATH="$system_path" bash "$dispatch" --previous )
-[ "$(jq -r .backend <<<"$(json_of "$o")")" = difftool ] \
-  || fail "no viewer -> want a difftool review, got: $(json_of "$o")"
-ok "backend: no viewer installed degrades the run to git's difftool"
+[ "$(jq -r .backend <<<"$(json_of "$o")")" = revdiff ] \
+  || fail "no viewer -> want the configured adapter, got: $(json_of "$o")"
+ok "backend: no viewer installed keeps the configured adapter, never a difftool"
+
+# `git` is not a backend at all (DIFF-18): a changeset shown without a verdict
+# invites "you saw it, approve?", so the difftool is off the menu entirely and
+# asking for it fails the same way any other typo does.
+git -C "$repo" config anchor.reviewBackend git
+rc=0
+o=$( cd "$repo" && PATH="$system_path" bash "$dispatch" --previous 2>&1 ) || rc=$?
+[ "$rc" -eq 64 ] || fail "git backend -> want exit 64 for an unknown backend, got $rc: $o"
+grep -q "unknown review backend 'git'" <<<"$o" \
+  || fail "git backend -> want the unknown-backend error naming it, got: $o"
+! grep -q 'REVIEW_VERDICT=' <<<"$o" || fail "git backend -> nothing should be reviewed, got: $o"
+git -C "$repo" config --unset anchor.reviewBackend
+ok "backend: git is not selectable — the difftool is off the menu (DIFF-18)"
 
 # editor is selectable but never substituted in, so an absent viewer doesn't
 # turn a changeset review into an editor buffer.

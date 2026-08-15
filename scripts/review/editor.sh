@@ -31,6 +31,11 @@
 # An editor carries one artifact, so a review with no drafted artifact (a
 # diff-only range review) is `no-verdict` with the cause on stderr rather than a
 # silent pass — set a visual backend for those skills.
+#
+# Editor resolution and host selection live in the lib because the dispatcher's
+# --print-backend probe needs the same answers without opening anything.
+# shellcheck source=../lib/review-editor.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/review-editor.sh"
 
 editor_caps='{"producesVerdict":true,"perHunkReview":false,"editableCommitMessage":true,"editableDescription":true,"sideMarkers":false}'
 
@@ -62,24 +67,6 @@ editor_emit() {
   echo "REVIEW_OUTPUT=$out"
 }
 
-# Resolve the editor the way git does — core.editor, then VISUAL, then EDITOR,
-# then git's own default. `git var GIT_EDITOR` answers that in one call, but it
-# reads the GIT_EDITOR environment variable first, and an agent harness commonly
-# exports `GIT_EDITOR=true` to keep git from ever opening one. Honoring that here
-# would open nothing, change nothing, and read as "saved unchanged" — an
-# approval the user never gave. So a no-op editor is treated as unset.
-editor_resolve() {
-  local ed
-  ed=$(git var GIT_EDITOR 2>/dev/null || true)
-  case "$ed" in
-    true|:|*/true) ed="" ;;
-  esac
-  [[ -n "$ed" ]] || ed=$(git config --get core.editor 2>/dev/null || true)
-  [[ -n "$ed" ]] || ed="${VISUAL:-}"
-  [[ -n "$ed" ]] || ed="${EDITOR:-}"
-  printf '%s' "$ed"
-}
-
 # Shell-quote one argument for embedding in the command strings the overlay
 # hosts take (they run `sh -c`, not an argv).
 editor_sq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
@@ -99,60 +86,49 @@ editor_await() {
   cat "$sentinel"
 }
 
-# Open $2 in the resolved editor $1 and return the editor's exit status.
-#
-# Claude Code's Bash tool has no controlling TTY, so a terminal editor can only
-# render inside a terminal the host puts on screen. The hosts are tried in order
-# of how directly they report the editor's own exit status.
+# Open $2 in the resolved editor $1 and return the editor's exit status, in
+# whichever host `anchor_editor_host` picked for this session.
 editor_launch() {
   local ed="$1" file="$2" rc=0 cmd sentinel
 
-  # An explicit launcher wins: the escape hatch for a host not handled below,
-  # and the seam the tests drive.
-  if [[ -n "${ANCHOR_EDITOR_LAUNCHER:-}" ]]; then
-    "$ANCHOR_EDITOR_LAUNCHER" "$file" || rc=$?
-    return "$rc"
-  fi
-
-  if [[ -n "${TMUX:-}" ]] && command -v tmux >/dev/null 2>&1; then
-    # display-popup -E blocks until the command exits but reports its own status,
-    # not the command's, so the status comes back through a sentinel.
-    sentinel=$(mktemp "${TMPDIR:-/tmp}/anchor-editor-rc.XXXXXX")
-    cmd="$ed $(editor_sq "$file"); printf %s \$? > $(editor_sq "$sentinel")"
-    tmux display-popup -E -w 90% -h 90% "$cmd" >/dev/null 2>&1 || true
-    rc=$(editor_await "$sentinel") || rc=124
-    rm -f "$sentinel"
-    return "$rc"
-  fi
-
-  # A GUI editor configured to block (`code --wait`, `subl -w`) needs no
-  # terminal at all, and neither does a Windows `notepad`. Running it directly
-  # is then both correct and the only path that works in a Git Bash session.
-  if [[ "$ed" == *" --wait"* || "$ed" == *" -w"* || "$ed" == *" -W"* \
-        || "$ed" == notepad* || "$ed" == *"/notepad"* ]]; then
-    ( eval "$ed $(editor_sq "$file")" ) || rc=$?
-    return "$rc"
-  fi
-
-  # A real TTY — anchor invoked from the user's own shell rather than an agent.
-  if [[ -t 0 ]]; then
-    ( eval "$ed $(editor_sq "$file")" ) || rc=$?
-    return "$rc"
-  fi
-
-  if [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]] \
-     && [[ "${TERM_PROGRAM:-}" == "iTerm.app" ]] && command -v osascript >/dev/null 2>&1; then
-    sentinel=$(mktemp "${TMPDIR:-/tmp}/anchor-editor-rc.XXXXXX")
-    cmd="$ed $(editor_sq "$file"); printf %s \$? > $(editor_sq "$sentinel"); exit"
-    osascript >/dev/null 2>&1 <<APPLESCRIPT || true
+  case "$(anchor_editor_host "$ed")" in
+    launcher)
+      "$ANCHOR_EDITOR_LAUNCHER" "$file" || rc=$?
+      return "$rc"
+      ;;
+    tmux)
+      # display-popup -E blocks until the command exits but reports its own status,
+      # not the command's, so the status comes back through a sentinel.
+      sentinel=$(mktemp "${TMPDIR:-/tmp}/anchor-editor-rc.XXXXXX")
+      cmd="$ed $(editor_sq "$file"); printf %s \$? > $(editor_sq "$sentinel")"
+      tmux display-popup -E -w 90% -h 90% "$cmd" >/dev/null 2>&1 || true
+      rc=$(editor_await "$sentinel") || rc=124
+      rm -f "$sentinel"
+      return "$rc"
+      ;;
+    gui)
+      # A blocking GUI editor needs no terminal at all, which makes running it
+      # directly both correct and the only path that works in a Git Bash session.
+      ( eval "$ed $(editor_sq "$file")" ) || rc=$?
+      return "$rc"
+      ;;
+    tty)
+      ( eval "$ed $(editor_sq "$file")" ) || rc=$?
+      return "$rc"
+      ;;
+    iterm2)
+      sentinel=$(mktemp "${TMPDIR:-/tmp}/anchor-editor-rc.XXXXXX")
+      cmd="$ed $(editor_sq "$file"); printf %s \$? > $(editor_sq "$sentinel"); exit"
+      osascript >/dev/null 2>&1 <<APPLESCRIPT || true
 tell application "iTerm2"
   create window with default profile command "/bin/sh -c $(printf '%s' "$(editor_sq "$cmd")" | sed 's/\\/\\\\/g; s/"/\\"/g')"
 end tell
 APPLESCRIPT
-    rc=$(editor_await "$sentinel") || rc=124
-    rm -f "$sentinel"
-    return "$rc"
-  fi
+      rc=$(editor_await "$sentinel") || rc=124
+      rm -f "$sentinel"
+      return "$rc"
+      ;;
+  esac
 
   echo "review-diff.sh: no way to open '$ed' — a terminal editor needs a terminal, and this session has none. Run inside tmux, configure a blocking GUI editor (git config core.editor 'code --wait'), or point ANCHOR_EDITOR_LAUNCHER at a script that opens one." >&2
   return 125
@@ -194,9 +170,8 @@ emit_review() {
   fi
 
   local ed
-  ed=$(editor_resolve)
-  # An explicit launcher owns the editor choice, so it stands in for the config.
-  if [[ -z "$ed" && -z "${ANCHOR_EDITOR_LAUNCHER:-}" ]]; then
+  ed=$(anchor_editor_resolve)
+  if ! anchor_editor_named "$ed"; then
     echo "review-diff.sh: no editor configured — set core.editor, VISUAL, or EDITOR." >&2
     editor_emit no-verdict absent "no editor configured"
     return

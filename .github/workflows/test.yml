@@ -131,3 +131,22 @@ jobs:
         run: bash tests/review-diff.test.sh
       - name: editor backend + per-skill backend key
         run: bash tests/review-editor.test.sh
+
+  review-cr:
+    # Exercises the reviewer's side against stub gh/glab: reaching another
+    # author's CR head through the forge's ref namespace rather than a branch,
+    # and posting findings that must anchor to the SHA the diff was read at.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+      - name: configure git identity
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "CI"
+      - name: review CR recon
+        run: bash tests/review-cr.test.sh
+      - name: review posting
+        run: bash tests/review-post.test.sh

@@ -3,10 +3,10 @@
 Tracking status of the requirements declared in [`SPEC.md`](SPEC.md).
 Maintained by `/sextant:spec-status`.
 
-**Last audit:** 2026-08-12
+**Last audit:** 2026-08-13
 **Spec version:** root SPEC.md (unversioned)
 **Plugin version:** 1.5.0
-**Coverage:** 176 Covered, 0 Partial, 0 Missing/Contradicts
+**Coverage:** 193 Covered, 0 Partial, 0 Missing/Contradicts
 
 The implementation is the plugin itself — the skill prompts under
 `skills/`, the ambient rules under `rules/`, and the helper scripts under
@@ -23,12 +23,13 @@ draft to review against the implementation, not an audited ledger.
 | TARGET-01..09 | 9 | All Covered | Target resolution + worktree isolation — `scripts/{resolve-target,worktree}.sh`, each `skills/*/SKILL.md` "Target repo"; every skill routes a name argument through `resolve-target.sh` |
 | COMMIT-01..22 | 22 | All Covered | Review-first commit-and-push flow (1.0), recon before tests, pipeline watch after the push (COMMIT-21), and the direct-to-default choice described as landing without a CR rather than as bypassing review (COMMIT-22) — `skills/commit/SKILL.md`, `scripts/{commit,commit-preflight,look-ahead,squash-check,pipeline-after-push}.sh` |
 | PREPARE-01..17 | 17 | All Covered | `prepare-review`, pushed-branch only, opens the draft CR without pushing, reviews the description in the tool, verifies deep-link line parts, reports the branch's pipeline once the description lands (PREPARE-16), and names the source branch that won't be deleted on merge, offering the forge's remediation (PREPARE-17) — `skills/prepare-review/SKILL.md`, `scripts/{prepare-review,deep-links,pipeline-after-push}.sh`, `tests/prepare-review.test.sh` |
+| REVIEW-01..14 | 14 | All Covered | The reviewer's side — resolve a CR by number/URL/branch, read the description before the diff, show the whole range in the viewer, anchor findings to lines with the summary as the fallback, gate the post on the exact text, and refuse a post whose head moved (REVIEW-11) — `skills/review/SKILL.md`, `scripts/{review-cr,review-post}.sh`, `templates/cr-review.md`, `guides/forge-cookbook.md`, `tests/review-cr.test.sh`, `tests/review-post.test.sh` |
 | FEEDBACK-01..09 | 9 | All Covered | Fetch, triage, act on threads, watch the fix commit's pipeline into the summary (FEEDBACK-09) — `skills/resolve-feedback/SKILL.md`, `scripts/pipeline-after-push.sh` |
 | MERGE-01..16 | 16 | All Covered | Gate checks (ready/mergeable/pipeline/approvals/threads), method choice, merge + cleanup — `skills/merge/SKILL.md`, `guides/forge-cookbook.md` |
 | RELEASE-01..20 | 20 | All Covered | Release-model detection, version recommendation, notes + review, per-model publish — `skills/release/SKILL.md`, `scripts/release-recon.sh`, `guides/release-models.md`, `guides/forge-cookbook.md` |
 | ISSUES-01..12 | 12 | All Covered | Author one issue — gather intent, guard duplicates, draft, file (`skills/issue/SKILL.md`); list/scope/rank/recommend, read-only (`skills/issues/SKILL.md`) |
 | CI-01..14 | 14 | All Covered | Status/watch/job modes, commit-scoped resolution, per-workflow fold and the single-run opt-out; run/job breakdown tabulated with per-state emoji (CI-10..12) and watched once per commit after a push (CI-13..14) — `skills/pipeline/SKILL.md`, `skills/merge/SKILL.md` (CI-09), `templates/pipeline-report.md`, `scripts/{pipeline-status,pipeline-after-push}.sh`, `tests/pipeline-{status,after-push}.test.sh` |
-| DIFF-01..17 | 17 | All Covered | Tool-agnostic review contract — dispatcher `scripts/review-diff.sh` + adapters `scripts/review/{moor,revdiff,editor}.sh`; consumers read the normalized verdict, and treat an unparseable or absent one as no-verdict (DIFF-12) — `skills/{commit,prepare-review,issue,release}/SKILL.md` verdict sections. The editor backend edits the artifact rather than commenting on it, aborts on an emptied buffer, refuses a review with no artifact, and discounts a no-op `GIT_EDITOR` (DIFF-13..16) — `scripts/review/editor.sh` (`emit_review`, `editor_resolve`); `--print-backend` reports the resolved backend without launching (DIFF-17) — `scripts/review-diff.sh` (`resolve_backend`), `tests/review-editor.test.sh`. Resolution considers only installed tools, substituting an installed viewer for an absent one and degrading to git's difftool when there is none, with `editor` never substituted in (DIFF-11) — `scripts/review-diff.sh` (`installed_backend`), `tests/review-diff.test.sh` |
+| DIFF-01..20 | 20 | All Covered | Tool-agnostic review contract — dispatcher `scripts/review-diff.sh` + adapters `scripts/review/{moor,revdiff,editor,git}.sh`; consumers read the normalized verdict, and treat an unparseable or absent one as no-verdict (DIFF-12) — `skills/{commit,prepare-review,issue,release,review}/SKILL.md` verdict sections. The editor backend edits the artifact rather than commenting on it, aborts on an emptied buffer, refuses a review with no artifact, and discounts a no-op `GIT_EDITOR` (DIFF-13..16) — `scripts/review/editor.sh` (`emit_review`), `scripts/lib/review-editor.sh` (`anchor_editor_resolve`); the one skill whose subject is always a changeset catches that refusal at the probe rather than launching into it — `skills/review/SKILL.md` Step 3; `--print-backend` reports the resolved backend without launching, plus whether an editor review would reach an editor at all (DIFF-17) — `scripts/review-diff.sh` (`resolve_backend`), `scripts/lib/review-editor.sh` (`anchor_editor_host`, `anchor_editor_available`), `tests/review-editor.test.sh`. Resolution considers only installed tools, substituting an installed viewer for an absent one and otherwise keeping the configured backend so its report names the missing tool, with `editor` and `git` both selectable but never substituted in (DIFF-11) — `scripts/review-diff.sh` (`installed_backend`), `tests/review-diff.test.sh`. git's difftool is not a selectable backend at all, so asking for it fails as an unknown name (DIFF-18) — `scripts/review-diff.sh`, `tests/review-diff.test.sh`. It still reaches the screen as moor's transport, and that ungraded result is the DIFF-10 shape — `scripts/lib/review-difftool.sh`, `scripts/review/moor.sh`. An ungraded review takes a fallback ladder rather than a "you saw it, approve?" question — the draft's path, the editor rung where DIFF-17 says it is reachable, and a chat read of the artifact or a file-by-file changeset walk as the floor (DIFF-20) — `guides/review-fallback.md`, the fallback sections of all five review-consuming skills. A git-range review takes caller-supplied header overrides, which is what keeps another author's CR from being labelled with the reviewer's own last commit (DIFF-19) — `scripts/review-diff.sh` (git-range `--title` / `--detail`), `tests/review-cr.test.sh` |
 | CONFIG-01..15 | 15 | All Covered | `anchor.*` key handling, including the per-skill after-push watch gate (CONFIG-06), the per-skill review backend, whose preference is settled against what is installed rather than assumed present (CONFIG-15 — `scripts/review-diff.sh` (`resolve_backend`, `installed_backend`), `guides/configuring.md` "A backend per artifact", `tests/review-{editor,diff}.test.sh`), and a verbosity dial per artifact — CR (CONFIG-07..10), commit message body (CONFIG-11), issue body (CONFIG-12), release notes (CONFIG-13) — each abbreviating sections rather than removing them, with the cross-artifact invariants, the clamp, and the audience-widens-as-the-default-descends ordering in CONFIG-14 — `guides/configuring.md` (Defaults table), `guides/cr-verbosity.md`, `templates/{cr-description,commit-message,issue-description}.md` ("At lower verbosity"), `scripts/pipeline-after-push.sh` (`config_bool`), commit/prepare-review/issue/release config steps, `tests/config-defaults.test.sh` (the documented defaults agree across SPEC, guide, skills, templates) |
 | FORGE-01..09 | 9 | All Covered | Template composition, body-file, markdown, auth — `templates/`, `guides/{forge-cookbook,markdown-gotchas}.md`; template resolution across the forge's own inheritance with a deterministic per-level pick and the `anchor.crTemplateRepo` backstop (FORGE-06..09) — `scripts/prepare-review.sh`, `tests/prepare-review.test.sh` |
 | RULE-01..05 | 5 | All Covered | SessionStart-injected rules — `hooks/emit-rules.sh`, `rules/*.md`; RULE-04 routes CR creation through `prepare-review` |
@@ -36,6 +37,93 @@ draft to review against the implementation, not an audited ledger.
 | CONFIRM-01..06 | 6 | All Covered | Approval of the exact text before anything publishes under the user's name — commit message in the review tool (`skills/commit/SKILL.md` Step 5), CR description (`skills/prepare-review/SKILL.md` Steps 4-5), issue body (`skills/issue/SKILL.md`), thread replies (`skills/resolve-feedback/SKILL.md` 3c), release notes (`skills/release/SKILL.md`); CONFIRM-03 is the plan-is-not-prose distinction the reply gate rests on |
 
 ## Audit history
+
+### 2026-08-15 — The difftool leaves the menu (DIFF-18, DIFF-10, DIFF-11)
+
+STATUS.md updated: no ID count change, 193; DIFF-18 rewritten, DIFF-10 and
+DIFF-11 amended.
+
+Demoting the difftool to selectable-but-never-automatic (below) kept the option
+open on the theory that someone might want it deliberately. Reviewing the
+result: it is a disconnected experience — the diff opens in a window that
+reports nothing back, so the flow lands in the fallback ladder anyway, having
+first primed the user to say yes. That is the rubber stamp the verdict contract
+exists to prevent, and leaving it selectable meant a config key could still
+reach it. `scripts/review/git.sh` is gone and DIFF-18 now records the absence
+rather than the adapter, so re-adding it argues against a requirement rather
+than filling a gap.
+
+The difftool does not disappear from the codebase: moor's adapter drives `git
+difftool` to reach moor, so an absent or unconfigured moor still leaves one on
+screen. That case is DIFF-10's, reworded from "the configured difftool" — which
+no longer exists — to a launch that reaches one, and its result now names the
+ladder rather than the direct question DIFF-20 forbids. It kept its old wording
+("ask the user directly") a day past the pivot that outlawed it.
+
+### 2026-08-13 — A fallback ladder instead of a difftool rung (DIFF-20, DIFF-11, DIFF-17, DIFF-18)
+
+STATUS.md updated: +1 ID (DIFF-20, Covered), 192 → 193; DIFF-11, DIFF-17 and
+DIFF-18 amended in place.
+
+The bottom rung of the install ladder was measured against what it produces. A
+difftool review shows the diff and then reports `no-verdict`, so the flow ends
+in the same chat question an absent viewer would have asked — except the user
+has now read something, and the natural next question is "you saw it, approve?".
+That converts a tooling failure into an approval, which is the outcome the
+verdict contract exists to prevent. So nothing degrades into `git` any more; it
+joins `editor` as selectable-but-never-automatic, and DIFF-20 defines what
+happens below a viewer instead.
+
+The editor rung needs a probe it did not have. `--print-backend` treated the
+editor backend as always available because it has no binary to look for, which
+is true and useless: what decides the rung is whether a launch would *reach* an
+editor — one resolvable per DIFF-16, and a host to open it in. Both halves moved
+to `scripts/lib/review-editor.sh` so the probe and the adapter answer from the
+same code, and the probe reports the result on its own axis.
+
+`tests/review-editor.test.sh` was passing by coincidence of the environment: its
+per-skill cases assert `backend == revdiff` while running against the ambient
+PATH, and DIFF-11's resolution had made the host's installed set load-bearing.
+On a machine with moor installed — every session has the plugin's own `bin/` on
+PATH — it substituted moor and the cases failed; CI stayed green only because an
+ubuntu runner has neither viewer. Pinned with a stub viewer dir and a no-op
+`GIT_EDITOR`, alongside the `GIT_CONFIG_GLOBAL` pin that was already there.
+
+### 2026-08-12 — Reviewing someone else's change request (REVIEW-01..14, DIFF-19)
+
+STATUS.md updated: +15 IDs (REVIEW-01..14 and DIFF-19, all Covered), 177 → 192.
+`anchor` covered the change lifecycle from the author's side only; a CR number
+or URL from a teammate had no entry point, and findings landed in chat where the
+author never saw them. The new category is the write half of a seam whose two
+ends already existed — `deep-links.sh` builds line anchors for the authoring
+side, `resolve-feedback` parses threads off a CR for the reading side.
+
+Two requirements carry the design decisions the issue left open. REVIEW-05/06
+make the diff presentation unfiltered and unskippable and treat an `incomplete`
+verdict as a halt: a review that saw part of a change and signed off on all of
+it is the rubber-stamp the step exists to prevent, and `reviewCompleteness:
+null` says unmeasured rather than complete. REVIEW-13 keeps the forge verdict
+out of the skill — leaving comments and recording an approval are separate acts,
+and only the second is irreversible.
+
+REVIEW-11 exists for the failure the issue named: a CR whose head moves
+mid-review anchors every comment to a stale SHA. The head is pinned when the
+diff is fetched and re-read before the first write, and a mismatch refuses
+rather than re-anchoring by guess.
+
+### 2026-08-12 — A `git` backend for the no-viewer fallback (DIFF-18)
+
+STATUS.md updated: +1 ID (DIFF-18, Covered), 176 → 177. Degrading to git's
+difftool ran through moor's adapter, which drives `git difftool` on its way to
+reading moor's sidecar. That worked, but it made `moor` name two things — a
+backend the user selects and the fallback nobody does — and it only worked while
+git had a difftool to resolve: with `diff.tool` and `merge.tool` both unset, git
+falls back to vimdiff, which waits on a terminal a CI job hasn't got, so the run
+hung until the job was cancelled.
+
+`scripts/review/git.sh` now owns that path. Where the configured backend's own
+tool is the missing one, the dispatcher keeps that backend instead, so the report
+names the absent tool rather than saying only that some difftool closed.
 
 ### 2026-08-12 — An editor review backend, selectable per artifact (DIFF-13..17, CONFIG-15)
 

@@ -36,6 +36,10 @@
 #   bash review-diff.sh <diff-range>
 #     e.g. bash review-diff.sh HEAD                   # working tree vs HEAD
 #     e.g. bash review-diff.sh HEAD~1...HEAD          # explicit commit range
+#   A git-range review takes the same --title / --detail overrides as --files.
+#   The computed header describes the *local* HEAD, which is the wrong subject
+#   when the range is somebody else's change request fetched into this checkout
+#   — /anchor:review passes the CR's own title and facts instead.
 #
 # Files mode — review two arbitrary paths (no git range required), e.g. an old
 # vs. proposed CR description. Domain-agnostic: pass the header text yourself.
@@ -61,8 +65,15 @@ set -euo pipefail
 #       REVIEW_BACKEND=<name>              what to pass to --backend
 #       REVIEW_BACKEND_AVAILABLE=0|1       0 = nothing usable is installed
 #       REVIEW_BACKEND_CONFIGURED=<name>   only when config asked for another
+#       REVIEW_EDITOR_AVAILABLE=0|1        1 = --backend editor would reach an
+#         editor. Reported on its own axis because it answers a different
+#         question: not "which viewer shows the changeset" but "can the user be
+#         handed the drafted artifact to edit" — the rung a skill offers when
+#         the viewer is missing or died (see guides/review-fallback.md).
 # shellcheck source=lib/resolve-context.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
+# shellcheck source=lib/review-editor.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/review-editor.sh"
 CTX_REPO=""
 CTX_WORKTREE=""
 review_skill=""
@@ -93,6 +104,12 @@ resolve_backend() {
 
 # The editor backend opens whatever editor git resolves, so it has no binary of
 # its own to look for; the others are named after theirs.
+#
+# This stays a PATH question for the run path on purpose. An editor backend that
+# cannot reach an editor still belongs to the editor adapter, whose `no-verdict`
+# names the missing piece — degrading it to a difftool would answer the diff
+# question when the caller asked the artifact one. The probe below asks the
+# sharper `anchor_editor_available` instead, since it is deciding what to offer.
 backend_installed() {
   [[ "$1" == "editor" ]] || command -v "$1" >/dev/null 2>&1
 }
@@ -101,10 +118,10 @@ backend_installed() {
 # installed leaves the name as configured — the probe reports that alongside
 # REVIEW_BACKEND_AVAILABLE=0, so a caller still learns what was asked for.
 #
-# Substitution stays among the diff viewers. `editor` remains selectable but
-# never automatic: it edits one drafted artifact rather than showing a
-# changeset, so standing in for an absent revdiff would answer a different
-# question than the caller asked.
+# Substitution stays among the diff viewers. `editor` is selectable but never
+# automatic: it edits one drafted artifact rather than showing a changeset, so
+# standing in for an absent revdiff would answer a different question than the
+# caller asked.
 installed_backend() {
   local configured="$1" candidate
   if backend_installed "$configured"; then printf '%s' "$configured"; return; fi
@@ -117,13 +134,22 @@ installed_backend() {
 if [[ "$print_backend" == "1" ]]; then
   configured=$(resolve_backend)
   backend=$(installed_backend "$configured")
+  editor_available=0
+  anchor_editor_available && editor_available=1
   echo "REVIEW_BACKEND=$backend"
-  if backend_installed "$backend"; then
+  if [[ "$backend" == "editor" ]]; then
+    # Selected, so its own reachability is the answer to "is anything usable
+    # here" — a configured editor backend with nowhere to open an editor is as
+    # unavailable as an absent viewer, and saying otherwise sends the caller to
+    # launch a review that reports a host problem instead of showing anything.
+    echo "REVIEW_BACKEND_AVAILABLE=$editor_available"
+  elif backend_installed "$backend"; then
     echo "REVIEW_BACKEND_AVAILABLE=1"
   else
     echo "REVIEW_BACKEND_AVAILABLE=0"
   fi
   [[ "$backend" == "$configured" ]] || echo "REVIEW_BACKEND_CONFIGURED=$configured"
+  echo "REVIEW_EDITOR_AVAILABLE=$editor_available"
   exit 0
 fi
 
@@ -188,7 +214,24 @@ if [[ "${1:-}" == "--files" ]]; then
     esac
   done
 else
-  # Git-range modes: resolve the range and the header style.
+  # Git-range modes: resolve the range and the header style. Header overrides
+  # are collected first so they can be applied after the defaults are computed.
+  override_title=""
+  override_details_json=""
+  args=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --title)  override_title="${2:?--title needs a value}"; shift 2 ;;
+      --detail)
+        pair="${2:?--detail needs label=value}"; shift 2
+        override_details_json=$(jq -c --arg l "${pair%%=*}" --arg v "${pair#*=}" \
+          '. + [{label:$l, value:$v}]' <<<"${override_details_json:-[]}")
+        ;;
+      *) args+=("$1"); shift ;;
+    esac
+  done
+  set -- "${args[@]+"${args[@]}"}"
+
   if [[ "${1:-}" == "--commit" ]]; then
     diff_range=$(determine_commit_range) || {
       echo "review-diff.sh: could not determine a diff range (no upstream tracking branch and no origin/main or origin/master)" >&2
@@ -269,6 +312,12 @@ else
         {label:"commit",value:$c},{label:"author",value:$a},{label:"range",value:$r}]
        + (if $b == "" then [] else [{label:"body",value:$b}] end)')
   fi
+
+  # An override replaces the computed value rather than merging with it: the
+  # computed header describes a different subject entirely, so keeping half of
+  # it would attribute the range to the wrong commit.
+  [[ -n "$override_title" ]] && review_title="$override_title"
+  [[ -n "$override_details_json" ]] && review_details_json="$override_details_json"
 fi
 
 # --- Select the backend and delegate -----------------------------------------
@@ -282,10 +331,12 @@ if [[ ! -r "$adapter" ]]; then
   exit 64
 fi
 backend=$(installed_backend "$backend")
-# An adapter whose tool is absent can only report that absence, so a machine
-# with no viewer installed reviews through moor's adapter instead — it drives
-# `git difftool --dir-diff`, which degrades to whatever difftool git resolves.
-backend_installed "$backend" || backend=moor
+# A machine with no viewer installed keeps the configured adapter, whose report
+# names the tool that is missing. There is nothing below it to degrade into —
+# git's difftool was retired as a backend (DIFF-18) because a changeset shown
+# without a verdict invites "you saw it, approve?", which is the rubber stamp the
+# contract exists to prevent. The skill's fallback ladder
+# (guides/review-fallback.md) is the rung below.
 adapter="$(dirname "${BASH_SOURCE[0]}")/review/${backend}.sh"
 
 # The review-request contract the sourced adapter reads. Exported so the

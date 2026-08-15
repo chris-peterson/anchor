@@ -62,7 +62,18 @@ git -C "$repo" config commit.gpgsign false
 printf 'one\n' > "$repo/a.txt"; git -C "$repo" add -A; git -C "$repo" commit --quiet -m first
 printf 'one\ntwo\n' > "$repo/a.txt"; git -C "$repo" add -A; git -C "$repo" commit --quiet -m second
 
-run() { ( cd "$repo" && bash "$dispatch" "$@" ); }
+# Hermetic in PATH as well as in git config. Backend resolution settles the
+# configured name against what is installed, so a developer machine with moor
+# on PATH (every session has the plugin's own bin/ there) would substitute it
+# for the revdiff these cases configure — and the assertions would read the
+# host's installed set rather than the key resolution they are about. A stub
+# revdiff ahead of everything makes the configured backend present, which is
+# the state the substitution rule leaves alone. It sits in its own dir, not
+# $bin: the probe cases below run against $bin precisely to assert what happens
+# when no viewer is installed.
+viewerbin="$work/viewerbin"; mkdir -p "$viewerbin"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$viewerbin/revdiff"; chmod +x "$viewerbin/revdiff"
+run() { ( cd "$repo" && PATH="$viewerbin:$PATH" bash "$dispatch" "$@" ); }
 verdict_of() { sed -n 's/^REVIEW_VERDICT=//p' <<<"$1"; }
 json_of()    { sed -n 's/^REVIEW_OUTPUT=//p' <<<"$1"; }
 
@@ -200,14 +211,30 @@ key_of() { sed -n "s/^$1=//p" <<<"$2"; }
 # The probe answers "what is installed", so these cases run against a PATH this
 # test controls rather than whatever the developer happens to have. `git` is all
 # the probe itself needs, so the system dirs are enough alongside the stubs.
-probe() { ( cd "$repo" && PATH="$bin:/usr/bin:/bin" bash "$dispatch" "$@" ); }
+#
+# `GIT_EDITOR=true` pins the other half. The editor axis is reported from what a
+# launch would actually reach, so without pinning it these cases would read the
+# developer's own EDITOR and whether they ran the suite from a terminal. A no-op
+# GIT_EDITOR is the case DIFF-16 already discounts, which makes it the
+# deterministic "no editor here" — the cases wanting the other answer set
+# ANCHOR_EDITOR_LAUNCHER, which stands in for the config.
+probe() { ( cd "$repo" && PATH="$bin:/usr/bin:/bin" GIT_EDITOR=true bash "$dispatch" "$@" ); }
 
 git -C "$repo" config anchor.reviewBackend editor
 git -C "$repo" config --unset anchor.commit.reviewBackend
 o=$(probe --skill commit --print-backend)
 [ "$(key_of REVIEW_BACKEND "$o")" = editor ]        || fail "--print-backend name"
-[ "$(key_of REVIEW_BACKEND_AVAILABLE "$o")" = 1 ]   || fail "editor needs no binary, so it is always available"
-ok "probe: --print-backend reports the resolved backend, editor always available"
+[ "$(key_of REVIEW_BACKEND_AVAILABLE "$o")" = 0 ]   || fail "a selected editor backend with no editor to open is not available"
+[ "$(key_of REVIEW_EDITOR_AVAILABLE "$o")" = 0 ]    || fail "no editor resolves, so the editor rung is not offerable"
+ok "probe: a selected editor backend reports unavailable when no editor resolves"
+
+# The editor axis is reported on every probe, not only when editor is selected:
+# it is what a skill offers as the rung below a viewer that is missing or died.
+o=$( cd "$repo" && PATH="$bin:/usr/bin:/bin" ANCHOR_EDITOR_LAUNCHER="$bin/stub-editor.sh" \
+     bash "$dispatch" --skill commit --print-backend )
+[ "$(key_of REVIEW_BACKEND_AVAILABLE "$o")" = 1 ] || fail "a reachable editor makes the selected editor backend available"
+[ "$(key_of REVIEW_EDITOR_AVAILABLE "$o")" = 1 ]  || fail "a reachable editor should be reported as offerable"
+ok "probe: a reachable editor is reported on its own axis"
 
 git -C "$repo" config anchor.commit.reviewBackend definitely-not-installed
 o=$(probe --skill commit --print-backend)

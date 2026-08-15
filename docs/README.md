@@ -12,7 +12,8 @@ flowchart TD
     Need["work to do"] -->|issue| Filed["issue on the forge"]
     Filed -->|commit| Pushed["reviewed and pushed"]
     Pushed -->|prepare-review| Open["change request open"]
-    Open -->|resolve-feedback| Cleared["review threads cleared"]
+    Open -->|review| Reviewed["findings on the CR"]
+    Reviewed -->|resolve-feedback| Cleared["review threads cleared"]
     Cleared -->|merge| Landed["landed"]
     Landed -->|release| Shipped["published version"]
 ```
@@ -32,7 +33,7 @@ The two skills you reach for most, in motion:
 ## Quickstart
 
 `anchor` drives the forge through its official CLI, so the skills that touch a
-change request, issue, pipeline, or release (`prepare-review`,
+change request, issue, pipeline, or release (`prepare-review`, `review`,
 `resolve-feedback`, `merge`, `release`, `pipeline`, `issue`, `issues`) need the
 one for your `origin` remote installed and authenticated with read+write scope.
 `commit` works without it. Install
@@ -76,8 +77,9 @@ path of least resistance.
 
 ## Optional integrations
 
-The skills run with nothing else installed. Each of these adds something when
-present and is skipped when absent.
+The skills run with nothing else installed: with no diff viewer on the machine,
+the review is walked with you in chat. Each of these adds something when present
+and is skipped when absent.
 
 - **[revdiff](https://revdiff.com)** — the backend the skills reach for when
   it's installed and you haven't said otherwise: a terminal-native diff reviewer
@@ -90,10 +92,6 @@ present and is skipped when absent.
   selected with `git config anchor.reviewBackend moor`: a keyboard-driven diff
   viewer whose `REVIEW_CONTEXT` sidecar contract (the review-feedback channel) is
   defined in [moor's `SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md).
-  Its adapter drives `git difftool --dir-diff`, which is also what you get with
-  no diff viewer installed at all — a visual review through whatever difftool git
-  resolves, shown without a verdict, so the skill asks whether to revise or
-  proceed.
 - **[tack](https://github.com/chris-peterson/tack)** — the work tracker. Naming a
   repo you aren't sitting in (`/anchor:commit payments-api`) resolves through
   tack's repo database, and when a tack route is bound to the session, `merge`
@@ -117,5 +115,6 @@ present and is skipped when absent.
   which one owns the version bump
 - **Templates** — the output shapes the skills produce:
   [commit message](/templates/commit-message),
-  [CR description](/templates/cr-description), and
+  [CR description](/templates/cr-description),
+  [CR review](/templates/cr-review), and
   [issue description](/templates/issue-description)

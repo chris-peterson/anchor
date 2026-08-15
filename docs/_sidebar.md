@@ -4,6 +4,7 @@
 - Skills
   - [commit](/skills/commit)
   - [prepare-review](/skills/prepare-review)
+  - [review](/skills/review)
   - [resolve-feedback](/skills/resolve-feedback)
   - [merge](/skills/merge)
   - [release](/skills/release)
@@ -15,6 +16,7 @@
 - Templates
   - [Commit message](/templates/commit-message)
   - [CR description](/templates/cr-description)
+  - [CR review](/templates/cr-review)
   - [Issue description](/templates/issue-description)
 - Guides
   - [Configuring anchor](/guides/configuring)

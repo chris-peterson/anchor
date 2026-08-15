@@ -71,7 +71,11 @@ a single verdict, so the skills don't care which reviewer is installed.
 |---|---|---|
 | [revdiff](https://revdiff.com) | the default since 1.4.0 | A terminal-native reviewer that also handles hg and jj, with diff-side markers on each annotation |
 | [moor](https://github.com/chris-peterson/moor) | `git config anchor.reviewBackend moor` | Comments on individual changes, per-hunk review state, and an editable commit message that round-trips |
-| your `git difftool` | neither plugin installed | A visual diff with no structured verdict, so the skill asks directly whether to revise or proceed |
+
+With no viewer installed, the skills walk the change with you in chat rather
+than opening git's difftool: a changeset on screen with no verdict behind it
+ends in "you saw it, approve?", which is the one answer a review step must not
+manufacture.
 
 The contract between them — the four-value verdict, ungraded comments anchored to
 lines or files, and what a backend that can't answer a question reports instead of
