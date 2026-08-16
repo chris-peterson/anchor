@@ -1,69 +1,14 @@
 # Changelog
 
-## Unreleased
+## 1.6.0
 
-### Added
+## What's Changed
+* Let the review step take an edit, not a comment by @chris-peterson in https://github.com/chris-peterson/anchor/pull/65
+* review a change request by @chris-peterson in https://github.com/chris-peterson/anchor/pull/66
+* Give anchor's review a caller that isn't a skill by @chris-peterson in https://github.com/chris-peterson/anchor/pull/61
 
-- An **`editor` review backend**, for when you already know the sentence you want
-  and would rather type it than describe it. Every `anchor` skill that drafts
-  prose hands it to you before it lands, and until now the only way to change it
-  was to *comment* and have `anchor` rewrite from the comments. Set
-  `anchor.reviewBackend editor` and the draft opens in your editor instead, with
-  the change under review below a scissors line the way `git commit --verbose`
-  works. What you save is the artifact — taken verbatim, not re-drafted from.
-  Empty the buffer and nothing is committed, filed, or published.
 
-- **A backend per artifact**: `anchor.<skill>.reviewBackend` overrides
-  `anchor.reviewBackend` for one skill, the way `anchor.<skill>.watchPipelineAfterPush`
-  already does. Which shape suits an artifact varies — a commit message is a
-  natural editor artifact, while a CR description whose deep links want checking
-  against the diff reads better in a diff viewer:
-
-  ```bash
-  git config anchor.reviewBackend revdiff        # diffs in the TUI
-  git config anchor.commit.reviewBackend editor  # commit messages in $EDITOR
-  ```
-
-- A command line: `anchor diff <left> <right>` reviews any two files or
-  directories in the review tool you've configured, and prints the verdict and
-  the reviewer's comments as JSON. The review the skills launch was previously
-  reachable only from a skill, so a hook, a shell, or another agent with two
-  files to compare had to re-derive the invocation or go without. Add a header
-  with `--title` and repeatable `--detail label=value`. Reachable as
-  `/anchor:anchor` in a session, and as `anchor` from a shell once installed.
-
-- `anchor install-cli` puts the CLI on PATH and installs zsh tab completion in the
-  same step, and a SessionStart hook tells you when a plugin update has left that
-  wrapper on an older build. See [the CLI guide](https://chris-peterson.github.io/anchor/#/guides/cli).
-
-- The length dial CR descriptions have had now covers every artifact `anchor`
-  writes: `anchor.issueVerbosity` (default `75`), `anchor.commitVerbosity`
-  (`50`), and `anchor.releaseVerbosity` (`10`) join `anchor.crVerbosity`. The
-  defaults descend along the lifecycle because each step out widens the
-  audience — an issue is written for the few people who'll do the work, release
-  notes for everyone using the project — and the background that saves the first
-  reader a conversation is what the last one skims past.
-
-  Each dial abbreviates prose rather than dropping content: a commit's subject
-  rules and `Refs:` trailer hold at every setting, an issue's acceptance criteria
-  are never condensed, and every release-note entry survives with its
-  breaking-change migration steps intact.
-
-- A **Defaults** table opens the configuring guide, listing what each `anchor.*`
-  key does when you've set nothing. The values used to be a clause inside each
-  key's own description, which meant reading the whole table to find them.
-
-### Changed
-
-- A review now opens in a tool that's actually installed. `anchor` resolves the
-  backend against what's on your machine, so naming one you haven't installed
-  gets you the diff viewer you do have, said in one line, instead of a review
-  that reports nothing. The `editor` backend is never substituted in — it edits
-  one drafted artifact rather than showing a changeset.
-
-- CR descriptions draft at `anchor.crVerbosity` `25` rather than `50` when you
-  set nothing, so they come out shorter without anyone configuring anything.
-  `git config anchor.crVerbosity 50` restores the previous length.
+**Full Changelog**: https://github.com/chris-peterson/anchor/compare/v1.5.0...v1.6.0
 
 ## 1.5.0
 
