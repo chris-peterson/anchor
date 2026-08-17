@@ -301,4 +301,63 @@ grep -qx 'REVIEW_BACKEND=editor' <<<"$o" || fail "editor configured -> want edit
 git -C "$repo" config --unset anchor.reviewBackend
 ok "backend: editor stays selected and is never substituted in"
 
+# ================== context flags anywhere in the argv ====================
+# `--repo` used to be leading-only, so an invocation that appended it reviewed
+# the cwd repo instead of the target — and `--local` staged the cwd repo too.
+# `other` stands in for the session's cwd: a clean checkout whose own diff is
+# empty, which is what made the wrong-repo review look like an approved one.
+other="$work/other"
+git init --quiet -b main "$other"
+git -C "$other" config user.email "t@example.com"
+git -C "$other" config user.name "T"
+git -C "$other" config commit.gpgsign false
+printf 'untouched\n' > "$other/b.txt"; git -C "$other" add -A; git -C "$other" commit --quiet -m only
+
+git -C "$repo" config anchor.reviewBackend moor
+mkfix '{"output":{"exitCode":0,"reviewer":"Rev","comments":[]}}'
+export MOOR_INPUT_CAPTURE="$work/input.json"
+o=$( cd "$other" && bash "$dispatch" --previous --repo "$repo" )
+[ "$(verdict_of "$o")" = approved ] || fail "trailing --repo -> $(verdict_of "$o"), want approved"
+[ "$(jq -r '.input.details[] | select(.label=="repo") | .value' "$MOOR_INPUT_CAPTURE")" = repo ] \
+  || fail "trailing --repo reviewed the wrong checkout: $(jq -c '.input.details' "$MOOR_INPUT_CAPTURE")"
+unset MOOR_INPUT_CAPTURE
+ok "context: --repo after the mode retargets the review (TARGET-10)"
+
+# a value that looks like a context flag stays a value
+o=$( cd "$other" && bash "$dispatch" --previous --repo "$repo" --title '--worktree' )
+[ "$(verdict_of "$o")" = approved ] || fail "--title '--worktree' should stay a title value: $o"
+ok "context: a flag-shaped option value is not read as a context flag"
+
+# per-skill backend selection still resolves when --skill trails the mode
+git -C "$repo" config anchor.trailing.reviewBackend revdiff
+export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
+o=$( cd "$other" && bash "$dispatch" --previous --repo "$repo" --skill trailing )
+[ "$(jq -r .backend <<<"$(json_of "$o")")" = revdiff ] \
+  || fail "trailing --skill did not select the per-skill backend: $(json_of "$o")"
+git -C "$repo" config --unset anchor.trailing.reviewBackend
+ok "context: --skill after the mode still selects the per-skill backend"
+
+# a misspelled flag is an error, not a silently dropped argument
+rc=0; o=$( cd "$repo" && bash "$dispatch" --previous --repoo "$repo" 2>&1 ) || rc=$?
+[ "$rc" -eq 64 ] || fail "unknown option -> want exit 64, got $rc: $o"
+! grep -q 'REVIEW_VERDICT=' <<<"$o" || fail "unknown option should review nothing: $o"
+ok "context: an unknown option exits 64 instead of being dropped"
+
+rc=0; o=$( cd "$repo" && bash "$dispatch" --previous HEAD~1...HEAD 2>&1 ) || rc=$?
+[ "$rc" -eq 64 ] || fail "extra positional -> want exit 64, got $rc: $o"
+ok "context: an extra positional argument exits 64"
+
+# ================== empty range ==========================================
+# Nothing to show means nothing was reviewed, and a viewer quit on an empty diff
+# is indistinguishable from an approval — so the dispatcher never launches one.
+git -C "$repo" config anchor.reviewBackend revdiff
+export REVDIFF_ARGS_FILE="$work/empty-args.txt"; rm -f "$REVDIFF_ARGS_FILE"
+o=$( cd "$other" && bash "$dispatch" --local 2>/dev/null ); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = no-verdict ] || fail "empty range -> $(verdict_of "$o"), want no-verdict"
+[ "$(jq -r .raw.exitCode <<<"$j")" = empty-range ] || fail "empty range raw.exitCode: $j"
+[ "$(jq -r .capabilities.producesVerdict <<<"$j")" = false ] || fail "empty range producesVerdict"
+[ ! -e "$REVDIFF_ARGS_FILE" ] || fail "empty range should not launch a viewer"
+unset REVDIFF_ARGS_FILE
+ok "empty range: no-verdict, nothing launched (DIFF-21)"
+
 echo "# all checks passed"

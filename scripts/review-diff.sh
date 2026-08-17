@@ -47,7 +47,7 @@
 
 set -euo pipefail
 
-# Leading flags, before the mode:
+# Context flags, accepted anywhere in the argv:
 #   --repo / --worktree <path>  retargets the git range / difftool onto a
 #     checkout other than the cwd repo (see scripts/lib/resolve-context.sh). The
 #     --files mode takes absolute paths, so this is only meaningful for the
@@ -79,16 +79,27 @@ CTX_WORKTREE=""
 review_skill=""
 backend_override=""
 print_backend=0
-while true; do
-  case "${1:-}" in
+# One pass over the whole argv, so a caller that writes `--repo` after the mode
+# still retargets. These used to be leading-only: a `--repo` that arrived after
+# the mode fell through to the mode parser, which collected it as an unnamed
+# token and never read it, so the review silently ran against the cwd repo — and
+# `--local` staged that repo — while the rest of the flow used the target.
+# Flags whose value is arbitrary text pass through *with* their value, so a value
+# that happens to look like a context flag is not read as one.
+rest=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
     --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
     --worktree) CTX_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
     --skill)    review_skill="${2:?--skill needs a name}"; shift 2 ;;
     --backend)  backend_override="${2:?--backend needs a name}"; shift 2 ;;
     --print-backend) print_backend=1; shift ;;
-    *) break ;;
+    --title|--detail|--message-file)
+                rest+=("$1" "${2:?$1 needs a value}"); shift 2 ;;
+    *)          rest+=("$1"); shift ;;
   esac
 done
+set -- "${rest[@]+"${rest[@]}"}"
 ctx_resolve_repo
 
 # Which shape suits an artifact varies — a commit message is a natural editor
@@ -227,10 +238,25 @@ else
         override_details_json=$(jq -c --arg l "${pair%%=*}" --arg v "${pair#*=}" \
           '. + [{label:$l, value:$v}]' <<<"${override_details_json:-[]}")
         ;;
+      --commit|--local|--previous|--full|--message-file) args+=("$1"); shift ;;
+      # A misspelled flag used to be collected here and dropped, which reads as a
+      # review of something the caller didn't ask for; --files errors on one, so
+      # the git-range modes do too.
+      -*) echo "review-diff.sh: unknown option: $1" >&2; exit 64 ;;
       *) args+=("$1"); shift ;;
     esac
   done
   set -- "${args[@]+"${args[@]}"}"
+
+  # Each git-range mode takes exactly one token (--local optionally a
+  # --message-file pair). Anything past that was meant to do something, and
+  # dropping it reviews a different subject than the caller asked for.
+  expect_consumed() {
+    if [[ $# -gt 0 ]]; then
+      echo "review-diff.sh: unexpected argument: $1" >&2
+      exit 64
+    fi
+  }
 
   if [[ "${1:-}" == "--commit" ]]; then
     diff_range=$(determine_commit_range) || {
@@ -238,8 +264,8 @@ else
       exit 65
     }
     header_mode="commit"
+    expect_consumed "${@:2}"
   elif [[ "${1:-}" == "--local" ]]; then
-    git add -A
     diff_range="HEAD"
     header_mode="local"
     # --message-file seeds the drafted commit message into the review so the
@@ -247,7 +273,12 @@ else
     if [[ "${2:-}" == "--message-file" ]]; then
       message_file="${3:?--message-file needs a path}"
       [[ -r "$message_file" ]] || { echo "review-diff.sh: message file not readable: $message_file" >&2; exit 66; }
+      expect_consumed "${@:4}"
+    else
+      expect_consumed "${@:2}"
     fi
+    # Staged last, so a rejected argv never leaves the repo staged.
+    git add -A
   elif [[ "${1:-}" == "--previous" ]]; then
     git rev-parse --verify --quiet HEAD~1 >/dev/null || {
       echo "review-diff.sh: HEAD has no parent commit to compare against" >&2
@@ -255,15 +286,18 @@ else
     }
     diff_range="HEAD~1...HEAD"
     header_mode="commit"
+    expect_consumed "${@:2}"
   elif [[ "${1:-}" == "--full" ]]; then
     diff_range=$(determine_default_branch_range) || {
       echo "review-diff.sh: could not resolve a default branch (no origin/HEAD, origin/main, or origin/master)" >&2
       exit 65
     }
     header_mode="full"
+    expect_consumed "${@:2}"
   else
     diff_range="${1:?Usage: review-diff.sh --local | --previous | --full | --commit | <diff-range> | --files <left> <right> ...}"
     if [[ "$diff_range" == "HEAD" ]]; then header_mode="local"; else header_mode="commit"; fi
+    expect_consumed "${@:2}"
   fi
 
   repo=$(basename "$(git rev-parse --show-toplevel)")
@@ -338,6 +372,24 @@ backend=$(installed_backend "$backend")
 # contract exists to prevent. The skill's fallback ladder
 # (guides/review-fallback.md) is the rung below.
 adapter="$(dirname "${BASH_SOURCE[0]}")/review/${backend}.sh"
+
+# An empty range has nothing to show, and a viewer opened on nothing is quit the
+# same way an approved review is — so launching one manufactures an `approved`
+# for a changeset nobody saw. Report `no-verdict` naming the repo the range
+# resolved against, which is also what surfaces a review pointed at the wrong
+# checkout (DIFF-21).
+if [[ "$review_mode" == "range" ]] && git diff --quiet "$diff_range" -- 2>/dev/null; then
+  echo "review-diff.sh: $diff_range is empty in $(git rev-parse --show-toplevel) (target resolved via ${RESOLVED_VIA:-cwd}) — nothing to review" >&2
+  jq -cn --arg b "$backend" --arg r "$diff_range" '{
+    backend:$b, verdict:"no-verdict",
+    reviewCompleteness:null, reviewer:null, comments:[], editedFields:[],
+    capabilities:{producesVerdict:false, perHunkReview:false,
+                  editableCommitMessage:false, editableDescription:false,
+                  sideMarkers:false},
+    raw:{exitCode:"empty-range", range:$r}}' \
+    | { read -r out; echo "REVIEW_VERDICT=no-verdict"; echo "REVIEW_OUTPUT=$out"; }
+  exit 0
+fi
 
 # The review-request contract the sourced adapter reads. Exported so the
 # adapter (sourced below) counts as a consumer — it runs in this same shell.

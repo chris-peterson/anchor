@@ -81,6 +81,12 @@ behavior, not an independent authority — review them against the source.
   ends.
 - **[TARGET-09]** If a commit-writing flow resolves a target that has no local
   checkout, then the system shall stop rather than commit to the wrong location.
+- **[TARGET-10]** The system shall accept `--repo`/`--worktree` at any position in
+  a helper's arguments, and shall reject an argument it does not recognize rather
+  than dropping it. A retargeting flag honored only in a leading position is
+  silently ignored anywhere else, so the helper runs against the
+  working-directory repo while the rest of the flow uses the target — a
+  divergence no later step can detect.
 
 ### COMMIT — Commit
 
@@ -622,6 +628,12 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   DIFF-13. Its floor shall be reading the change in the conversation — the
   artifact in full, or a changeset walked file by file — never a summary
   standing in for the change, since approval of a summary grades the summary.
+- **[DIFF-21]** If the resolved range holds no changes, then the system shall
+  report `no-verdict` with `raw.exitCode` `empty-range`, name the repo the range
+  resolved against and how that target was resolved, and launch no viewer. A
+  viewer opened on an empty diff is closed exactly as an approved review is, so
+  launching one manufactures approval for a changeset nobody saw; an empty range
+  is also how a review aimed at the wrong checkout presents.
 
 ### CLI — Command-line entrypoint
 

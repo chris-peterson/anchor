@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- A review that named its target repo with a trailing `--repo` reviewed the
+  *working-directory* repo instead. `review-diff.sh` read `--repo`/`--worktree`
+  only ahead of the mode flag and collected a later one as an unnamed token, so
+  the diff came from the session's own checkout — usually clean, hence an empty
+  viewer — while the commit that followed landed correctly in the target. It also
+  meant `--local` ran `git add -A` against the wrong repo. Adding `--skill` to
+  the invocation in 1.6.0 pushed `--repo` to the end, which is what made this
+  routine. Both flags are now read at any position, and an argument the
+  dispatcher doesn't recognize is an error rather than a dropped token.
+
+- An empty diff range now reports `no-verdict` instead of opening a viewer on
+  nothing. Quitting an empty viewer is the same keystroke as approving a review,
+  so the flow read it as approval for a changeset nobody saw.
+
 ## 1.6.0
 
 ## What's Changed
