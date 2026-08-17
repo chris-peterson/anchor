@@ -385,6 +385,8 @@ Then ask how to proceed with the `AskUserQuestion` tool, header `Disposition`, o
 
 Reached on an `approved` review, or on **Yes (write)** from the no-backend fallback. Editing a description is reversible, which is why the review's sign-off is enough to write on. On 401/403 or similar auth failure, surface the error and ask the user to refresh credentials — do not silently fall back to copy-only. The draft is `DESC_DRAFT_PATH`:
 
+**Screenshots referenced by local path (GitLab) upload first.** `glab api --method POST projects/<id>/uploads --form "file=@local.png"` returns a `markdown` field pointing at a hosted URL — swap each local reference for its upload result in `DESC_DRAFT_PATH` before the write below, so the description lands with working images on the first try. See the forge cookbook's binary-upload recipe; the `-F`/`--form` distinction there is the part that bites.
+
 - **GitHub:** `gh pr edit --body-file <DESC_DRAFT_PATH>`.
 - **GitLab:** use the API form `glab api -X PUT projects/:fullpath/merge_requests/<CR_IID> -F "description=@<DESC_DRAFT_PATH>"` — `glab mr update -d` doesn't accept a file. See the bundled forge cookbook (`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`) for the full canonical invocation.
 
@@ -413,4 +415,4 @@ If this CR must land after a predecessor CR, record the ordering on the forge on
 
 No predecessor captured (a single CR, or an independent one) → skip this entirely.
 
-> **One web-UI step remains regardless of choice:** screenshots embedded in the description must be dragged into the forge editor (`gh` / `glab` don't expose a clean upload path). After **Yes (write)** lands the body, open the CR in the browser, drop each PNG, and re-save — the forge rewrites the local paths to hosted URLs.
+> **On GitHub, one web-UI step remains:** `gh` exposes no equivalent upload endpoint, so screenshots embedded in the description must be dragged into the forge editor. After **Yes (write)** lands the body, open the CR in the browser, drop each PNG, and re-save — GitHub rewrites the local paths to hosted URLs. **On GitLab this step doesn't exist** — the "Write it" step above already uploaded each screenshot through `glab api --form` and wrote the description with hosted URLs, so there's nothing left to drag in.

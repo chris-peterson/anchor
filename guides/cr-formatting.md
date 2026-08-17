@@ -180,6 +180,15 @@ they're usually the centerpiece, not a footnote.
   | ![Before](before-login.png) | ![After](after-login.png) |
   ```
 
-Screenshots are local files; the markdown references them by path. After pasting
-the description into the forge web UI, drag and drop each PNG into the editor —
-GitHub/GitLab uploads and rewrites the path to a hosted URL automatically.
+Screenshots start as local files; the markdown needs them at a hosted URL before
+the write, or the description ships broken images.
+
+- **GitLab — upload through the API, no web UI involved.** `glab api --method
+  POST projects/<id>/uploads --form "file=@local.png"` returns a `markdown`
+  field (`![local](/uploads/<hash>/local.png)`) — swap it in for the local
+  path before writing the description. See the [forge cookbook](/guides/forge-cookbook)
+  binary-upload recipe for the exact invocation and the `-F` vs `--form` trap
+  that makes this look like it doesn't work.
+- **GitHub — no equivalent API path is confirmed; use the web UI.** Paste the
+  description, then drag each PNG into the editor — GitHub uploads it and
+  rewrites the path to a hosted URL automatically.

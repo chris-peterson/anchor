@@ -758,21 +758,31 @@ from a script.
 
 ## Binary upload (image attachments, GitLab)
 
-`glab api ... -F "file=@image.png"` returns HTTP 400 for binary multipart
-uploads. Fall back to authenticated `curl`:
+`glab api` uploads a PNG straight through — no token, no `curl`, no web UI —
+**as long as you reach for `--form`, not `-F`/`--field`.** They look
+interchangeable and aren't: `-F` is short for `--field`, which JSON/string-
+encodes an `@file` value — fine for a text file (a commit message, an MR
+description) but it mangles binary content, which is the HTTP 400 this used to
+produce. `--form` sends real `multipart/form-data`, which is what a binary
+upload endpoint expects. Chasing the 400 into "glab can't do this, fall back to
+`curl` with a raw token" is the wrong turn: it works, and the extra token
+extraction it seems to demand is both unnecessary and a step downward — pulling
+a token out of `glab`'s own credential store is exactly the kind of action a
+permission classifier should (and will) balk at, and does not belong in a
+script.
 
 ```bash
 # 1. Get the numeric project id (the uploads endpoint requires it, not :fullpath).
 glab repo view --output json | jq -r '.id'   # → 16529
 
-# 2. POST the file with the token glab already uses.
-curl -sS -X POST "<gitlab-host>/api/v4/projects/<id>/uploads" \
-  -H "PRIVATE-TOKEN: $GITLAB_ACCESS_TOKEN" \
-  -F "file=@/path/to/image.png"
+# 2. POST the file — glab authenticates it the same as any other `glab api` call.
+glab api --method POST "projects/<id>/uploads" --form "file=@/path/to/image.png"
 # → { "markdown": "![image](/uploads/<hash>/image.png)", ... }
 ```
 
-The returned `markdown` field embeds directly into an MR description.
+The returned `markdown` field embeds directly into an MR description — swap it
+in before the write, and the description lands with working images on the
+first PUT. No return trip through the web UI.
 
 ## Etiquette: history is mutable until the CR is marked ready
 
