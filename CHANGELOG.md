@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.1
+
+**Full Changelog**: https://github.com/chris-peterson/anchor/compare/v1.6.0...v1.6.1
+
 ## 1.6.0
 
 ## What's Changed
