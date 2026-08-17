@@ -1,42 +1,5 @@
 # Changelog
 
-## Unreleased
-
-### Changed
-
-- `/anchor:commit` stages the paths it changed instead of running `git add -A`.
-  Two agent sessions can share a checkout, and a whole-tree add put whichever
-  files the other session had in flight into this one's review and commit, under a
-  message that never mentioned them. `commit-preflight.sh`, `review-diff.sh
-  --local`, and `commit.sh` all take a repeatable `--path` (repo-root-relative);
-  the commit is scoped to the same set, so a file someone else staged stays staged
-  rather than riding along. A `--path` with nothing to stage stops the flow, since
-  the alternative is dropping a file from the commit with nothing to show for it.
-
-  The pre-flight also reports `OTHER_STAGED` — staged paths it did not stage —
-  so the skill can name the other session's work instead of committing it.
-
-- A dirty working tree stops `/anchor:prepare-review` with just that: uncommitted
-  changes, commit them first. It used to explain how the tree got dirty and why a
-  description couldn't be drafted against it, which is a paragraph to read past to
-  reach the one available action.
-
-### Fixed
-
-- A review that named its target repo with a trailing `--repo` reviewed the
-  *working-directory* repo instead. `review-diff.sh` read `--repo`/`--worktree`
-  only ahead of the mode flag and collected a later one as an unnamed token, so
-  the diff came from the session's own checkout — usually clean, hence an empty
-  viewer — while the commit that followed landed correctly in the target. It also
-  meant `--local` ran `git add -A` against the wrong repo. Adding `--skill` to
-  the invocation in 1.6.0 pushed `--repo` to the end, which is what made this
-  routine. Both flags are now read at any position, and an argument the
-  dispatcher doesn't recognize is an error rather than a dropped token.
-
-- An empty diff range now reports `no-verdict` instead of opening a viewer on
-  nothing. Quitting an empty viewer is the same keystroke as approving a review,
-  so the flow read it as approval for a changeset nobody saw.
-
 ## 1.6.0
 
 ## What's Changed
