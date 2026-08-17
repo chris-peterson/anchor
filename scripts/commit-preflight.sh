@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
-# One-shot pre-flight recon for /anchor:commit: stages, then gathers everything
-# Steps 1-3 need to decide the route, and prints it as a single KEY=value block
-# so the skill reads one command's output instead of running stage + stat +
-# look-ahead + squash-check + branch/default + config as separate visible calls.
-# Fewer calls, less to narrate — the review preview comes sooner.
+# One-shot pre-flight recon for /anchor:commit: stages the paths it was given,
+# then gathers everything Steps 1-3 need to decide the route, and prints it as a
+# single KEY=value block so the skill reads one command's output instead of
+# running stage + stat + look-ahead + squash-check + branch/default + config as
+# separate visible calls. Fewer calls, less to narrate — the review preview comes
+# sooner.
+#
+# Staging is path-scoped (`--path`, repeatable) rather than `git add -A`. A
+# checkout can be shared by more than one agent session, and a whole-tree add
+# sweeps up whatever the others have in flight — their files then get reviewed
+# and committed under this session's message. With no `--path` this stages
+# nothing and reports the index as it found it.
 #
 # It does NOT read the full staged diff: the model needs that verbatim to draft
 # the message, so the skill reads `git diff --cached` itself. Tests stay out too,
@@ -15,10 +22,15 @@
 # --repo / --worktree <path> retargets onto a checkout other than the cwd repo
 # (see scripts/lib/resolve-context.sh).
 #
+# --path <p> names a path to stage, repeatable, relative to the repo root.
+#
 # Output (KEY=value on stdout):
 #   REPO_ROOT=<path>        the resolved target checkout, so the skill needs no
 #                           separate `git rev-parse --show-toplevel` call
-#   STAGED=<0|1>            1 == something is staged after `git add -A`
+#   STAGED=<0|1>            1 == something is staged
+#   OTHER_STAGED=<n>        staged paths this call did not stage — someone else's
+#                           in-flight work sharing the checkout, which the skill
+#                           surfaces rather than committing
 #   STAT=<summary>          the `git diff --cached --stat` total line (empty if nothing staged)
 #   BRANCH=<name>           current branch (empty on detached HEAD)
 #   DEFAULT_BRANCH=<name>   origin/HEAD -> main -> master (empty if none resolve)
@@ -35,16 +47,20 @@ here="$(dirname "${BASH_SOURCE[0]}")"
 source "$here/lib/resolve-context.sh"
 CTX_REPO=""
 CTX_WORKTREE=""
+paths=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
     --worktree) CTX_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
+    --path)     paths+=("${2:?--path needs a path}"); shift 2 ;;
     *) echo "commit-preflight.sh: unknown argument: $1" >&2; exit 64 ;;
   esac
 done
 ctx_resolve_repo
 
-git add -A
+# shellcheck source=lib/stage-paths.sh
+source "$here/lib/stage-paths.sh"
+anchor_stage_paths "commit-preflight.sh" "${paths[@]+"${paths[@]}"}"
 
 staged=0
 if ! git diff --cached --quiet; then staged=1; fi
@@ -74,6 +90,7 @@ config_json=$(git config --get-regexp '^anchor\.' 2>/dev/null \
 
 echo "REPO_ROOT=$(git rev-parse --show-toplevel)"
 echo "STAGED=$staged"
+echo "OTHER_STAGED=$(anchor_other_staged_count "${paths[@]+"${paths[@]}"}")"
 echo "STAT=$stat"
 echo "BRANCH=$branch"
 echo "DEFAULT_BRANCH=$default_branch"

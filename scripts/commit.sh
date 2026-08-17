@@ -11,19 +11,25 @@
 # from skill prose. Folding the sequence into one script makes it a single
 # allowlistable call, and the analyzer only sees the outer `bash` invocation.
 #
-# It does NOT stage: Step 1 (and the Step 4 review) already ran `git add -A`, so
-# the index is the reviewed changeset. Staging here would pull in edits made
-# after the review. The message is read from a file (`--message-file`), never an
-# argument, so a message body never lands in the command line — the same reason
-# COMMIT-17 avoids inlining the message, and it keeps message text out of any
-# command log.
+# It does NOT stage: Step 1 (and the Step 4 review) staged the paths under
+# review, so the index already holds the reviewed changeset. Staging here would
+# pull in edits made after the review. The message is read from a file
+# (`--message-file`), never an argument, so a message body never lands in the
+# command line — the same reason COMMIT-17 avoids inlining the message, and it
+# keeps message text out of any command log.
+#
+# It does commit path-scoped when `--path` is given, which is what keeps a shared
+# checkout honest: another session's staged file stays staged rather than riding
+# into this commit under a message that never mentions it. `--amend -- <paths>`
+# keeps every file the amended commit already carried, so a message-only amend can
+# safely pass no paths at all.
 #
 # --repo / --worktree <path> retargets onto a checkout other than the cwd repo
 # (see scripts/lib/resolve-context.sh).
 #
 # Usage:
-#   commit.sh --mode new           --message-file <path> [--allow-default-branch]
-#   commit.sh --mode amend         --message-file <path> [--force-with-lease] [--allow-default-branch]
+#   commit.sh --mode new           --message-file <path> [--path <p>]... [--allow-default-branch]
+#   commit.sh --mode amend         --message-file <path> [--path <p>]... [--force-with-lease] [--allow-default-branch]
 #   commit.sh --mode push-existing
 #
 # Modes:
@@ -55,6 +61,8 @@ set -euo pipefail
 
 # shellcheck source=lib/resolve-context.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
+# shellcheck source=lib/stage-paths.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/stage-paths.sh"
 
 CTX_REPO=""
 CTX_WORKTREE=""
@@ -62,11 +70,13 @@ mode=""
 message_file=""
 force_with_lease=0
 allow_default_branch=0
+paths=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)                 CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
     --worktree)             CTX_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
+    --path)                 paths+=("${2:?--path needs a path}"); shift 2 ;;
     --mode)                 mode="${2:?--mode needs a value}"; shift 2 ;;
     --message-file)         message_file="${2:?--message-file needs a path}"; shift 2 ;;
     --force-with-lease)     force_with_lease=1; shift ;;
@@ -120,17 +130,18 @@ fi
 
 # --- Commit -------------------------------------------------------------------
 
-case "$mode" in
-  new)
-    git commit -F "$message_file"
-    ;;
-  amend)
-    git commit --amend -F "$message_file"
-    ;;
-  push-existing)
-    : # nothing to commit — push the existing unpushed work
-    ;;
-esac
+if [[ "$mode" != "push-existing" ]]; then
+  commit_args=()
+  [[ "$mode" == "amend" ]] && commit_args+=(--amend)
+  commit_args+=(-F "$message_file")
+  if [[ ${#paths[@]} -gt 0 ]]; then
+    anchor_reject_absolute "commit.sh" "${paths[@]}"
+    commit_args+=(--)
+    while IFS= read -r spec; do commit_args+=("$spec"); done \
+      < <(anchor_commit_pathspecs "${paths[@]}")
+  fi
+  git commit "${commit_args[@]}"
+fi
 
 commit_sha=$(git rev-parse --short HEAD)
 

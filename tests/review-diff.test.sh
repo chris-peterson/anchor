@@ -347,6 +347,32 @@ rc=0; o=$( cd "$repo" && bash "$dispatch" --previous HEAD~1...HEAD 2>&1 ) || rc=
 [ "$rc" -eq 64 ] || fail "extra positional -> want exit 64, got $rc: $o"
 ok "context: an extra positional argument exits 64"
 
+# ================== --local staging is path-scoped ========================
+# A new file has to reach the index to show up in `git diff HEAD`, which is why
+# --local stages at all. It stages only what it was given: the reviewer of a
+# shared checkout should not be handed another session's in-flight file.
+git -C "$repo" config anchor.reviewBackend revdiff
+git -C "$repo" reset --quiet
+printf 'new and mine\n' > "$repo/mine.txt"
+printf 'not mine\n' > "$repo/other-session.txt"
+export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
+o=$(run --local --path mine.txt)
+[ "$(verdict_of "$o")" = approved ] || fail "--local --path verdict: $o"
+git -C "$repo" diff --cached --name-only | grep -qx 'mine.txt' || fail "--path mine.txt should be staged"
+if git -C "$repo" diff --cached --name-only | grep -qx 'other-session.txt'; then
+  fail "--local must not stage a path it was not given"
+fi
+ok "--local: stages only --path, never the whole tree"
+
+# a --path with nothing to stage stops the review rather than showing a
+# changeset that is missing a file the caller thinks is in it
+rc=0; out=$( run --local --path nope.txt 2>&1 ) || rc=$?
+[ "$rc" -eq 65 ] || fail "--local with an unchanged --path -> want 65, got $rc: $out"
+! grep -q 'REVIEW_VERDICT=' <<<"$out" || fail "nothing should be reviewed: $out"
+ok "--local: a --path with nothing to stage exits 65 without reviewing"
+git -C "$repo" reset --quiet
+rm -f "$repo/other-session.txt"
+
 # ================== empty range ==========================================
 # Nothing to show means nothing was reviewed, and a viewer quit on an empty diff
 # is indistinguishable from an approval — so the dispatcher never launches one.

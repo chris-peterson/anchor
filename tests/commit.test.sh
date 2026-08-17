@@ -99,4 +99,46 @@ echo "$out" | grep -q '^PUSHED=ok$'       || fail "push-existing not ok: $out"
 [[ "$(git -C "$remote" log -1 refs/heads/feat --format=%s)" == "Add c directly" ]] || fail "push-existing did not reach remote"
 ok "push-existing pushes the unpushed commit without making a new one"
 
+# --- --path scopes the commit, leaving a foreign staged file staged ---------
+# The shared-checkout case: another session has its file in the index, and this
+# commit must neither carry it nor drop it.
+printf 'ours\n' > "$repo/mine.txt"
+printf 'theirs\n' > "$repo/other-session.txt"
+git -C "$repo" add -A
+printf 'Add mine only\n' > "$msgfile"
+out=$(bash "$commit_sh" --repo "$repo" --mode new --message-file "$msgfile" --path mine.txt)
+echo "$out" | grep -q '^PUSHED=ok$' || fail "scoped commit push not ok: $out"
+git -C "$repo" show --name-only --format= HEAD | grep -qx 'mine.txt' || fail "scoped commit missing mine.txt"
+if git -C "$repo" show --name-only --format= HEAD | grep -qx 'other-session.txt'; then
+  fail "scoped commit swept in the other session's file"
+fi
+git -C "$repo" diff --cached --name-only | grep -qx 'other-session.txt' \
+  || fail "the other session's staged file should still be staged"
+ok "--path commits only the named paths and leaves a foreign staged file staged"
+
+# --- amend + --path keeps the files the amended commit already carried ------
+# `git commit --amend -- <paths>` layers the named paths onto the existing
+# commit rather than reducing it to them, so a scoped amend is not lossy.
+printf 'more ours\n' >> "$repo/mine.txt"
+printf 'Add mine only (amended)\n' > "$msgfile"
+out=$(bash "$commit_sh" --repo "$repo" --mode amend --message-file "$msgfile" \
+        --force-with-lease --path mine.txt)
+echo "$out" | grep -q '^PUSHED=ok$' || fail "scoped amend push not ok: $out"
+git -C "$repo" ls-tree --name-only HEAD | grep -qx 'seed.txt' || fail "scoped amend dropped seed.txt from the tree"
+git -C "$repo" ls-tree --name-only HEAD | grep -qx 'mine.txt' || fail "scoped amend lost mine.txt"
+if git -C "$repo" show --name-only --format= HEAD | grep -qx 'other-session.txt'; then
+  fail "scoped amend pulled in the other session's file"
+fi
+ok "--path amend keeps the amended commit's other files and still excludes foreign work"
+
+# an absolute --path is refused before anything is committed
+sha_before=$(git -C "$repo" rev-parse HEAD)
+set +e
+out=$(bash "$commit_sh" --repo "$repo" --mode new --message-file "$msgfile" --path "$repo/mine.txt" 2>&1)
+rc=$?
+set -e
+[[ $rc -eq 64 ]] || fail "absolute --path -> want exit 64, got $rc: $out"
+[[ "$(git -C "$repo" rev-parse HEAD)" == "$sha_before" ]] || fail "absolute --path still committed"
+ok "an absolute --path is refused before anything is committed"
+
 echo "# all checks passed"

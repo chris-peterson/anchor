@@ -97,8 +97,21 @@ behavior, not an independent authority — review them against the source.
   until it passes, including for pre-existing failures.
 - **[COMMIT-03]** Where no test runner is found, the system shall skip the test
   step silently.
-- **[COMMIT-04]** When staging, the system shall stage all changes with
-  `git add -A` and read the staged diff before drafting a message.
+- **[COMMIT-04]** When staging, the system shall stage only the paths the caller
+  names, and read the staged diff before drafting a message. A checkout can be
+  shared by more than one agent session, so a whole-tree add stages another
+  session's in-flight work, which then reaches the review and the commit under a
+  message that does not describe it — invisibly, since the diffstat and the diff
+  both read as one changeset.
+- **[COMMIT-04a]** If a named path has nothing to stage, then the system shall
+  stop rather than stage the rest. The caller named a file it believes it
+  changed, so a typo or a path relative to the wrong root would otherwise drop
+  that file from the commit with nothing to show it was left behind.
+- **[COMMIT-04b]** The system shall scope the commit to the same paths it staged,
+  and shall report staged paths it did not stage rather than committing or
+  unstaging them. Scoping only the staging still lets a foreign index entry ride
+  into the commit; the entry is another session's to resolve, so it is surfaced,
+  left staged, and excluded.
 - **[COMMIT-05]** If nothing is staged, then the system shall describe the most
   recent unpushed commit, and shall stop if HEAD is already pushed or there are
   no local changes.
@@ -178,6 +191,12 @@ check.
   freely; while it is marked ready, the system shall ask before force-pushing.
 - **[PREPARE-06]** If local state does not match the CR head, then the system shall
   surface the mismatch and stop rather than draft.
+- **[PREPARE-06a]** Where the mismatch is an uncommitted working tree, the system
+  shall report that changes are uncommitted and must be committed first, and
+  nothing else. The author knows what they changed and why it is not committed
+  yet, so a diagnosis of how the tree got dirty, and an argument for why a
+  description cannot be drafted against it, is prose to read past to reach the one
+  action available.
 - **[PREPARE-07]** Before drafting, the system shall resolve open questions (why,
   audience, scope, ordering, verification gaps) with the user rather than park
   them in the description.
@@ -634,6 +653,12 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   viewer opened on an empty diff is closed exactly as an approved review is, so
   launching one manufactures approval for a changeset nobody saw; an empty range
   is also how a review aimed at the wrong checkout presents.
+- **[DIFF-22]** Where a local-changes review stages so that new files appear in
+  the range, the system shall stage only the paths the caller names, and shall
+  stop when a named path has nothing to stage. The review has to cover the same
+  files the commit will, so its staging follows COMMIT-04 rather than sweeping the
+  tree — a reviewer handed another session's file grades a changeset that is not
+  the one under review.
 
 ### CLI — Command-line entrypoint
 

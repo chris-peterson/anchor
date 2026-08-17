@@ -13,8 +13,9 @@
 # and stays here.
 #
 # Three review modes, each named for what it shows:
-#   --local      local changes — working tree vs the last commit (stages first):
-#     bash review-diff.sh --local       -> HEAD
+#   --local      local changes — working tree vs the last commit (stages the
+#                paths it was given first, so a new file is in the review):
+#     bash review-diff.sh --local --path <p> [--path <p>...]   -> HEAD
 #     bash review-diff.sh --local --message-file <path>
 #       also seeds the drafted commit message (subject as headline, body as prose)
 #       into the review, so the reviewer reviews the message with the diff and can
@@ -52,6 +53,9 @@ set -euo pipefail
 #     checkout other than the cwd repo (see scripts/lib/resolve-context.sh). The
 #     --files mode takes absolute paths, so this is only meaningful for the
 #     git-range modes.
+#   --path <p>  a path for --local to stage, repeatable, resolved against the repo
+#     root. Only these are staged: a whole-tree add would pull a session sharing
+#     the checkout into this review (see scripts/lib/stage-paths.sh).
 #   --skill <name>  names the invoking skill, which selects the backend
 #     (anchor.<skill>.reviewBackend over anchor.reviewBackend) and tells an
 #     adapter which artifact is under review.
@@ -74,11 +78,14 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 # shellcheck source=lib/review-editor.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/review-editor.sh"
+# shellcheck source=lib/stage-paths.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/stage-paths.sh"
 CTX_REPO=""
 CTX_WORKTREE=""
 review_skill=""
 backend_override=""
 print_backend=0
+stage_paths=()
 # One pass over the whole argv, so a caller that writes `--repo` after the mode
 # still retargets. These used to be leading-only: a `--repo` that arrived after
 # the mode fell through to the mode parser, which collected it as an unnamed
@@ -93,6 +100,7 @@ while [[ $# -gt 0 ]]; do
     --worktree) CTX_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
     --skill)    review_skill="${2:?--skill needs a name}"; shift 2 ;;
     --backend)  backend_override="${2:?--backend needs a name}"; shift 2 ;;
+    --path)     stage_paths+=("${2:?--path needs a path}"); shift 2 ;;
     --print-backend) print_backend=1; shift ;;
     --title|--detail|--message-file)
                 rest+=("$1" "${2:?$1 needs a value}"); shift 2 ;;
@@ -277,8 +285,11 @@ else
     else
       expect_consumed "${@:2}"
     fi
-    # Staged last, so a rejected argv never leaves the repo staged.
-    git add -A
+    # Staged last, so a rejected argv never leaves the repo staged. Only the
+    # named paths: a new file has to be in the index to appear in a `git diff
+    # HEAD`, and a whole-tree add to get it there would pull in a session sharing
+    # the checkout (scripts/lib/stage-paths.sh).
+    anchor_stage_paths "review-diff.sh" "${stage_paths[@]+"${stage_paths[@]}"}"
   elif [[ "${1:-}" == "--previous" ]]; then
     git rev-parse --verify --quiet HEAD~1 >/dev/null || {
       echo "review-diff.sh: HEAD has no parent commit to compare against" >&2
