@@ -51,6 +51,12 @@
 #                                yet, but the branch isn't pushed — the skill
 #                                directs the user to /anchor:commit (which commits
 #                                and pushes) rather than pushing here
+#   NOTHING_TO_REVIEW=<0|1>      1 == a recognized forge, HEAD is the default
+#                                branch, the tree is clean, and nothing is ahead:
+#                                there is no branch to open a CR from and no work
+#                                to put in one. The script exits 65 in this state
+#                                (see Exit codes) — every other key is still
+#                                emitted first so the caller can say why.
 #   CR_PREEXISTING=<0|1>         a CR was already open before this run
 #   CR_CREATED=<0|1>             this script opened a draft CR
 #   CR_URL=<web url>             empty on the skip-deep-links path
@@ -96,6 +102,17 @@
 # CR_CREATE_ERROR=<message> and exits non-zero so the skill surfaces it and asks
 # the user to refresh credentials (the fail-fast-on-auth rule) rather than
 # silently dropping to the URL-free path.
+#
+# Exit codes:
+#   0   the block is a state the flow continues from
+#   64  usage error (unknown argument)
+#   65  NOTHING_TO_REVIEW — the dead end above. Its own code, not 1, so the skill
+#       can tell "this flow does not apply here" from "something broke". A caller
+#       that reaches this state has nothing to open a CR against, so continuing
+#       past it means the CR step was silently dropped from whatever chain asked
+#       for it; the non-zero status is what makes that visible instead of leaving
+#       it to the reader of a KEY=value block.
+#   1   an operational failure (e.g. CR_CREATE_ERROR)
 #
 # Usage:
 #   prepare-review.sh             # resolve the CR, or open a draft on the
@@ -231,6 +248,7 @@ resolve_cr() {
 needs_commit=0
 needs_branch=0
 needs_push=0
+nothing_to_review=0
 
 # Uncommitted work? (routes the on-default case below, and reused by the state
 # check further down so we only shell out to `git status` once.)
@@ -249,6 +267,10 @@ if [[ "$forge" != "none" && "$on_default" -eq 1 ]]; then
     needs_commit=1
   elif [[ "$ahead" -gt 0 ]]; then
     needs_branch=1
+  else
+    # Nothing to branch from and nothing to put in a CR. Unlike the two above,
+    # this state has no route forward — reported as a key and exited on below.
+    nothing_to_review=1
   fi
 elif [[ "$forge" != "none" && "$on_default" -eq 0 ]]; then
   if resolve_cr; then
@@ -601,6 +623,7 @@ echo "BEHIND=$behind"
 echo "NEEDS_BRANCH=$needs_branch"
 echo "NEEDS_COMMIT=$needs_commit"
 echo "NEEDS_PUSH=$needs_push"
+echo "NOTHING_TO_REVIEW=$nothing_to_review"
 echo "CR_PREEXISTING=$cr_preexisting"
 echo "CR_CREATED=$cr_created"
 echo "CR_URL=$cr_url"
@@ -618,3 +641,10 @@ echo "TEMPLATE_CANDIDATES=$template_candidates"
 echo "DELETE_BRANCH_ON_MERGE=$delete_branch_on_merge"
 echo "ANCHOR_CONFIG=$anchor_cfg"
 echo "FILE_LINKS=$file_links"
+
+# Exit last, so the block above is complete: the caller reports the dead end from
+# the same keys it reads on every other path, and only the status differs.
+if [[ "$nothing_to_review" -eq 1 ]]; then
+  echo "prepare-review.sh: nothing to review — $branch is the default branch, the tree is clean, and nothing is ahead of it. There is no branch to open a change request from." >&2
+  exit 65
+fi

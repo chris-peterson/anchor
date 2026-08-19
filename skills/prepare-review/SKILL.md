@@ -79,7 +79,8 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 | `RESOLVED_VIA` | `cwd` (inferred from the working directory) or `repo` (an explicit `--repo` was honored) — see "Operating against a non-cwd repo" |
 | `FORGE` | `github` / `gitlab` picks the CLI for the rest of the skill; `none` → the URL-free `skip-deep-links` path |
 | `DEFAULT_BRANCH` | substitute for `main` in the diff/log commands below |
-| `ON_DEFAULT_BRANCH=1` | HEAD is the default branch — there's no branch to open a CR *from*. With work to review, `NEEDS_BRANCH=1` routes through branch creation first; clean with nothing ahead → nothing to review, stop |
+| `ON_DEFAULT_BRANCH=1` | HEAD is the default branch — there's no branch to open a CR *from*. With work to review, `NEEDS_BRANCH=1` routes through branch creation first; clean with nothing ahead → `NOTHING_TO_REVIEW=1` and the script exits 65 |
+| `NOTHING_TO_REVIEW=1` | **The script exited 65.** There is no branch to open a CR from and nothing to put in one, so this flow does not apply here — report that and stop. Say it plainly: a chain that named `/anchor:prepare-review` has lost its CR step, and the user needs to know *before* anything downstream (a merge, a release) runs. Never paraphrase it into "this step was moot" and continue |
 | `AHEAD=0` | nothing ahead of the default branch — `NEEDS_COMMIT=1` chains to `/anchor:commit` (see below); otherwise say so and stop |
 | `NEEDS_BRANCH=1` | on the default branch with work to review — a feature branch must exist before a CR can be opened (see "Get to a reviewable, pushed commit") |
 | `NEEDS_COMMIT=1` | no reviewable commit yet — chain into `/anchor:commit` before continuing (see "Get to a reviewable, pushed commit") |
