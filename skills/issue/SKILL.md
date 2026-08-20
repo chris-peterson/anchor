@@ -42,8 +42,15 @@ flowchart TD
     Match -->|No, file new| Tmpl
     Reuse --> Tmpl
 
-    subgraph "Step 5: Output"
-        Draft --> Out{Disposition?}
+    subgraph "Step 5: Classify"
+        Draft --> Meta["Read the repo's labels + open milestones"]
+        Meta --> Fit{One clear fit?}
+        Fit -->|Several, or none obvious| Choose["Ask the author"]
+    end
+
+    subgraph "Step 6: Output"
+        Fit -->|Yes| Out{Disposition?}
+        Choose --> Out
         Out -->|Write| Forge(["Create / update issue"])
         Out -->|Copy| CopyOnly(["Print for paste"])
         Out -->|Edit| Revise["Revise (moor or chat)"] --> Draft
@@ -72,7 +79,7 @@ Act on `TARGET_VIA`:
 
 Pick the forge per **Target repo** above (`gh` for GitHub, `glab` for GitLab).
 
-- **An issue URL or number was provided** → **update** that issue. Pull its current body to a temp file now (`$(mktemp -u "${TMPDIR:-/tmp}/issue-current.XXXXXX").md`); Step 5 diffs the draft against it:
+- **An issue URL or number was provided** → **update** that issue. Pull its current body to a temp file now (`$(mktemp -u "${TMPDIR:-/tmp}/issue-current.XXXXXX").md`); Step 6 diffs the draft against it:
 
   ```bash
   # GitHub
@@ -147,7 +154,19 @@ Draft a concise imperative **title** (under 72 characters), then the body follow
 - **Same "what to avoid" discipline as a CR description** — no loaded framing (`${CLAUDE_PLUGIN_ROOT}/guides/loaded-framing.md`), no drift artifacts, no leaked deliberation, nothing the reader can already see.
 - **Watch the rendering gotchas** — the body is pasted into a markdown renderer; the bundled `${CLAUDE_PLUGIN_ROOT}/guides/markdown-gotchas.md` lists the traps (character escaping, nested fences, mermaid, `<details>`, tables in lists).
 
-## Step 5: Output
+## Step 5: Labels and milestone
+
+An issue lands in someone's triage queue, so its metadata is part of filing it. Read what the project actually defines rather than naming a label from memory — an invented name is how a repo ends up with `bugfix` sitting next to `bug`. The listing calls for both forges are in the bundled forge cookbook (`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`), section "Labels and milestones".
+
+Both listings are pure-remote, so a `tack` target needs no checkout — retarget per **Target repo**: `-R <TARGET_PROJECT>` on `gh label list` and `TARGET_PROJECT` substituted for `{owner}/{repo}` in the `gh api` path; `-R <TARGET_URL>` on `glab label list`, `--project <TARGET_PROJECT>` on `glab milestone list`, `--hostname <TARGET_HOST>` on both.
+
+**Labels.** The descriptions the repo ships on its labels are the triage taxonomy — match the issue against them and apply every label that plainly fits. Two cases go to the user with `AskUserQuestion` rather than being decided for them: several labels are plausible and choosing between them is a judgment about the work (`bug` vs `enhancement` for behavior someone considers wrong), or nothing in the set fits an issue a reader would expect to be labelled. No label is a legitimate answer to either.
+
+**Milestone.** Only the open ones (GitLab: `active`) are candidates. Attach one where exactly one plausibly fits — the release the work has to ship in, or the milestone whose theme this work is part of. Where two or more fit, ask; where the repo has no open milestone, or none relates to this work, attach none and don't raise it.
+
+**On the update path, add only.** Read what the issue already carries (`gh issue view <num> --json labels,milestone` / `glab issue view <iid> --output json`) and treat it as settled: propose a label the issue is missing, and a milestone only where it has none. Replacing or removing what someone already triaged is something the user asks for.
+
+## Step 6: Output
 
 Write the drafted body to a temp file (`$(mktemp -u "${TMPDIR:-/tmp}/issue-draft.XXXXXX").md`).
 
@@ -161,6 +180,8 @@ git --no-pager diff --no-index <current-path> <draft-path>
 
 When creating a new issue, display the full title and body in a fenced code block.
 
+Either way, lead the block with the Step 5 metadata on one line — `Labels: bug, docs · Milestone: 1.7.0`, or `none` on either side — so it rides the one disposition question with the body instead of becoming a second gate.
+
 Then ask the user how to proceed with the `AskUserQuestion` tool. Use header `Disposition` and these options (default first):
 
 - **Yes (write)** — create the issue (or push the updated body). The body comes from `<draft-path>`. On a 401/403 or similar auth failure, surface it and ask the user to refresh credentials — don't silently fall back to copy-only (per the fail-fast-on-auth rule).
@@ -169,25 +190,31 @@ Then ask the user how to proceed with the `AskUserQuestion` tool. Use header `Di
 
 ### Yes (write)
 
-`anchor` assigns new issues to you. The canonical invocations — including the `glab api`-then-`glab issue update` two-step GitLab needs for a file-sourced body, and the update-from-file forms — live in the bundled forge cookbook (`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`), sections "Issue create" and "Issue description update from a file".
+`anchor` assigns new issues to you, and applies the labels and milestone from Step 5 in the same write. The canonical invocations — including the `glab api`-then-`glab issue update` two-step GitLab needs for a file-sourced body, and the update-from-file forms — live in the bundled forge cookbook (`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`), sections "Issue create", "Issue description update from a file", and "Labels and milestones".
 
 When a `tack` target resolved (see **Target repo**), retarget these off the cwd repo: add `-R <TARGET_PROJECT>` to the `gh issue` calls; on GitLab substitute the URL-encoded `TARGET_PROJECT` for `:fullpath` and add `--hostname <TARGET_HOST>` on the `glab api` calls, and `-R <TARGET_URL>` on `glab issue update`.
 
+Repeat `--label` per label; drop a metadata flag entirely where Step 5 settled on none.
+
 ```bash
 # GitHub — create
-gh issue create --title "<title>" --body-file <draft-path> --assignee @me
+gh issue create --title "<title>" --body-file <draft-path> --assignee @me \
+  --label "<label>" --milestone "<milestone title>"
 
-# GitHub — update
-gh issue edit <num> --body-file <draft-path>
+# GitHub — update (edit has no --label; --add-label adds without replacing)
+gh issue edit <num> --body-file <draft-path> \
+  --add-label "<label>" --milestone "<milestone title>"
 ```
 
 ```bash
-# GitLab — create (API form so the body can come from a file), then assign
+# GitLab — create (API form so the body can come from a file), then the
+# assignee and metadata in one porcelain follow-up
 glab api -X POST projects/:fullpath/issues -F title="<title>" -F "description=@<draft-path>"
-glab issue update <iid> --assignee <username>
+glab issue update <iid> --assignee <username> --label "<a,b>" --milestone "<milestone title>"
 
 # GitLab — update
 glab api -X PUT projects/:fullpath/issues/<iid> -F "description=@<draft-path>"
+glab issue update <iid> --label "<a,b>" --milestone "<milestone title>"
 ```
 
 After the issue lands, print its URL.

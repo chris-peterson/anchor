@@ -231,6 +231,10 @@ check.
   on merge, the system shall name the condition and offer the forge's remediation,
   applying it only on the user's approval. An unreadable setting shall report as
   unknown rather than as either state.
+- **[PREPARE-18]** Once the description has landed, the system shall apply the
+  project's own labels and, where exactly one plausibly fits, one of its open
+  milestones to the change request, adding to rather than replacing what the CR
+  already carries, and asking the author where the choice is not clear.
 
 ### REVIEW — Review someone else's change request
 
@@ -417,8 +421,9 @@ established before anything is proposed or written.
 
 ### ISSUES — Issues
 
-Authoring a single issue (the `issue` skill, ISSUES-01..06) and surveying the
-backlog to pick the next one (the `issues` skill, ISSUES-07..12).
+Authoring a single issue (the `issue` skill, ISSUES-01..06 and ISSUES-13..17)
+and surveying the backlog to pick the next one (the `issues` skill,
+ISSUES-07..12).
 
 - **[ISSUES-01]** When invoked with an issue reference, the system shall update that
   issue against its current body as baseline; otherwise it shall create a new
@@ -450,6 +455,20 @@ backlog to pick the next one (the `issues` skill, ISSUES-07..12).
   top-ranked one as the next to work on, offering to open it for viewing.
 - **[ISSUES-12]** The system shall not write to the forge; its output is limited to
   listing, ranking, and opening an issue for viewing.
+- **[ISSUES-13]** When writing an issue, the system shall apply the labels that fit
+  it from the target project's existing label set, and shall not create a label the
+  project does not define.
+- **[ISSUES-14]** Where more than one of those labels plausibly fits, or where none
+  fits an issue a reader would expect to be labelled, the system shall ask the
+  author rather than choosing, and shall accept no label as the answer.
+- **[ISSUES-15]** When writing an issue, the system shall consider only the
+  project's open milestones, attaching one where exactly one plausibly fits, asking
+  the author where several do, and attaching none where none does.
+- **[ISSUES-16]** Where the issue already exists, the system shall only add the
+  labels and milestone it lacks, and shall not remove or replace the ones already on
+  it.
+- **[ISSUES-17]** The system shall present the labels and milestone with the drafted
+  body for one approval rather than gating them separately.
 
 ### CI — Pipeline
 
