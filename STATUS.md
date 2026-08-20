@@ -6,7 +6,7 @@ Maintained by `/sextant:spec-status`.
 **Last audit:** 2026-08-20
 **Spec version:** root SPEC.md (unversioned)
 **Plugin version:** 1.6.1
-**Coverage:** 221 Covered, 0 Partial, 0 Missing/Contradicts
+**Coverage:** 222 Covered, 0 Partial, 0 Missing/Contradicts
 
 The implementation is the plugin itself — the skill prompts under
 `skills/`, the ambient rules under `rules/`, and the helper scripts under
@@ -21,7 +21,7 @@ draft to review against the implementation, not an audited ledger.
 | Prefix | Count | Status | Notes |
 |--------|------:|--------|-------|
 | TARGET-01..10 | 10 | All Covered | Target resolution + worktree isolation — `scripts/{resolve-target,worktree}.sh`, each `skills/*/SKILL.md` "Target repo"; every skill routes a name argument through `resolve-target.sh`. `--repo`/`--worktree` are read at any argv position and an unrecognized argument is an error rather than a dropped token, so an appended retargeting flag cannot leave a helper on the cwd repo while the flow uses the target (TARGET-10) — `scripts/review-diff.sh` (context-flag pass, `expect_consumed`), `scripts/look-ahead.sh`, `tests/review-diff.test.sh` |
-| COMMIT-01..22 (+04a, 04b) | 24 | All Covered | Review-first commit-and-push flow (1.0), recon before tests, pipeline watch after the push (COMMIT-21), and the direct-to-default choice described as landing without a CR rather than as bypassing review (COMMIT-22) — `skills/commit/SKILL.md`, `scripts/{commit,commit-preflight,look-ahead,squash-check,pipeline-after-push}.sh`. Staging names its paths instead of adding the whole tree, stops on a path with nothing to stage, scopes the commit to the same set, and reports a staged path it did not stage rather than committing or unstaging it (COMMIT-04, 04a, 04b) — `scripts/lib/stage-paths.sh` (`anchor_stage_paths`, `anchor_other_staged_count`, `anchor_commit_pathspecs`), `scripts/commit-preflight.sh` (`OTHER_STAGED`), `scripts/commit.sh` (`--path`), `skills/commit/SKILL.md` Steps 1/5/6, `tests/{commit-preflight,commit}.test.sh` |
+| COMMIT-01..22 (+04a, 04b, 04c) | 25 | All Covered | Review-first commit-and-push flow (1.0), recon before tests, pipeline watch after the push (COMMIT-21), and the direct-to-default choice described as landing without a CR rather than as bypassing review (COMMIT-22) — `skills/commit/SKILL.md`, `scripts/{commit,commit-preflight,look-ahead,squash-check,pipeline-after-push}.sh`. Staging names its paths instead of adding the whole tree, stops on a path with no change at all, scopes the commit to the same set, and reports a staged path it did not stage rather than committing or unstaging it (COMMIT-04, 04a, 04b). Restaging the same list is safe for any mix of added, modified, deleted, and renamed paths, because a path already staged in full is skipped — so a staged deletion, or the old half of a rename, cannot make the `git add` fatal for the flows that stage their list twice (COMMIT-04c) — `scripts/lib/stage-paths.sh` (`anchor_stage_paths`, `anchor_other_staged_count`, `anchor_commit_pathspecs`), `scripts/commit-preflight.sh` (`OTHER_STAGED`), `scripts/commit.sh` (`--path`), `skills/commit/SKILL.md` Steps 1/5/6, `tests/{stage-paths,commit-preflight,commit}.test.sh` |
 | PREPARE-01..18 (+06a) | 19 | All Covered | `prepare-review`, pushed-branch only, opens the draft CR without pushing, reviews the description in the tool, verifies deep-link line parts, reports the branch's pipeline once the description lands (PREPARE-16), and names the source branch that won't be deleted on merge, offering the forge's remediation (PREPARE-17) — `skills/prepare-review/SKILL.md`, `scripts/{prepare-review,deep-links,pipeline-after-push}.sh`, `tests/prepare-review.test.sh`. The CR is labelled from the project's own set and given a milestone where one of its open ones fits, added to whatever it already carries (PREPARE-18) — `skills/prepare-review/SKILL.md` Step 4 ("Label it and set the milestone"), `guides/forge-cookbook.md` "Labels and milestones". A dirty-tree stop reports that changes are uncommitted and nothing more, rather than diagnosing how the tree got that way (PREPARE-06a) — `skills/prepare-review/SKILL.md` "Act on `STATE`" |
 | REVIEW-01..14 | 14 | All Covered | The reviewer's side — resolve a CR by number/URL/branch, read the description before the diff, show the whole range in the viewer, anchor findings to lines with the summary as the fallback, gate the post on the exact text, and refuse a post whose head moved (REVIEW-11) — `skills/review/SKILL.md`, `scripts/{review-cr,review-post}.sh`, `templates/cr-review.md`, `guides/forge-cookbook.md`, `tests/review-cr.test.sh`, `tests/review-post.test.sh` |
 | FEEDBACK-01..09 | 9 | All Covered | Fetch, triage, act on threads, watch the fix commit's pipeline into the summary (FEEDBACK-09) — `skills/resolve-feedback/SKILL.md`, `scripts/pipeline-after-push.sh` |
@@ -38,6 +38,14 @@ draft to review against the implementation, not an audited ledger.
 | CONFIRM-01..06 | 6 | All Covered | Approval of the exact text before anything publishes under the user's name — commit message in the review tool (`skills/commit/SKILL.md` Step 5), CR description (`skills/prepare-review/SKILL.md` Steps 4-5), issue body (`skills/issue/SKILL.md`), thread replies (`skills/resolve-feedback/SKILL.md` 3c), release notes (`skills/release/SKILL.md`); CONFIRM-03 is the plan-is-not-prose distinction the reply gate rests on |
 
 ## Audit history
+
+### 2026-08-20 — Repeatable path staging (COMMIT-04c)
+
+STATUS.md updated: +1 ID (COMMIT-04c, Covered), 221 → 222. COMMIT-04a was
+narrowed to a path with no change at all, and the already-fully-staged case
+moved to COMMIT-04c: `git add` is fatal on a path git has already staged as a
+deletion or as a rename's old half, and both the commit and review flows stage
+their path list twice by design.
 
 ### 2026-08-20 — Coverage refresh (spec-status)
 

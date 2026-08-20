@@ -33,19 +33,39 @@ anchor_reject_absolute() {
 # file it believes it changed, so the likely causes are a typo or a path relative
 # to the wrong directory — both of which would otherwise drop that file from the
 # commit with no sign that anything was left behind.
+#
+# Only the worktree half of a path is stageable, and `git status --porcelain`
+# reports it in the second column: blank there means the path is already fully
+# staged. Naming such a path in `git add` is fatal — exit 128, "did not match any
+# files" — whenever nothing it matches is still on disk, which is the case for a
+# staged deletion and for the old half of a staged rename. One bad pathspec aborts
+# the whole `git add`, so a single such path would drop every other path in the
+# list. Hence: a path with an unstaged change is staged, a path already fully
+# staged is skipped, and only a path with no status at all is the typo error.
+# Callers stage the same list more than once by design (a review needs new files
+# in the index before `git diff HEAD` will show them), so this has to hold on the
+# second call as much as the first.
 anchor_stage_paths() {
   local caller="$1"; shift
   [[ $# -gt 0 ]] || return 0
   anchor_reject_absolute "$caller" "$@" || return $?
-  local p
+  local p st line
   local -a specs=()
   for p in "$@"; do
-    if [[ -z "$(git status --porcelain -- ":/$p")" ]]; then
+    st="$(git status --porcelain -- ":/$p")"
+    if [[ -z "$st" ]]; then
       echo "$caller: --path names nothing changed: $p" >&2
       return 65
     fi
-    specs+=(":/$p")
+    # A directory pathspec reports a line per entry; one unstaged entry is enough.
+    while IFS= read -r line; do
+      if [[ "${line:1:1}" != " " ]]; then
+        specs+=(":/$p")
+        break
+      fi
+    done <<< "$st"
   done
+  [[ ${#specs[@]} -gt 0 ]] || return 0
   git add -- "${specs[@]}"
 }
 
