@@ -31,7 +31,7 @@ jobs:
   commit:
     # Exercises scripts/commit.sh end-to-end (commit + push variants, the
     # push-existing mode, and the default-branch guard) against a local bare
-    # remote.
+    # remote, over the path-staging lib both it and the review flow share.
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -42,6 +42,8 @@ jobs:
         run: |
           git config --global user.email "ci@example.com"
           git config --global user.name "CI"
+      - name: path staging
+        run: bash tests/stage-paths.test.sh
       - name: commit helper
         run: bash tests/commit.test.sh
       - name: commit preflight

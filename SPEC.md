@@ -103,15 +103,25 @@ behavior, not an independent authority — review them against the source.
   session's in-flight work, which then reaches the review and the commit under a
   message that does not describe it — invisibly, since the diffstat and the diff
   both read as one changeset.
-- **[COMMIT-04a]** If a named path has nothing to stage, then the system shall
+- **[COMMIT-04a]** If a named path has no change at all, then the system shall
   stop rather than stage the rest. The caller named a file it believes it
   changed, so a typo or a path relative to the wrong root would otherwise drop
-  that file from the commit with nothing to show it was left behind.
+  that file from the commit with nothing to show it was left behind. A path whose
+  change is already staged in full is a separate case, governed by COMMIT-04c.
 - **[COMMIT-04b]** The system shall scope the commit to the same paths it staged,
   and shall report staged paths it did not stage rather than committing or
   unstaging them. Scoping only the staging still lets a foreign index entry ride
   into the commit; the entry is another session's to resolve, so it is surfaced,
   left staged, and excluded.
+- **[COMMIT-04c]** Staging a path list shall succeed on every run with the same
+  list, for any mix of added, modified, deleted, and renamed paths, and shall
+  skip a path whose change is already staged in full. The commit flow stages its
+  list twice by design, because a review of newly added files needs them in the
+  index before the staged diff will show them. A deletion, and the old half of a
+  rename, are absent from both the index and the working tree once staged, and
+  naming such a path in a `git add` is fatal to the entire invocation — so a
+  staging step that cannot repeat fails the second call and takes every other
+  path in the list down with it.
 - **[COMMIT-05]** If nothing is staged, then the system shall describe the most
   recent unpushed commit, and shall stop if HEAD is already pushed or there are
   no local changes.
