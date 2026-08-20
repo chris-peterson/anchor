@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `/anchor:issue` triages the issue it files. It reads the project's own labels
+  and open milestones, applies the labels whose descriptions fit the work, and
+  attaches a milestone where exactly one plausibly does — so an issue arrives in
+  the queue already sorted instead of bare. Where two labels are both plausible,
+  or nothing in the set fits, it asks rather than guessing, and "no label" is an
+  answer. Only labels the project already defines are used, so a filed issue
+  can't be what introduces `bugfix` next to `bug`.
+
+  Updating an existing issue only adds: a label it's missing, or a milestone
+  where it has none. What someone already triaged stays.
+
+- `/anchor:prepare-review` does the same for a change request once its
+  description lands, on the same additive terms.
+
 ## 1.6.1
 
 **Full Changelog**: https://github.com/chris-peterson/anchor/compare/v1.6.0...v1.6.1

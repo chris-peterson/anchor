@@ -519,6 +519,49 @@ glab api -X PUT projects/:fullpath/issues/<iid> \
   -F "description=@/tmp/issue-body.aB3xKp.md"
 ```
 
+## Labels and milestones
+
+Applied to an issue when it's filed or updated (the `issue` skill), and to a CR
+once its description lands (`prepare-review`). Read the sets first — both CLIs
+take a **name**, so a value that isn't in the project's set is either an error or
+a brand-new label nobody asked for.
+
+```bash
+# GitHub — labels, then milestones
+gh label list --limit 100 --json name,description
+gh api 'repos/{owner}/{repo}/milestones?state=open&per_page=50' \
+  --jq '.[] | "\(.title)\t\(.due_on)\t\(.description)"'
+
+# GitLab
+glab label list --output json
+glab milestone list --state active --output json
+```
+
+Applying them:
+
+| | GitHub | GitLab |
+|--|--------|--------|
+| **Issue, on create** | `--label <name>` (repeatable), `--milestone <title>` | `--label a,b` / `-m <title>` on `glab issue create`; from the API form, `-F labels=a,b` — but the milestone wants a numeric `milestone_id`, so set it in the `glab issue update` follow-up |
+| **Issue, on edit** | `--add-label <name>` / `--remove-label <name>`; `--milestone <title>` replaces, `--remove-milestone` clears | `--label a,b` adds, `--unlabel a,b` removes; `-m <title>` sets, `-m ""` clears |
+| **CR** | `gh pr edit <num> --add-label <name> --milestone <title>` (same flag split as `issue edit`) | `glab mr update <iid> --label a,b --milestone <title>` (`--label` adds, `--unlabel` removes) |
+| **Read what's set** | `gh issue view <num> --json labels,milestone` · `gh pr view <num> --json labels,milestone` | `glab issue view <iid> --output json` / `glab mr view <iid> --output json` (`.labels`, `.milestone`) |
+
+Known gaps:
+
+- **`gh` has no `milestone` command.** The list comes from the REST API
+  (`gh api repos/{owner}/{repo}/milestones`); `--milestone` on `create`/`edit`
+  still takes the title, not the number.
+- **`gh issue edit` has no `--label`.** It's `--add-label` / `--remove-label`
+  there, while `create` uses `--label` — the same word means different things on
+  the two subcommands.
+- **GitLab milestones can be group-level.** `glab milestone list` returns the
+  project's own; `--group <path> --include-ancestors` reaches the ones a project
+  inherits, which is where a release milestone usually lives in a group.
+- **The GitLab issues API can't take the milestone by title.** `POST
+  projects/:fullpath/issues` wants `milestone_id`, so `anchor` sets labels and
+  milestone in the `glab issue update <iid>` call it already makes for the
+  assignee.
+
 ## Issue / CR comment from a file
 
 `glab issue note` / `glab mr note` only accept `-m <string>` or open an editor.

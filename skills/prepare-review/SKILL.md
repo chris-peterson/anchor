@@ -396,7 +396,31 @@ Reached on an `approved` review, or on **Yes (write)** from the no-backend fallb
 
 When operating against a non-cwd repo these are the write path, so retarget them per "Operating against a non-cwd repo": add `-R <owner/name>` to `gh pr edit`, and substitute the URL-encoded project for `:fullpath` in the `glab api` PUT (plus `--hostname` for self-hosted).
 
-Report the write as one line — the CR URL and that the description landed. **No CR to write to** (`skip-deep-links`, or the user picked copy-only): print the body for them to paste into the web UI themselves.
+Report the write as one line once **Label it and set the milestone** below has run — the CR URL, that the description landed, and what the metadata came out as. **No CR to write to** (`skip-deep-links`, or the user picked copy-only): print the body for them to paste into the web UI themselves.
+
+### Label it and set the milestone
+
+A CR sits in the same triage queues an issue does, so give it the project's own labels and, where one fits, its milestone. Read the project's label set and its open milestones rather than naming one from memory — the listing calls are in the cookbook's "Labels and milestones" — then read what the CR already carries, which is what decides how much of it is yours to set:
+
+```bash
+# GitHub
+gh pr view <CR_NUMBER> --json labels,milestone
+
+# GitLab
+glab mr view <CR_IID> --output json
+```
+
+Match the change against the descriptions the repo ships on its labels and apply the ones that plainly fit and the CR is missing. `--add-label` and `--label` add, so a CR the user already labelled keeps what it has; `--milestone` **replaces** on both forges, so attach one only where the CR has none and exactly one of the open ones fits. Where several labels are plausible and only one belongs, or several milestones fit, ask with `AskUserQuestion` — no label and no milestone are both legitimate answers, and where the project defines none, set nothing and don't raise it.
+
+```bash
+# GitHub
+gh pr edit <CR_NUMBER> --add-label "<label>" --milestone "<milestone title>"
+
+# GitLab
+glab mr update <CR_IID> --label "<a,b>" --milestone "<milestone title>"
+```
+
+Retarget the listing and these calls per "Operating against a non-cwd repo" the same way the write path does (`-R`, `TARGET_PROJECT` for `{owner}/{repo}` in the `gh api` milestones path, `--hostname` for self-hosted GitLab). The full flag set and the CLI gaps — `gh` has no `milestone` command, and `gh pr edit` has no plain `--label` — are in the cookbook's "Labels and milestones".
 
 ### Report the branch's pipeline
 
