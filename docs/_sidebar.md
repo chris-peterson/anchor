@@ -24,6 +24,7 @@
   - [CR verbosity, calibrated](/guides/cr-verbosity)
   - [Forge cookbook](/guides/forge-cookbook)
   - [Markdown gotchas](/guides/markdown-gotchas)
+  - [Temp paths a caller can grant](/guides/temp-paths)
   - [CR formatting](/guides/cr-formatting)
   - [Description vs docs](/guides/description-vs-docs)
   - [Loaded framing](/guides/loaded-framing)

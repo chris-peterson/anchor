@@ -898,7 +898,23 @@ rather than becoming a second answer in the exit status.
 - **[UX-05]** Where a helper script can supply a value the skill would otherwise
   derive with its own commands (a path hash, a temp path), the system shall read it
   from the recon block rather than run those commands.
-
+- **[UX-06]** The system shall prescribe only commands whose shape and paths a
+  caller can grant, shall name the allow rule that covers each prescribed path,
+  and shall state the shells and platforms its prescribed commands assume. A
+  path-scoped allow rule matches a literal prefix, so a `${TMPDIR:-/tmp}`
+  template resolves outside an `Edit(//tmp/**)` grant on any platform that sets
+  `TMPDIR` — macOS always among them; and a compound shape (`;`, `&&`, `$(…)`
+  around the consequential step) is gated on the shape alone and cannot be
+  approved by any permission entry. The cost lands in the caller's session on
+  every run for as long as the guidance stands, and with several sessions open it
+  is not the click but the prompt sitting unnoticed in a window nobody is
+  watching.
+- **[UX-06a]** The system's own scripts may honor `$TMPDIR` where its prescribed
+  guidance may not. The safety analyzer reads the outer command line, so a
+  `mktemp` inside `bash scripts/foo.sh` is invisible to it and a script is free
+  to respect a per-user temp dir. Both positions are correct at once, and the
+  reconciliation is stated where each is written rather than left as two files
+  that disagree.
 ### CONFIRM — Approval before publishing
 
 Everything the system publishes goes out under the user's credentials and in

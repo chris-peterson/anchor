@@ -79,7 +79,7 @@ Act on `TARGET_VIA`:
 
 Pick the forge per **Target repo** above (`gh` for GitHub, `glab` for GitLab).
 
-- **An issue URL or number was provided** → **update** that issue. Pull its current body to a temp file now (`$(mktemp -u "${TMPDIR:-/tmp}/issue-current.XXXXXX").md`); Step 6 diffs the draft against it:
+- **An issue URL or number was provided** → **update** that issue. Pull its current body to a temp file now (`$(mktemp -u /tmp/issue-current.XXXXXX).md`); Step 6 diffs the draft against it:
 
   ```bash
   # GitHub
@@ -168,7 +168,7 @@ Both listings are pure-remote, so a `tack` target needs no checkout — retarget
 
 ## Step 6: Output
 
-Write the drafted body to a temp file (`$(mktemp -u "${TMPDIR:-/tmp}/issue-draft.XXXXXX").md`).
+Write the drafted body to a temp file (`$(mktemp -u /tmp/issue-draft.XXXXXX).md`) — the literal `/tmp` is what a caller's `Edit(//tmp/**)` grant reaches (`${CLAUDE_PLUGIN_ROOT}/guides/temp-paths.md`).
 
 **Present the change — in your own message.** Running a command does *not* show the user anything: a Bash tool's output goes to you, and the terminal collapses it to a `+80 lines` stub they'd have to expand. Asking them to approve off the back of that is asking them to approve blind. So whatever you present, it goes in the reply as text.
 
