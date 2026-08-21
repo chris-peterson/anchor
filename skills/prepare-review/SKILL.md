@@ -87,6 +87,7 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 | `BEHIND=<n>` | `>0` → run the rebase dialog below |
 | `CR_URL` / `CR_IID` | the resolved or freshly-opened draft — deep-link target and write target (empty on `skip-deep-links`) |
 | `CR_DRAFT` | gates the post-rebase force-push (see below) |
+| `PRIOR_CR_IID` / `PRIOR_CR_STATE` | non-empty → the branch name already carries a CR that isn't open, which this run passed over; name it once (see "A reused branch name") |
 | `STATE` | `match` → proceed; anything else → surface and stop (see "Act on `STATE`") |
 | `CURRENT_DESC_PATH` | the review's left-hand side in Step 4 (empty on `skip-deep-links`) |
 | `DESC_DRAFT_PATH` | where to write the drafted description in Step 4 — already `mktemp`'d, so don't make your own |
@@ -135,6 +136,14 @@ The second run is on a pushed feature branch with a commit ahead; it auto-opens 
 - **User asks not to open one** — the repo merges direct to `main` without CRs, or the CLI's default forge instance is wrong for this repo. Re-run with `--no-open` to proceed URL-free; or, if they'd rather open the draft themselves, pause until they confirm one is open, then re-run so the script resolves its URL.
 
 (When `ON_DEFAULT_BRANCH=1`, the script doesn't auto-open either — but that routes through branch creation, not skip-deep-links; see above.)
+
+### A reused branch name (`PRIOR_CR_IID` / `PRIOR_CR_STATE`)
+
+Only an open CR is this run's target. Neither CLI filters its branch lookup by state, so a short topical branch name that has been used before resolves to whatever CR used it last — the script passes over a merged, closed, or locked one and opens a fresh draft instead. When these keys are non-empty, say so in one line as part of reporting the new CR, so the author who expected the old one isn't left to work out why a new number appeared:
+
+> Opened `#82`. `#57` used this branch name before and is merged, so it isn't this run's target.
+
+Both keys empty → say nothing; there was no prior CR to pass over. An explicit `--cr <iid|url>` resolves whatever was named regardless of state, so this never fires on that path.
 
 ### Branch deletion on merge (`DELETE_BRANCH_ON_MERGE`)
 
