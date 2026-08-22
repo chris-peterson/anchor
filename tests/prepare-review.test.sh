@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
-# Functional test for scripts/prepare-review.sh's DELETE_BRANCH_ON_MERGE and
-# TEMPLATE_* keys.
+# Functional test for scripts/prepare-review.sh's CR resolution,
+# DELETE_BRANCH_ON_MERGE, and TEMPLATE_* keys.
+#
+# The resolution half covers which CR the branch-inferred lookup will adopt.
+# Neither CLI filters that lookup by state, so a reused branch name resolves to
+# whatever CR used it last; only an open one is this run's target. The stub
+# fixtures carry `state` because the real CLIs do — `gh pr view --json state`
+# answers OPEN/CLOSED/MERGED and `glab mr view` answers
+# opened/closed/merged/locked — so a fixture omitting it would let the script's
+# read come back empty while the assertions still passed.
 #
 # The template half covers the resolution order — project setting, repo-local
 # files, the forge's inherited templates, then anchor.crTemplateRepo — and the
@@ -223,17 +231,19 @@ template_repo() {
   echo "$repo"
 }
 
+# gh_pr_json <head-sha> [state]   — state defaults to the open case.
 gh_pr_json() {
   cat > "$CR_AFTER_CREATE" <<JSON
 {"url":"https://github.com/example/repo/pull/7","number":7,"isDraft":true,
- "headRefOid":"$1","body":"seeded body"}
+ "headRefOid":"$1","body":"seeded body","state":"${2:-OPEN}"}
 JSON
 }
 
+# glab_mr_json <head-sha> <should-remove> <force-remove> [state]
 glab_mr_json() {
   cat > "$CR_AFTER_CREATE" <<JSON
 {"web_url":"https://gitlab.com/example/repo/-/merge_requests/7","iid":7,"draft":true,
- "sha":"$1","description":"seeded body",
+ "sha":"$1","description":"seeded body","state":"${4:-opened}",
  "should_remove_source_branch":$2,"force_remove_source_branch":$3}
 JSON
 }
@@ -453,5 +463,93 @@ out=$(bash "$prepare_review_sh" --repo "$repo")
 [[ -z "$(key "$out" TEMPLATE_PATH)" ]] \
   || fail "expected no template path; got: $(key "$out" TEMPLATE_PATH)"
 ok "an empty hierarchy leaves the template unset"
+
+# --- CR state: only an open CR is the branch's target ------------------------
+#
+# A branch name that has been used before still resolves to its old CR on both
+# forges. Adopting a merged one sets CR_PREEXISTING=1 and skips the auto-open, so
+# the flow reaches the description step holding a CR that cannot receive it. What
+# kept that from landing a description on a merged CR was incidental — the
+# head-mismatch check firing because the old CR's head differs from local HEAD —
+# and on a reused branch whose old head happened to match, the write would go
+# through.
+
+# The branch lookup ignores a merged CR and opens a fresh draft; the one it
+# passed over is reported so the new draft is not unexplained.
+for state in MERGED CLOSED; do
+  repo="$(make_repo github.com "gh-state-${state}")"
+  gh_pr_json "$(git -C "$repo" rev-parse HEAD)" "$state"
+  cp "$CR_AFTER_CREATE" "$CR_JSON"          # the branch lookup finds this one
+  gh_pr_json "$(git -C "$repo" rev-parse HEAD)"   # what the create call installs
+  export DELETE_ON_MERGE=true
+  out=$(bash "$prepare_review_sh" --repo "$repo")
+  [[ "$(key "$out" CR_PREEXISTING)" == 0 ]] \
+    || fail "a $state PR must not be adopted; got CR_PREEXISTING=$(key "$out" CR_PREEXISTING)"
+  [[ "$(key "$out" CR_CREATED)" == 1 ]] \
+    || fail "expected a fresh draft over a $state PR; got: $out"
+  [[ "$(key "$out" PRIOR_CR_STATE)" == "$state" ]] \
+    || fail "expected PRIOR_CR_STATE=$state; got $(key "$out" PRIOR_CR_STATE)"
+  [[ "$(key "$out" PRIOR_CR_IID)" == 7 ]] \
+    || fail "expected the passed-over PR's number; got $(key "$out" PRIOR_CR_IID)"
+  ok "GitHub ignores a $state PR on the branch and opens a fresh draft"
+done
+
+for state in merged closed locked; do
+  repo="$(make_repo gitlab.com "gl-state-${state}")"
+  glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false "$state"
+  cp "$CR_AFTER_CREATE" "$CR_JSON"
+  glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false
+  out=$(bash "$prepare_review_sh" --repo "$repo")
+  [[ "$(key "$out" CR_PREEXISTING)" == 0 ]] \
+    || fail "a $state MR must not be adopted; got CR_PREEXISTING=$(key "$out" CR_PREEXISTING)"
+  [[ "$(key "$out" CR_CREATED)" == 1 ]] \
+    || fail "expected a fresh draft over a $state MR; got: $out"
+  [[ "$(key "$out" PRIOR_CR_STATE)" == "$state" ]] \
+    || fail "expected PRIOR_CR_STATE=$state; got $(key "$out" PRIOR_CR_STATE)"
+  ok "GitLab ignores a $state MR on the branch and opens a fresh draft"
+done
+
+# An open CR on the branch resolves exactly as before, and reports no prior CR.
+repo="$(make_repo github.com gh-state-open)"
+gh_pr_json "$(git -C "$repo" rev-parse HEAD)"
+cp "$CR_AFTER_CREATE" "$CR_JSON"
+export DELETE_ON_MERGE=true
+out=$(bash "$prepare_review_sh" --repo "$repo")
+[[ "$(key "$out" CR_PREEXISTING)" == 1 ]] \
+  || fail "an OPEN PR should still be adopted; got: $out"
+[[ "$(key "$out" CR_CREATED)" == 0 ]] || fail "an open PR needs no fresh draft; got: $out"
+[[ -z "$(key "$out" PRIOR_CR_STATE)" && -z "$(key "$out" PRIOR_CR_IID)" ]] \
+  || fail "an open PR should report no prior CR; got $(key "$out" PRIOR_CR_STATE)"
+ok "an open PR on the branch resolves unchanged"
+
+repo="$(make_repo gitlab.com gl-state-open)"
+glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false
+cp "$CR_AFTER_CREATE" "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo")
+[[ "$(key "$out" CR_PREEXISTING)" == 1 ]] \
+  || fail "an opened MR should still be adopted; got: $out"
+ok "an opened MR on the branch resolves unchanged"
+
+# --cr names one specific CR, so it resolves whatever its state — the reason the
+# check is scoped to the branch-inferred path rather than applied in both.
+repo="$(make_repo github.com gh-state-explicit)"
+gh_pr_json "$(git -C "$repo" rev-parse HEAD)" MERGED
+cp "$CR_AFTER_CREATE" "$CR_JSON"
+export DELETE_ON_MERGE=true
+out=$(bash "$prepare_review_sh" --repo "$repo" --cr 7)
+[[ "$(key "$out" CR_PREEXISTING)" == 1 ]] \
+  || fail "--cr must resolve a merged PR; got CR_PREEXISTING=$(key "$out" CR_PREEXISTING)"
+[[ "$(key "$out" CR_IID)" == 7 ]] || fail "--cr should resolve PR 7; got $(key "$out" CR_IID)"
+[[ "$(key "$out" CR_CREATED)" == 0 ]] || fail "--cr must not open a second CR; got: $out"
+ok "--cr resolves a merged PR regardless of state"
+
+repo="$(make_repo gitlab.com gl-state-explicit)"
+glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false merged
+cp "$CR_AFTER_CREATE" "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo" --cr 7)
+[[ "$(key "$out" CR_PREEXISTING)" == 1 ]] \
+  || fail "--cr must resolve a merged MR; got CR_PREEXISTING=$(key "$out" CR_PREEXISTING)"
+[[ "$(key "$out" CR_IID)" == 7 ]] || fail "--cr should resolve MR 7; got $(key "$out" CR_IID)"
+ok "--cr resolves a merged MR regardless of state"
 
 echo "all prepare-review tests passed"

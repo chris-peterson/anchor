@@ -194,6 +194,13 @@ check.
   user to `/anchor:commit` (which commits and pushes) rather than pushing itself.
 - **[PREPARE-03]** The system shall open a draft CR against the already-pushed branch
   and shall not push.
+- **[PREPARE-03a]** Where the CR is inferred from the branch rather than named
+  explicitly, the system shall treat only an open CR as this run's target, and
+  shall report a non-open CR it passed over. Neither forge CLI filters its branch
+  lookup by state, so a branch name that has been used before resolves to
+  whatever CR used it last; a merged or closed CR adopted as the target skips the
+  draft-open, and the description then has no open CR to land on. A CR named
+  explicitly resolves whatever its state, because the author asked for that one.
 - **[PREPARE-04]** While the branch is behind the default branch, the system shall
   offer to rebase and, since the branch is already pushed, follow the rebase with
   `git push --force-with-lease` per the draft/ready gate.
