@@ -6,7 +6,7 @@ Maintained by `/sextant:spec-status`.
 **Last audit:** 2026-08-20
 **Spec version:** root SPEC.md (unversioned)
 **Plugin version:** 1.6.1
-**Coverage:** 223 Covered, 0 Partial, 0 Missing/Contradicts
+**Coverage:** 224 Covered, 0 Partial, 0 Missing/Contradicts
 
 The implementation is the plugin itself — the skill prompts under
 `skills/`, the ambient rules under `rules/`, and the helper scripts under
@@ -34,17 +34,18 @@ draft to review against the implementation, not an audited ledger.
 | CONFIG-01..15 | 15 | All Covered | `anchor.*` key handling, including the per-skill after-push watch gate (CONFIG-06), the per-skill review backend, whose preference is settled against what is installed rather than assumed present (CONFIG-15 — `scripts/review-diff.sh` (`resolve_backend`, `installed_backend`), `guides/configuring.md` "A backend per artifact", `tests/review-{editor,diff}.test.sh`), and a verbosity dial per artifact — CR (CONFIG-07..10), commit message body (CONFIG-11), issue body (CONFIG-12), release notes (CONFIG-13) — each abbreviating sections rather than removing them, with the cross-artifact invariants, the clamp, and the audience-widens-as-the-default-descends ordering in CONFIG-14 — `guides/configuring.md` (Defaults table), `guides/cr-verbosity.md`, `templates/{cr-description,commit-message,issue-description}.md` ("At lower verbosity"), `scripts/pipeline-after-push.sh` (`config_bool`), commit/prepare-review/issue/release config steps, `tests/config-defaults.test.sh` (the documented defaults agree across SPEC, guide, skills, templates) |
 | FORGE-01..09 | 9 | All Covered | Template composition, body-file, markdown, auth — `templates/`, `guides/{forge-cookbook,markdown-gotchas}.md`; template resolution across the forge's own inheritance with a deterministic per-level pick and the `anchor.crTemplateRepo` backstop (FORGE-06..09) — `scripts/prepare-review.sh`, `tests/prepare-review.test.sh` |
 | RULE-01..05 | 5 | All Covered | SessionStart-injected rules — `hooks/emit-rules.sh`, `rules/*.md`; RULE-04 routes CR creation through `prepare-review` |
-| UX-01..05 | 5 | All Covered | Narration, orchestration, decision prompts, artifact visibility, recon-supplied values — cross-cutting, each `skills/*/SKILL.md`, `guides/execute-quietly.md` |
+| UX-01..05 (+06, 06a) | 7 | All Covered | Narration, orchestration, decision prompts, artifact visibility, recon-supplied values — cross-cutting, each `skills/*/SKILL.md`, `guides/execute-quietly.md`. Prescribed commands use a shape and a path the caller can grant, paired with the allow rule that covers them and scoped to a stated set of shells and platforms, while anchor's own scripts stay free to honor `$TMPDIR` (UX-06, 06a) — `guides/temp-paths.md`, `rules/use-forge-clis.md`, `guides/forge-cookbook.md`, `skills/{commit,issue,resolve-feedback}/SKILL.md`, `scripts/lib/tmpfile.sh`, `tests/tmp-path-guidance.test.sh` (ubuntu/macOS/Windows matrix) |
 | CONFIRM-01..06 | 6 | All Covered | Approval of the exact text before anything publishes under the user's name — commit message in the review tool (`skills/commit/SKILL.md` Step 5), CR description (`skills/prepare-review/SKILL.md` Steps 4-5), issue body (`skills/issue/SKILL.md`), thread replies (`skills/resolve-feedback/SKILL.md` 3c), release notes (`skills/release/SKILL.md`); CONFIRM-03 is the plan-is-not-prose distinction the reply gate rests on |
 
 ## Audit history
 
-### 2026-08-20 — Only an open CR is the branch's target (PREPARE-03a)
+### 2026-08-20 — Prescribed paths a caller can grant (UX-06, UX-06a)
 
-STATUS.md updated: +1 ID (PREPARE-03a, Covered), 222 → 223. Neither forge CLI
-filters its branch lookup by CR state, so a reused branch name resolved to a
-merged or closed CR and the draft-open was skipped; `resolve_cr` now reads the
-state off the result it already fetched.
+STATUS.md updated: +2 IDs (UX-06, UX-06a, both Covered), 222 → 224. The six
+prescribed `mktemp` sites moved from `${TMPDIR:-/tmp}` to a literal `/tmp`,
+which an `Edit(//tmp/**)` grant reaches on macOS where the template did not;
+`scripts/lib/tmpfile.sh` keeps `$TMPDIR` and now states why the two differ.
+
 ### 2026-08-20 — Repeatable path staging (COMMIT-04c)
 
 STATUS.md updated: +1 ID (COMMIT-04c, Covered), 221 → 222. COMMIT-04a was

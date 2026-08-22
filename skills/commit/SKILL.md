@@ -125,7 +125,7 @@ Reached only when Step 1 found something to commit (`STAGED=1`). **Skip the suit
 
 Look for a test runner in the project (e.g., `just test`, `npm test`, `dotnet test`, `pytest`, `go test ./...`, a `Makefile` test target) and run it. Discovery is yours on purpose rather than scripted: you can report progress on a slow suite, pick the right target when a repo exposes several, and act on a failure in the same pass.
 
-**Gate on the exit code, not on the output.** A suite's stdout is not a reliable pass/fail signal: a runner that exercises a validator against known-bad fixtures prints `*** Found 1 error(s)` on a *successful* run, and `| tail -30` of that reads as a failure. Reading the output then re-running to get a clean exit code runs the suite twice. So capture the status on the first invocation — `<runner>; echo "exit: $?"`, or `${PIPESTATUS[0]}` when a pipe is unavoidable — and let that decide.
+**Gate on the exit code, not on the output.** A suite's stdout is not a reliable pass/fail signal: a runner that exercises a validator against known-bad fixtures prints `*** Found 1 error(s)` on a *successful* run, and `| tail -30` of that reads as a failure. Reading the output then re-running to get a clean exit code runs the suite twice. So capture the status on the first invocation and let that decide. Run the suite bare and read the status the harness reports with it; a non-zero exit is surfaced without you asking for it. Where you need a pipeline's status, put the pipeline in a script and run the script — the safety analyzer reads only the outer command line, so `${PIPESTATUS[0]}` inside `bash run-tests.sh` costs nothing, while a `;`-sequenced `echo "exit: $?"` on the command line is gated on its shape and no allow rule can reach it.
 
 **Run the suite as its own Bash call.** Don't chain it onto another command with `&&` or fold it into a `$(…)`: a compound hides the consequential step from the permission prompt, and a non-zero exit from either half becomes ambiguous.
 
@@ -153,7 +153,7 @@ Keep the body free of loaded framing — temporal blame, size-minimizers, self-c
 
 See `${CLAUDE_PLUGIN_ROOT}/guides/configuring.md` for the full key set.
 
-Write the drafted message to a temp file (`$(mktemp -u "${TMPDIR:-/tmp}/commit-msg.XXXXXX").md`) with the Write tool. Step 5 passes it into the review so you review the message alongside the diff, and Step 6 commits it (or the reviewer's edited version).
+Write the drafted message to a temp file (`$(mktemp -u /tmp/commit-msg.XXXXXX).md`) with the Write tool — the literal `/tmp` is what a caller's `Edit(//tmp/**)` grant reaches (`${CLAUDE_PLUGIN_ROOT}/guides/temp-paths.md`). Step 5 passes it into the review so you review the message alongside the diff, and Step 6 commits it (or the reviewer's edited version).
 
 ## Step 4: Settle the branch and shape
 

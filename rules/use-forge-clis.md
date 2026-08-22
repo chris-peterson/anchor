@@ -40,8 +40,13 @@ still uses the CLI directly.
 
 For any multi-line body the skill produces (tables, code fences) — CR
 descriptions, issue bodies, comments — write it to a unique temp file
-(`$(mktemp -u "${TMPDIR:-/tmp}/cr-body.XXXXXX").md`) and pass it by file (`--body-file`,
-`-F description=@<path>`); never inline escape-quoted strings. (That's the skill
+(`$(mktemp -u /tmp/cr-body.XXXXXX).md`) and pass it by file (`--body-file`,
+`-F description=@<path>`); never inline escape-quoted strings. The literal `/tmp`
+is deliberate — `${TMPDIR:-/tmp}` resolves outside an `Edit(//tmp/**)` grant on
+any platform that sets `TMPDIR`, macOS always among them, and the caller pays a
+prompt every run. The paths, the allow rules that cover them, and the
+PowerShell-only case are in
+`${CLAUDE_PLUGIN_ROOT}/guides/temp-paths.md`. (That's the skill
 writing the body it composed — the mechanical half — not a consumer
 hand-authoring one.)
 

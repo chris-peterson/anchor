@@ -251,7 +251,7 @@ returns to triage — it stays here.
 
 ### 3d. Post the approved replies
 
-Write each approved body to a unique temp file (`$(mktemp -u "${TMPDIR:-/tmp}/reply.XXXXXX").md`)
+Write each approved body to a unique temp file (`$(mktemp -u /tmp/reply.XXXXXX).md`, whose literal `/tmp` a caller's `Edit(//tmp/**)` grant reaches — `${CLAUDE_PLUGIN_ROOT}/guides/temp-paths.md`)
 and post it into the *existing* thread — not as a new top-level comment (see
 the cookbook, "Reply to a review thread"). Post what was approved: an
 improvement you notice while posting goes back through 3c, because the point of

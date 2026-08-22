@@ -8,9 +8,11 @@ on:
 
 jobs:
   tmpfile:
-    # The temp-path helper's portability claim is cross-platform, so prove it on
-    # each mktemp it must survive: GNU coreutils (ubuntu), BSD (macos — the
-    # binary that broke the old form), and Git Bash's MSYS2 mktemp (windows).
+    # The temp-path claims are cross-platform, so prove them on each mktemp they
+    # must survive: GNU coreutils (ubuntu), BSD (macos — the binary that broke
+    # the old form), and Git Bash's MSYS2 mktemp (windows). The guidance half
+    # rides the same matrix because whether TMPDIR is set, and what a literal
+    # /tmp resolves to, is exactly what differs between these three.
     strategy:
       fail-fast: false
       matrix:
@@ -23,6 +25,8 @@ jobs:
       - uses: actions/checkout@v6
       - name: temp-path helper
         run: bash tests/tmpfile.test.sh
+      - name: temp-path guidance
+        run: bash tests/tmp-path-guidance.test.sh
       # In this matrix because the deep-link anchors are path hashes, and the
       # hashing binary varies (macOS ships `shasum` with no `sha1sum`).
       - name: deep links

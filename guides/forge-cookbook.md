@@ -166,9 +166,16 @@ replaces a trailing run, so it takes `cr-body.XXXXXX.md` as a literal filename
 same on GNU, BSD, and Git Bash:
 
 ```bash
-echo "$(mktemp -u "${TMPDIR:-/tmp}/cr-body.XXXXXX").md"
+echo "$(mktemp -u /tmp/cr-body.XXXXXX).md"
 # → /tmp/cr-body.aB3xKp.md
 ```
+
+The `/tmp` is literal rather than `${TMPDIR:-/tmp}`: a caller grants paths by
+prefix, and on macOS `TMPDIR` is always set, so the template resolves to
+`/var/folders/…` and misses an `Edit(//tmp/**)` grant. See
+[temp-paths](/guides/temp-paths) for the platform table, the allow rules to pair
+with it, and why anchor's own scripts honor `$TMPDIR` where this guidance does
+not.
 
 Run inner commands (like the `glab api user` id lookup) as their own step and
 reuse the captured value — chaining with `$(…)` or `;`/`&&` trips structural
