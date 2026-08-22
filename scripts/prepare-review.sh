@@ -53,6 +53,13 @@
 #                                and pushes) rather than pushing here
 #   CR_PREEXISTING=<0|1>         a CR was already open before this run
 #   CR_CREATED=<0|1>             this script opened a draft CR
+#   PRIOR_CR_IID=<iid/number>    a CR on this branch name that is not open, so it
+#                                is not this run's target; empty when the branch
+#                                carries none. Branch names get reused, so the
+#                                skill names the one it passed over rather than
+#                                leaving a fresh draft looking unexplained
+#   PRIOR_CR_STATE=<state|>      that CR's state as the forge reports it —
+#                                merged/closed/locked, or MERGED/CLOSED
 #   CR_URL=<web url>             empty on the skip-deep-links path
 #   CR_IID=<iid/number>          empty when no CR
 #   CR_DRAFT=<true|false|>       the CR's draft flag (empty when no CR)
@@ -187,9 +194,19 @@ fi
 
 cr_url=""; cr_iid=""; cr_draft=""; cr_head=""; cr_desc=""; cr_delete_branch=""
 cr_preexisting=0; cr_created=0
+prior_cr_iid=""; prior_cr_state=""
 
 # Pull a CR's url/iid/draft/headsha/description into the cr_* vars. Returns
 # non-zero (leaving them empty) when no CR is open for the current branch.
+#
+# Only an open CR counts on the branch-inferred path. Neither CLI filters its
+# branch lookup by state, so a branch name that has been used before resolves to
+# whatever CR used it last — a merged one adopted as this run's target skips the
+# auto-open below, and the description then has no open CR to land on. The state
+# is read off the result the lookup already returned, so this costs no extra
+# call, and it is checked before any cr_* var is assigned so a rejected CR leaves
+# them empty as the contract above promises. An explicit --cr names one specific
+# CR, so that path resolves whatever was asked for whatever its state.
 resolve_cr() {
   # With --cr, view that specific CR (iid or URL) rather than the one the
   # current branch backs; without it, the branch's open CR as before.
@@ -199,6 +216,13 @@ resolve_cr() {
       [[ -n "$cr_ref" ]] && args=("$cr_ref" "${args[@]}")
       json=$(glab mr view "${args[@]}" 2>/dev/null) || return 1
       [[ -z "$json" ]] && return 1
+      local mr_state
+      mr_state=$(jq -r '.state // empty' <<<"$json")
+      if [[ -z "$cr_ref" && "$mr_state" != "opened" ]]; then
+        prior_cr_state="$mr_state"
+        prior_cr_iid=$(jq -r '.iid // empty' <<<"$json")
+        return 1
+      fi
       cr_url=$(jq -r '.web_url // empty' <<<"$json")
       [[ -z "$cr_url" ]] && return 1
       cr_iid=$(jq -r '.iid // empty' <<<"$json")
@@ -213,10 +237,17 @@ resolve_cr() {
         then "true" else "false" end' <<<"$json")
       ;;
     github)
-      local json args=(--json "url,number,isDraft,headRefOid,body")
+      local json args=(--json "url,number,isDraft,headRefOid,body,state")
       [[ -n "$cr_ref" ]] && args=("$cr_ref" "${args[@]}")
       json=$(gh pr view "${args[@]}" 2>/dev/null) || return 1
       [[ -z "$json" ]] && return 1
+      local pr_state
+      pr_state=$(jq -r '.state // empty' <<<"$json")
+      if [[ -z "$cr_ref" && "$pr_state" != "OPEN" ]]; then
+        prior_cr_state="$pr_state"
+        prior_cr_iid=$(jq -r '.number // empty' <<<"$json")
+        return 1
+      fi
       cr_url=$(jq -r '.url // empty' <<<"$json")
       [[ -z "$cr_url" ]] && return 1
       cr_iid=$(jq -r '.number // empty' <<<"$json")
@@ -603,6 +634,8 @@ echo "NEEDS_COMMIT=$needs_commit"
 echo "NEEDS_PUSH=$needs_push"
 echo "CR_PREEXISTING=$cr_preexisting"
 echo "CR_CREATED=$cr_created"
+echo "PRIOR_CR_IID=$prior_cr_iid"
+echo "PRIOR_CR_STATE=$prior_cr_state"
 echo "CR_URL=$cr_url"
 echo "CR_IID=$cr_iid"
 echo "CR_DRAFT=$cr_draft"

@@ -257,7 +257,7 @@ ok "someone else's completions directory does not read as ours"
 # The wrapper records a path at install time, so a plugin update leaves it on the
 # old build. The hook is the only thing that notices, and it must never block.
 
-hook="$root/hooks/check-cli-freshness.sh"
+hook="$root/hooks/cli-freshness.sh"
 stub_bin="$work/stub-bin"
 mkdir -p "$stub_bin"
 

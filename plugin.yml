@@ -67,9 +67,9 @@ suite:
       rewrite-history-through-anchor: Route history rewrites through `anchor`
       use-forge-clis: Drive forge operations through `gh` / `glab`
     hooks:
-      check-cli-freshness: SessionStart — Reports when the anchor wrapper on PATH is older than the installed plugin, since install-cli bakes in the path it ran from.
+      cli-freshness: SessionStart — Reports when the anchor wrapper on PATH is older than the installed plugin, since install-cli bakes in the path it ran from.
       emit-rules: SessionStart — Emits the plugin's ambient rules into the agent's context.
-      hooks: 'Hook wiring: SessionStart→emit-rules, check-cli-freshness.'
+      hooks: 'Hook wiring: SessionStart→emit-rules, cli-freshness.'
     commands:
       anchor: Run anchor's CLI — a generic two-path diff review, completions, and the PATH installer
   # <<< shipyard:describe <<<
