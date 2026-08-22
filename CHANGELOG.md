@@ -18,6 +18,15 @@
 - `/anchor:prepare-review` does the same for a change request once its
   description lands, on the same additive terms.
 
+### Changed
+
+- The stale-wrapper report reaches Claude through
+  `hookSpecificOutput.additionalContext` rather than plain stdout, matching the
+  shape the rest of the suite's freshness hooks emit, and the handler moved to
+  `hooks/cli-freshness.sh` under the name its four peers use. The report itself
+  is unchanged in substance: which version the wrapper runs, which version the
+  plugin is, and that `/anchor:anchor install-cli` is what refreshes it.
+
 ## 1.6.1
 
 **Full Changelog**: https://github.com/chris-peterson/anchor/compare/v1.6.0...v1.6.1
