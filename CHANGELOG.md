@@ -1,33 +1,20 @@
 # Changelog
 
-## Unreleased
+## 1.7.0
 
 ### Added
 
-- `/anchor:issue` triages the issue it files. It reads the project's own labels
-  and open milestones, applies the labels whose descriptions fit the work, and
-  attaches a milestone where exactly one plausibly does — so an issue arrives in
-  the queue already sorted instead of bare. Where two labels are both plausible,
-  or nothing in the set fits, it asks rather than guessing, and "no label" is an
-  answer. Only labels the project already defines are used, so a filed issue
-  can't be what introduces `bugfix` next to `bug`.
-
-  Updating an existing issue only adds: a label it's missing, or a milestone
-  where it has none. What someone already triaged stays.
-
-- `/anchor:prepare-review` does the same for a change request once its
-  description lands, on the same additive terms.
+- `/anchor:issue` and `/anchor:prepare-review` label and milestone what they file or open, from the project's own set, adding to what's already there rather than replacing it.
 
 ### Removed
 
-- The `anchor` CLI is gone, along with everything that only existed to serve
-  it: `scripts/anchor`, the `/anchor:anchor` slash command and its `diff` /
-  `completions` / `install-cli` subcommands, the `/anchor:install-cli` skill,
-  and the SessionStart hook that reported a stale PATH wrapper. Anyone
-  invoking `anchor diff <left> <right>` from a shell, a hook, or another agent
-  has no drop-in replacement; the skills themselves call
-  `scripts/review-diff.sh` directly and are unaffected. There is no PATH
-  wrapper to install anymore.
+- The `anchor` CLI (`scripts/anchor`, `/anchor:anchor`, `/anchor:install-cli`, and its PATH-wrapper freshness check) is gone. Anyone invoking `anchor diff` / `anchor completions` / `anchor install-cli` from a shell, a hook, or another agent has no replacement; the skills call `scripts/review-diff.sh` directly and are unaffected.
+
+### Fixed
+
+- `/anchor:commit` and `/anchor:review` no longer fail when re-staging a path list that includes a deletion or the old half of a rename.
+- `/anchor:prepare-review`'s branch-based CR lookup adopts only an open CR, so a reused branch name whose earlier CR merged or closed gets a fresh draft instead.
+- Prescribed temp-file commands write to `/tmp` directly so a granted `Edit(//tmp/**)` permission covers them on macOS.
 
 ## 1.6.1
 
