@@ -18,14 +18,16 @@
 - `/anchor:prepare-review` does the same for a change request once its
   description lands, on the same additive terms.
 
-### Changed
+### Removed
 
-- The stale-wrapper report reaches Claude through
-  `hookSpecificOutput.additionalContext` rather than plain stdout, matching the
-  shape the rest of the suite's freshness hooks emit, and the handler moved to
-  `hooks/cli-freshness.sh` under the name its four peers use. The report itself
-  is unchanged in substance: which version the wrapper runs, which version the
-  plugin is, and that `/anchor:anchor install-cli` is what refreshes it.
+- The `anchor` CLI is gone, along with everything that only existed to serve
+  it: `scripts/anchor`, the `/anchor:anchor` slash command and its `diff` /
+  `completions` / `install-cli` subcommands, the `/anchor:install-cli` skill,
+  and the SessionStart hook that reported a stale PATH wrapper. Anyone
+  invoking `anchor diff <left> <right>` from a shell, a hook, or another agent
+  has no drop-in replacement; the skills themselves call
+  `scripts/review-diff.sh` directly and are unaffected. There is no PATH
+  wrapper to install anymore.
 
 ## 1.6.1
 

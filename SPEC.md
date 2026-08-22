@@ -20,13 +20,6 @@ behavior, not an independent authority — review them against the source.
   `/anchor:prepare-review`, `/anchor:review`, `/anchor:resolve-feedback`,
   `/anchor:merge`, `/anchor:release`, `/anchor:issue`, `/anchor:issues`,
   `/anchor:pipeline`.
-- **CLI** — the command-line entrypoint (`scripts/anchor`), reached as
-  `/anchor:anchor` in a session and as `anchor` from a shell. It is what a caller
-  that is not a skill invokes; the skills call the helpers directly. Defined
-  under CLI.
-- **Wrapper** — the file `anchor install-cli` writes onto PATH. It records the
-  plugin path it was generated from, so a plugin update leaves it running the
-  previous build until `install-cli` runs again.
 - **Forge** — GitHub or GitLab, selected by the `origin` remote; drives the CLI
   choice (`gh` for GitHub, `glab` for GitLab).
 - **CR (change request)** — a pull request on GitHub or a merge request on
@@ -695,78 +688,6 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   files the commit will, so its staging follows COMMIT-04 rather than sweeping the
   tree — a reviewer handed another session's file grades a changeset that is not
   the one under review.
-
-### CLI — Command-line entrypoint
-
-The skills are one caller of `anchor`'s helpers, not the only one. `scripts/anchor`
-is the interface the others reach: a hook, the `/anchor:anchor` slash shim, a
-plain shell, and an agent with two files to compare and no interest in the rest
-of the lifecycle. Its first subcommand, `diff`, exposes the two-path review the
-DIFF contract already describes.
-
-The stream split is the load-bearing part. A payload on stdout and diagnostics on
-stderr is what lets `anchor diff a b > review.json` produce a file `jq` reads
-without stripping anything, and it is why the verdict stays a field in the JSON
-rather than becoming a second answer in the exit status.
-
-- **[CLI-01]** The system shall expose its deterministic helpers through one
-  command-line entrypoint, so a caller that is not a skill — a hook, the slash
-  command, a shell, another agent — invokes one interface rather than
-  re-deriving an invocation from the scripts. The skills call the helpers
-  directly; the entrypoint exists for everyone else.
-- **[CLI-02]** Where `CLAUDE_PLUGIN_ROOT` is set, the system shall resolve its
-  plugin root from it, and otherwise from the executable's own location, so an
-  invocation inside a session and one from a clone or the PATH wrapper both work.
-- **[CLI-03]** The system shall write a subcommand's payload to stdout and nothing
-  else, and shall write errors, warnings, and progress to stderr.
-- **[CLI-04]** The system shall report through its exit status whether the command
-  ran — zero ran, 64 a usage error, other non-zero could not produce a result —
-  and shall not encode a review verdict there. The verdict is a field in the
-  payload, so a second copy in the exit status could disagree with it.
-- **[CLI-05]** When invoked with `--help`, `-h`, or `help`, the system shall print
-  the usage text to stdout and exit zero.
-- **[CLI-06]** If invoked with no arguments or an unrecognized command, then the
-  system shall print the usage text to stderr and exit non-zero, and shall not
-  fall through to a default action. A convenience default for a bare invocation
-  belongs to the slash shim, which keeps the CLI surface uniform.
-- **[CLI-07]** The system shall read the version it reports from
-  `.claude-plugin/plugin.json` at run time, holding no version constant in the
-  executable.
-- **[CLI-08]** The system shall derive its dispatched commands, its usage listing,
-  and its shell completion from one declared command list, resolving each name to
-  its handler by convention, so a command cannot be dispatched without also being
-  offered by the completion.
-- **[CLI-09]** When given `diff <left> <right>`, the system shall review the two
-  paths through the backend named by `anchor.reviewBackend` and print the review
-  contract as a single JSON object. Neither path need be a file or sit in a git
-  repository — two directories compare as trees.
-- **[CLI-10]** Where `--title` or `--detail <label>=<value>` is given, the system
-  shall seed the review header with it, accepting `--detail` more than once.
-- **[CLI-11]** If the review dispatcher produces no `REVIEW_OUTPUT`, then the
-  system shall exit non-zero reporting that no verdict was produced, and shall
-  print nothing to stdout — the CLI-surface form of DIFF-12, since an empty
-  payload would otherwise read as a clean review.
-- **[CLI-12]** When asked for a zsh completion, the system shall print the script
-  to stdout, and where `--install` is given shall write it as `_anchor` in the
-  user's zsh completion directory.
-- **[CLI-13]** When installing the completion, the system shall place the `fpath`
-  assignment before `compinit` runs, and where the shell profile already sets both
-  it shall leave the profile unchanged.
-- **[CLI-14]** When `install-cli` runs, the system shall write the PATH wrapper and
-  install the shell completion in the same step, so tab completion needs no second
-  command the user has to know about.
-- **[CLI-15]** The system shall write the wrapper as a file recording the plugin
-  path it was generated from, not a link, so the version it reports is the version
-  of the build it points at.
-- **[CLI-16]** The system shall compare the wrapper's reported version against the
-  plugin manifest once per session and report a difference without blocking;
-  where no wrapper is on PATH, or its version cannot be read, it shall stay
-  silent. Once per session rather than per skill invocation, because the callers
-  that go stale include ones that never enter a skill. The comparison shall ask
-  the wrapper for the version of the build it points at, resolved from its own
-  location rather than from the session's `CLAUDE_PLUGIN_ROOT` — inherited, that
-  variable wins under CLI-02 and the old build reports the current manifest, so
-  the two sides can never disagree.
 
 ### CONFIG — Configuration
 

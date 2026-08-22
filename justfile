@@ -24,10 +24,10 @@ describe:
 
 # lint the shell scripts (mirrors the lint.yml CI job)
 lint:
-    shellcheck hooks/*.sh scripts/*.sh scripts/anchor scripts/review/*.sh tests/*.sh
+    shellcheck hooks/*.sh scripts/*.sh scripts/review/*.sh tests/*.sh
 
 # run every test.yml CI job locally, in the same grouping
-test: test-tmpfile test-commit test-prepare-review test-release-recon test-pipeline test-config-defaults test-anchor-cli test-review test-review-cr
+test: test-tmpfile test-commit test-prepare-review test-release-recon test-pipeline test-config-defaults test-review test-review-cr
 
 # test.yml: tmpfile — the temp-path helper and deep-link anchors
 test-tmpfile:
@@ -55,10 +55,6 @@ test-pipeline:
 # test.yml: config-defaults — the six sources of truth for verbosity defaults agree
 test-config-defaults:
     bash tests/config-defaults.test.sh
-
-# test.yml: anchor-cli — CLI entrypoint, completion parity, install-cli, freshness hook
-test-anchor-cli:
-    bash tests/anchor-cli.test.sh
 
 # test.yml: review — the review dispatcher and its moor/revdiff adapters
 test-review:
