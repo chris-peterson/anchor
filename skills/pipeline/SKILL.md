@@ -55,14 +55,14 @@ task-tracking.
 Resolve which repo this operates on — the working directory isn't a reliable
 proxy. Re-resolve on every invocation.
 
-- **With an argument** (`/anchor:pipeline <name>`): resolve the name through
-  tack's repo db — `bash "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh" <name>`
-  (see the cookbook's "Resolving a named target repo"). `TARGET_VIA=tack` → use
+- **With an argument** (`/anchor:pipeline <name>`): resolve the name —
+  `bash "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh" <name>`
+  (see the cookbook's "Resolving a named target repo"). `TARGET_VIA=resolved` → use
   `TARGET_LOCAL` as the checkout and pass it as `--repo` to the helper below; this
   skill reads the branch and HEAD from a work tree, so if `TARGET_LOCAL` is empty
-  (a repo tack knows but you have no clone of) say so and stop, rather than
-  reporting the cwd repo's pipeline under the requested repo's name. `ambiguous` →
-  prompt with `TARGET_CANDIDATES`. `cwd` (no tack, or no match) → fall back to a
+  (a repo on the forge that isn't the one you're standing in) say so and stop,
+  rather than reporting the cwd repo's pipeline under the requested repo's name.
+  `ambiguous` → prompt with `TARGET_CANDIDATES`. `cwd` (no match) → fall back to a
   case-insensitive substring-match of `<name>` against the basename of every git
   repo the session has touched; one match → use it (confirm in one line),
   zero/multiple → ask.

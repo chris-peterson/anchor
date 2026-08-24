@@ -45,30 +45,37 @@ directly across separate Bash calls, where there's no persistent `cd`.
 ## Resolving a named target repo
 
 The forms above take a *path*. When the user instead names a target — "file this
-against `logbook`", "open the MR in `customer-svc`" — resolve the name through
-tack's repo db rather than guessing from cwd or improvising a `-R` slug:
+against `payments-api`", "open the MR in `customer-svc`" — resolve the name rather
+than guessing from cwd or improvising a `-R` slug:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh" <name>
 ```
 
-It prints `TARGET_VIA`:
+It takes a remote URL, a `owner/repo` (or `group/subgroup/repo`) slug, or a bare
+name, and prints `TARGET_VIA`:
 
-- **`tack`** — one match, with `TARGET_URL`, `TARGET_FORGE`, `TARGET_HOST`,
+- **`resolved`** — one match, with `TARGET_URL`, `TARGET_FORGE`, `TARGET_HOST`,
   `TARGET_PROJECT`, `TARGET_LOCAL`. Use `TARGET_PROJECT` / `TARGET_HOST` with the
   per-command forms above (`gh -R`, `glab :fullpath` + `--hostname`), and
   `TARGET_LOCAL` as the checkout for anything needing a work tree.
-- **`ambiguous`** — `TARGET_CANDIDATES` (`[{key,url,local}]`); prompt the user.
-- **`cwd`** — no tack on PATH, or no match; fall back to the cwd `origin`.
+- **`ambiguous`** — `TARGET_CANDIDATES` (`[{key,url,local}]`); prompt the user. A
+  bare name can live on more than one forge, or twice on one.
+- **`cwd`** — nothing matched; fall back to the cwd `origin`. `TARGET_NOTE`
+  separates "no repo by that name" from "no authenticated forge to ask".
 
-**Local vs remote-only.** `TARGET_LOCAL` is empty for a known remote with no
-checkout (the common case for a repo you don't have cloned). Pure-remote
-operations — filing/updating an issue, describing or querying a CR — work fine
-remote-only via `-R` / `:fullpath`. Operations that need a work tree — committing,
-pushing, opening a CR (there must be a branch to push) — require a checkout: pass
+A bare name is matched against every repo you can reach on each host `gh` and
+`glab` report you're logged in to, on the **basename, exactly**. A URL or a
+host-qualified path carries its own facts and costs no forge call at all.
+
+**Local vs remote-only.** `TARGET_LOCAL` holds the working directory's repo when
+its `origin` is the repo that resolved, and is empty otherwise — anywhere else on
+the machine the repo might be cloned is unknown here. Pure-remote operations —
+filing/updating an issue, describing or querying a CR — work fine remote-only via
+`-R` / `:fullpath`. Operations that need a work tree — committing, pushing,
+opening a CR (there must be a branch to push) — require a checkout: pass
 `TARGET_LOCAL` as `--repo <path>` when present, and when it's empty ask for an
-explicit `--repo <path>` rather than proceeding. tack is optional —
-without it (or with no match) `TARGET_VIA=cwd` and everything behaves as today.
+explicit `--repo <path>` rather than proceeding.
 
 ## Linking an ordering dependency between CRs
 

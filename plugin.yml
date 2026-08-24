@@ -29,7 +29,7 @@ suite:
       url: https://revdiff.com
     - name: tack
       required: false
-      reason: resolves a named target repo; records CRs and releases against a route
+      reason: records CRs and releases against a route
   # Activated by user-invoked skills (commit, prepare-review) and by ambient
   # rules injected at session start.
   activations: [user, session]

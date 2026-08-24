@@ -69,8 +69,8 @@ silently inside the orchestrator's list. Otherwise enumerate:
 ## Step 1: Resolve and fetch the change request
 
 **Target repo.** Resolve it as the other `anchor` skills do. **With a name
-argument**, go through tack's repo db
-(`${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh <name>`): `TARGET_VIA=tack` →
+argument**, resolve it with
+`${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh <name>`: `TARGET_VIA=resolved` →
 pass `TARGET_LOCAL` as `--repo`; empty `TARGET_LOCAL` → ask where the checkout
 lives; `ambiguous` → prompt with `TARGET_CANDIDATES`; `cwd` → the working
 directory's repo. **With a CR URL**, the URL names the project — if that project

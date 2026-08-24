@@ -73,12 +73,12 @@ and do **not** create your own tasks. Otherwise enumerate:
 ## Target repo and CR
 
 Resolve the repo as the other `anchor` skills do. **With a name argument**, resolve
-it through tack's repo db (`${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh <name>`, see the cookbook's
-"Resolving a named target repo"): `TARGET_VIA=tack` → use `TARGET_LOCAL` as the
+it with `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh <name>` (see the cookbook's
+"Resolving a named target repo"): `TARGET_VIA=resolved` → use `TARGET_LOCAL` as the
 checkout — this skill runs `git` post-merge (checkout, pull, branch delete), so it
 needs one; if `TARGET_LOCAL` is empty, ask where the checkout lives rather than
-proceeding. `ambiguous` → prompt with `TARGET_CANDIDATES`. `cwd` (no tack, or no
-match) → fall back to a substring-match against repos the session has touched.
+proceeding. `ambiguous` → prompt with `TARGET_CANDIDATES`. `cwd` (no match) → fall
+back to a substring-match against repos the session has touched.
 **With no argument**, `git rev-parse --show-toplevel` from the working directory;
 ambiguous → ask. Run git with `-C <repo>` when the working directory isn't the
 target.
