@@ -15,6 +15,10 @@
 # Runs on the ubuntu / macOS / Windows-Git-Bash matrix because the claims in
 # guides/temp-paths.md are per-platform: whether TMPDIR is set, and whether a
 # literal /tmp is writable and what it resolves to.
+# ci-platforms: linux macos windows
+#   Whether TMPDIR is set, and where a literal /tmp actually lands, is exactly
+#   what differs between these three.
+
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

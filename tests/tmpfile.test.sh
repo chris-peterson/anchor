@@ -6,6 +6,10 @@
 # outside behaves identically regardless of which mktemp the shell resolves.
 # macOS's default `mktemp` is BSD /usr/bin/mktemp — the binary that broke the
 # old `mktemp NAME.XXXXXX.md` form and let a stale scratch file block a rerun.
+# ci-platforms: linux macos windows
+#   Each host resolves a different mktemp — GNU coreutils, BSD (the binary that
+#   broke the old template), and Git Bash's MSYS2 — which is the whole subject.
+
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

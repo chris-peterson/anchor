@@ -112,5 +112,5 @@ and is skipped when absent.
 - **Templates** — the output shapes the skills produce:
   [commit message](/templates/commit-message),
   [CR description](/templates/cr-description),
-  [CR review](/templates/cr-review), and
+  [review qualities](/templates/review-qualities), and
   [issue description](/templates/issue-description)

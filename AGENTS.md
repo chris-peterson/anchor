@@ -19,14 +19,18 @@ just generate       # regenerate plugin.json and docs/ from plugin.yml and the s
 just describe       # resync plugin.yml's suite.describe from skills/rules/hooks
 just docs           # render the docs site and serve it locally
 
+just test           # every suite this platform runs, via tests/run-all.sh
 bash tests/<name>.test.sh                                  # one suite
 shellcheck hooks/*.sh scripts/*.sh scripts/review/*.sh tests/*.sh
 ```
 
-There is no aggregate test target: each `tests/*.test.sh` is its own CI job
-(`.github/workflows/test.yml`), several of them matrixed across ubuntu, macOS,
-and Windows because the behavior under test is exactly what differs between
-platforms.
+`tests/run-all.sh` discovers `tests/*.test.sh`, so a new suite needs no wiring in
+the justfile or `.github/workflows/test.yml` — CI is one job running that script
+across an ubuntu / macOS / Windows matrix. A suite declares where it is expected
+to hold with a `# ci-platforms:` line in its own header; absent one it runs on
+linux and macos. Windows is opt-in, and the suites that claim it are the ones
+whose subject *is* the platform difference — which `mktemp` the shell resolves,
+whether the host ships `sha1sum`.
 
 ## Layout
 

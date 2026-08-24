@@ -250,12 +250,14 @@ check.
   milestones to the change request, adding to rather than replacing what the CR
   already carries, and asking the author where the choice is not clear.
 
-### REVIEW — Review someone else's change request
+### REVIEW — Review a change request
 
 The `review` skill: the reviewer's side of the seam `prepare-review` and
-`resolve-feedback` sit on either end of. It takes a CR nobody in this session
-wrote, produces findings anchored to files and lines, and lands them as threads
-on that CR once the user approves the wording.
+`resolve-feedback` sit on either end of. It examines a CR's diff against the
+qualities the user has set and produces findings anchored to files and lines.
+Authorship then picks where those findings go — threads on someone else's CR once
+the user approves the wording, or a working-tree fix list on the user's own,
+ending in the handoff that marks the CR ready.
 
 - **[REVIEW-01]** When `/anchor:review` runs, the system shall resolve the target
   repo as the other skills do and gather the CR via a single recon script,
@@ -264,10 +266,12 @@ on that CR once the user approves the wording.
   URL, a source branch, or the current branch, on either forge, and shall take
   the forge from the resolved CR rather than from the working directory's
   `origin`.
-- **[REVIEW-03]** Where the resolved CR is not open, is still a draft, or was
-  written by the invoking user, the system shall name that condition and confirm
-  before continuing, rather than spending review attention on a change nobody
-  asked to have reviewed.
+- **[REVIEW-03]** Where the resolved CR is not open, the system shall name that
+  state and confirm before continuing, rather than spending review attention on a
+  change nobody is waiting on.
+- **[REVIEW-03a]** Where the resolved CR was written by someone else and is still
+  a draft, the system shall name that and confirm before continuing; in
+  self-review a draft is the expected state and shall pass without comment.
 - **[REVIEW-04]** The system shall read the CR's description before its diff, and
   shall treat what the description does not account for as a finding.
 - **[REVIEW-05]** The system shall present the CR's entire diff range in a review
@@ -280,9 +284,10 @@ on that CR once the user approves the wording.
 - **[REVIEW-07]** When the backend returns `changes-requested`, the system shall
   treat its comments as the review's findings and carry each one's wording
   verbatim, rather than as feedback blocking the flow.
-- **[REVIEW-08]** The system shall anchor each finding to a file and a line where
-  it has one, and shall fold a finding it cannot anchor into the summary comment
-  rather than dropping it.
+- **[REVIEW-08]** The system shall place each finding at the narrowest location
+  that carries it — the line, else the method or hunk, else the file, else the
+  changeset — and shall fold a finding it cannot anchor to a line into the summary
+  comment rather than dropping it.
 - **[REVIEW-09]** The system shall obtain the user's approval of the exact text
   of every thread and of the summary comment before posting any of them, and
   shall present that text as the rendering the post is built from.
@@ -300,6 +305,26 @@ on that CR once the user approves the wording.
 - **[REVIEW-14]** The system shall build the previewed text and the posted text
   from one findings document through one code path, so that what the user
   approved is what lands.
+- **[REVIEW-15]** The system shall read the review-qualities template before it
+  examines the diff and shall weigh the qualities that template lists and no
+  others, so that editing the template — adding a quality, dropping one,
+  rewriting the output instruction — changes what a review examines with no other
+  change.
+- **[REVIEW-16]** The system shall examine the diff against each listed quality
+  independently, one agent per quality, and shall merge their findings into one
+  set, dropping duplicates and keeping a comment the reviewer typed ahead of an
+  agent finding on the same line.
+- **[REVIEW-17]** Where the resolved CR was written by the invoking user, the
+  system shall run a self-review: findings become a working-tree fix list, nothing
+  is posted to the forge, and re-reviewing the corrected diff is a loop within the
+  same invocation.
+- **[REVIEW-18]** When a self-review ends, the system shall offer to mark the CR
+  ready and to request reviewers, and shall do neither without the user choosing
+  it.
+- **[REVIEW-19]** Where the author wants a self-review finding on the record, the
+  system shall post it under the same gates as another author's CR — the exact
+  text approved (REVIEW-09) and the pinned head re-read (REVIEW-11) — rather than
+  as a self-review side effect.
 
 ### FEEDBACK — Resolve feedback
 
