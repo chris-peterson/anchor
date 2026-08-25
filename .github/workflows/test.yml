@@ -121,8 +121,8 @@ jobs:
         run: bash tests/config-defaults.test.sh
 
   review:
-    # Exercises the review dispatcher and its moor/revdiff adapters against stub
-    # backends, asserting the normalized DIFF contract each emits.
+    # Exercises the review dispatcher and its revdiff/editor adapters against
+    # stub backends, asserting the normalized DIFF contract each emits.
     runs-on: ubuntu-latest
     defaults:
       run:

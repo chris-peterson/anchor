@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Functional test for the review dispatcher (scripts/review-diff.sh) and its
-# backend adapters (scripts/review/{moor,revdiff}.sh).
+# revdiff adapter (scripts/review/revdiff.sh).
 #
-# Drives the real dispatcher against stub backends: a stub `moor` (files mode)
-# and a fake git difftool (range mode) that write a fixture sidecar, and a stub
-# `revdiff` that writes fixture markdown and exits with a chosen code. Asserts
-# the normalized DIFF contract each adapter emits. Requires jq.
+# Drives the real dispatcher against a stub revdiff launcher that writes fixture
+# markdown and exits with a chosen code. Asserts the normalized DIFF contract
+# the adapter emits, plus the dispatcher's own range, header, staging, and
+# backend-resolution behavior. Requires jq.
 set -euo pipefail
 
 # Hermetic: ignore the user's global/system git config so backend selection is
@@ -30,37 +30,22 @@ mkdir -p "$bin"
 # --- stub launch-revdiff.sh: the adapter delegates terminal launching to the
 # revdiff plugin's launcher (annotations on stdout, exit 0/10/other). This stub
 # stands in via ANCHOR_REVDIFF_LAUNCHER: prints $REVDIFF_STUB_OUTPUT, exits
-# $REVDIFF_STUB_RC, records its args to $REVDIFF_ARGS_FILE.
+# $REVDIFF_STUB_RC, records its args to $REVDIFF_ARGS_FILE, and copies the
+# seeded header (--description-file, which the adapter deletes on return) to
+# $REVDIFF_DESC_CAPTURE.
 cat > "$bin/stub-launch-revdiff.sh" <<'EOF'
 #!/usr/bin/env bash
 [ -n "${REVDIFF_ARGS_FILE:-}" ] && printf '%s\n' "$@" > "$REVDIFF_ARGS_FILE"
+if [ -n "${REVDIFF_DESC_CAPTURE:-}" ]; then
+  for a in "$@"; do
+    case "$a" in --description-file=*) cp "${a#*=}" "$REVDIFF_DESC_CAPTURE" ;; esac
+  done
+fi
 printf '%s' "${REVDIFF_STUB_OUTPUT:-}"
 exit "${REVDIFF_STUB_RC:-0}"
 EOF
 chmod +x "$bin/stub-launch-revdiff.sh"
 export ANCHOR_REVDIFF_LAUNCHER="$bin/stub-launch-revdiff.sh"
-
-# --- fake git difftool: captures the adapter's input sidecar (for asserting the
-# seeded header), then copies $MOOR_FIXTURE into the sidecar named by REVIEW_CONTEXT
-cat > "$bin/fake-difftool.sh" <<'EOF'
-#!/usr/bin/env bash
-[ -n "${MOOR_INPUT_CAPTURE:-}" ] && [ -n "${REVIEW_CONTEXT:-}" ] && cp "$REVIEW_CONTEXT" "$MOOR_INPUT_CAPTURE" 2>/dev/null
-if [ -n "${MOOR_FIXTURE:-}" ] && [ -n "${REVIEW_CONTEXT:-}" ]; then
-  cat "$MOOR_FIXTURE" > "$REVIEW_CONTEXT"
-fi
-exit 0
-EOF
-chmod +x "$bin/fake-difftool.sh"
-
-# --- stub moor (files mode): writes $MOOR_FIXTURE into the --context sidecar
-cat > "$bin/moor" <<'EOF'
-#!/usr/bin/env bash
-ctx=""
-while [ $# -gt 0 ]; do case "$1" in --context) ctx="$2"; shift 2;; *) shift;; esac; done
-[ -n "${MOOR_FIXTURE:-}" ] && [ -n "$ctx" ] && cat "$MOOR_FIXTURE" > "$ctx"
-exit 0
-EOF
-chmod +x "$bin/moor"
 
 # --- stub revdiff: never executed (the adapter drives the launcher), but the
 # resolver looks the tool up on PATH, so the suite has to carry one to test
@@ -77,90 +62,12 @@ git init --quiet -b main "$repo"
 git -C "$repo" config user.email "t@example.com"
 git -C "$repo" config user.name "T"
 git -C "$repo" config commit.gpgsign false
-git -C "$repo" config diff.tool faketool
-git -C "$repo" config difftool.faketool.cmd "$bin/fake-difftool.sh"
 printf 'one\n' > "$repo/a.txt"; git -C "$repo" add -A; git -C "$repo" commit --quiet -m first
 printf 'one\ntwo\n' > "$repo/a.txt"; git -C "$repo" add -A; git -C "$repo" commit --quiet -m second
 
 run() { ( cd "$repo" && bash "$dispatch" "$@" ); }
 verdict_of() { sed -n 's/^REVIEW_VERDICT=//p' <<<"$1"; }
 json_of()    { sed -n 's/^REVIEW_OUTPUT=//p' <<<"$1"; }
-
-# Write a moor sidecar fixture and point MOOR_FIXTURE at it, which is what both
-# stubs above read. Exporting inside the helper keeps the call sites a bare
-# `mkfix '<json>'` rather than an `export VAR="$(mkfix ...)"` that masks its
-# return value (SC2155).
-mkfix() { printf '%s' "$1" > "$work/fixture.json"; MOOR_FIXTURE="$work/fixture.json"; export MOOR_FIXTURE; }
-
-# ============================ moor adapter ================================
-# (exercised through files mode via the stub moor)
-git -C "$repo" config anchor.reviewBackend moor
-
-# approved + complete
-mkfix '{"output":{"exitCode":0,"reviewer":"Rev","comments":[]}}'
-o=$(run --files "$repo/a.txt" "$repo/a.txt")
-[ "$(verdict_of "$o")" = approved ] || fail "moor exit0 -> $(verdict_of "$o"), want approved"
-j=$(json_of "$o")
-[ "$(jq -r .backend <<<"$j")" = moor ]              || fail "moor backend"
-[ "$(jq -r .reviewCompleteness <<<"$j")" = complete ] || fail "moor exit0 completeness"
-[ "$(jq -r 'has("severitySource")' <<<"$j")" = false ] || fail "moor still emits severitySource"
-[ "$(jq -r '.capabilities | has("gradedSeverity")' <<<"$j")" = false ] || fail "moor still emits caps.gradedSeverity"
-ok "moor: exit 0 -> approved, complete, ungraded"
-
-# changes-requested with a mapped line comment. The fixture carries a stray
-# `action` the way an older moor would; the mapping drops it (moor IM.OUT-02a).
-mkfix '{"output":{"exitCode":1,"reviewer":"Rev","comments":[{"body":"fix this","action":"fix-now","file":"a.txt","startLine":2,"endLine":2}]}}'
-o=$(run --files "$repo/a.txt" "$repo/a.txt"); j=$(json_of "$o")
-[ "$(verdict_of "$o")" = changes-requested ] || fail "moor exit1 verdict"
-[ "$(jq -r '.comments[0] | has("action")' <<<"$j")" = false ] || fail "moor comment still carries action"
-[ "$(jq -r '.comments[0].target' <<<"$j")" = line ]    || fail "moor comment target=line"
-[ "$(jq -r '.comments[0].startLine' <<<"$j")" = 2 ]    || fail "moor comment startLine"
-[ "$(jq -r '.comments[0].side' <<<"$j")" = new ]       || fail "moor comment side=new"
-ok "moor: exit 1 -> changes-requested + line comment mapped"
-
-# incomplete + partial
-mkfix '{"output":{"exitCode":2,"reviewer":"Rev","comments":[]}}'
-o=$(run --files "$repo/a.txt" "$repo/a.txt"); j=$(json_of "$o")
-[ "$(verdict_of "$o")" = incomplete ] || fail "moor exit2 verdict"
-[ "$(jq -r .reviewCompleteness <<<"$j")" = partial ] || fail "moor exit2 completeness=partial"
-ok "moor: exit 2 -> incomplete, partial"
-
-# edited commit message -> editedFields
-mkfix '{"output":{"exitCode":0,"reviewer":"Rev","comments":[],"commitMessage":{"original":"old subj","edited":"new subj"}}}'
-o=$(run --files "$repo/a.txt" "$repo/a.txt"); j=$(json_of "$o")
-[ "$(jq -r '.editedFields[0].target' <<<"$j")" = commit-message ] || fail "moor editedFields target"
-[ "$(jq -r '.editedFields[0].edited' <<<"$j")" = "new subj" ]      || fail "moor editedFields edited"
-ok "moor: edited commit message -> editedFields[commit-message]"
-
-# range mode through the fake difftool (backend=moor when the sidecar has output)
-mkfix '{"output":{"exitCode":0,"reviewer":"Rev","comments":[]}}'
-o=$(run --previous); j=$(json_of "$o")
-[ "$(verdict_of "$o")" = approved ]     || fail "moor range verdict"
-[ "$(jq -r .backend <<<"$j")" = moor ]  || fail "moor range backend"
-ok "moor: range mode (difftool with sidecar output) -> approved"
-
-# --message-file seeds the drafted commit message into the review input header
-printf 'wip line\n' >> "$repo/a.txt"
-msg="$work/msg.txt"; printf 'Add a feature\n\nThe body explains why.\n' > "$msg"
-mkfix '{"output":{"exitCode":0,"reviewer":"Rev","comments":[]}}'
-export MOOR_INPUT_CAPTURE="$work/input.json"
-o=$(run --local --message-file "$msg")
-[ "$(verdict_of "$o")" = approved ] || fail "message-file review verdict"
-[ "$(jq -r '.input.title' "$MOOR_INPUT_CAPTURE")" = "Add a feature" ] \
-  || fail "subject not seeded as title: $(jq -c .input.title "$MOOR_INPUT_CAPTURE")"
-[ "$(jq -r '.input.details[] | select(.label=="body") | .value' "$MOOR_INPUT_CAPTURE")" = "The body explains why." ] \
-  || fail "body not seeded as a body row"
-unset MOOR_INPUT_CAPTURE
-ok "moor: --message-file seeds subject as title and body as a body row"
-
-# difftool fallback: sidecar left with no output section -> no-verdict/difftool
-unset MOOR_FIXTURE
-o=$(run --previous); j=$(json_of "$o")
-[ "$(verdict_of "$o")" = no-verdict ]        || fail "fallback verdict"
-[ "$(jq -r .backend <<<"$j")" = difftool ]   || fail "fallback backend=difftool"
-[ "$(jq -r .capabilities.producesVerdict <<<"$j")" = false ] || fail "fallback producesVerdict=false"
-[ "$(jq -r .raw.exitCode <<<"$j")" = absent ] || fail "fallback raw.exitCode=absent"
-ok "moor: no sidecar output -> no-verdict, backend=difftool"
 
 # ============================ revdiff adapter =============================
 git -C "$repo" config anchor.reviewBackend revdiff
@@ -232,6 +139,21 @@ grep -qx 'HEAD'   "$REVDIFF_ARGS_FILE" || fail "revdiff args missing against HEA
 unset REVDIFF_ARGS_FILE
 ok "revdiff: --previous translated to base/against refs"
 
+# --message-file seeds the drafted commit message into the review header, so the
+# message is reviewed beside the diff it describes rather than in a chat gate
+printf 'wip line\n' >> "$repo/a.txt"
+msg="$work/msg.txt"; printf 'Add a feature\n\nThe body explains why.\n' > "$msg"
+export REVDIFF_DESC_CAPTURE="$work/desc.md"
+export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
+o=$(run --local --message-file "$msg")
+[ "$(verdict_of "$o")" = approved ] || fail "message-file review verdict"
+[ "$(head -1 "$REVDIFF_DESC_CAPTURE")" = "# Add a feature" ] \
+  || fail "subject not seeded as the header title: $(head -1 "$REVDIFF_DESC_CAPTURE")"
+grep -qx -- '- \*\*body:\*\* The body explains why.' "$REVDIFF_DESC_CAPTURE" \
+  || fail "body not seeded as a body row: $(cat "$REVDIFF_DESC_CAPTURE")"
+unset REVDIFF_DESC_CAPTURE
+ok "--message-file seeds subject as the title and body as a body row"
+
 # ============================ backend selection ==========================
 git -C "$repo" config --unset anchor.reviewBackend
 export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
@@ -246,10 +168,7 @@ git -C "$repo" config --unset anchor.reviewBackend
 
 # ================== backend resolution against installed tools ============
 # The resolver only considers tools that are there, so these run under a PATH
-# built for the case: a system PATH carries neither viewer, and `only` carries
-# moor alone.
-only="$work/only"; mkdir -p "$only"
-printf '#!/usr/bin/env bash\nexit 0\n' > "$only/moor"; chmod +x "$only/moor"
+# built for the case: a system PATH carries no viewer, and $bin carries revdiff.
 system_path="/usr/bin:/bin"
 
 pb() { ( cd "$repo" && PATH="$1" bash "$dispatch" --print-backend ); }
@@ -258,23 +177,26 @@ o=$(pb "$bin:$PATH")
 grep -qx 'REVIEW_BACKEND=revdiff' <<<"$o" || fail "revdiff installed -> want revdiff, got: $o"
 ok "backend: prefers revdiff when its tool is installed"
 
-o=$(pb "$only:$system_path")
-grep -qx 'REVIEW_BACKEND=moor' <<<"$o" || fail "revdiff absent -> want moor, got: $o"
+git -C "$repo" config anchor.reviewBackend definitely-not-installed
+o=$(pb "$bin:$PATH")
+grep -qx 'REVIEW_BACKEND=revdiff' <<<"$o" \
+  || fail "absent preferred tool -> want the installed viewer, got: $o"
+grep -qx 'REVIEW_BACKEND_CONFIGURED=definitely-not-installed' <<<"$o" \
+  || fail "substitution should name what config asked for, got: $o"
+git -C "$repo" config --unset anchor.reviewBackend
 ok "backend: substitutes an installed viewer when the preferred tool is absent"
 
 # With nothing to stand in, the probe still names what was asked for — the
-# degradation below is the run's business, not a claim that moor is installed.
+# degradation below is the run's business, not a claim that revdiff is installed.
 o=$(pb "$system_path")
 grep -qx 'REVIEW_BACKEND=revdiff' <<<"$o"     || fail "no viewer -> want the configured name, got: $o"
 grep -qx 'REVIEW_BACKEND_AVAILABLE=0' <<<"$o" || fail "no viewer -> want AVAILABLE=0, got: $o"
 ok "backend: with nothing installed the probe reports the preference, unavailable"
 
 # The run keeps the configured adapter, whose report names the tool that is
-# missing. It does not slide into git's difftool: `diff.tool` is set here, so
-# the only thing stopping that is the rule, and a difftool review would report
-# `difftool` / no-verdict having shown a diff nobody can grade — the rung the
-# skill's fallback ladder replaced.
-unset MOOR_FIXTURE
+# missing. There is nothing below it to degrade into: git's difftool is not a
+# backend (DIFF-18), because a diff nobody can grade invites "you saw it,
+# approve?" — the rung the skill's fallback ladder replaced.
 o=$( cd "$repo" && PATH="$system_path" bash "$dispatch" --previous )
 [ "$(jq -r .backend <<<"$(json_of "$o")")" = revdiff ] \
   || fail "no viewer -> want the configured adapter, got: $(json_of "$o")"
@@ -313,14 +235,14 @@ git -C "$other" config user.name "T"
 git -C "$other" config commit.gpgsign false
 printf 'untouched\n' > "$other/b.txt"; git -C "$other" add -A; git -C "$other" commit --quiet -m only
 
-git -C "$repo" config anchor.reviewBackend moor
-mkfix '{"output":{"exitCode":0,"reviewer":"Rev","comments":[]}}'
-export MOOR_INPUT_CAPTURE="$work/input.json"
+git -C "$repo" config anchor.reviewBackend revdiff
+export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
+export REVDIFF_DESC_CAPTURE="$work/desc.md"
 o=$( cd "$other" && bash "$dispatch" --previous --repo "$repo" )
 [ "$(verdict_of "$o")" = approved ] || fail "trailing --repo -> $(verdict_of "$o"), want approved"
-[ "$(jq -r '.input.details[] | select(.label=="repo") | .value' "$MOOR_INPUT_CAPTURE")" = repo ] \
-  || fail "trailing --repo reviewed the wrong checkout: $(jq -c '.input.details' "$MOOR_INPUT_CAPTURE")"
-unset MOOR_INPUT_CAPTURE
+grep -qx -- '- \*\*repo:\*\* repo' "$REVDIFF_DESC_CAPTURE" \
+  || fail "trailing --repo reviewed the wrong checkout: $(cat "$REVDIFF_DESC_CAPTURE")"
+unset REVDIFF_DESC_CAPTURE
 ok "context: --repo after the mode retargets the review (TARGET-10)"
 
 # a value that looks like a context flag stays a value

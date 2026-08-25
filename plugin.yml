@@ -27,9 +27,6 @@ suite:
       reason: preferred diff-review backend
       # revdiff documents itself off the hub, so its link can't be derived.
       url: https://revdiff.com
-    - name: moor
-      required: false
-      reason: alternate diff-review backend (anchor.reviewBackend=moor)
     - name: tack
       required: false
       reason: resolves a named target repo; records CRs and releases against a route

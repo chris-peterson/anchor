@@ -21,7 +21,7 @@ flowchart TD
 ## In action
 
 Tests pass, and `/anchor:commit` does the rest — staging, a why-first message,
-and a code review in moor where a rejected change comes back as a concrete
+and a code review where a rejected change comes back as a concrete
 edit, not a vague "looks off":
 
 <div class="cw-session" data-cw-session="session"></div>
@@ -88,10 +88,6 @@ and is skipped when absent.
   confirms the message itself. Because revdiff is a TUI, `anchor` opens it
   through the revdiff plugin's terminal-overlay launcher, so that plugin has to
   be installed too.
-- **[moor](https://github.com/chris-peterson/moor)** — the alternate backend,
-  selected with `git config anchor.reviewBackend moor`: a keyboard-driven diff
-  viewer whose `REVIEW_CONTEXT` sidecar contract (the review-feedback channel) is
-  defined in [moor's `SPEC.md`](https://github.com/chris-peterson/moor/blob/main/SPEC.md).
 - **[tack](https://github.com/chris-peterson/tack)** — the work tracker. Naming a
   repo you aren't sitting in (`/anchor:commit payments-api`) resolves through
   tack's repo database, and when a tack route is bound to the session, `merge`

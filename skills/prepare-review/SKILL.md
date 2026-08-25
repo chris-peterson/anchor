@@ -51,7 +51,7 @@ flowchart TD
 
 ## Execute quietly — do the thinking, don't show it
 
-Follow the execute-quietly discipline: `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. It bites hardest here because **the reviewer reviews A → B — the net change from base to final state — not the path you took to get there.** The session's pivots, dead ends, and intermediate iterations are development *process*, not the change under review; narrating that process — to the user, or into the description — is this skill's recurring failure. Step 1's recon and Step 4's diff/moor review each fold into one call precisely so there is nothing to narrate between them: run the call, read the result, move on.
+Follow the execute-quietly discipline: `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. It bites hardest here because **the reviewer reviews A → B — the net change from base to final state — not the path you took to get there.** The session's pivots, dead ends, and intermediate iterations are development *process*, not the change under review; narrating that process — to the user, or into the description — is this skill's recurring failure. Step 1's recon and Step 4's review each fold into one call precisely so there is nothing to narrate between them: run the call, read the result, move on.
 
 **The entire visible output of a run is:**
 
@@ -372,14 +372,14 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --bac
 
 `CURRENT_DESC_PATH` is the left-hand side. On a freshly-opened draft its `--fill` baseline is the commit body, so the review reads as mostly additions — that's expected, and still the right comparison: it shows the reviewer what they're getting *instead of* what the forge already has.
 
-**Don't announce the launch.** The backend puts the diff on screen itself — a terminal overlay (revdiff) or its own window (moor) — so the user can see it. A line saying the review is open, and what's in it, describes what the tool is already showing. The next thing you say is the verdict, the feedback echoed back, or the one-line write result.
+**Don't announce the launch.** The backend puts the diff on screen itself — a terminal overlay, on revdiff — so the user can see it. A line saying the review is open, and what's in it, describes what the tool is already showing. The next thing you say is the verdict, the feedback echoed back, or the one-line write result.
 
 When the background command completes, read its stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trips the command-substitution gate. The last lines carry `REVIEW_VERDICT` (`approved` / `changes-requested` / `incomplete` / `no-verdict`) and `REVIEW_OUTPUT` (compact JSON — the DIFF contract in `SPEC.md`). **Don't read silence as success** — only `approved` is approval:
 
 - **`approved`** — write the draft to the CR (see "Write it" below). The reviewer read the description and signed off; a second chat gate asking the same question is the ceremony this step exists to remove. Surface any comments an approving review still left, after the write. If the result carries `editedFields` with `target: "description"` (the `editor` backend, where the saved buffer *is* the description), **that text is what you write** — adopt it verbatim rather than re-drafting from it, and don't re-present it for approval; the user just typed it.
 - **`changes-requested`** — each entry in `REVIEW_OUTPUT.comments` is `{body, target, file?, startLine?, endLine?, side?}`, where `body` is the inline feedback. Comments are ungraded, so fold in every one, then re-open the review on the revised draft. Echo the comments back first (the review-feedback table in `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`) so the user knows they landed.
 - **`incomplete`** — the reviewer closed with changes unreviewed: a partial pass, not approval. Ask what they want to change, then re-review.
-- **`no-verdict`** — the review **did not complete**. `backend: "difftool"` (or `capabilities.producesVerdict: false`) means a difftool with no contract showed the description; otherwise the backend closed early or errored (see `raw.exitCode`). Either way the user *may* have seen it and definitely didn't grade it: report what happened, then take the fallback ladder below. Don't silently retry — the same failure recurs.
+- **`no-verdict`** — the review **did not complete**. `capabilities.producesVerdict: false` means the backend graded nothing; otherwise it closed early or errored (see `raw.exitCode`). Either way the user *may* have seen it and definitely didn't grade it: report what happened, then take the fallback ladder below. Don't silently retry — the same failure recurs.
 - **No verdict line at all** — stdout empty, only stderr text, or no parseable `REVIEW_VERDICT`: the dispatcher exited before reporting (bad argument, missing `jq`, a backend that died). Treat it as `no-verdict` — say what the output did show, and take the fallback ladder below. Nothing is written to the CR on an unverified result.
 
 ### When the review didn't grade it (or there's no CR yet)

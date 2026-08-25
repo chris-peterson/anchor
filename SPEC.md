@@ -42,10 +42,9 @@ behavior, not an independent authority — review them against the source.
   decisive for the whole release path. Defined under RELEASE.
 - **Worktree isolation** — running a write flow that targets a non-cwd repo in a
   dedicated git worktree, set up and torn down around the flow.
-- **tack** / **moor** / **revdiff** — sibling plugins `anchor` integrates with when
-  present (repo resolution and route bookkeeping; visual diff review; an
-  alternate terminal-native review backend). Each is optional, and the flow that
-  uses it falls back when absent.
+- **tack** / **revdiff** — sibling plugins `anchor` integrates with when present
+  (repo resolution and route bookkeeping; terminal-native visual diff review).
+  Each is optional, and the flow that uses it falls back when absent.
 
 ## Requirements
 
@@ -541,11 +540,7 @@ this" nullability from SARIF's `notApplicable`.
 
 ```
 {
-  // the selectable backends, then the value emitted when a difftool that does
-  // not speak the contract showed the diff (DIFF-10) — a report of what
-  // happened, not a choice, which is why it is last rather than ranked among
-  // them. No backend selects it: DIFF-18 keeps the difftool off the menu.
-  backend:            "revdiff" | "moor" | "editor" | "difftool",
+  backend:            "revdiff" | "editor",
   verdict:            "approved" | "changes-requested" | "incomplete" | "no-verdict",
   reviewCompleteness: "complete" | "partial" | null,   // null = backend cannot say
   reviewer:           string | null,
@@ -571,12 +566,12 @@ this" nullability from SARIF's `notApplicable`.
 
 **Verdict mapping:**
 
-| `verdict` | moor | revdiff | editor | meaning |
-|---|---|---|---|---|
-| `approved` | exit 0 | exit 0 | saved, changed or not | clean — proceed |
-| `changes-requested` | exit 1 | exit 10 | — | blocking feedback to address |
-| `incomplete` | exit 2 | — | — | not every hunk was reviewed (moor-only) |
-| `no-verdict` | exit 3 / absent | exit 1 | buffer emptied, or a non-zero exit | no usable verdict — the cause (closed early, tool error, an aborted edit, or a difftool that does not speak the contract) is read from `raw.exitCode` and `capabilities.producesVerdict` |
+| `verdict` | revdiff | editor | meaning |
+|---|---|---|---|
+| `approved` | exit 0 | saved, changed or not | clean — proceed |
+| `changes-requested` | exit 10 | — | blocking feedback to address |
+| `incomplete` | — | — | not every hunk was reviewed; for a backend that tracks per-hunk review (`capabilities.perHunkReview`) |
+| `no-verdict` | exit 1 | buffer emptied, or a non-zero exit | no usable verdict — the cause (closed early, tool error, or an aborted edit) is read from `raw.exitCode` and `capabilities.producesVerdict` |
 
 The `editor` backend has no `changes-requested` row because it returns text, not
 comments: an editor's whole answer is the revised artifact, which is why the
@@ -608,12 +603,6 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   consumer a second, disagreeing answer.
 - **[DIFF-09]** The system shall carry each comment's backend-verbatim text in
   `raw` so feedback the normalization cannot represent is not lost.
-- **[DIFF-10]** If a launch reaches a difftool that does not speak the contract —
-  moor's adapter drives `git difftool` to reach moor, so an absent moor, or one
-  that is not git's configured `diff.tool`, leaves a plain difftool on screen —
-  then the system shall emit `backend` `difftool`, `capabilities.producesVerdict`
-  false, and verdict `no-verdict`, and hand the flow to the fallback ladder
-  (DIFF-20) rather than asking whether the shown diff is approved.
 - **[DIFF-11]** The system shall resolve the backend against the tools that are
   installed: where the preferred backend's tool is absent, it shall substitute an
   installed diff viewer, and where none is installed it shall keep the configured
@@ -659,8 +648,7 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   review ends exactly where an absent viewer's would — except the user has now
   read something, which makes "you saw it, approve?" the natural next question
   and a rubber stamp the likely answer. Every route below a real viewer is the
-  fallback ladder (DIFF-20); where a difftool nonetheless reaches the screen as
-  another backend's transport, DIFF-10 governs the result.
+  fallback ladder (DIFF-20).
 - **[DIFF-19]** Where a git-range review's subject is not the local `HEAD`, the
   system shall accept a caller-supplied title and detail rows and use them in
   place of the computed header, so a range fetched from another author's change

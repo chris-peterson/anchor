@@ -63,12 +63,11 @@ printf 'one\n' > "$repo/a.txt"; git -C "$repo" add -A; git -C "$repo" commit --q
 printf 'one\ntwo\n' > "$repo/a.txt"; git -C "$repo" add -A; git -C "$repo" commit --quiet -m second
 
 # Hermetic in PATH as well as in git config. Backend resolution settles the
-# configured name against what is installed, so a developer machine with moor
-# on PATH (every session has the plugin's own bin/ there) would substitute it
-# for the revdiff these cases configure — and the assertions would read the
-# host's installed set rather than the key resolution they are about. A stub
-# revdiff ahead of everything makes the configured backend present, which is
-# the state the substitution rule leaves alone. It sits in its own dir, not
+# configured name against what is installed, so without a fixed PATH the
+# assertions would read the host's installed set rather than the key resolution
+# they are about. A stub revdiff ahead of everything makes the configured
+# backend present, which is the state the substitution rule leaves alone. It
+# sits in its own dir, not
 # $bin: the probe cases below run against $bin precisely to assert what happens
 # when no viewer is installed.
 viewerbin="$work/viewerbin"; mkdir -p "$viewerbin"
@@ -243,19 +242,19 @@ o=$(probe --skill commit --print-backend)
 ok "probe: with no diff viewer installed at all, the probe reports unavailable"
 
 # With one installed, the probe coalesces onto it and names what config wanted.
-cat > "$bin/moor" <<'EOF'
+cat > "$bin/revdiff" <<'EOF'
 #!/usr/bin/env bash
 exit 0
 EOF
-chmod +x "$bin/moor"
+chmod +x "$bin/revdiff"
 o=$(probe --skill commit --print-backend)
-[ "$(key_of REVIEW_BACKEND "$o")" = moor ]                                  || fail "probe should coalesce onto the installed tool"
+[ "$(key_of REVIEW_BACKEND "$o")" = revdiff ]                               || fail "probe should coalesce onto the installed tool"
 [ "$(key_of REVIEW_BACKEND_AVAILABLE "$o")" = 1 ]                           || fail "a coalesced backend is available"
 [ "$(key_of REVIEW_BACKEND_CONFIGURED "$o")" = definitely-not-installed ]   || fail "the substitution should name what config asked for"
 ok "probe: coalesces onto an installed tool and names the configured one"
 
 # ...but never onto the editor: it edits one artifact rather than showing a diff.
-rm -f "$bin/moor"
+rm -f "$bin/revdiff"
 git -C "$repo" config --unset anchor.reviewBackend
 o=$(probe --skill commit --print-backend)
 [ "$(key_of REVIEW_BACKEND "$o")" != editor ] || fail "editor should never be substituted automatically"

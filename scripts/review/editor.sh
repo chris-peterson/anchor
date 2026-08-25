@@ -11,11 +11,11 @@
 #   message_file         the drafted commit message (range mode, --message-file)
 #   review_skill         the invoking skill, when the caller passed --skill
 #
-# The other backends ask the reviewer to *comment* on a draft and anchor rewrites
-# from the comments. This one is the other shape of that step: it opens the draft
-# in the user's editor, and whatever they save IS the artifact. So the contract's
-# comments array is always empty here, and the text comes back as editedFields —
-# the same channel moor uses for a message edited in-tool.
+# The diff-viewer backends ask the reviewer to *comment* on a draft and anchor
+# rewrites from the comments. This one is the other shape of that step: it opens
+# the draft in the user's editor, and whatever they save IS the artifact. So the
+# contract's comments array is always empty here, and the text comes back as
+# editedFields.
 #
 # The buffer is git's own commit-message shape: the artifact on top, a scissors
 # line, and the change under review below it. Everything below the scissors is
@@ -187,7 +187,7 @@ emit_review() {
     printf 'Everything below this line is ignored. Save to accept the text above;\n'
     printf 'empty it to abort, and nothing this review gates will happen.\n\n'
     printf '%s\n' "$review_title"
-    # The seeded message rides in the details as a `body` row for moor's header;
+    # The seeded message rides in the details as a `body` row for a viewer's header;
     # here the message is the editable region itself, so the row would be a
     # second copy the user could edit to no effect.
     jq -r '.[] | select(.label != "body") | "  \(.label): \(.value)"' <<<"$review_details_json"

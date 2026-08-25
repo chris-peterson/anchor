@@ -53,7 +53,7 @@ flowchart TD
         Choose --> Out
         Out -->|Write| Forge(["Create / update issue"])
         Out -->|Copy| CopyOnly(["Print for paste"])
-        Out -->|Edit| Revise["Revise (moor or chat)"] --> Draft
+        Out -->|Edit| Revise["Revise (review backend or chat)"] --> Draft
     end
 ```
 
@@ -221,7 +221,7 @@ After the issue lands, print its URL.
 
 ### Edit
 
-A visual review is the preferred edit surface but **optional** — it runs when a review backend ([moor](https://github.com/chris-peterson/moor) by default, or revdiff) is available. When one is, open a one-off review of the current body vs. the draft (when updating) or the draft alone, launched via the dispatcher as a **background** Bash call so it doesn't hold the turn open:
+A visual review is the preferred edit surface but **optional** — it runs when a review backend ([revdiff](https://revdiff.com) by default, or `editor`) is available. When one is, open a one-off review of the current body vs. the draft (when updating) or the draft alone, launched via the dispatcher as a **background** Bash call so it doesn't hold the turn open:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill issue --files \
@@ -232,7 +232,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill issue --files \
 
 `--skill issue` selects this skill's backend (`anchor.issue.reviewBackend` over `anchor.reviewBackend`); `--print-backend` reports which one that is, and whether it's available, without opening anything.
 
-Don't announce the launch — the backend puts the draft on screen itself, in a terminal overlay (revdiff) or its own window (moor), so a line saying the review is open describes what the user can already see; the next thing you say is the verdict.
+Don't announce the launch — the backend puts the draft on screen itself, in a terminal overlay on revdiff, so a line saying the review is open describes what the user can already see; the next thing you say is the verdict.
 
 Read the verdict back with the **BashOutput tool** (not `tail` / `$(...)`). Only `REVIEW_VERDICT` `approved` is approval; an `approved` result carrying `editedFields` with `target: "issue-body"` (the `editor` backend, where the saved buffer *is* the body) means file that text verbatim rather than re-drafting from it; `changes-requested` carries comments in `REVIEW_OUTPUT.comments` to fold in before re-presenting — ungraded, so every one of them; `incomplete` / `no-verdict` mean the review didn't complete — surface what happened and take the fallback ladder rather than treating silence as approval. A result that carries **no parseable `REVIEW_VERDICT` at all** (empty stdout, stderr only — the dispatcher exited before reporting) is the same case: report what the output showed and verify with the user; nothing is filed on an unverified result. (The full verdict contract matches the `prepare-review` skill's Step 4.)
 

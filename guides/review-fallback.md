@@ -21,12 +21,9 @@ converts a tooling failure into an approval, which is the one outcome the
 verdict contract exists to prevent. Ask about the **content**, never about the
 window.
 
-This is why a difftool is not a rung, and no longer a backend either (DIFF-18).
-It can put a diff on screen, but it speaks no contract, so its review ends here
-regardless — one screen later, with the user primed to say yes. One can still
-reach the screen as moor's transport, when moor is absent or isn't git's
-`diff.tool`; that arrives as `backend: "difftool"` and belongs on this ladder
-like any other ungraded result.
+This is why a difftool is not a rung, and not a backend either (DIFF-18). It can
+put a diff on screen, but it speaks no contract, so its review ends here
+regardless — one screen later, with the user primed to say yes.
 
 ## Rung 1 — hand over the artifact
 
@@ -96,7 +93,7 @@ that is worth saying once, without nagging. When the ladder was reached because
 nothing is installed, close with the one-time cost rather than only the
 degradation:
 
-> No diff viewer installed — reviewing in chat. `revdiff` or `moor` would give
-> you inline comments and a real verdict.
+> No diff viewer installed — reviewing in chat. `revdiff` would give you inline
+> comments and a real verdict.
 
 Once per flow, at the end, and never in place of doing the rung.

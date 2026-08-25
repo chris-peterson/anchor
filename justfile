@@ -56,7 +56,7 @@ test-pipeline:
 test-config-defaults:
     bash tests/config-defaults.test.sh
 
-# test.yml: review — the review dispatcher and its moor/revdiff adapters
+# test.yml: review — the review dispatcher and its revdiff/editor adapters
 test-review:
     bash tests/review-diff.test.sh
     bash tests/review-editor.test.sh

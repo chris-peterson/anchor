@@ -36,7 +36,7 @@ skills/<name>/SKILL.md    one skill per lifecycle step; the prompt is the implem
 rules/                    ambient rules injected into every session by hooks/emit-rules.sh
 scripts/                  the deterministic helpers the skills shell out to
 scripts/lib/              sourced-only helpers (context resolution, portable temp paths)
-scripts/review/           per-backend review adapters (moor, revdiff)
+scripts/review/           per-backend review adapters (revdiff, editor)
 guides/                   reference the skills and rules read at runtime
 templates/                the output shapes the skills produce, read at runtime
 tests/                    bash suites, one per script under test

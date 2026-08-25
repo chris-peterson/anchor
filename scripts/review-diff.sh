@@ -49,7 +49,7 @@
 set -euo pipefail
 
 # Context flags, accepted anywhere in the argv:
-#   --repo / --worktree <path>  retargets the git range / difftool onto a
+#   --repo / --worktree <path>  retargets the git range / review onto a
 #     checkout other than the cwd repo (see scripts/lib/resolve-context.sh). The
 #     --files mode takes absolute paths, so this is only meaningful for the
 #     git-range modes.
@@ -122,11 +122,11 @@ resolve_backend() {
 }
 
 # The editor backend opens whatever editor git resolves, so it has no binary of
-# its own to look for; the others are named after theirs.
+# its own to look for; revdiff is named after its.
 #
 # This stays a PATH question for the run path on purpose. An editor backend that
 # cannot reach an editor still belongs to the editor adapter, whose `no-verdict`
-# names the missing piece — degrading it to a difftool would answer the diff
+# names the missing piece — degrading it to a diff viewer would answer the diff
 # question when the caller asked the artifact one. The probe below asks the
 # sharper `anchor_editor_available` instead, since it is deciding what to offer.
 backend_installed() {
@@ -142,11 +142,9 @@ backend_installed() {
 # standing in for an absent revdiff would answer a different question than the
 # caller asked.
 installed_backend() {
-  local configured="$1" candidate
+  local configured="$1"
   if backend_installed "$configured"; then printf '%s' "$configured"; return; fi
-  for candidate in revdiff moor; do
-    if backend_installed "$candidate"; then printf '%s' "$candidate"; return; fi
-  done
+  if backend_installed revdiff; then printf '%s' revdiff; return; fi
   printf '%s' "$configured"
 }
 
@@ -318,9 +316,9 @@ else
     stat=$(git diff --cached --stat HEAD | tail -1 | sed 's/^[[:space:]]*//')
     base=$(git log -1 --format='%h %s' HEAD)
     if [[ -n "$message_file" ]]; then
-      # Seed the drafted message: subject is the headline (moor's title), the
-      # body row is the message prose moor renders and seeds its editable
-      # message from (IM.IN-02 / CO-10), so message + diff are reviewed together.
+      # Seed the drafted message: subject is the review's headline, the body row
+      # is the message prose the backend renders, so message + diff are reviewed
+      # together.
       review_title=$(head -1 "$message_file")
       msg_body=$(tail -n +3 "$message_file")
       review_details_json=$(jq -n \
@@ -372,16 +370,16 @@ fi
 backend=$(resolve_backend)
 adapter="$(dirname "${BASH_SOURCE[0]}")/review/${backend}.sh"
 if [[ ! -r "$adapter" ]]; then
-  echo "review-diff.sh: unknown review backend '$backend' (no adapter at $adapter). Set anchor.reviewBackend to editor, moor, or revdiff." >&2
+  echo "review-diff.sh: unknown review backend '$backend' (no adapter at $adapter). Set anchor.reviewBackend to editor or revdiff." >&2
   exit 64
 fi
 backend=$(installed_backend "$backend")
 # A machine with no viewer installed keeps the configured adapter, whose report
 # names the tool that is missing. There is nothing below it to degrade into —
-# git's difftool was retired as a backend (DIFF-18) because a changeset shown
-# without a verdict invites "you saw it, approve?", which is the rubber stamp the
-# contract exists to prevent. The skill's fallback ladder
-# (guides/review-fallback.md) is the rung below.
+# git's difftool is not a backend (DIFF-18) because a changeset shown without a
+# verdict invites "you saw it, approve?", which is the rubber stamp the contract
+# exists to prevent. The skill's fallback ladder (guides/review-fallback.md) is
+# the rung below.
 adapter="$(dirname "${BASH_SOURCE[0]}")/review/${backend}.sh"
 
 # An empty range has nothing to show, and a viewer opened on nothing is quit the

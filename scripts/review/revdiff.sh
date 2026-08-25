@@ -9,10 +9,10 @@
 #   review_title         the header title
 #   review_details_json  the header details, a JSON array of {label,value}
 #
-# revdiff is a terminal TUI, so — unlike moor's GUI window — it needs a terminal
-# to render, and anchor launches review from a background Bash call with no
-# controlling TTY. Launching `revdiff` directly there fails ("could not open a
-# new TTY"). So this adapter delegates terminal launching to the revdiff plugin's
+# revdiff is a terminal TUI, so it needs a terminal to render, and anchor
+# launches review from a background Bash call with no controlling TTY. Launching
+# `revdiff` directly there fails ("could not open a new TTY"). So this adapter
+# delegates terminal launching to the revdiff plugin's
 # launch-revdiff.sh, which opens revdiff in a terminal overlay (tmux/zellij/
 # kitty/iTerm2/…), captures the annotations to stdout, and exits with revdiff's
 # code (0 none / 10 annotations / other failure). anchor keeps range resolution

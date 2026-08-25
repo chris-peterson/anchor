@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Removed
+
+- The `moor` review backend. `anchor.reviewBackend=moor` now fails as an unknown backend — set `revdiff` or `editor`, or unset the key for the `revdiff` default. A commit message edited inside the review tool goes with it; the `editor` backend still returns one. Nothing produces the `incomplete` verdict any more, since per-hunk review tracking was moor's.
+- The `difftool` result shape (`backend: "difftool"`, DIFF-10). It existed because moor's adapter reached moor through `git difftool`, so a plain difftool left on screen had to be reported as shown-but-ungraded; no backend reaches a difftool now.
+
 ## 1.7.0
 
 ### Added

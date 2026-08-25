@@ -57,7 +57,7 @@ behind them.
 ## Exception: echo back feedback from a review tool
 
 The one input you *do* surface verbatim is feedback that reached you through a
-review/diff tool's side channel — moor's sidecar verdict, or any equivalent.
+review/diff tool's side channel — revdiff's annotations, or any equivalent.
 The user typed those comments outside the chat and has no confirmation you
 received them, so close the loop before acting: echo the comments back in a
 table under a **Review feedback** heading, then say what you're about to do
