@@ -211,13 +211,18 @@ key_of() { sed -n "s/^$1=//p" <<<"$2"; }
 # test controls rather than whatever the developer happens to have. `git` is all
 # the probe itself needs, so the system dirs are enough alongside the stubs.
 #
-# `GIT_EDITOR=true` pins the other half. The editor axis is reported from what a
-# launch would actually reach, so without pinning it these cases would read the
-# developer's own EDITOR and whether they ran the suite from a terminal. A no-op
-# GIT_EDITOR is the case DIFF-16 already discounts, which makes it the
-# deterministic "no editor here" — the cases wanting the other answer set
-# ANCHOR_EDITOR_LAUNCHER, which stands in for the config.
-probe() { ( cd "$repo" && PATH="$bin:/usr/bin:/bin" GIT_EDITOR=true bash "$dispatch" "$@" ); }
+# The editor axis is pinned to "nothing to open", so these cases don't read the
+# developer's own EDITOR or whether they ran the suite from a terminal. A no-op
+# GIT_EDITOR is not enough on its own — the chain continues past git's own rungs
+# (DIFF-16), so on a stock machine it still lands on a compiled default. What is
+# deterministic on every platform is the *host* half: with no tmux, no iTerm2,
+# and stdin off a terminal, a resolved editor has nowhere to render, which is
+# what DIFF-17 reports as unavailable. The cases wanting the other answer set
+# ANCHOR_EDITOR_LAUNCHER, which stands in for both halves.
+probe() {
+  ( cd "$repo" && PATH="$bin:/usr/bin:/bin" GIT_EDITOR=true TMUX='' TERM_PROGRAM='' \
+      bash "$dispatch" "$@" </dev/null )
+}
 
 git -C "$repo" config anchor.reviewBackend editor
 git -C "$repo" config --unset anchor.commit.reviewBackend
@@ -225,7 +230,7 @@ o=$(probe --skill commit --print-backend)
 [ "$(key_of REVIEW_BACKEND "$o")" = editor ]        || fail "--print-backend name"
 [ "$(key_of REVIEW_BACKEND_AVAILABLE "$o")" = 0 ]   || fail "a selected editor backend with no editor to open is not available"
 [ "$(key_of REVIEW_EDITOR_AVAILABLE "$o")" = 0 ]    || fail "no editor resolves, so the editor rung is not offerable"
-ok "probe: a selected editor backend reports unavailable when no editor resolves"
+ok "probe: a selected editor backend reports unavailable with nowhere to open one"
 
 # The editor axis is reported on every probe, not only when editor is selected:
 # it is what a skill offers as the rung below a viewer that is missing or died.
@@ -277,5 +282,78 @@ rm -f "$EDITOR_BUFFER_CAPTURE"
 probe --skill commit --print-backend >/dev/null
 [ ! -f "$EDITOR_BUFFER_CAPTURE" ] || fail "--print-backend should launch nothing"
 ok "probe: --print-backend launches nothing"
+unset EDITOR_BUFFER_CAPTURE
+
+# ====================== per-skill defaults (CONFIG-15) =====================
+# With nothing configured, the default follows what the review is about.
+git -C "$repo" config --unset anchor.reviewBackend
+git -C "$repo" config --unset anchor.commit.reviewBackend
+cat > "$bin/revdiff" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod +x "$bin/revdiff"
+
+for skill in prepare-review issue release; do
+  o=$( cd "$repo" && PATH="$bin:/usr/bin:/bin" ANCHOR_EDITOR_LAUNCHER="$bin/stub-editor.sh" \
+       bash "$dispatch" --skill "$skill" --print-backend )
+  [ "$(key_of REVIEW_BACKEND "$o")" = editor ] || fail "$skill reviews one drafted document, so it should default to the editor"
+done
+ok "default: a drafted-document skill opens the editor with nothing configured"
+
+for skill in commit review; do
+  o=$(probe --skill "$skill" --print-backend)
+  [ "$(key_of REVIEW_BACKEND "$o")" = revdiff ] || fail "$skill reviews a changeset, so it should default to the viewer"
+done
+ok "default: a changeset skill opens the diff viewer with nothing configured"
+
+# A *defaulted* editor with nowhere to open gives way to an installed viewer, and
+# the probe names what it stepped aside from: nobody asked for the editor, and
+# dead-ending the flow in a host problem is worse than showing the diff (DIFF-11).
+o=$(probe --skill prepare-review --print-backend)
+[ "$(key_of REVIEW_BACKEND "$o")" = revdiff ]           || fail "an unreachable defaulted editor should give way to an installed viewer"
+[ "$(key_of REVIEW_BACKEND_AVAILABLE "$o")" = 1 ]       || fail "the viewer that stood in is available"
+[ "$(key_of REVIEW_BACKEND_CONFIGURED "$o")" = editor ] || fail "the substitution should name the editor it replaced"
+ok "default: an unreachable defaulted editor gives way to an installed viewer"
+
+# A *configured* one is kept and reports the missing piece itself.
+git -C "$repo" config anchor.prepare-review.reviewBackend editor
+o=$(probe --skill prepare-review --print-backend)
+[ "$(key_of REVIEW_BACKEND "$o")" = editor ]      || fail "a configured editor should be kept, not swapped for a viewer"
+[ "$(key_of REVIEW_BACKEND_AVAILABLE "$o")" = 0 ] || fail "kept, and reported unavailable"
+git -C "$repo" config --unset anchor.prepare-review.reviewBackend
+ok "default: a configured editor is kept even with nowhere to open it"
+
+# ====================== the resolution chain (DIFF-16) =====================
+# Asserted on the lib directly: the rungs past git's own are anchor's, and a
+# launch would only show which one won.
+cat > "$bin/resolve-editor.sh" <<EOF
+#!/usr/bin/env bash
+source "$here/../scripts/lib/review-editor.sh"
+printf '%s' "\$(anchor_editor_resolve)"
+EOF
+chmod +x "$bin/resolve-editor.sh"
+
+codebin="$work/codebin"
+mkdir -p "$codebin"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$codebin/code"
+chmod +x "$codebin/code"
+
+resolve() { ( cd "$repo" && PATH="$1:/usr/bin:/bin" GIT_EDITOR=true bash "$bin/resolve-editor.sh" ); }
+
+r=$(resolve "$codebin")
+[ "$r" = "code --wait" ] || fail "a blocking VS Code on PATH should be reached, got '$r'"
+ok "resolve: past git's chain, a blocking VS Code on PATH"
+
+r=$(resolve "$work/empty-bin")
+[ -n "$r" ] || fail "git's own compiled default should still resolve"
+case "$r" in true|:|*/true) fail "a no-op compiled default should be discounted" ;; esac
+ok "resolve: and below that, git's own compiled default"
+
+git -C "$repo" config core.editor "my-editor --wait"
+r=$(resolve "$codebin")
+[ "$r" = "my-editor --wait" ] || fail "core.editor should win over both new rungs, got '$r'"
+git -C "$repo" config --unset core.editor
+ok "resolve: a configured editor wins over both"
 
 echo "# all checks passed"

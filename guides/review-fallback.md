@@ -42,17 +42,20 @@ honest way to read it.
 rung is a real review, not a consolation: the dispatcher opens the artifact in
 the user's own editor with the change under review below a scissors line, and
 whatever they save comes back through the contract as `editedFields`, adopted
-verbatim (DIFF-13).
+verbatim (DIFF-13). For the skills that already default to it, this rung is
+where they started, so a `no-verdict` from the editor lands on rung 2 instead of
+being offered the same tool twice.
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill <skill> --backend editor …
 ```
 
-`REVIEW_EDITOR_AVAILABLE=0` means a launch would reach no editor — either none
-resolves (`core.editor`, `VISUAL`, `EDITOR`, with a no-op `GIT_EDITOR`
-discounted per DIFF-16) or there is nowhere to put one. Don't offer it, and
-don't launch it to find out; say what would fix it if the user asks —
-`git config --global core.editor '<your editor>'`.
+`REVIEW_EDITOR_AVAILABLE=0` means a launch would reach no editor — nothing
+resolves along the chain (`core.editor`, `VISUAL`, `EDITOR`, a blocking VS Code
+on `PATH`, git's compiled default, with a no-op `GIT_EDITOR` discounted per
+DIFF-16), or there is nowhere to put one. Don't offer it, and don't launch it to
+find out; say what would fix it if the user asks — `git config --global
+core.editor '<your editor>'`.
 
 ## Rung 2 — walk it in chat
 

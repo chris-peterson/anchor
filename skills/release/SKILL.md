@@ -217,10 +217,20 @@ they differ in where the notes end up.
 ### `release-triggered` and `tag-triggered` — the notes are the published body
 
 The workflow owns the bump; the notes never enter a commit, so they get the review
-gate themselves. Open them against `RELEASE_NOTES_BASELINE` (the empty left-hand
-side the recon block created) through the **dispatcher** — not the backend
-directly. The viewer blocks until closed, so launch it as a **background** Bash
-call and read its stdout with the **BashOutput tool**; `tail` / `$(...)` trips the
+gate themselves.
+
+The notes are one drafted document, so this skill defaults to the `editor`
+backend: they open in the user's editor and whatever they save *is* the notes. A
+configured viewer, or an editor with nowhere to open, gets the diff viewer
+instead — where the baseline is empty, so it reads as all additions. Ask
+`--print-backend` which one it will be, and say so in one line when it reports
+`REVIEW_BACKEND_CONFIGURED` — the run opening something other than what the
+preference named.
+
+Then open the notes against `RELEASE_NOTES_BASELINE` (the empty left-hand side
+the recon block created) through the **dispatcher** — not the backend directly.
+It blocks until closed, so launch it as a **background** Bash call and read its
+stdout with the **BashOutput tool**; `tail` / `$(...)` trips the
 command-substitution gate:
 
 ```bash
@@ -230,13 +240,13 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill release --files \
   --detail version=<NEW_VERSION> --detail range=<RELEASE_RANGE>
 ```
 
-It reads as all additions — expected; the notes are new. Map `REVIEW_VERDICT` as
-the other skills do: only `approved` proceeds — and where it carries `editedFields`
-with `target: "release-notes"` (the `editor` backend, whose saved buffer *is* the
-notes), publish that text verbatim rather than re-drafting from it;
-`changes-requested` means fold in
-every comment (they're ungraded) and re-open; `incomplete` and `no-verdict` mean the reviewer
-didn't grade it. A result with **no parseable `REVIEW_VERDICT`** (empty stdout,
+Map `REVIEW_VERDICT` as the other skills do: only `approved` proceeds — and where
+it carries `editedFields` with `target: "release-notes"`, the saved buffer *is*
+the notes, so publish that text verbatim rather than re-drafting from it;
+`changes-requested` means fold in every comment (they're ungraded) and re-open
+against the previous draft — copied aside to a sibling path with `.prev` before
+the extension — so the second pass shows what the feedback changed; `incomplete`
+and `no-verdict` mean the reviewer didn't grade it. A result with **no parseable `REVIEW_VERDICT`** (empty stdout,
 stderr only — the dispatcher exited before reporting) reads the same way, and so
 does a probe reporting nothing installed.
 

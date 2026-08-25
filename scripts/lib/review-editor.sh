@@ -14,21 +14,51 @@
 # consumer that offers the editor route on the first half alone dead-ends the
 # user in a `no-verdict` naming a host problem they were never warned about.
 
-# Resolve the editor the way git does — core.editor, then VISUAL, then EDITOR,
-# then git's own default. `git var GIT_EDITOR` answers that in one call, but it
-# reads the GIT_EDITOR environment variable first, and an agent harness commonly
-# exports `GIT_EDITOR=true` to keep git from ever opening one. Honoring that here
-# would open nothing, change nothing, and read as "saved unchanged" — an
-# approval the user never gave. So a no-op editor is treated as unset (DIFF-16).
-anchor_editor_resolve() {
-  local ed
-  ed=$(git var GIT_EDITOR 2>/dev/null || true)
-  case "$ed" in
-    true|:|*/true) ed="" ;;
+# A no-op editor is treated as unset (DIFF-16): an agent harness commonly exports
+# `GIT_EDITOR=true` to keep git from ever opening one, and honoring that would
+# open nothing, change nothing, and read as "saved unchanged" — an approval the
+# user never gave. Applied to every rung below, since git's compiled default can
+# be a no-op too on a purpose-built image.
+anchor_editor_usable() {
+  case "${1:-}" in
+    ""|true|:|*/true) return 1 ;;
   esac
-  [[ -n "$ed" ]] || ed=$(git config --get core.editor 2>/dev/null || true)
-  [[ -n "$ed" ]] || ed="${VISUAL:-}"
-  [[ -n "$ed" ]] || ed="${EDITOR:-}"
+}
+
+# The blocking GUI editors anchor reaches for when nothing is configured, most
+# preferred first, each with the flag that makes it block — which is also what
+# `anchor_editor_host` reads to pick the `gui` host. Kept to the editors that
+# take `--wait`; anything else is a `core.editor` away (DIFF-16).
+anchor_editor_candidates=(code code-insiders)
+
+# Resolve the editor git would use — GIT_EDITOR, core.editor, VISUAL, EDITOR —
+# and then two rungs of anchor's own, because git's chain runs out while this
+# backend still has somewhere to go. `git var GIT_EDITOR` answers git's half in
+# one call, but it reads the environment variable first, so the rungs are walked
+# by hand here to keep the scrub above in front of each one.
+#
+# Past the user's configuration come a blocking VS Code and git's compiled
+# default, in that order. `code --wait` renders through the `gui` host, which
+# needs no terminal at all, where `vi` needs one some host puts up — so the
+# reachable one goes first. Both sit below every configured value, which is what
+# keeps naming an editor a decision rather than a hint.
+anchor_editor_resolve() {
+  local ed candidate
+  ed=$(git var GIT_EDITOR 2>/dev/null || true)
+  anchor_editor_usable "$ed" || ed=$(git config --get core.editor 2>/dev/null || true)
+  anchor_editor_usable "$ed" || ed="${VISUAL:-}"
+  anchor_editor_usable "$ed" || ed="${EDITOR:-}"
+  if ! anchor_editor_usable "$ed"; then
+    ed=""
+    for candidate in "${anchor_editor_candidates[@]}"; do
+      if command -v "$candidate" >/dev/null 2>&1; then ed="$candidate --wait"; break; fi
+    done
+  fi
+  # git's compiled default — what a plain `git commit` opens here. `git var`
+  # reports it only with GIT_EDITOR out of the environment entirely; an empty
+  # value is honored as an empty editor rather than falling through.
+  anchor_editor_usable "$ed" || ed=$( (unset GIT_EDITOR; git var GIT_EDITOR) 2>/dev/null || true)
+  anchor_editor_usable "$ed" || ed=""
   printf '%s' "$ed"
 }
 

@@ -2,9 +2,15 @@
 
 ## Unreleased
 
+### Changed
+
+- Review backends now default per skill. `/anchor:prepare-review`, `/anchor:issue`, and `/anchor:release` review one drafted document, so they open it in your editor and take whatever you save as the artifact; `/anchor:commit` and `/anchor:review` review a changeset and keep `revdiff`. Set `anchor.reviewBackend`, or `anchor.<skill>.reviewBackend`, to name one tool for everything as before.
+- The editor a review opens resolves past git's own chain: with no `core.editor`, `VISUAL`, or `EDITOR` set, `anchor` reaches for a blocking VS Code on your `PATH` (`code --wait`) and then git's compiled default. A session exporting `GIT_EDITOR=true` — the common agent-harness shape — no longer means no editor at all.
+- A review re-opened after `changes-requested` compares against the draft you graded, not the description the forge holds, so the second pass shows what your feedback changed.
+
 ### Removed
 
-- The `moor` review backend. `anchor.reviewBackend=moor` now fails as an unknown backend — set `revdiff` or `editor`, or unset the key for the `revdiff` default. A commit message edited inside the review tool goes with it; the `editor` backend still returns one. Nothing produces the `incomplete` verdict any more, since per-hunk review tracking was moor's.
+- The `moor` review backend. `anchor.reviewBackend=moor` now fails as an unknown backend — set `revdiff` or `editor`, or unset the key for the per-skill default. A commit message edited inside the review tool goes with it; the `editor` backend still returns one. Nothing produces the `incomplete` verdict any more, since per-hunk review tracking was moor's.
 - The `difftool` result shape (`backend: "difftool"`, DIFF-10). It existed because moor's adapter reached moor through `git difftool`, so a plain difftool left on screen had to be reported as shown-but-ungraded; no backend reaches a difftool now.
 
 ## 1.7.0

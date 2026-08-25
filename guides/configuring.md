@@ -28,8 +28,8 @@ The four verbosity dials are listed in lifecycle order, and they descend:
 
 | Key | Default | What that gets you |
 |---|---|---|
-| `anchor.reviewBackend` | `revdiff` | The terminal-native reviewer opens the diff; `editor` opens the drafted text in your editor instead. The value is a preference among installed tools: with the named one absent, an installed viewer stands in, and with none installed the review is walked with you in chat. |
-| `anchor.<skill>.reviewBackend` | the umbrella key | A skill reviews in the backend above until you give that skill its own. |
+| `anchor.reviewBackend` | per skill | Unset, each skill picks the shape its artifact wants: `editor` for the ones reviewing a single drafted document (`prepare-review`, `issue`, `release`), `revdiff` for the ones reviewing a changeset (`commit`, `review`). Setting it names one tool for all of them. |
+| `anchor.<skill>.reviewBackend` | the umbrella key, else the skill's own default | A skill reviews in the backend above until you give that skill its own. |
 | `anchor.reviewBudgetMins` | `10` | Descriptions are written for ten minutes of focused review — enough for the change and the topics around it. |
 | `anchor.issueVerbosity` | `75` | Issue bodies run long: the people who pick the work up need the context in the issue. |
 | `anchor.commitVerbosity` | `50` | Commit bodies run to the why plus the context the diff doesn't show. |
@@ -55,7 +55,7 @@ each row.
 | Key | Example | Effect |
 |---|---|---|
 | `anchor.workTrackerBaseUri` | `git config anchor.workTrackerBaseUri https://app.clickup.com/t/` | The base URL of your work tracker. When you mention a ticket, `commit` adds a `Refs:` trailer and `prepare-review` links it in the CR. See [Work-tracker references](#work-tracker-references). |
-| `anchor.reviewBackend` | `git config anchor.reviewBackend editor` | Which review tool the skills launch: `revdiff` or `editor`. Both return a normalized review verdict, which is the whole point of the key — git's own difftool is deliberately not on the list, because a changeset shown without a verdict ends in "you saw it, approve?", and that is a rubber stamp rather than a review. `revdiff` is a terminal-native reviewer that also handles hg/jj repos; it needs the revdiff plugin installed — `anchor` delegates to its terminal-overlay launcher to open the TUI. `editor` is the other shape of the step: instead of commenting on the draft, you edit it. How the chosen tool renders the diff is its own knob, not an `anchor.*` key: see [Review-backend config](#review-backend-config) (per backend: [`revdiff`](#review-backend-config-revdiff), [`editor`](#review-backend-config-editor)). |
+| `anchor.reviewBackend` | `git config anchor.reviewBackend revdiff` | Which review tool the skills launch, overriding the per-skill defaults in [A backend per artifact](#a-backend-per-artifact): `revdiff` or `editor`. Both return a normalized review verdict, which is the whole point of the key — git's own difftool is deliberately not on the list, because a changeset shown without a verdict ends in "you saw it, approve?", and that is a rubber stamp rather than a review. `revdiff` is a terminal-native reviewer that also handles hg/jj repos; it needs the revdiff plugin installed — `anchor` delegates to its terminal-overlay launcher to open the TUI. `editor` is the other shape of the step: instead of commenting on the draft, you edit it. How the chosen tool renders the diff is its own knob, not an `anchor.*` key: see [Review-backend config](#review-backend-config) (per backend: [`revdiff`](#review-backend-config-revdiff), [`editor`](#review-backend-config-editor)). |
 | `anchor.<skill>.reviewBackend` | `git config anchor.commit.reviewBackend editor` | The same choice for one skill, overriding the umbrella key above. See [A backend per artifact](#a-backend-per-artifact). |
 | `anchor.reviewBudgetMins` | `git config anchor.reviewBudgetMins 10` | How many minutes of focused attention you expect this CR to get. It's an *input*, not a length cap: a tight budget (≈5) makes `prepare-review` lead with the essentials and cut asides hard; a generous one (≈30) keeps more supporting context and depth. It steers *what to include*, not the tone — a tight budget is no license for punchy or marketing framing. For *how long* the result runs, see `crVerbosity` below and [Length knobs](#length-knobs). |
 | `anchor.issueVerbosity` | `git config anchor.issueVerbosity 100` | Where an issue body sits between brevity and thoroughness. It sits highest of the four because the audience is the people who'll do the work, and what reads as detail to anyone else saves them a conversation. Below `100` the prose tightens in order — callouts, then the approach's explanation down to its load-bearing decisions, then Context's second paragraph. **Acceptance criteria are never abbreviated**: they say what done means, so they're the issue's floor the way the deep links are the CR's. |
@@ -191,15 +191,41 @@ can miss the one `anchor` opens. See
 
 #### Review-backend config: `editor`
 
-The `editor` backend uses whatever editor git uses, so the knob is git's own:
+The `editor` backend opens the editor git would open, so the knob is git's own:
 
 ```bash
 git config core.editor "code --wait"   # or set VISUAL / EDITOR
 ```
 
+`anchor` walks these in order and takes the first that names something:
+
+| # | Source | Notes |
+|--:|---|---|
+| 1 | `GIT_EDITOR` | Ignored when it is a no-op (`true`, `:`) — the way an agent harness keeps git from opening editors. Honoring it would open nothing, change nothing, and read as approval. |
+| 2 | `git config core.editor` | The one to set if you want this decided per repo or globally. |
+| 3 | `VISUAL`, then `EDITOR` | Where git looks next. Claude Code exposes no editor setting of its own, and its transcript viewer documents these two, so one value can steer both it and `anchor`. |
+| 4 | A blocking VS Code on `PATH` | `code --wait`, then `code-insiders --wait`. `anchor`'s own preference, not git's. |
+| 5 | git's compiled default | Whatever a plain `git commit` opens here, usually `vi`. |
+
+Rungs 4 and 5 are where `anchor` goes past git: git's chain ends at 5, and a
+session that exports `GIT_EDITOR=true` with nothing else set would otherwise
+have no editor at all on a machine where `git commit` opens one. VS Code sits
+above `vi` because it renders in its own window, where a terminal editor needs a
+terminal `anchor` has to find (see below).
+
+To change it, set rung 2 or 3 — both override everything under them:
+
+```bash
+git config --global core.editor "vim"           # every repo
+git config core.editor "code --wait"            # this repo only
+export VISUAL="code --wait"                     # this shell, and Ctrl+G with it
+```
+
 A GUI editor has to **block** — `--wait` on VS Code, `-w` on Sublime and
 TextMate. Without it the editor returns the instant it opens and `anchor` reads
-an untouched draft as one you approved.
+an untouched draft as one you approved. That's also why rung 4 stays narrow to
+the VS Code family: `--wait` is the flag it knows blocks, so any other editor is
+a `core.editor` away rather than a guess.
 
 A *terminal* editor needs a terminal, and the session `anchor` runs in has none,
 so it opens one: a tmux popup inside tmux, an iTerm2 window on macOS. Anywhere
@@ -207,19 +233,20 @@ else, point `ANCHOR_EDITOR_LAUNCHER` at a script that takes the file path and
 opens your editor on it, blocking until it closes. `ANCHOR_EDITOR_TIMEOUT`
 (default 1800s) bounds how long `anchor` waits on a window that never closes.
 
-`anchor` deliberately ignores a `GIT_EDITOR` set to `true` — the way an agent
-harness keeps git from opening editors. Honoring it would open nothing, change
-nothing, and read as approval.
-
 ### A backend per artifact
 
-Which shape suits an artifact varies. A commit message is a natural editor
-artifact — you usually know the sentence you want. A CR description whose deep
-links want checking against the diff reads better in a diff viewer. So the
-backend resolves per skill, the umbrella key setting the default:
+Which shape suits an artifact varies, so each skill has its own default —
+decided by whether its review has a changeset in it.
+
+| Skill | Default | Why |
+|---|---|---|
+| `commit`, `review` | `revdiff` | The subject is a changeset, and per-hunk annotation is what a diff viewer is for. |
+| `prepare-review`, `issue`, `release` | `editor` | The subject is one drafted document. Its two sides are text against text, so a diff viewer marks every line as added and asks you to comment your way to a rewrite; the editor hands you the document and takes back what you saved. |
+
+Either way you can name the other one:
 
 ```bash
-git config anchor.reviewBackend revdiff        # diffs in the TUI
+git config anchor.reviewBackend revdiff        # every artifact in the TUI
 git config anchor.commit.reviewBackend editor  # commit messages in $EDITOR
 ```
 
@@ -247,12 +274,14 @@ vim's `:cq`) and the flow halts with nothing committed, filed, or published.
 Unlike `git commit`, lines beginning with `#` are kept: three of the four
 artifacts are markdown, where `#` is a heading.
 
-**When the tool you named isn't installed.** `anchor` asks which backend a review
-can actually open before it opens one, and considers only installed tools — so a
-`revdiff` you haven't installed yet gets you the diff viewer you *do* have, named
-in one line rather than discovered as a surprise window. `editor` is never
-substituted in: it edits one drafted artifact rather than showing a changeset, so
-standing in for an absent diff viewer would answer a different question.
+**When the tool isn't there.** `anchor` asks which backend a review can actually
+open before it opens one — so a `revdiff` you haven't installed yet gets you the
+diff viewer you *do* have, named in one line rather than discovered as a surprise
+window. What substitutes is a *default*: a defaulted `editor` with nowhere to
+open gives way to an installed viewer, since nobody asked for it. A backend you
+named in the config is kept whether or not it can open, and reports what's
+missing — handing you a diff viewer when you asked for the editor would answer a
+question you didn't ask.
 
 An editor carries one artifact, so it has nothing to show for a review that is a
 diff on its own — `/anchor:commit`'s push-existing path, where there are

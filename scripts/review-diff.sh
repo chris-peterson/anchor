@@ -7,10 +7,12 @@
 #   REVIEW_OUTPUT=<normalized json>   (the DIFF contract; see SPEC.md "DIFF")
 #
 # The backend is `anchor.<skill>.reviewBackend` when the caller passed --skill,
-# else `anchor.reviewBackend` (default `revdiff`); each adapter lives in
-# scripts/review/<backend>.sh and defines emit_review, mapping the tool's native
-# output onto the normalized result. Range/header resolution is backend-agnostic
-# and stays here.
+# else `anchor.reviewBackend`, else the per-skill default in
+# `skill_default_backend` — `editor` for the skills whose review is one drafted
+# document, `revdiff` for the ones whose subject is a changeset. Each adapter
+# lives in scripts/review/<backend>.sh and defines emit_review, mapping the
+# tool's native output onto the normalized result. Range/header resolution is
+# backend-agnostic and stays here.
 #
 # Three review modes, each named for what it shows:
 #   --local      local changes — working tree vs the last commit (stages the
@@ -110,47 +112,87 @@ done
 set -- "${rest[@]+"${rest[@]}"}"
 ctx_resolve_repo
 
-# Which shape suits an artifact varies — a commit message is a natural editor
-# artifact, a CR description whose deep links want checking against the diff
-# reads better in a diff viewer — so the key resolves per skill first, the way
-# anchor.<skill>.watchPipelineAfterPush does.
+# Which shape suits an artifact varies, so the default is per skill (CONFIG-15).
+# A review whose subject is a changeset gets the diff viewer — that is what
+# per-hunk annotation is for. A review whose subject is one drafted document
+# gets the editor: its `--files` pair is text against text, so the diff viewer
+# marks every line as added and asks the reviewer to comment their way to a
+# rewrite, where the editor hands them the document and takes back what they
+# saved.
+skill_default_backend() {
+  case "${1:-}" in
+    prepare-review|issue|release) printf 'editor' ;;
+    *)                            printf 'revdiff' ;;
+  esac
+}
+
+# resolve_backend's answers, set rather than printed: a `$(...)` call would run
+# the function in a subshell and drop the source along with it. The source is
+# whether the name came from `--backend`, from a config key, or from the per-skill
+# default — substitution reads it, since a preference the user typed is honored
+# even when it cannot open and a default is not.
+resolved_backend=""
+resolved_backend_source=""
+
+# The key resolves per skill first, the way anchor.<skill>.watchPipelineAfterPush
+# does.
 resolve_backend() {
-  local b="$backend_override"
-  [[ -n "$b" || -z "$review_skill" ]] || b=$(git config "anchor.${review_skill}.reviewBackend" 2>/dev/null || true)
-  [[ -n "$b" ]] || b=$(git config anchor.reviewBackend 2>/dev/null || true)
-  printf '%s' "${b:-revdiff}"
+  local b="$backend_override" src=override
+  if [[ -z "$b" ]]; then
+    src=config
+    [[ -z "$review_skill" ]] || b=$(git config "anchor.${review_skill}.reviewBackend" 2>/dev/null || true)
+    [[ -n "$b" ]] || b=$(git config anchor.reviewBackend 2>/dev/null || true)
+  fi
+  if [[ -z "$b" ]]; then
+    src=default
+    b=$(skill_default_backend "$review_skill")
+  fi
+  resolved_backend="$b"
+  resolved_backend_source="$src"
 }
 
 # The editor backend opens whatever editor git resolves, so it has no binary of
 # its own to look for; revdiff is named after its.
 #
-# This stays a PATH question for the run path on purpose. An editor backend that
+# This stays a PATH question on purpose. A *configured* editor backend that
 # cannot reach an editor still belongs to the editor adapter, whose `no-verdict`
 # names the missing piece — degrading it to a diff viewer would answer the diff
-# question when the caller asked the artifact one. The probe below asks the
-# sharper `anchor_editor_available` instead, since it is deciding what to offer.
+# question when the caller asked the artifact one. The sharper
+# `anchor_editor_available` is asked where the decision is what to open or offer:
+# `installed_backend` below, and the `--print-backend` probe.
 backend_installed() {
   [[ "$1" == "editor" ]] || command -v "$1" >/dev/null 2>&1
 }
 
-# The configured backend, or an installed viewer standing in for it. Nothing
-# installed leaves the name as configured — the probe reports that alongside
-# REVIEW_BACKEND_AVAILABLE=0, so a caller still learns what was asked for.
+# The resolved backend, or an installed one standing in for it. Nothing installed
+# leaves the name as resolved — the probe reports that alongside
+# REVIEW_BACKEND_AVAILABLE=0, so a caller still learns what was preferred.
 #
-# Substitution stays among the diff viewers. `editor` is selectable but never
-# automatic: it edits one drafted artifact rather than showing a changeset, so
-# standing in for an absent revdiff would answer a different question than the
-# caller asked.
+# Substitution runs in both directions, and what it turns on is where the name
+# came from rather than which name it is. A *configured* backend is kept whether
+# or not it can open, so its own report names the missing piece: asking for the
+# editor and getting a diff viewer answers a question the user didn't ask. A
+# *defaulted* one is a choice nobody made, so an editor with nowhere to open
+# gives way to an installed viewer rather than dead-ending a flow in a host
+# problem the user was never warned about.
 installed_backend() {
-  local configured="$1"
-  if backend_installed "$configured"; then printf '%s' "$configured"; return; fi
+  local preferred="$1"
+  if [[ "$preferred" == "editor" ]]; then
+    if [[ "$resolved_backend_source" == "default" ]] \
+       && ! anchor_editor_available && backend_installed revdiff; then
+      printf '%s' revdiff; return
+    fi
+    printf '%s' editor; return
+  fi
+  if backend_installed "$preferred"; then printf '%s' "$preferred"; return; fi
   if backend_installed revdiff; then printf '%s' revdiff; return; fi
-  printf '%s' "$configured"
+  printf '%s' "$preferred"
 }
 
 if [[ "$print_backend" == "1" ]]; then
-  configured=$(resolve_backend)
-  backend=$(installed_backend "$configured")
+  resolve_backend
+  preferred="$resolved_backend"
+  backend=$(installed_backend "$preferred")
   editor_available=0
   anchor_editor_available && editor_available=1
   echo "REVIEW_BACKEND=$backend"
@@ -165,7 +207,11 @@ if [[ "$print_backend" == "1" ]]; then
   else
     echo "REVIEW_BACKEND_AVAILABLE=0"
   fi
-  [[ "$backend" == "$configured" ]] || echo "REVIEW_BACKEND_CONFIGURED=$configured"
+  # What the preference named, reported only when the run would use something
+  # else — a config key that named an absent viewer, or a defaulted editor with
+  # nowhere to open. Either way the caller has a name to say out loud, so the
+  # tool that opens isn't discovered as a surprise window.
+  [[ "$backend" == "$preferred" ]] || echo "REVIEW_BACKEND_CONFIGURED=$preferred"
   echo "REVIEW_EDITOR_AVAILABLE=$editor_available"
   exit 0
 fi
@@ -365,9 +411,10 @@ fi
 
 # --- Select the backend and delegate -----------------------------------------
 
-# The configured name is validated before substitution, so a typo in the config
+# The resolved name is validated before substitution, so a typo in the config
 # still fails loudly rather than being silently replaced by an installed viewer.
-backend=$(resolve_backend)
+resolve_backend
+backend="$resolved_backend"
 adapter="$(dirname "${BASH_SOURCE[0]}")/review/${backend}.sh"
 if [[ ! -r "$adapter" ]]; then
   echo "review-diff.sh: unknown review backend '$backend' (no adapter at $adapter). Set anchor.reviewBackend to editor or revdiff." >&2

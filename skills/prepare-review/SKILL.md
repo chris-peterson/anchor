@@ -349,19 +349,21 @@ The description gets pasted into a markdown renderer, so rendering bugs are user
 
 ### Open the review
 
-The description review runs when a review backend is installed. Ask the dispatcher which one — it resolves this skill's key over the umbrella one, and considers only tools that are actually installed, so the name it returns is one you can open:
+The description review runs when a review backend is available. Ask the dispatcher which one — it resolves this skill's key over the umbrella one and then this skill's default, considering only tools it can actually open:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --print-backend
 ```
 
-- `REVIEW_BACKEND_AVAILABLE=0` — nothing usable is installed; skip to the fallback ladder below.
-- `REVIEW_BACKEND_CONFIGURED` present — the configured tool isn't installed and the probe found another. Say which one you're opening in one line, so a `revdiff` that turns out to be missing isn't discovered as a surprise window.
+- `REVIEW_BACKEND=editor` — this skill's default. The description opens in the user's editor and whatever they save *is* the description; the current description rides along below the scissors line as read-only context.
+- `REVIEW_BACKEND=revdiff` (or another viewer) — either the user configured one, or no editor was reachable and an installed viewer stood in. The user comments and you fold the comments in.
+- `REVIEW_BACKEND_AVAILABLE=0` — nothing usable; skip to the fallback ladder below.
+- `REVIEW_BACKEND_CONFIGURED` present — the run is opening something other than what the preference named: a configured tool that isn't installed, or the default editor with nowhere to open it. Say which one you're opening in one line, so it isn't discovered as a surprise window.
 - `REVIEW_EDITOR_AVAILABLE=0|1` — whether the fallback ladder may offer the editor rung. Carry it forward; it costs nothing here and it's the difference between offering a route that works and one that dead-ends.
 
 Pass what it returned to the launch (`--backend <REVIEW_BACKEND>`) so the review opens in the tool the probe found rather than re-resolving the config.
 
-With a backend available, open the current description vs. the draft through the **dispatcher** — not the backend directly; the dispatcher builds the header and prints the normalized result on its stdout. The viewer blocks until closed, so launch as a **background** Bash call (`run_in_background: true`); a foreground call holds the turn open until the Bash timeout:
+With a backend available, open the draft through the **dispatcher** — not the backend directly; the dispatcher builds the header and prints the normalized result on its stdout. The backend blocks until it's closed, so launch as a **background** Bash call (`run_in_background: true`); a foreground call holds the turn open until the Bash timeout:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --backend <REVIEW_BACKEND> --files \
@@ -370,14 +372,15 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --bac
   --detail branch=<BRANCH> --detail CR=<CR_URL>
 ```
 
-`CURRENT_DESC_PATH` is the left-hand side. On a freshly-opened draft its `--fill` baseline is the commit body, so the review reads as mostly additions — that's expected, and still the right comparison: it shows the reviewer what they're getting *instead of* what the forge already has.
+`CURRENT_DESC_PATH` is the left-hand side — what the forge holds now. It's context for the draft, not the subject: on a CR this run opened, the forge's `--fill` baseline is the commit body, so there's little of it to compare against.
 
-**Don't announce the launch.** The backend puts the diff on screen itself — a terminal overlay, on revdiff — so the user can see it. A line saying the review is open, and what's in it, describes what the tool is already showing. The next thing you say is the verdict, the feedback echoed back, or the one-line write result.
+**Don't announce the launch.** The backend puts the artifact on screen itself — an editor window, or a terminal overlay on revdiff — so the user can see it. A line saying the review is open, and what's in it, describes what the tool is already showing. The next thing you say is the verdict, the feedback echoed back, or the one-line write result.
 
 When the background command completes, read its stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trips the command-substitution gate. The last lines carry `REVIEW_VERDICT` (`approved` / `changes-requested` / `incomplete` / `no-verdict`) and `REVIEW_OUTPUT` (compact JSON — the DIFF contract in `SPEC.md`). **Don't read silence as success** — only `approved` is approval:
 
-- **`approved`** — write the draft to the CR (see "Write it" below). The reviewer read the description and signed off; a second chat gate asking the same question is the ceremony this step exists to remove. Surface any comments an approving review still left, after the write. If the result carries `editedFields` with `target: "description"` (the `editor` backend, where the saved buffer *is* the description), **that text is what you write** — adopt it verbatim rather than re-drafting from it, and don't re-present it for approval; the user just typed it.
+- **`approved`** — write the draft to the CR (see "Write it" below). A result carrying `editedFields` with `target: "description"` is the `editor` backend, where the saved buffer *is* the description: **that text is what you write**, verbatim, and it isn't re-presented for approval — the user just typed it. Either way the reviewer read the description and signed off, so a second chat gate asking the same question is the ceremony this step exists to remove. Surface any comments an approving review still left, after the write.
 - **`changes-requested`** — each entry in `REVIEW_OUTPUT.comments` is `{body, target, file?, startLine?, endLine?, side?}`, where `body` is the inline feedback. Comments are ungraded, so fold in every one, then re-open the review on the revised draft. Echo the comments back first (the review-feedback table in `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`) so the user knows they landed.
+  - **The re-open's left-hand side is the previous draft, not `CURRENT_DESC_PATH`.** Copy the draft aside before revising it — to a sibling path with `.prev` before the extension — and pass that as the left. What the second pass has to show is what the feedback changed; the description the forge holds is the comparison the first pass already answered.
 - **`incomplete`** — the reviewer closed with changes unreviewed: a partial pass, not approval. Ask what they want to change, then re-review.
 - **`no-verdict`** — the review **did not complete**. `capabilities.producesVerdict: false` means the backend graded nothing; otherwise it closed early or errored (see `raw.exitCode`). Either way the user *may* have seen it and definitely didn't grade it: report what happened, then take the fallback ladder below. Don't silently retry — the same failure recurs.
 - **No verdict line at all** — stdout empty, only stderr text, or no parseable `REVIEW_VERDICT`: the dispatcher exited before reporting (bad argument, missing `jq`, a backend that died). Treat it as `no-verdict` — say what the output did show, and take the fallback ladder below. Nothing is written to the CR on an unverified result.
