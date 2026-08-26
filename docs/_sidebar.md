@@ -30,4 +30,3 @@
   - [Release models](/guides/release-models)
   - [Staying in changeset scope](/guides/changeset-scope)
   - [Execute quietly](/guides/execute-quietly)
-  - [Worktree isolation](/guides/worktree-isolation)

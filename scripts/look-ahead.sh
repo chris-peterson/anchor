@@ -10,17 +10,15 @@
 # hook rules. Inside a script the analyzer only sees the outer `bash` invocation,
 # so the structural gate doesn't fire.
 #
-# --repo / --worktree <path> retargets onto a checkout other than the cwd repo
+# --repo <path> retargets onto a checkout other than the cwd repo
 # (see scripts/lib/resolve-context.sh), and is accepted anywhere in the argv.
 
 # shellcheck source=lib/resolve-context.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 CTX_REPO=""
-CTX_WORKTREE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
-    --worktree) CTX_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
     *) echo "look-ahead.sh: unknown option: $1" >&2; exit 64 ;;
   esac
 done

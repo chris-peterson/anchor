@@ -29,8 +29,7 @@
 #     pushing here.
 #
 # Output lines (KEY=value, read from stdout):
-#   RESOLVED_VIA=<worktree|repo|cwd>  worktree == ran in a --worktree checkout;
-#                                repo == an explicit --repo checkout;
+#   RESOLVED_VIA=<repo|cwd>      repo == an explicit --repo checkout;
 #                                cwd == inferred from the working directory
 #   FORGE=<github|gitlab|none>
 #   BRANCH=<current branch>
@@ -74,7 +73,7 @@
 #   TEMPLATE_PATH=<path>         the CR template to compose into, empty when the
 #                                hierarchy holds none or the pick needs the author.
 #                                Always absolute — the skill reads it from its own
-#                                cwd, which under --repo/--worktree isn't this one
+#                                cwd, which under --repo isn't this one
 #   TEMPLATE_SOURCE=<local|project-settings|inherited|configured|ambiguous|none>
 #                                which level answered. inherited == a GitLab
 #                                parent group / the instance, or the owner's
@@ -109,17 +108,13 @@
 #                                         # already-pushed branch; NEEDS_PUSH if unpushed
 #   prepare-review.sh --no-open    # never auto-open; no CR -> skip-deep-links path
 #   prepare-review.sh --repo <path>      # operate on a checkout other than the cwd repo
-#   prepare-review.sh --worktree <path>  # operate in a flow-owned isolated worktree
 #   prepare-review.sh --cr <iid|url>     # resolve a specific CR, not the current branch's
 #
-# --repo / --worktree cd into the target checkout so every git/gh/glab call
-# below targets it (see scripts/lib/resolve-context.sh); the emitted RESOLVED_VIA
-# reports whether the run used --worktree, --repo, or fell back to cwd. These are
-# the fix for "target repo != session cwd": for a repo the session didn't start
-# in, the skill sets up an isolated worktree first (scripts/worktree.sh) and
-# passes it here as --worktree; --repo is the operate-directly case. Pair either
-# with a checkout on the CR's branch when the CR you want isn't the current
-# branch, or add --cr.
+# --repo cds into the target checkout so every git/gh/glab call below targets it
+# (see scripts/lib/resolve-context.sh); the emitted RESOLVED_VIA reports whether
+# the run used --repo or fell back to cwd. It is the fix for "target repo !=
+# session cwd". Pair it with a checkout on the CR's branch when the CR you want
+# isn't the current branch, or add --cr.
 
 set -euo pipefail
 
@@ -130,13 +125,11 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/tmpfile.sh"
 
 auto_open=1
 CTX_REPO=""
-CTX_WORKTREE=""
 cr_ref=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-open)  auto_open=0; shift ;;
     --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
-    --worktree) CTX_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
     --cr)       cr_ref="${2:?--cr needs an iid or URL}"; shift 2 ;;
     *) echo "prepare-review.sh: unknown argument: $1" >&2; exit 64 ;;
   esac
@@ -470,9 +463,9 @@ tpl_resolve_from() {
 tpl_unresolved() { [[ "$template_source" == none ]]; }
 
 # Paths go out absolute. The script runs from inside the target checkout, but the
-# skill reading TEMPLATE_PATH does not — under --repo / --worktree its cwd is a
-# different repo entirely, where a repo-relative path resolves to nothing or, worse,
-# to a same-named file.
+# skill reading TEMPLATE_PATH does not — under --repo its cwd is a different repo
+# entirely, where a repo-relative path resolves to nothing or, worse, to a
+# same-named file.
 tpl_local_gitlab() {
   local f
   for f in .gitlab/merge_request_templates/*.md; do

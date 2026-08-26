@@ -59,11 +59,9 @@ set -euo pipefail
 # shellcheck source=lib/resolve-context.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 CTX_REPO=""
-CTX_WORKTREE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
-    --worktree) CTX_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
     *) echo "squash-check.sh: unknown argument: $1" >&2; exit 64 ;;
   esac
 done

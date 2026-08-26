@@ -23,7 +23,7 @@
 #   GitLab  refs/merge-requests/<iid>/head
 #
 # Output lines (KEY=value, read from stdout):
-#   RESOLVED_VIA=<worktree|repo|cwd>  which checkout the run operated in
+#   RESOLVED_VIA=<repo|cwd>      which checkout the run operated in
 #   FORGE=<github|gitlab>        picks the CLI for the rest of the flow
 #   HOST=<host>                  e.g. gitlab.example.com (glab --hostname)
 #   PROJECT=<owner/name>         full project path after the host, any depth
@@ -63,12 +63,10 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/tmpfile.sh"
 
 CTX_REPO=""
-CTX_WORKTREE=""
 cr_ref=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
-    --worktree) CTX_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
     --*) echo "review-cr.sh: unknown argument: $1" >&2; exit 64 ;;
     *)  [[ -n "$cr_ref" ]] && { echo "review-cr.sh: more than one CR reference: $cr_ref, $1" >&2; exit 64; }
         cr_ref="$1"; shift ;;

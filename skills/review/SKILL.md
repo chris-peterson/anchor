@@ -75,8 +75,7 @@ pass `TARGET_LOCAL` as `--repo`; empty `TARGET_LOCAL` → ask where the checkout
 lives; `ambiguous` → prompt with `TARGET_CANDIDATES`; `cwd` → the working
 directory's repo. **With a CR URL**, the URL names the project — if that project
 isn't the cwd repo, resolve its checkout the same way before continuing. This
-skill reads a work tree, so it needs one; it writes no commits, so no worktree
-isolation is required.
+skill reads a work tree, so it needs one.
 
 Then gather everything in one call:
 

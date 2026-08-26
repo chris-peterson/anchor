@@ -30,7 +30,7 @@
 #   pipeline-after-push.sh --skill commit
 #   pipeline-after-push.sh --skill prepare-review --sha <sha> --timeout 600
 #
-# --repo / --worktree <path> retargets onto a checkout other than the cwd repo
+# --repo <path> retargets onto a checkout other than the cwd repo
 # (see scripts/lib/resolve-context.sh); --sha, --branch, --workflow, --interval
 # and --timeout pass through to pipeline-status.sh.
 
@@ -43,13 +43,11 @@ source "$here/lib/resolve-context.sh"
 skill=""
 sha=""
 CTX_REPO=""
-CTX_WORKTREE=""
 passthrough=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --skill)    skill="${2:?--skill needs a name}"; shift 2 ;;
     --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
-    --worktree) CTX_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
     --sha)      sha="${2:?--sha needs a value}"; shift 2 ;;
     --branch|--workflow|--interval|--timeout)
                 passthrough+=("$1" "${2:?$1 needs a value}"); shift 2 ;;
@@ -77,8 +75,8 @@ if [[ "$enabled" == "false" ]]; then
 fi
 
 # The ledger of reported runs lives in the *common* git dir, so every worktree of
-# a repo shares it — a flow that pushes from an isolated worktree and reports
-# from the main checkout is still one report.
+# a repo shares it — a push from one worktree and a report from another is still
+# one report.
 #
 # It holds run ids, not commit shas. A sha is the wrong key: where CI is gated on
 # the CR rather than the push (`on: pull_request`), the push-time watch correctly

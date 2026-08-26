@@ -100,9 +100,19 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 
 If the block carries a `CR_CREATE_ERROR=…` line, the draft-open hit an auth or push failure — surface it and ask the user to refresh credentials; do **not** fall back to the URL-free path (the fail-fast-on-auth rule).
 
-### Operating against a non-cwd repo (worktree isolation)
+### Operating against a non-cwd repo
 
-When the CR lives in a repo other than the session's cwd (you're in repo A, the CR is in repo B), don't drive B off cwd: resolve the target, decide direct-vs-worktree **once up front** with `bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree.sh" setup <path-to-B-checkout>`, thread the resolved `<CHECKOUT>` through every later command (the harness resets cwd between Bash calls), and tear the worktree down when the flow ends. The full procedure — name resolution via `resolve-target.sh`, the `worktree.sh` setup/teardown lifecycle, and the `git -C` / `-R` / `glab api` threading rules — is in `${CLAUDE_PLUGIN_ROOT}/guides/worktree-isolation.md`; consult it whenever B ≠ cwd.
+When the CR lives in a repo other than the session's cwd (you're in repo A, the CR is in repo B), don't drive B off cwd. **With B given as a name** — "open the MR in `customer-svc`" — resolve it with `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh <name>` (see the cookbook's "Resolving a named target repo") and act on `TARGET_VIA`:
+
+- **One match** — use `TARGET_LOCAL` as B's checkout. Opening a CR needs a work tree (there has to be a branch to push), so when `TARGET_LOCAL` is empty, ask where the checkout lives rather than proceeding.
+- **`ambiguous`** — prompt with `TARGET_CANDIDATES`, then use the chosen entry.
+- **`cwd`** — the name matched nothing. **Don't open a CR in the cwd repo when the user named a different one**: say the name didn't resolve and ask for an explicit `--repo <path>`. This flow writes — it opens a CR, describes it, and may rebase and force-push — so a silent fall-back publishes work against a repo nobody named.
+
+**With B given as a path**, that path is the checkout; there's nothing to resolve.
+
+Either way, thread the checkout through every later command — the harness resets cwd between Bash calls, so each one needs it again: `prepare-review.sh --repo <path>`, `git -C <path>`, `-R <owner/name>` on `gh`/`glab` subcommands, and the URL-encoded project for `:fullpath` (plus `--hostname <host>`) on `glab api`, which has no `-R`. The full threading rules are in `${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`.
+
+`--cr <iid|url>` resolves a CR that isn't the checkout's branch — updating an MR while the checkout sits on a WIP branch. The deep-link and diff steps still read the checkout's branch, so point `--repo` at a checkout on the CR's branch when you need those.
 
 When the target is just the session cwd (no non-cwd repo in play), skip all of this — everything below is plain `git` / `gh` / `glab` against the working directory.
 

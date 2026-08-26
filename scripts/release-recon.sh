@@ -47,7 +47,7 @@
 #   RELEASE_NOTES_BASELINE=<path>      an empty file, the left-hand side of the notes
 #                                      review; only for the models that publish the
 #                                      notes as a release body, empty otherwise
-#   RESOLVED_VIA=<worktree|repo|cwd>
+#   RESOLVED_VIA=<repo|cwd>
 #
 # Models, in detection precedence — the first that matches wins:
 #   release-triggered    CI fires on a published release and owns the bump. Publish
@@ -61,7 +61,6 @@
 # Modes:
 #   release-recon.sh                    the cwd repo
 #   release-recon.sh --repo <path>      a checkout other than the cwd repo
-#   release-recon.sh --worktree <path>  a flow-owned isolated worktree
 
 set -euo pipefail
 
@@ -71,11 +70,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/tmpfile.sh"
 
 CTX_REPO=""
-CTX_WORKTREE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
-    --worktree) CTX_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
     *) echo "release-recon.sh: unknown argument: $1" >&2; exit 64 ;;
   esac
 done

@@ -24,7 +24,7 @@
 # keeps every file the amended commit already carried, so a message-only amend can
 # safely pass no paths at all.
 #
-# --repo / --worktree <path> retargets onto a checkout other than the cwd repo
+# --repo <path> retargets onto a checkout other than the cwd repo
 # (see scripts/lib/resolve-context.sh).
 #
 # Usage:
@@ -65,7 +65,6 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/stage-paths.sh"
 
 CTX_REPO=""
-CTX_WORKTREE=""
 mode=""
 message_file=""
 force_with_lease=0
@@ -75,7 +74,6 @@ paths=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)                 CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
-    --worktree)             CTX_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
     --path)                 paths+=("${2:?--path needs a path}"); shift 2 ;;
     --mode)                 mode="${2:?--mode needs a value}"; shift 2 ;;
     --message-file)         message_file="${2:?--message-file needs a path}"; shift 2 ;;

@@ -243,11 +243,11 @@ o=$( cd "$other" && bash "$dispatch" --previous --repo "$repo" )
 grep -qx -- '- \*\*repo:\*\* repo' "$REVDIFF_DESC_CAPTURE" \
   || fail "trailing --repo reviewed the wrong checkout: $(cat "$REVDIFF_DESC_CAPTURE")"
 unset REVDIFF_DESC_CAPTURE
-ok "context: --repo after the mode retargets the review (TARGET-10)"
+ok "context: --repo after the mode retargets the review (TARGET-09)"
 
 # a value that looks like a context flag stays a value
-o=$( cd "$other" && bash "$dispatch" --previous --repo "$repo" --title '--worktree' )
-[ "$(verdict_of "$o")" = approved ] || fail "--title '--worktree' should stay a title value: $o"
+o=$( cd "$other" && bash "$dispatch" --previous --repo "$repo" --title '--repo' )
+[ "$(verdict_of "$o")" = approved ] || fail "--title '--repo' should stay a title value: $o"
 ok "context: a flag-shaped option value is not read as a context flag"
 
 # per-skill backend selection still resolves when --skill trails the mode

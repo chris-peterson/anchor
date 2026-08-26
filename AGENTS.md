@@ -97,5 +97,3 @@ generated file; edit its source and run `just generate`.
   published release or tag push, a bump commit in the repo, or nobody. Resolved
   by `scripts/release-recon.sh`; a wrong read collides with the workflow's own
   commit, which is why it is established before anything is drafted.
-- **Worktree isolation** — running a write flow that targets a non-cwd repo in a
-  dedicated git worktree, set up and torn down around the flow.
