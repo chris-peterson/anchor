@@ -104,9 +104,9 @@ If the block carries a `CR_CREATE_ERROR=…` line, the draft-open hit an auth or
 
 When the CR lives in a repo other than the session's cwd (you're in repo A, the CR is in repo B), don't drive B off cwd. **With B given as a name** — "open the MR in `customer-svc`" — resolve it with `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh <name>` (see the cookbook's "Resolving a named target repo") and act on `TARGET_VIA`:
 
-- **`tack`** — use `TARGET_LOCAL` as B's checkout. Opening a CR needs a work tree (there has to be a branch to push), so when `TARGET_LOCAL` is empty, ask where the checkout lives rather than proceeding.
+- **One match** — use `TARGET_LOCAL` as B's checkout. Opening a CR needs a work tree (there has to be a branch to push), so when `TARGET_LOCAL` is empty, ask where the checkout lives rather than proceeding.
 - **`ambiguous`** — prompt with `TARGET_CANDIDATES`, then use the chosen entry.
-- **`cwd`** — no tack on `PATH`, or the name matched nothing. **Don't open a CR in the cwd repo when the user named a different one**: say the name didn't resolve and ask for an explicit `--repo <path>`. This flow writes — it opens a CR, describes it, and may rebase and force-push — so a silent fall-back publishes work against a repo nobody named.
+- **`cwd`** — the name matched nothing. **Don't open a CR in the cwd repo when the user named a different one**: say the name didn't resolve and ask for an explicit `--repo <path>`. This flow writes — it opens a CR, describes it, and may rebase and force-push — so a silent fall-back publishes work against a repo nobody named.
 
 **With B given as a path**, that path is the checkout; there's nothing to resolve.
 
