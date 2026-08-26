@@ -40,8 +40,6 @@ behavior, not an independent authority — review them against the source.
   triggered by a published release or a tag push, a bump commit in the repo
   itself, or nobody (no version artifact). Resolved by `release-recon.sh` and
   decisive for the whole release path. Defined under RELEASE.
-- **Worktree isolation** — running a write flow that targets a non-cwd repo in a
-  dedicated git worktree, set up and torn down around the flow.
 - **tack** / **revdiff** — sibling plugins `anchor` integrates with when present
   (repo resolution and route bookkeeping; terminal-native visual diff review).
   Each is optional, and the flow that uses it falls back when absent.
@@ -66,14 +64,11 @@ behavior, not an independent authority — review them against the source.
   the working directory, then the system shall state the resolved path and ask
   which repo to target.
 - **[TARGET-07]** While operating on a repo other than the working directory, the
-  system shall address it with `git -C` and helper `--repo`/`--worktree` flags
-  rather than `cd`.
-- **[TARGET-08]** Where a write flow targets a non-cwd repo, the system shall
-  isolate the work in a dedicated git worktree and tear it down when the flow
-  ends.
-- **[TARGET-09]** If a commit-writing flow resolves a target that has no local
+  system shall address it with `git -C` and the helper `--repo` flag rather than
+  `cd`.
+- **[TARGET-08]** If a commit-writing flow resolves a target that has no local
   checkout, then the system shall stop rather than commit to the wrong location.
-- **[TARGET-10]** The system shall accept `--repo`/`--worktree` at any position in
+- **[TARGET-09]** The system shall accept `--repo` at any position in
   a helper's arguments, and shall reject an argument it does not recognize rather
   than dropping it. A retargeting flag honored only in a leading position is
   silently ignored anywhere else, so the helper runs against the

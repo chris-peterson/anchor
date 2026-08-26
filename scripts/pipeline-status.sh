@@ -50,7 +50,6 @@
 #   pipeline-status.sh                 one-shot status for the commit at HEAD
 #   pipeline-status.sh --watch         poll until terminal (or the ceiling), then emit
 #   pipeline-status.sh --repo <path>              target a checkout other than the cwd repo
-#   pipeline-status.sh --worktree <path>          target a flow-owned isolated worktree
 #   pipeline-status.sh --branch <b> --sha <sha>   target an explicit ref/commit
 #   pipeline-status.sh --workflow <name>          scope to one GitHub workflow
 #                                              (path, file name, or display name)
@@ -84,12 +83,10 @@ workflow=""
 single_run=""
 pipeline_id=""
 CTX_REPO=""
-CTX_WORKTREE=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --watch)    mode="watch"; shift ;;
     --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
-    --worktree) CTX_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
     --branch)   branch="${2:?--branch needs a value}"; shift 2 ;;
     --sha)      sha="${2:?--sha needs a value}"; shift 2 ;;
     --workflow)   workflow="${2:?--workflow needs a value}"; shift 2 ;;

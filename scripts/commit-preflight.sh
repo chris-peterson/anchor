@@ -19,7 +19,7 @@
 # runs first because it's cheap and decides whether a suite needs running at all
 # — the push-existing and nothing-to-do routes have no commit to test.
 #
-# --repo / --worktree <path> retargets onto a checkout other than the cwd repo
+# --repo <path> retargets onto a checkout other than the cwd repo
 # (see scripts/lib/resolve-context.sh).
 #
 # --path <p> names a path to stage, repeatable, relative to the repo root.
@@ -46,12 +46,10 @@ here="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=lib/resolve-context.sh
 source "$here/lib/resolve-context.sh"
 CTX_REPO=""
-CTX_WORKTREE=""
 paths=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
-    --worktree) CTX_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
     --path)     paths+=("${2:?--path needs a path}"); shift 2 ;;
     *) echo "commit-preflight.sh: unknown argument: $1" >&2; exit 64 ;;
   esac

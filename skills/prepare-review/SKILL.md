@@ -100,9 +100,9 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 
 If the block carries a `CR_CREATE_ERROR=…` line, the draft-open hit an auth or push failure — surface it and ask the user to refresh credentials; do **not** fall back to the URL-free path (the fail-fast-on-auth rule).
 
-### Operating against a non-cwd repo (worktree isolation)
+### Operating against a non-cwd repo
 
-When the CR lives in a repo other than the session's cwd (you're in repo A, the CR is in repo B), don't drive B off cwd: resolve the target, decide direct-vs-worktree **once up front** with `bash "${CLAUDE_PLUGIN_ROOT}/scripts/worktree.sh" setup <path-to-B-checkout>`, thread the resolved `<CHECKOUT>` through every later command (the harness resets cwd between Bash calls), and tear the worktree down when the flow ends. The full procedure — name resolution via `resolve-target.sh`, the `worktree.sh` setup/teardown lifecycle, and the `git -C` / `-R` / `glab api` threading rules — is in `${CLAUDE_PLUGIN_ROOT}/guides/worktree-isolation.md`; consult it whenever B ≠ cwd.
+When the CR lives in a repo other than the session's cwd (you're in repo A, the CR is in repo B), don't drive B off cwd: resolve B's checkout with `resolve-target.sh`, then thread that path through every later command — the harness resets cwd between Bash calls, so each one needs it again. `prepare-review.sh --repo <path>`, `git -C <path>`, and `-R <owner/name>` on `gh`/`glab`; the threading rules are in `${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`.
 
 When the target is just the session cwd (no non-cwd repo in play), skip all of this — everything below is plain `git` / `gh` / `glab` against the working directory.
 

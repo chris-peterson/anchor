@@ -15,44 +15,30 @@
 # create uses the cwd repo as the source project → a 422 fork-mismatch); running
 # *inside* the target checkout has no such gap.
 #
-# This library only ever `cd`s — it does not create anything. Two explicit
-# targets, both just a checkout to step into:
+# This library only ever `cd`s — it does not create anything.
 #
 #   CTX_REPO       (in)  a checkout to operate on directly (--repo)
-#   CTX_WORKTREE   (in)  an isolated worktree to operate in (--worktree), created
-#                        and torn down by the *flow* via worktree.sh — see below
-#   RESOLVED_VIA   (out) `cwd` (inferred), `repo` (--repo), or `worktree`
-#                        (--worktree); the caller emits it so a fallback is never
-#                        silent
+#   RESOLVED_VIA   (out) `cwd` (inferred) or `repo` (--repo); the caller emits it
+#                        so a fallback is never silent
 #
-# CTX_WORKTREE wins over CTX_REPO when both are set (the flow has already
-# isolated). With neither, cwd is left untouched — today's behavior, byte-for-byte.
-#
-# Worktree isolation (the "wandered outside the start dir → use a worktree"
-# rule) is owned by scripts/worktree.sh, not here: it decides direct-vs-worktree,
-# creates the worktree once, and the skill tears it down at flow end. These
-# scripts only ever step into whatever checkout they're pointed at, so the
-# worktree can outlive any single one of them (the isolation would be pointless
-# if each script created and removed its own).
+# With CTX_REPO unset, cwd is left untouched.
 #
 # On a target that isn't a git working tree it prints CTX_ERROR=… on stderr and
 # exits 66, rather than silently operating against the wrong (cwd) repo.
 
 ctx_resolve_repo() {
-  local target via
-  if [[ -n "${CTX_WORKTREE:-}" ]]; then
-    target="$CTX_WORKTREE"; via=worktree
-  elif [[ -n "${CTX_REPO:-}" ]]; then
-    target="$CTX_REPO"; via=repo
+  local target
+  if [[ -n "${CTX_REPO:-}" ]]; then
+    target="$CTX_REPO"
   else
     RESOLVED_VIA=cwd
     return
   fi
 
   if ! git -C "$target" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    echo "CTX_ERROR=--$via target is not a git working tree: $target" >&2
+    echo "CTX_ERROR=--repo target is not a git working tree: $target" >&2
     exit 66
   fi
-  cd "$target" || { echo "CTX_ERROR=could not cd into $via target: $target" >&2; exit 66; }
-  RESOLVED_VIA="$via"
+  cd "$target" || { echo "CTX_ERROR=could not cd into repo target: $target" >&2; exit 66; }
+  RESOLVED_VIA=repo
 }

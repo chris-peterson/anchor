@@ -12,6 +12,7 @@
 
 - The `moor` review backend. `anchor.reviewBackend=moor` now fails as an unknown backend — set `revdiff` or `editor`, or unset the key for the per-skill default. A commit message edited inside the review tool goes with it; the `editor` backend still returns one. Nothing produces the `incomplete` verdict any more, since per-hunk review tracking was moor's.
 - The `difftool` result shape (`backend: "difftool"`, DIFF-10). It existed because moor's adapter reached moor through `git difftool`, so a plain difftool left on screen had to be reported as shown-but-ungraded; no backend reaches a difftool now.
+- Worktree isolation. `scripts/worktree.sh`, the `--worktree <path>` flag on every helper, and `guides/worktree-isolation.md` are gone; a write flow against a repo the session didn't start in now operates directly in that checkout via `--repo <path>`, the same as a read flow; `--repo` takes any checkout, a linked worktree included. Anyone passing `--worktree` gets an unrecognized-argument error — pass `--repo` instead. `RESOLVED_VIA` reports `repo` or `cwd` only, and TARGET-08 is retired (TARGET-09/10 renumber to 08/09).
 
 ## 1.7.0
 

@@ -90,8 +90,7 @@ When the target repo isn't the working directory, pass it through rather than
 `-R <owner/name>` on `gh`/`glab` (the URL-encoded project for `:fullpath`, plus
 `--hostname <host>`, on `glab api`). The retargeting rules are in
 `${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md` ("Targeting a repo that isn't the
-working directory"). A release **writes** — when the target isn't the cwd repo,
-isolate the work in a worktree first (`${CLAUDE_PLUGIN_ROOT}/scripts/worktree.sh`).
+working directory").
 
 ## Step 1: Establish the release model
 

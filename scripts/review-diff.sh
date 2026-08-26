@@ -51,10 +51,9 @@
 set -euo pipefail
 
 # Context flags, accepted anywhere in the argv:
-#   --repo / --worktree <path>  retargets the git range / review onto a
-#     checkout other than the cwd repo (see scripts/lib/resolve-context.sh). The
-#     --files mode takes absolute paths, so this is only meaningful for the
-#     git-range modes.
+#   --repo <path>  retargets the git range / review onto a checkout other than
+#     the cwd repo (see scripts/lib/resolve-context.sh). The --files mode takes
+#     absolute paths, so this is only meaningful for the git-range modes.
 #   --path <p>  a path for --local to stage, repeatable, resolved against the repo
 #     root. Only these are staged: a whole-tree add would pull a session sharing
 #     the checkout into this review (see scripts/lib/stage-paths.sh).
@@ -83,7 +82,6 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/review-editor.sh"
 # shellcheck source=lib/stage-paths.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/stage-paths.sh"
 CTX_REPO=""
-CTX_WORKTREE=""
 review_skill=""
 backend_override=""
 print_backend=0
@@ -99,7 +97,6 @@ rest=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
-    --worktree) CTX_WORKTREE="${2:?--worktree needs a path}"; shift 2 ;;
     --skill)    review_skill="${2:?--skill needs a name}"; shift 2 ;;
     --backend)  backend_override="${2:?--backend needs a name}"; shift 2 ;;
     --path)     stage_paths+=("${2:?--path needs a path}"); shift 2 ;;
