@@ -320,6 +320,39 @@ glab api -X PUT projects/:fullpath/merge_requests/<iid> \
   -F "description=@/tmp/cr-body.aB3xKp.md"
 ```
 
+## Mark a CR ready, and request reviewers
+
+The handoff at the end of a self-review: the author is happy with their own
+change and wants eyes on it. Both halves are separate calls, and neither is
+implied by the other — marking a CR ready does not name who should look at it.
+
+```bash
+# GitHub — ready, then reviewers (a team goes as ORG/team-slug).
+gh pr ready <num>
+gh pr edit <num> --add-reviewer monalisa,hubot
+
+# GitLab — ready, then reviewers (comma-separated, or a repeated flag).
+glab mr update <iid> --ready
+glab mr update <iid> --reviewer alice,bob
+```
+
+Both name the target state rather than toggling it — the inverse is its own flag
+(`gh pr ready --undo`, `glab mr update --draft`) — so running them on a CR that
+is already ready doesn't send it back to draft, unlike `--remove-source-branch`
+(see MR create above).
+
+Two `glab` details worth knowing before reaching for the API form:
+
+- **`--reviewer` replaces** the existing reviewer list by default. Prefix a
+  username with `+` to add to it, `-` or `!` to remove — `--reviewer +carol`.
+- **Reviewers and assignees are different fields.** `--assignee` sets who owns
+  the MR (which `anchor` sets to the author at create time); `--reviewer` sets
+  who is being asked to look. GitHub splits them the same way,
+  `--add-assignee` / `--add-reviewer`.
+
+Unlike the array-valued create-time fields, these porcelain flags do encode
+multiple users correctly, so there is no need for the `glab api` form here.
+
 ## Check a CR's mergeable state
 
 Before merging, read whether the forge considers the CR landable — conflicts or a

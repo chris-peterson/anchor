@@ -3,6 +3,10 @@
 # CR description's Review guide points at. Asserts the forge-specific hash and
 # view path, and that the hashes match what the forges actually render:
 # GitLab anchors a file by sha1(path), GitHub by sha256(path).
+# ci-platforms: linux macos windows
+#   The anchors are path hashes and the hashing binary varies — macOS ships
+#   shasum with no sha1sum.
+
 set -euo pipefail
 
 # Hermetic: ignore the user's global/system git config.

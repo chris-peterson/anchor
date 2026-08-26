@@ -7,12 +7,12 @@ on:
   workflow_dispatch:
 
 jobs:
-  tmpfile:
-    # The temp-path claims are cross-platform, so prove them on each mktemp they
-    # must survive: GNU coreutils (ubuntu), BSD (macos — the binary that broke
-    # the old form), and Git Bash's MSYS2 mktemp (windows). The guidance half
-    # rides the same matrix because whether TMPDIR is set, and what a literal
-    # /tmp resolves to, is exactly what differs between these three.
+  suites:
+    # One job, discovered: tests/run-all.sh walks tests/*.test.sh and runs the
+    # ones declaring this platform in their own `# ci-platforms:` header, so a
+    # new suite needs no wiring here. The matrix exists for the suites whose
+    # subject *is* the platform — which mktemp the shell resolves, whether the
+    # host has sha1sum — and everything else declares linux and runs once.
     strategy:
       fail-fast: false
       matrix:
@@ -23,136 +23,11 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v6
-      - name: temp-path helper
-        run: bash tests/tmpfile.test.sh
-      - name: temp-path guidance
-        run: bash tests/tmp-path-guidance.test.sh
-      # In this matrix because the deep-link anchors are path hashes, and the
-      # hashing binary varies (macOS ships `shasum` with no `sha1sum`).
-      - name: deep links
-        run: bash tests/deep-links.test.sh
-
-  commit:
-    # Exercises scripts/commit.sh end-to-end (commit + push variants, the
-    # push-existing mode, and the default-branch guard) against a local bare
-    # remote, over the path-staging lib both it and the review flow share.
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@v6
+      # The suites that commit, push to a local bare remote, or read a CR head
+      # need an identity; a runner has none.
       - name: configure git identity
         run: |
           git config --global user.email "ci@example.com"
           git config --global user.name "CI"
-      - name: path staging
-        run: bash tests/stage-paths.test.sh
-      - name: commit helper
-        run: bash tests/commit.test.sh
-      - name: commit preflight
-        run: bash tests/commit-preflight.test.sh
-
-  prepare-review:
-    # Exercises scripts/prepare-review.sh's branch-deletion read against stub
-    # gh/glab binaries, since the preference lives per-MR on GitLab and only
-    # repo-wide on GitHub — the asymmetry the key exists to report.
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@v6
-      - name: configure git identity
-        run: |
-          git config --global user.email "ci@example.com"
-          git config --global user.name "CI"
-      - name: prepare-review recon
-        run: bash tests/prepare-review.test.sh
-
-  release:
-    # Exercises scripts/release-recon.sh against a repo per release model, since
-    # the model decides who owns the version bump and a wrong read collides with
-    # the CI workflow's own commit.
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@v6
-      - name: configure git identity
-        run: |
-          git config --global user.email "ci@example.com"
-          git config --global user.name "CI"
-      - name: release recon
-        run: bash tests/release-recon.test.sh
-
-  pipeline:
-    # Exercises scripts/pipeline-status.sh and its after-push caller against stub
-    # gh/glab binaries that filter their fixtures the way the real CLIs do, since
-    # the verdict turns on which runs a lookup can see — a release-triggered run
-    # carries the tag as its branch, and a GitHub commit has one run per workflow.
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@v6
-      - name: configure git identity
-        run: |
-          git config --global user.email "ci@example.com"
-          git config --global user.name "CI"
-      - name: pipeline status
-        run: bash tests/pipeline-status.test.sh
-      - name: pipeline after push
-        run: bash tests/pipeline-after-push.test.sh
-
-  config-defaults:
-    # The three verbosity defaults are restated across SPEC.md, the configuring
-    # guide's Defaults table, two skill prompts, and two templates — nothing
-    # reads them back at run time, so this is what keeps the six in agreement.
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@v6
-      - name: documented defaults agree
-        run: bash tests/config-defaults.test.sh
-
-  review:
-    # Exercises the review dispatcher and its revdiff/editor adapters against
-    # stub backends, asserting the normalized DIFF contract each emits.
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@v6
-      - name: configure git identity
-        run: |
-          git config --global user.email "ci@example.com"
-          git config --global user.name "CI"
-      - name: review dispatcher + adapters
-        run: bash tests/review-diff.test.sh
-      - name: editor backend + per-skill backend key
-        run: bash tests/review-editor.test.sh
-
-  review-cr:
-    # Exercises the reviewer's side against stub gh/glab: reaching another
-    # author's CR head through the forge's ref namespace rather than a branch,
-    # and posting findings that must anchor to the SHA the diff was read at.
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@v6
-      - name: configure git identity
-        run: |
-          git config --global user.email "ci@example.com"
-          git config --global user.name "CI"
-      - name: review CR recon
-        run: bash tests/review-cr.test.sh
-      - name: review posting
-        run: bash tests/review-post.test.sh
+      - name: test suites
+        run: bash tests/run-all.sh

@@ -1,18 +1,30 @@
 ---
 name: review
-description: Review someone else's open change request — fetch it, read every change in the diff viewer, write up the findings, then post them as inline threads once the exact text is approved. Use when reviewing a PR/MR, or when a teammate sends a CR number or URL to look at.
+description: Review an open change request — read every change in the diff viewer, examine it against the qualities you've set, then post the findings as inline threads once the exact text is approved. On your own CR it runs as a self-review instead — the fixes land in the tree, nothing posts, and it ends by offering to mark the CR ready. Use when reviewing a PR/MR, when a teammate sends a CR number or URL, or when reviewing your own change before handing it over.
 ---
 
 # Review
 
-Take a change request someone else wrote and drive it to feedback that reaches
-them: resolve the CR, read the description that says why it exists, look at
-every change, collect findings that name a file and a line, and — once the user
-approves the exact wording — post them where the code is.
+Take a change request and drive it to feedback: resolve the CR, read the
+description that says why it exists, look at every change, examine the diff
+against each quality in
+`${CLAUDE_PLUGIN_ROOT}/templates/review-qualities.md`, and collect findings that
+name a file and a line.
 
-This is the other side of `/anchor:resolve-feedback`. That skill brings a
-reviewer's findings back into your branch; this one produces them on someone
-else's.
+Where those findings go depends on who wrote the CR, and **authorship picks the
+mode** (Step 5):
+
+| The CR | Mode | The findings |
+|---|---|---|
+| someone else's | **review** | threads on their CR, once the user approves the exact wording |
+| the user's own (`IS_OWN_CR=1`) | **self-review** | a fix list worked in the tree; nothing posts, and the mode ends by offering to mark the CR ready |
+
+Self-review is the cold pass an author makes before handing a change to anyone
+else. `/anchor:prepare-review` opens the CR as a draft precisely so that
+decision stays theirs, and this is where they make it.
+
+This is also the other side of `/anchor:resolve-feedback`. That skill brings a
+reviewer's findings back into your branch; this one produces them.
 
 **Recording a verdict is not this skill's act.** Approving a CR (`gh pr review
 --approve`, `glab mr approve`) is the one irreversible thing in the flow and it
@@ -45,15 +57,30 @@ flowchart TD
         Complete -->|No| View
     end
 
-    subgraph "Step 4-5: Draft and approve"
-        Complete -->|Yes| Doc["Merge annotations + findings"]
-        Doc --> Show["Show the drafted findings"]
-        Show --> Gate{Approved?}
-        Gate -->|Revise| Doc
-        Gate -->|Keep local| Local([Review stays in the session])
+    subgraph "Step 4: Examine against each quality"
+        Complete -->|Yes| Fan["One agent per listed quality"]
+        Fan --> Doc["Merge annotations + findings"]
     end
 
-    Gate -->|Post| Post["Post threads + summary"] --> Report([Report what landed])
+    subgraph "Step 5: Self-review"
+        Fix["Fix in the tree, re-review"] --> Ready{Mark ready + assign?}
+        Ready -->|Not yet| Draft([Stays a draft])
+        Ready -->|Yes| Handoff([Ready, reviewers assigned])
+    end
+
+    subgraph "Step 6-7: Approve and post"
+        Show["Show the drafted findings"] --> Gate{Approved?}
+        Gate -->|Revise| Show
+        Gate -->|Keep local| Local([Review stays in the session])
+        Gate -->|Post| Post["Post threads + summary"]
+    end
+
+    Doc --> Who{Whose CR?}
+    Who -->|Mine| Fix
+    Who -->|Theirs| Show
+    Post --> Report([Report what landed])
+    Draft --> Report
+    Handoff --> Report
 ```
 
 ## Task tracking when orchestrated
@@ -63,8 +90,9 @@ silently inside the orchestrator's list. Otherwise enumerate:
 
 - `Step 1: Fetch the change request`
 - `Step 3: Review every change`
-- `Step 4: Draft the review`
-- `Step 6: Post the approved findings`
+- `Step 4: Examine the diff against each quality`
+- `Step 5: Self-review the findings` *(own CR)* or
+  `Step 6: Post the approved findings` *(someone else's)*
 
 ## Step 1: Resolve and fetch the change request
 
@@ -91,9 +119,9 @@ and act only on what it surfaces:
 | `FORGE` / `HOST` / `PROJECT` | pick the CLI and target it; `HOST` is `glab --hostname` on self-hosted GitLab |
 | `CR_IID` / `CR_URL` / `CR_TITLE` / `CR_AUTHOR` | the one line you report, and the header for Step 3's viewer |
 | `CR_STATE` | anything but `open` → say what state it's in and ask before continuing; a merged CR takes comments but nobody is waiting on them |
-| `CR_DRAFT=true` | the author hasn't asked for review yet — say so and confirm before spending their attention |
-| `IS_OWN_CR=1` | the CR is the user's own; say so once. `/anchor:prepare-review` describes your own change, and self-review is a different act from the one this skill performs |
-| `CR_HEAD_SHA` / `CR_BASE_SHA` / `CR_START_SHA` | pinned at fetch time; Step 6 passes them back so every anchor lands on the diff that was actually read |
+| `CR_DRAFT=true` | on someone else's CR the author hasn't asked for review yet — say so and confirm before spending their attention. In self-review it is the expected state and needs no comment |
+| `IS_OWN_CR=1` | the CR is the user's own, so this runs as a **self-review** (Step 5). Say which mode you're in once, and don't ask them to confirm reviewing their own change |
+| `CR_HEAD_SHA` / `CR_BASE_SHA` / `CR_START_SHA` | pinned at fetch time; Step 7 passes them back so every anchor lands on the diff that was actually read |
 | `DIFF_RANGE` | what Step 3 hands the viewer — the **whole** range, never a subset |
 | `CHANGED_FILES` | the size of what's being reviewed |
 | `DESC_PATH` | the description, for Step 2 |
@@ -192,11 +220,80 @@ differently from its siblings, because here the reviewer's comments are the
 *unmeasured*, not *complete*. The obligation this step carries is the one you
 control: hand the viewer the entire `DIFF_RANGE`, every time.
 
-## Step 4: Write up the findings
+## Step 4: Examine the diff against each quality
+
+**Read `${CLAUDE_PLUGIN_ROOT}/templates/review-qualities.md` before the
+examination, not after.** It lists the qualities a review weighs and the
+instruction their findings come back in. It is the user's file to edit, so the list as it stands is
+the review's scope: don't weigh a quality it doesn't list, and don't skip one it
+does.
+
+**One agent per listed quality**, launched in a single message so they run
+concurrently. Each gets the pinned diff (`DIFF_PATH`), what Step 2 established
+the change is *for*, one quality's name and wording verbatim, and the template's
+output instruction — nothing about the other qualities. Independent lenses are
+the point; one pass over the whole list blurs them, which is most of why the list
+is worth enumerating. Cost scales with it: four qualities is four agents, ten is
+ten.
+
+Then merge everything into one set:
+
+- **The reviewer's own comments are findings**, kept **verbatim**. That sentence
+  is already the one they wanted to send, and rewriting it into a house voice
+  replaces what they approved with something they didn't.
+- **On a line carrying both**, keep the reviewer's and drop the agent's rather
+  than posting the line twice.
+- **Two agents on the same line for the same reason is one finding** — keep the
+  more specific and drop the rest.
+
+### Where each finding goes
+
+Put each remark at the **narrowest location that carries it**:
+
+| Finding | Where it lands |
+|---|---|
+| a file and a line | an inline thread anchored to that line |
+| a method or hunk, no single line | a thread on the line that opens it |
+| a file, no line | the summary comment, named with its file |
+| the changeset as a whole | the summary comment |
+
+**Nothing is dropped for want of an anchor.** A `file` or `changeset` target
+folds into the summary comment — that fallback is the script's, so state the
+concern where it belongs and let the rendering place it. Both forges take line
+anchors the same way, so which findings can be anchored doesn't depend on where
+the CR lives.
+
+### What a finding says
+
+The body is what lands in the thread, so write it as the thing the reviewer would
+type into the CR:
+
+- **State the consequence, not the observation.** *"This drops the tenant from
+  the cache key, so two tenants share an entry"* gives the author something to
+  act on; *"cache key changed"* restates the diff they wrote.
+- **One concern per finding.** Two concerns on one line are two findings; the
+  author resolves them separately.
+- **Ask when it is a question.** A question dressed as a demand wastes a round
+  trip.
+- **Point at the alternative when there is one**, in one clause. A finding that
+  only says *no* leaves the author to guess what *yes* looks like.
+- **Skip what the diff already shows.** The author can see which files changed.
+
+The register is `anchor`'s everywhere: plain words, no loaded framing
+(`${CLAUDE_PLUGIN_ROOT}/guides/loaded-framing.md`), no size-minimizers, no praise
+padding. Findings go out under the reviewer's name and read as the reviewer
+talking.
+
+The **summary** says whether the change does what its description claims and
+names the one thing most worth attention. It is not a verdict — recording
+approval or requesting changes on the forge is the human reviewer's own act
+(Step 8).
+
+### Write it out
 
 Write the findings to `FINDINGS_PATH` as JSON, then read it back rendered. The
 entries use the DIFF contract's comment shape, so a comment the user typed in
-the viewer and one you wrote are the same kind of object:
+the viewer and one an agent wrote are the same kind of object:
 
 ```json
 {
@@ -209,22 +306,11 @@ the viewer and one you wrote are the same kind of object:
 }
 ```
 
-Keep `cr.headSha` exactly as Step 1 pinned it — Step 6 checks it. Set `origin`
-to `reviewer` for anything the user typed in the viewer and `agent` for your
-own. What a finding should *say*, and how the summary is shaped, is in
-`${CLAUDE_PLUGIN_ROOT}/templates/cr-review.md`; read it before drafting.
+Keep `cr.headSha` exactly as Step 1 pinned it — Step 7 checks it. Set `origin`
+to `reviewer` for anything the user typed in the viewer and `agent` for a
+finding the fan-out produced.
 
-Findings that carry a file and a line become inline threads. A `file` or
-`changeset` target folds into the summary comment rather than being dropped —
-that fallback is the script's, so state the concern where it belongs and let the
-rendering place it.
-
-**What to look for is your judgment, not a checklist.** This skill supplies the
-plumbing — target to diff to findings to threads on the right lines — and
-deliberately doesn't ship a code-quality rubric. Read the change against the
-description's claims, and weight the reviewer's own annotations above your own.
-
-Render the review and revise it with the user until it says what they mean:
+Render the findings and revise them with the user until they say what they mean:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-post.sh" --preview --findings <FINDINGS_PATH>
@@ -234,7 +320,43 @@ Its output is the review — put it in your reply, since a Bash result reaches y
 and not the user. Iterate here as many rounds as the user wants; nothing has
 left the session yet.
 
-## Step 5: Approve the exact text
+## Step 5: Self-review — the CR is yours
+
+Reached when Step 1 reported `IS_OWN_CR=1`. Nothing in this step posts to the
+forge: a thread an author opens against themselves is a round trip with no
+reviewer in it, so the findings are a fix list instead. Steps 6 and 7 don't run.
+
+1. **Give them the fix list.** The `--preview` render is it — put it in your
+   reply as Step 4 says. Ask which findings they want acted on; a finding they
+   disagree with is dropped, not argued.
+2. **Fix in the working tree**, one finding at a time, running the project's
+   tests as you go. Commits go through `/anchor:commit`, which decides
+   amend-vs-new-commit from the push state and the draft flag — don't rewrite
+   history here by hand.
+3. **Re-review the corrected diff.** Re-run Step 1 so `CR_HEAD_SHA` and
+   `DIFF_RANGE` cover the fix commits, then Steps 3 and 4 against the new head.
+   That is a loop inside this invocation, not a reason to start over: repeat
+   until a pass comes back with nothing the user wants fixed.
+4. **Hand it off.** Ask with `AskUserQuestion` (header `Handoff`):
+
+   - **Mark ready and request reviewers** — ask who, then do both.
+   - **Mark ready** — ready with no reviewer named.
+   - **Leave it a draft** *(default)* — a finished outcome. The author reviewed
+     their own change and isn't handing it over yet; say so and stop.
+   - **Post findings as threads** — for a known gap or a follow-up the author
+     wants a reviewer to see. Those findings go out through Steps 6 and 7 with
+     the same gates as anyone else's CR.
+
+   Neither marking ready nor requesting a reviewer happens without the user
+   picking it here. `/anchor:merge` also offers to mark a CR ready, but it asks
+   as a gate on the merge — the author is already landing the change by then, so
+   the question arrives long after the moment they wanted to hand it over. The
+   invocations for both forges are in
+   `${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`.
+
+Then report as Step 8 describes.
+
+## Step 6: Approve the exact text
 
 Everything below posts under the user's name with nothing marking it as drafted
 by an agent, so the words are theirs to approve — not a summary of them, and not
@@ -251,7 +373,7 @@ Then ask with `AskUserQuestion` (header `Post`):
 A revision at this gate re-renders and comes back here. Approval of one round is
 not approval of the next.
 
-## Step 6: Post the approved findings
+## Step 7: Post the approved findings
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-post.sh" --post \
@@ -272,13 +394,14 @@ Step 1 against the new head — never post anyway, and never re-anchor by guessi
 where the lines went.
 
 Post what was approved. An improvement you notice while posting goes back
-through Step 5.
+through Step 6.
 
-## Step 7: Report
+## Step 8: Report
 
-One line per finding: `#N <file:line> — posted` plus the summary comment's
-outcome, and the CR URL. Say plainly what was **not** posted — anything the user
-dropped, and anything that folded into the summary for want of an anchor.
+**After a post (Steps 6-7).** One line per finding: `#N <file:line> — posted`
+plus the summary comment's outcome, and the CR URL. Say plainly what was **not**
+posted — anything the user dropped, and anything that folded into the summary for
+want of an anchor.
 
 Close by naming the verdict as the user's to record, with the invocation:
 
@@ -288,10 +411,15 @@ Comments posted. Recording a verdict is yours:
   glab mr approve <iid>
 ```
 
+**After a self-review (Step 5).** One line per finding: `#N <file:line> — fixed
+in <sha>`, `— dropped`, or `— posted` for one that went out as a thread. Then the
+CR's state: still a draft, or ready with whoever was requested, and the CR URL.
+Nothing about a verdict — on your own CR there is none to record.
+
 ## Related
 
 `/anchor:prepare-review` writes the description this skill reads first;
 `/anchor:resolve-feedback` is what the author runs when these findings reach
-them. The canonical forge invocations behind Step 6 — line-anchored threads on
+them. The canonical forge invocations behind Step 7 — line-anchored threads on
 both forges, the batched review, the position payload GitLab silently drops when
 it's malformed — are in `${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`.

@@ -39,7 +39,7 @@ suite:
   cmds:
     - ["/anchor:commit", "Review the changeset, then commit with a why-first message and push"]
     - ["/anchor:prepare-review", "Rebase on the default branch and open a draft change request"]
-    - ["/anchor:review", "Read every change in someone else's CR, then post findings as inline threads"]
+    - ["/anchor:review", "Read every change in a CR, weigh it against your qualities, post findings inline"]
     - ["/anchor:resolve-feedback", "Work a CR's review threads to done, one by one"]
     - ["/anchor:merge", "Check the merge gates, wait on the pipeline, then land the CR and clean up"]
     - ["/anchor:release", "Work out what's shipping, recommend a version, draft the notes, publish"]
@@ -58,7 +58,7 @@ suite:
       prepare-review: Open the PR/MR on an already-pushed branch, rebase on the default branch if behind, and draft a description that tells reviewers WHY the change exists.
       release: Cut a release for what has landed — recommend a semver bump, draft the notes, and drive the repo's own publish path.
       resolve-feedback: Fetch an open CR's review feedback and drive each thread to resolution — fix, reply, resolve.
-      review: Review someone else's open change request — fetch it, read every change in the diff viewer, write up the findings, then post them as inline threads once the exact text is approved.
+      review: Review an open change request — read every change in the diff viewer, examine it against the qualities you've set, then post the findings as inline threads once the exact text is approved.
     rules:
       omit-attribution-trailers: Omit AI attribution trailers
       rewrite-history-through-anchor: Route history rewrites through `anchor`

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- `templates/review-qualities.md` states what `/anchor:review` looks for — correctness, style, security, simplicity out of the box — and is yours to edit. Each listed quality is read against the diff by its own agent, so adding one widens the review and dropping one narrows it, with no other change.
+- `/anchor:review` on your own change request runs as a self-review: the findings become a working-tree fix list, nothing is posted, re-reviewing the fixed diff is a loop inside the run, and it ends by offering to mark the CR ready and request reviewers — the handoff no skill owned before.
+
 ### Changed
 
 - Review backends now default per skill. `/anchor:prepare-review`, `/anchor:issue`, and `/anchor:release` review one drafted document, so they open it in your editor and take whatever you save as the artifact; `/anchor:commit` and `/anchor:review` review a changeset and keep `revdiff`. Set `anchor.reviewBackend`, or `anchor.<skill>.reviewBackend`, to name one tool for everything as before.
@@ -13,6 +18,7 @@
 - The `moor` review backend. `anchor.reviewBackend=moor` now fails as an unknown backend — set `revdiff` or `editor`, or unset the key for the per-skill default. A commit message edited inside the review tool goes with it; the `editor` backend still returns one. Nothing produces the `incomplete` verdict any more, since per-hunk review tracking was moor's.
 - The `difftool` result shape (`backend: "difftool"`, DIFF-10). It existed because moor's adapter reached moor through `git difftool`, so a plain difftool left on screen had to be reported as shown-but-ungraded; no backend reaches a difftool now.
 - Worktree isolation. `scripts/worktree.sh`, the `--worktree <path>` flag on every helper, and `guides/worktree-isolation.md` are gone; a write flow against a repo the session didn't start in now operates directly in that checkout via `--repo <path>`, the same as a read flow; `--repo` takes any checkout, a linked worktree included. Anyone passing `--worktree` gets an unrecognized-argument error — pass `--repo` instead. `RESOLVED_VIA` reports `repo` or `cwd` only, and TARGET-08 is retired (TARGET-09/10 renumber to 08/09).
+- `templates/cr-review.md` is gone. Its placement and finding-shape rules — narrowest anchor that carries the remark, one concern per finding, consequence over observation, the reviewer's own wording verbatim — are in the `review` skill, which is where the behavior they govern lives.
 
 ## 1.7.0
 
