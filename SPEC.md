@@ -640,7 +640,12 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   chain — a blocking editor found on `PATH` first, then git's own compiled
   default — since an editor the user never configured is still an editor they
   have, and the alternative is refusing a review on a machine where `git commit`
-  would have opened one. A found editor shall be invoked with the flag that makes
+  would have opened one. The compiled default shall be read independent of the
+  ambient terminal and of the no-op values already discounted above: git names no
+  editor at all when the terminal it was handed is dumb, which answers for git's
+  own stdio rather than for a backend that renders in a terminal the host opens
+  (DIFF-17), and an agent harness that leaves no terminal behind is the common
+  case here rather than the exception. A found editor shall be invoked with the flag that makes
   it block, and the search shall be limited to editors whose blocking flag is
   known, since a non-blocking editor returns before the user has typed and reads
   as an artifact they approved.

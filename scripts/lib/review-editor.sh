@@ -54,10 +54,15 @@ anchor_editor_resolve() {
       if command -v "$candidate" >/dev/null 2>&1; then ed="$candidate --wait"; break; fi
     done
   fi
-  # git's compiled default — what a plain `git commit` opens here. `git var`
-  # reports it only with GIT_EDITOR out of the environment entirely; an empty
-  # value is honored as an empty editor rather than falling through.
-  anchor_editor_usable "$ed" || ed=$( (unset GIT_EDITOR; git var GIT_EDITOR) 2>/dev/null || true)
+  # git's compiled default — what a plain `git commit` opens here. It answers
+  # only with the environment's own editors out of the way entirely, since it
+  # honors an empty or no-op value as the answer rather than falling through,
+  # and each of them was already walked and discounted above. TERM is pinned
+  # because git names no editor at all on a dumb terminal: that answers for the
+  # stdio git was handed, where this backend renders in a terminal the host
+  # opens (DIFF-17).
+  anchor_editor_usable "$ed" \
+    || ed=$( (unset GIT_EDITOR VISUAL EDITOR; TERM=xterm git var GIT_EDITOR) 2>/dev/null || true)
   anchor_editor_usable "$ed" || ed=""
   printf '%s' "$ed"
 }

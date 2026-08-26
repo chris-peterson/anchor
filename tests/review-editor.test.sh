@@ -339,16 +339,33 @@ mkdir -p "$codebin"
 printf '#!/usr/bin/env bash\nexit 0\n' > "$codebin/code"
 chmod +x "$codebin/code"
 
-resolve() { ( cd "$repo" && PATH="$1:/usr/bin:/bin" GIT_EDITOR=true bash "$bin/resolve-editor.sh" ); }
+# TERM is pinned per case rather than inherited: git names no editor at all on a
+# dumb terminal, and a CI step and Claude Code's Bash tool both run without one,
+# so a suite that reads whatever TERM the developer has passes here and fails
+# there.
+resolve() { ( cd "$repo" && PATH="$1:/usr/bin:/bin" TERM="${2-dumb}" GIT_EDITOR=true bash "$bin/resolve-editor.sh" ); }
 
 r=$(resolve "$codebin")
 [ "$r" = "code --wait" ] || fail "a blocking VS Code on PATH should be reached, got '$r'"
 ok "resolve: past git's chain, a blocking VS Code on PATH"
 
-r=$(resolve "$work/empty-bin")
-[ -n "$r" ] || fail "git's own compiled default should still resolve"
-case "$r" in true|:|*/true) fail "a no-op compiled default should be discounted" ;; esac
-ok "resolve: and below that, git's own compiled default"
+# A dumb terminal is git's answer about the stdio git itself was handed. This
+# backend puts the editor in a terminal the host opens (DIFF-17), which is a
+# separate question, so the rung stands either way.
+for term in dumb xterm; do
+  r=$(resolve "$work/empty-bin" "$term")
+  [ -n "$r" ] || fail "git's own compiled default should still resolve (TERM=$term)"
+  case "$r" in true|:|*/true) fail "a no-op compiled default should be discounted (TERM=$term)" ;; esac
+done
+ok "resolve: and below that, git's own compiled default, dumb terminal or not"
+
+# The no-op scrub reaches this rung's inputs too (DIFF-16): a harness that
+# exports EDITOR=true would otherwise hand git a value git happily reports, and
+# an editor that opens nothing reads as an artifact the user approved.
+r=$( cd "$repo" && PATH="$work/empty-bin:/usr/bin:/bin" TERM=xterm \
+     EDITOR=true VISUAL=true GIT_EDITOR=true bash "$bin/resolve-editor.sh" )
+[ -n "$r" ] || fail "a no-op EDITOR should not swallow git's compiled default"
+ok "resolve: a no-op EDITOR leaves the compiled default reachable"
 
 git -C "$repo" config core.editor "my-editor --wait"
 r=$(resolve "$codebin")
