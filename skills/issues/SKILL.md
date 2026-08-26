@@ -27,7 +27,7 @@ flowchart TD
 
 ## Target repo
 
-By default this lists issues for the repo backing the working directory — pick the forge from its `origin` remote (`gh` for GitHub, `glab` for GitLab). But the user may ask about a *different* repo ("what's open in `payments-api`?"). Don't guess from a half-remembered slug — resolve the name through tack's repo db:
+By default this lists issues for the repo backing the working directory — pick the forge from its `origin` remote (`gh` for GitHub, `glab` for GitLab). But the user may ask about a *different* repo ("what's open in `payments-api`?"). Don't guess from a half-remembered slug — resolve the name:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh" <name>
@@ -35,9 +35,9 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh" <name>
 
 Act on `TARGET_VIA`:
 
-- **`cwd`** — no tack, or no match (`TARGET_NOTE` says which). Fall back to the cwd `origin`. If the user clearly meant a repo that *didn't* resolve, say so rather than silently listing the cwd repo.
+- **`cwd`** — no match (`TARGET_NOTE` separates "no repo by that name" from "no authenticated forge to ask"). Fall back to the cwd `origin`. If the user clearly meant a repo that *didn't* resolve, say so rather than silently listing the cwd repo.
 - **`ambiguous`** — `TARGET_CANDIDATES` holds the matches as `[{key,url,local}]`. Present them with `AskUserQuestion`; proceed with the chosen entry.
-- **`tack`** — exactly one match. Listing is pure-remote, so `TARGET_LOCAL` is not needed:
+- **`resolved`** — exactly one match. Listing is pure-remote, so `TARGET_LOCAL` is not needed:
   - `TARGET_FORGE` picks the CLI (`gh` / `glab`).
   - **GitHub:** add `-R <TARGET_PROJECT>` to the `gh issue list` call.
   - **GitLab:** add `-R <TARGET_URL>` to the `glab issue list` call (and `--hostname <TARGET_HOST>` is harmless if you prefer it explicit).

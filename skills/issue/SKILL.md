@@ -59,7 +59,7 @@ flowchart TD
 
 ## Target repo
 
-By default this operates on the repo backing the working directory — pick the forge from its `origin` remote (`gh` for GitHub, `glab` for GitLab). But an issue is often filed *against a different repo* than the one you're sitting in ("file this against `payments-api`", "open an issue in `customer-svc`"). Don't guess from cwd or improvise a `-R` from a half-remembered slug — resolve the name through tack's repo db:
+By default this operates on the repo backing the working directory — pick the forge from its `origin` remote (`gh` for GitHub, `glab` for GitLab). But an issue is often filed *against a different repo* than the one you're sitting in ("file this against `payments-api`", "open an issue in `customer-svc`"). Don't guess from cwd or improvise a `-R` from a half-remembered slug — resolve the name:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh" <name>
@@ -67,13 +67,13 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh" <name>
 
 Act on `TARGET_VIA`:
 
-- **`cwd`** — no tack, or no match (`TARGET_NOTE` says which). Fall back to the cwd `origin`, exactly as today. If the user clearly meant a repo that *didn't* resolve, say so rather than silently filing against the cwd repo.
+- **`cwd`** — no match (`TARGET_NOTE` separates "no repo by that name" from "no authenticated forge to ask"). Fall back to the cwd `origin`. If the user clearly meant a repo that *didn't* resolve, say so rather than silently filing against the cwd repo.
 - **`ambiguous`** — `TARGET_CANDIDATES` holds the matches as `[{key,url,local}]`. Present them with `AskUserQuestion` and let the user pick; proceed with the chosen entry.
-- **`tack`** — exactly one match. Use the emitted fields for every forge call below:
+- **`resolved`** — exactly one match. Use the emitted fields for every forge call below:
   - `TARGET_FORGE` picks the CLI (`gh` / `glab`).
   - **GitHub:** add `-R <TARGET_PROJECT>` to the `gh issue …` calls.
   - **GitLab:** the create/update use `glab api projects/:fullpath/…`, but `:fullpath` resolves from the *cwd* git dir — substitute the URL-encoded `TARGET_PROJECT` for `:fullpath` and add `--hostname <TARGET_HOST>` (required for self-hosted, harmless elsewhere).
-  - `TARGET_LOCAL` — the checkout, when one exists. Only the template step needs it; create/update are pure-remote and work without it (the common case for a repo you don't have checked out).
+  - `TARGET_LOCAL` — the checkout, set when the target is the repo you're standing in. Only the template step needs it; create/update are pure-remote and work without it (the common case for a repo you named from elsewhere).
 
 ## Step 1: Resolve the issue
 
@@ -118,7 +118,7 @@ If it turns out the need *is* already tracked, this is an update, not a new issu
 
 ### Honor an existing forge template
 
-Before drafting, check whether the project ships an issue template. This reads the repo's files, so it needs a **local checkout** — look under the cwd repo, or under `TARGET_LOCAL` when a `tack` target resolved one (`ls <TARGET_LOCAL>/.gitlab/issue_templates/*.md`). When the target is remote-only (`TARGET_LOCAL` empty), skip template detection and note that a project template, if the repo has one, wasn't applied — don't block the issue on a checkout you don't have.
+Before drafting, check whether the project ships an issue template. This reads the repo's files, so it needs a **local checkout** — look under `TARGET_LOCAL` when a target resolved one (`ls <TARGET_LOCAL>/.gitlab/issue_templates/*.md`). When the target is remote-only (`TARGET_LOCAL` empty), skip template detection and note that a project template, if the repo has one, wasn't applied — don't block the issue on a checkout you don't have.
 
 - **GitLab:** `.gitlab/issue_templates/*.md` (respect the configured default if more than one)
 - **GitHub:** `.github/ISSUE_TEMPLATE/*.md`, or the legacy `.github/ISSUE_TEMPLATE.md`. A `.yml` **issue form** is a structured format — don't compose prose into it; surface it and let the author fill it in the web UI.
@@ -158,7 +158,7 @@ Draft a concise imperative **title** (under 72 characters), then the body follow
 
 An issue lands in someone's triage queue, so its metadata is part of filing it. Read what the project actually defines rather than naming a label from memory — an invented name is how a repo ends up with `bugfix` sitting next to `bug`. The listing calls for both forges are in the bundled forge cookbook (`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`), section "Labels and milestones".
 
-Both listings are pure-remote, so a `tack` target needs no checkout — retarget per **Target repo**: `-R <TARGET_PROJECT>` on `gh label list` and `TARGET_PROJECT` substituted for `{owner}/{repo}` in the `gh api` path; `-R <TARGET_URL>` on `glab label list`, `--project <TARGET_PROJECT>` on `glab milestone list`, `--hostname <TARGET_HOST>` on both.
+Both listings are pure-remote, so a resolved target needs no checkout — retarget per **Target repo**: `-R <TARGET_PROJECT>` on `gh label list` and `TARGET_PROJECT` substituted for `{owner}/{repo}` in the `gh api` path; `-R <TARGET_URL>` on `glab label list`, `--project <TARGET_PROJECT>` on `glab milestone list`, `--hostname <TARGET_HOST>` on both.
 
 **Labels.** The descriptions the repo ships on its labels are the triage taxonomy — match the issue against them and apply every label that plainly fits. Two cases go to the user with `AskUserQuestion` rather than being decided for them: several labels are plausible and choosing between them is a judgment about the work (`bug` vs `enhancement` for behavior someone considers wrong), or nothing in the set fits an issue a reader would expect to be labelled. No label is a legitimate answer to either.
 
@@ -192,7 +192,7 @@ Then ask the user how to proceed with the `AskUserQuestion` tool. Use header `Di
 
 `anchor` assigns new issues to you, and applies the labels and milestone from Step 5 in the same write. The canonical invocations — including the `glab api`-then-`glab issue update` two-step GitLab needs for a file-sourced body, and the update-from-file forms — live in the bundled forge cookbook (`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`), sections "Issue create", "Issue description update from a file", and "Labels and milestones".
 
-When a `tack` target resolved (see **Target repo**), retarget these off the cwd repo: add `-R <TARGET_PROJECT>` to the `gh issue` calls; on GitLab substitute the URL-encoded `TARGET_PROJECT` for `:fullpath` and add `--hostname <TARGET_HOST>` on the `glab api` calls, and `-R <TARGET_URL>` on `glab issue update`.
+When a target resolved (see **Target repo**), retarget these off the cwd repo: add `-R <TARGET_PROJECT>` to the `gh issue` calls; on GitLab substitute the URL-encoded `TARGET_PROJECT` for `:fullpath` and add `--hostname <TARGET_HOST>` on the `glab api` calls, and `-R <TARGET_URL>` on `glab issue update`.
 
 Repeat `--label` per label; drop a metadata flag entirely where Step 5 settled on none.
 

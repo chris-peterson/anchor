@@ -41,25 +41,27 @@ behavior, not an independent authority — review them against the source.
   itself, or nobody (no version artifact). Resolved by `release-recon.sh` and
   decisive for the whole release path. Defined under RELEASE.
 - **tack** / **revdiff** — sibling plugins `anchor` integrates with when present
-  (repo resolution and route bookkeeping; terminal-native visual diff review).
-  Each is optional, and the flow that uses it falls back when absent.
+  (route bookkeeping; terminal-native visual diff review). Each is optional, and
+  the flow that uses it falls back when absent.
 
 ## Requirements
 
 ### TARGET — Target repo resolution
 
 - **[TARGET-01]** When a skill is invoked with a name argument, the system shall
-  resolve that name through tack's repo db before operating on any repo.
+  resolve that name to a forge host and project path through `gh` and `glab`
+  before operating on any repo, over the repos the user can reach on each host
+  they are authenticated to.
 - **[TARGET-02]** When a skill is invoked with no argument, the system shall
   resolve the target repo from `git rev-parse --show-toplevel` of the working
   directory.
 - **[TARGET-03]** The system shall re-resolve the target repo on every invocation
   and shall not assume a previously resolved target carries forward.
-- **[TARGET-04]** If tack resolves a name to multiple candidates, then the system
-  shall present them and prompt the user to choose.
-- **[TARGET-05]** If tack yields no match or is absent, then the system shall fall
-  back to a case-insensitive substring match of the name against the basenames
-  of git repos the session has touched.
+- **[TARGET-04]** If a name matches more than one repo, then the system shall
+  present the candidates and prompt the user to choose.
+- **[TARGET-05]** If no repo matches, then the system shall fall back to a
+  case-insensitive substring match of the name against the basenames of git
+  repos the session has touched.
 - **[TARGET-06]** If the session touched more than one repo or edits landed outside
   the working directory, then the system shall state the resolved path and ask
   which repo to target.
@@ -74,6 +76,14 @@ behavior, not an independent authority — review them against the source.
   silently ignored anywhere else, so the helper runs against the
   working-directory repo while the rest of the flow uses the target — a
   divergence no later step can detect.
+- **[TARGET-10]** The system shall match a bare name against a repo's basename
+  exactly, case-insensitively. GitLab's project search answers on substrings, so
+  `toolbox` returns `pwsh-toolbox` alongside `cloud-toolbox`, and adopting one
+  would act on a repo the user never named.
+- **[TARGET-11]** The system shall report a local checkout for a resolved target
+  only when the working directory's repo has that target as its `origin`, and
+  shall skip a configured forge host it is not authenticated to. Where no host
+  could be queried at all, it shall report that rather than that nothing matched.
 
 ### COMMIT — Commit
 
