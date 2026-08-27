@@ -17,7 +17,14 @@
 # Output lines (KEY=value, read from stdout):
 #   RELEASE_MODEL=<model>              who owns the bump — see the table below
 #   RELEASE_FORGE=<github|gitlab|none>
-#   RELEASE_WORKFLOW=<path>            the release/tag-triggered CI file (model's evidence)
+#   RELEASE_WORKFLOW=<path>            the release/tag/dispatch-triggered CI file
+#                                      (the model's evidence)
+#   RELEASE_DISPATCH_INPUTS=<a,b>      inputs that workflow declares (dispatch only)
+#   RELEASE_DISPATCH_BUMP_INPUT=<name> the one carrying the semver level, so the
+#                                      dispatch passes it by the workflow's own name
+#   RELEASE_PUBLISH_DOCS=<a,b>         repo docs that state how it publishes; the repo
+#                                      is the authority, so read these before acting
+#                                      on the inferred model
 #   RELEASE_MANIFEST=<path>            the shipped version manifest (empty: none found)
 #   RELEASE_MANIFEST_SOURCE=<path>     the canonical descriptor when the manifest is
 #                                      generated from one — bump THIS, not the manifest
@@ -53,6 +60,8 @@
 #   release-triggered    CI fires on a published release and owns the bump. Publish
 #                        with `gh release create`; never hand-edit the manifest.
 #   tag-triggered        CI fires on a tag push and owns the publish.
+#   dispatch-triggered   a release workflow run by hand owns the bump. Publish by
+#                        dispatching it with the level; never hand-edit the manifest.
 #   bump-commit          no release CI; a version manifest exists, so the bump is a
 #                        commit in this repo.
 #   no-version-artifact  no manifest at all (IaC, docs, a content repo) — the merge
@@ -178,28 +187,103 @@ fi
 # Which block a `release:` line sits in decides the model, and `jobs:` blocks
 # hold `release:` job names at the same indent as `on:` blocks hold the trigger.
 # So walk the top-level keys and only look inside `on:`.
+#
+# Precedence within one file is release > tags > dispatch: a release workflow
+# that also carries `workflow_dispatch:` as a manual escape hatch is still
+# release-triggered, and reading it as dispatched would describe the hatch
+# rather than how the repo actually publishes.
 workflow_trigger() {
   awk '
     # A top-level key (column 0, not a comment) opens a new block.
     /^[^[:space:]#]/ { on_block = ($0 ~ /^("on"|'"'"'on'"'"'|on)[[:space:]]*:/); next }
     !on_block { next }
-    /^[[:space:]]+release[[:space:]]*:/ { print "release"; exit }
-    /^[[:space:]]+tags([[:space:]]*:|-ignore)/ { print "tags"; exit }
+    /^[[:space:]]+release[[:space:]]*:/ { r = 1 }
+    /^[[:space:]]+tags([[:space:]]*:|-ignore)/ { t = 1 }
+    /^[[:space:]]+workflow_dispatch[[:space:]]*:/ { d = 1 }
+    END { if (r) print "release"; else if (t) print "tags"; else if (d) print "dispatch" }
   ' "$1"
 }
 
+# The names of the inputs a `workflow_dispatch` trigger declares, one per line.
+# Walks by indentation rather than matching key names, because an input may be
+# called anything — which is the whole reason the caller has to be told.
+dispatch_inputs() {
+  awk '
+    /^[^[:space:]#]/ { on_block = ($0 ~ /^("on"|'"'"'on'"'"'|on)[[:space:]]*:/); wd = 0; inp = 0; next }
+    !on_block { next }
+    /^[[:space:]]*$/ { next }
+    /^[[:space:]]*#/ { next }
+    {
+      match($0, /^[ ]*/); ind = RLENGTH
+      if ($0 ~ /^[[:space:]]+workflow_dispatch[[:space:]]*:/) { wd = 1; wdind = ind; inp = 0; next }
+      if (!wd) next
+      if (ind <= wdind) { wd = 0; inp = 0; next }
+      if ($0 ~ /^[[:space:]]+inputs[[:space:]]*:/) { inp = 1; inpind = ind; next }
+      if (!inp) next
+      if (ind <= inpind) { inp = 0; next }
+      if (!nameind || ind < nameind) nameind = ind
+      if (ind == nameind && $0 ~ /^[[:space:]]*[A-Za-z_][A-Za-z0-9_-]*[[:space:]]*:/) {
+        k = $0; sub(/^[[:space:]]*/, "", k); sub(/[[:space:]]*:.*/, "", k); print k
+      }
+    }
+  ' "$1"
+}
+
+# A workflow's name and file name are matched case-insensitively below. `${1,,}`
+# would do this in one expansion, but it is bash 4.0+ and macOS ships 3.2, where
+# it is a parse error rather than a fallback.
+lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
+
+# Whether a dispatched workflow is the repo's *release* workflow. `release:` and
+# `tags:` are release triggers by construction; `workflow_dispatch:` is not —
+# it is the ordinary manual-run hatch, and most workflows in a repo carry one.
+# Matching it alone would name whichever workflow file sorted first, so a second
+# signal is required: the workflow identifies itself as a release, or it takes
+# the input a release-by-dispatch needs.
+dispatch_publishes() {
+  local f="$1" base name
+  base=$(basename "$f"); base="${base%.*}"
+  if [[ "$(lower "$base")" == *releas* || "$(lower "$base")" == *publish* ]]; then
+    return 0
+  fi
+  name=$(sed -n 's/^name:[[:space:]]*//p' "$f" | head -1)
+  if [[ "$(lower "$name")" == *releas* || "$(lower "$name")" == *publish* ]]; then
+    return 0
+  fi
+  [[ -n "$(bump_input_of "$f")" ]]
+}
+
+# The declared input that carries the semver level, so the skill dispatches with
+# the name the workflow actually uses instead of guessing `bump`.
+bump_input_of() {
+  local i
+  while read -r i; do
+    [[ -n "$i" ]] || continue
+    case "$(lower "$i")" in
+      bump|level|bump_level|bump-level|release_type|release-type|version|semver) echo "$i"; return ;;
+    esac
+  done < <(dispatch_inputs "$1")
+}
+
 detect_ci_model() {
-  local f trigger tag_workflow=""
+  local f trigger tag_workflow="" dispatch_workflow=""
   for f in .github/workflows/*.yml .github/workflows/*.yaml; do
     [[ -f "$f" ]] || continue
     trigger=$(workflow_trigger "$f")
     case "$trigger" in
-      release) echo "release-triggered $f"; return ;;
-      tags)    [[ -n "$tag_workflow" ]] || tag_workflow="$f" ;;
+      release)  echo "release-triggered $f"; return ;;
+      tags)     [[ -n "$tag_workflow" ]] || tag_workflow="$f" ;;
+      dispatch) if [[ -z "$dispatch_workflow" ]] && dispatch_publishes "$f"; then
+                  dispatch_workflow="$f"
+                fi ;;
     esac
   done
   if [[ -n "$tag_workflow" ]]; then
     echo "tag-triggered $tag_workflow"
+    return
+  fi
+  if [[ -n "$dispatch_workflow" ]]; then
+    echo "dispatch-triggered $dispatch_workflow"
     return
   fi
   # GitLab has no release-published event; a tag-gated pipeline is the shape.
@@ -318,9 +402,37 @@ case "$model" in
     ;;
 esac
 
+# --- The dispatched workflow's own interface ----------------------------------
+# Only meaningful on `dispatch-triggered`: the skill has to supply the level as
+# an input, and the workflow names that input, not this script.
+dispatch_inputs_csv=""
+dispatch_bump_input=""
+if [[ "$model" == "dispatch-triggered" && -n "$workflow" ]]; then
+  while read -r input; do
+    [[ -n "$input" ]] || continue
+    dispatch_inputs_csv+="${dispatch_inputs_csv:+,}$input"
+  done < <(dispatch_inputs "$workflow")
+  dispatch_bump_input=$(bump_input_of "$workflow")
+fi
+
+# --- What the repo says about publishing --------------------------------------
+# A repo is the authority on how it releases; inference from CI triggers is the
+# fallback for one that says nothing. Naming the docs is the deterministic half —
+# reading what they say is the skill's.
+publish_docs=""
+for d in AGENTS.md CONTRIBUTING.md; do
+  [[ -f "$d" ]] || continue
+  grep -qiE '(^#+[[:space:]].*(releas|publish))|(releases?[[:space:]]+(are|is)([[:space:]]|$))' "$d" \
+    || continue
+  publish_docs+="${publish_docs:+,}$d"
+done
+
 echo "RELEASE_MODEL=$model"
 echo "RELEASE_FORGE=$(detect_forge || true)"
 echo "RELEASE_WORKFLOW=$workflow"
+echo "RELEASE_DISPATCH_INPUTS=$dispatch_inputs_csv"
+echo "RELEASE_DISPATCH_BUMP_INPUT=$dispatch_bump_input"
+echo "RELEASE_PUBLISH_DOCS=$publish_docs"
 echo "RELEASE_MANIFEST=$manifest"
 echo "RELEASE_MANIFEST_SOURCE=$manifest_source"
 echo "RELEASE_MANIFEST_REGEN=$regen_cmd"

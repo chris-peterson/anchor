@@ -226,6 +226,149 @@ o=$(run "$repo")
 [ "$(val RELEASE_VERSION "$o")" = "0.2.0" ] || fail "VERSION file wrong: $o"
 ok "gitlab CI_COMMIT_TAG -> tag-triggered, version read from VERSION"
 
+# --- dispatch-triggered: a release workflow someone runs by hand ---------------
+# The escape-hatch trap: every workflow in a repo tends to carry
+# `workflow_dispatch:`, so matching that alone names whichever file sorts first.
+# Here `deploy-docs.yml` sorts ahead of `release.yml` and must not win.
+repo=$(new_repo dispatch)
+mkdir -p "$repo/.github/workflows"
+cat > "$repo/.github/workflows/deploy-docs.yml" <<'YAML'
+name: Deploy docs
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo docs
+YAML
+cat > "$repo/.github/workflows/release.yml" <<'YAML'
+name: Release
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: How far to advance the version
+        required: true
+        type: choice
+        options: [patch, minor, major]
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ship
+YAML
+printf 'name: p\nversion: 1.4.0\n' > "$repo/plugin.yml"
+mkdir -p "$repo/.claude-plugin"
+printf '{\n  "name": "p",\n  "version": "1.4.0"\n}\n' > "$repo/.claude-plugin/plugin.json"
+git -C "$repo" add -A
+git -C "$repo" commit --quiet -m dispatch
+o=$(run "$repo")
+[ "$(val RELEASE_MODEL "$o")" = "dispatch-triggered" ] \
+  || fail "a dispatch-only release workflow should be dispatch-triggered: $(val RELEASE_MODEL "$o")"
+[ "$(val RELEASE_WORKFLOW "$o")" = ".github/workflows/release.yml" ] \
+  || fail "the release workflow should win over the alphabetically-first hatch: $o"
+ok "workflow_dispatch on a release workflow -> dispatch-triggered (not deploy-docs)"
+
+[ "$(val RELEASE_DISPATCH_INPUTS "$o")" = "bump" ] \
+  || fail "declared dispatch inputs wrong: $(val RELEASE_DISPATCH_INPUTS "$o")"
+[ "$(val RELEASE_DISPATCH_BUMP_INPUT "$o")" = "bump" ] \
+  || fail "the level-carrying input should be named: $o"
+ok "the workflow's declared inputs and its level input are reported"
+
+# CI owns the bump here, so the notes are not a release body this skill writes.
+[ -z "$(val RELEASE_NOTES_BASELINE "$o")" ] \
+  || fail "dispatch-triggered notes ride a commit, so no notes baseline: $o"
+ok "dispatch-triggered gets no notes baseline"
+
+# --- a dispatched workflow that is not a release workflow ---------------------
+# Nothing identifies it as one and it takes no level, so inference falls through
+# to today's answer rather than naming a workflow that publishes nothing.
+repo=$(new_repo hatch-only)
+mkdir -p "$repo/.github/workflows"
+cat > "$repo/.github/workflows/ci.yml" <<'YAML'
+name: CI
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo build
+YAML
+printf '{\n  "name": "x",\n  "version": "2.0.0"\n}\n' > "$repo/package.json"
+git -C "$repo" add -A
+git -C "$repo" commit --quiet -m hatch
+o=$(run "$repo")
+[ "$(val RELEASE_MODEL "$o")" = "bump-commit" ] \
+  || fail "a manual-run hatch is not a release model: $(val RELEASE_MODEL "$o")"
+[ -z "$(val RELEASE_DISPATCH_INPUTS "$o")" ] || fail "no dispatch model, so no inputs: $o"
+ok "a plain workflow_dispatch hatch does not become a release model"
+
+# --- release: alongside workflow_dispatch: stays release-triggered ------------
+repo=$(new_repo both-triggers)
+mkdir -p "$repo/.github/workflows"
+cat > "$repo/.github/workflows/release.yml" <<'YAML'
+name: Release
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ship
+YAML
+printf '{\n  "name": "x",\n  "version": "1.0.0"\n}\n' > "$repo/package.json"
+git -C "$repo" add -A
+git -C "$repo" commit --quiet -m both
+o=$(run "$repo")
+[ "$(val RELEASE_MODEL "$o")" = "release-triggered" ] \
+  || fail "a manual hatch on a release-triggered workflow must not flip the model: $(val RELEASE_MODEL "$o")"
+[ -n "$(val RELEASE_NOTES_BASELINE "$o")" ] \
+  || fail "still release-triggered, so the notes baseline stands: $o"
+rm -f "$(val RELEASE_NOTES_BASELINE "$o")"
+ok "release: with a workflow_dispatch hatch stays release-triggered"
+
+# --- a repo that states its publish path --------------------------------------
+# The repo is the authority; naming the doc is deterministic, reading it is not.
+repo=$(new_repo states-publish)
+printf '{\n  "name": "x",\n  "version": "1.0.0"\n}\n' > "$repo/package.json"
+printf '# p\n\nReleases are cut by the maintainer, who runs make ship.\n' > "$repo/AGENTS.md"
+git -C "$repo" add -A
+git -C "$repo" commit --quiet -m states
+o=$(run "$repo")
+[ "$(val RELEASE_PUBLISH_DOCS "$o")" = "AGENTS.md" ] \
+  || fail "a doc stating how the repo publishes should be named: $(val RELEASE_PUBLISH_DOCS "$o")"
+ok "a stated publish path is surfaced for the skill to read"
+
+repo=$(new_repo silent-docs)
+printf '{\n  "name": "x",\n  "version": "1.0.0"\n}\n' > "$repo/package.json"
+printf '# p\n\nRun the tests with make test.\n' > "$repo/AGENTS.md"
+git -C "$repo" add -A
+git -C "$repo" commit --quiet -m silent
+o=$(run "$repo")
+[ -z "$(val RELEASE_PUBLISH_DOCS "$o")" ] \
+  || fail "a doc saying nothing about publishing should not be named: $o"
+ok "a repo whose docs say nothing about publishing surfaces none"
+
+# The statement can end the line — prose wraps, and requiring whitespace after
+# `are` is how the phrase most people write goes undetected.
+repo=$(new_repo wrapped-statement)
+printf '{\n  "name": "x",\n  "version": "1.0.0"\n}\n' > "$repo/package.json"
+printf '# p\n\nReleases are\ncut by the maintainer.\n' > "$repo/AGENTS.md"
+git -C "$repo" add -A
+git -C "$repo" commit --quiet -m wrapped
+o=$(run "$repo")
+[ "$(val RELEASE_PUBLISH_DOCS "$o")" = "AGENTS.md" ] \
+  || fail "a statement wrapping at end of line should still be found: $o"
+ok "a publish statement broken across lines is still surfaced"
+
 # --- branch + push state ------------------------------------------------------
 [ "$(val RELEASE_BRANCH "$o")" = "main" ] || fail "branch wrong: $o"
 [ "$(val RELEASE_ON_DEFAULT "$o")" = "1" ] || fail "main is the default branch here: $o"

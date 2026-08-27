@@ -16,8 +16,9 @@ So this skill assumes nothing about a preceding merge in the same session: it
 reads the release state from the repo, and runs the same way whether one CR just
 landed or five did last week.
 
-**Release model** = who owns the version bump: the CI workflow, a commit in this
-repo, or nobody. It is the first thing to establish and the one thing worth being
+**Release model** = who owns the version bump: a CI workflow, a commit in this
+repo, or nobody — and where the repo states its own publish path, that statement
+rather than the inference. It is the first thing to establish and the one thing worth being
 certain about — hand-editing a manifest whose workflow also bumps it lands two
 commits that fight, and it surfaces only after the release is public.
 
@@ -54,8 +55,11 @@ flowchart TD
     subgraph "Step 5: Publish by model"
         Notes --> Which{Which model?}
         Which -->|release/tag-triggered| ReviewNotes["Review notes, confirm, publish"]
+        Which -->|dispatch-triggered| Stage["Notes into the changelog"]
         Which -->|bump-commit| Bump["Bump source, edit changelog"]
         Bump --> Commit["Hand to /anchor:commit"]
+        Stage --> Dispatch["Commit, then dispatch with the level"]
+        Dispatch --> Follow
         ReviewNotes --> Follow["Watch workflow, fast-forward local"]
     end
 
@@ -110,8 +114,31 @@ procedure and the traps each one hides:
 |---|---|---|
 | `release-triggered` | the CI workflow (`RELEASE_WORKFLOW`) | create a forge release; never touch the manifest |
 | `tag-triggered` | the CI workflow | push an annotated tag |
+| `dispatch-triggered` | the CI workflow (`RELEASE_WORKFLOW`) | commit the notes, then dispatch it with the level; never touch the manifest |
 | `bump-commit` | this skill | bump, edit the changelog, commit |
 | `no-version-artifact` | nobody | nothing — report and stop |
+
+### The repo outranks the inference
+
+`RELEASE_MODEL` is inferred from the repo's CI triggers, which is the right
+answer only for a repo that hasn't said otherwise. A repo *is* the authority on
+how it publishes, so where it states that, the statement wins.
+
+`RELEASE_PUBLISH_DOCS` names the docs that state one — a comma-separated list of
+existing files, empty when none of them mention releasing. **Empty is the common
+case: act on `RELEASE_MODEL` and don't raise it.** Where it names a file, read
+that file for the publish path before doing anything else, and:
+
+- **The two agree** — proceed on the model; say nothing.
+- **They disagree** — follow the repo and say so in one line (*"AGENTS.md says
+  releases are dispatched, so taking that over the inferred `bump-commit`"*).
+  Don't argue the inference; the doc is the author writing down what they do.
+- **The doc describes a path no model covers** (a script, a separate release
+  repo, a person to ask) — say what it says and stop rather than substituting the
+  nearest model.
+
+This is a targeted read of a named file for one fact, not a general instruction
+to reason from the whole document.
 
 Two states end the run here, and both are correct outcomes rather than failures:
 
@@ -128,8 +155,8 @@ Two states need surfacing before going further:
   Surface the dirty tree and ask whether to commit it first (`/anchor:commit`) or
   release what's committed.
 - **`RELEASE_UNPUSHED` > 0 with `RELEASE_ON_DEFAULT=1`** — local commits the remote
-  hasn't seen. On the release-triggered and tag-triggered models the workflow builds
-  from the remote, so publishing now would ship without them. Push first.
+  hasn't seen. On every model where a workflow owns the bump it builds from the
+  remote, so publishing now would ship without them. Push first.
 
 ## Step 2: Read what is shipping
 
@@ -212,6 +239,10 @@ every consumer below takes them by file, never as an inline escaped string.
 Read the matching section of `${CLAUDE_PLUGIN_ROOT}/guides/release-models.md`
 before writing anything. The two families differ in *what gets reviewed*, because
 they differ in where the notes end up.
+
+Which family a model belongs to is decided by **where the notes end up**, not by
+what fires the publish: `release-triggered` and `tag-triggered` put them in the
+published body, `bump-commit` and `dispatch-triggered` put them in a commit.
 
 ### `release-triggered` and `tag-triggered` — the notes are the published body
 
@@ -297,6 +328,58 @@ easy to drop precisely because the publish already succeeded:
    carries generated content, so skipping it leaves the tree missing files and the
    next push rejected as non-fast-forward.
 
+### `dispatch-triggered` — the notes are committed, then the workflow runs
+
+The workflow owns the bump, the tag, and the published body; it reads the notes
+out of the changelog, so they have to be committed before it starts. That puts
+them in a commit — reviewed there, like `bump-commit`, which is why
+`RELEASE_NOTES_BASELINE` is empty and there is no separate notes review.
+
+1. **Write the notes into the changelog's accruing section.** Where
+   `RELEASE_CHANGELOG_UNRELEASED=1`, fill that section and **leave its heading
+   alone** — the workflow retitles it to the version it derives. Reconcile the
+   bullets already in it against `RELEASE_RANGE`; they may predate later changes
+   in the same release.
+2. **Do not bump the manifest or its source, and do not tag.** Those are the
+   workflow's, and doing them here lands a commit that fights its own.
+3. **Land the notes through `/anchor:commit`**, which runs the tests, reviews the
+   diff, writes the message, and pushes. The workflow builds from the remote, so
+   the push has to land before the dispatch.
+4. **Confirm the dispatch explicitly**, the same second gate the published-body
+   models get and for the same reason — the run publishes, and its tag may be
+   immutable. State the workflow, the level, and what the run owns:
+
+   > Dispatching `.github/workflows/release.yml` with `bump=minor` fires the run
+   > that derives `v1.8.0`, retitles the changelog section, commits, tags that
+   > commit, and publishes. Proceed? `[yes / no]`
+
+5. **Dispatch it**, passing the level by the input's own declared name — the
+   recon block resolved it, so don't assume `bump`:
+
+   ```bash
+   gh workflow run <RELEASE_WORKFLOW> -f <RELEASE_DISPATCH_BUMP_INPUT>=<level>
+   ```
+
+   Where `RELEASE_DISPATCH_INPUTS` lists inputs beyond the level, ask rather than
+   leaving a required one unset — a dispatch missing one fails before the run
+   starts. Where `RELEASE_DISPATCH_BUMP_INPUT` is empty, the workflow declares no
+   input that carries a level: report the inputs it does declare and ask which to
+   pass rather than guessing a name.
+
+   On GitLab there is no dispatch equivalent for a tag-gated pipeline; a repo
+   whose docs describe a manual pipeline run is the "path no model covers" case
+   in Step 1 — say what the doc says and stop.
+
+6. **Then follow through, exactly as the published-body models do.** `gh workflow
+   run` exits as soon as the run is queued, so nothing is released yet:
+
+   - **Watch the run to a terminal state** via `/anchor:pipeline`, naming the
+     workflow (`--workflow <RELEASE_WORKFLOW>`). A red run leaves the release
+     unmade, and the dispatch's own success says nothing about it.
+   - **Fast-forward the local checkout** — `git pull --ff-only` — once it is
+     green. The run pushed the bump commit and the tag; do the pull, don't offer
+     it.
+
 ### `bump-commit` — the bookkeeping is a commit
 
 Here the notes land *in the repo*, so they are reviewed as part of the commit
@@ -320,8 +403,10 @@ twice.
 ## Step 6: Report
 
 One line: the version, how it published, and where to see it —
-`Released v1.2.0 (minor) — <release url>` for the triggered models, or
-`Released v1.2.0 (minor) in <sha>` for a bump commit. Add the pipeline verdict
+`Released v1.2.0 (minor) — <release url>` for the models that publish a release
+body, or `Released v1.2.0 (minor) in <sha>` for a bump commit. On
+`dispatch-triggered` the version is the workflow's to derive, so report what the
+run produced rather than what was recommended. Add the pipeline verdict
 when Step 5 watched one. Where a tack route is bound to the session, attach the
 release URL to the route's tack as a link so the shipped artifact is recorded:
 

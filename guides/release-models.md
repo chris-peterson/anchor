@@ -14,8 +14,15 @@ release is already out.
 |---|---|---|
 | `release-triggered` | the CI workflow | create a release on the forge |
 | `tag-triggered` | the CI workflow | push an annotated tag |
+| `dispatch-triggered` | the CI workflow | dispatch it with the level |
 | `bump-commit` | this skill, as a commit | the commit (and its push) |
 | `no-version-artifact` | nobody | the merge already was the release |
+
+**A repo that states how it publishes outranks all of this.** The models are
+inferred from CI triggers, which is the fallback for a repo that says nothing.
+`RELEASE_PUBLISH_DOCS` names the repo docs that do say something — read them
+before acting on the inferred model, follow what they describe where the two
+disagree, and say in one line that you did.
 
 ## `release-triggered` — CI fires on a published release
 
@@ -89,6 +96,63 @@ manifest bump precedes the tag or the workflow performs it is repo-specific: rea
 `RELEASE_BUMP_CONVENTION` and the prior release's commits before writing
 anything. Tag from the commit that is shipping, and push the tag as its own step
 so a failed push doesn't leave a local-only tag that looks published.
+
+## `dispatch-triggered` — a release workflow someone runs by hand
+
+The shape: a workflow whose only trigger is `on: workflow_dispatch:`, taking the
+semver level as an input. The recon block names the file in `RELEASE_WORKFLOW`,
+the inputs it declares in `RELEASE_DISPATCH_INPUTS`, and the one carrying the
+level in `RELEASE_DISPATCH_BUMP_INPUT`.
+
+Same division of labor as `release-triggered` — **do not bump the manifest,
+regenerate it, or tag anything.** The workflow derives the version from the
+descriptor, retitles the changelog's accruing section, commits, and tags that
+commit, which is what makes the manifest at the tag report the version the tag
+names. The publish step is the dispatch:
+
+```bash
+gh workflow run <RELEASE_WORKFLOW> -f <RELEASE_DISPATCH_BUMP_INPUT>=<level>
+```
+
+Pass the level by the name the workflow declares rather than assuming `bump` —
+that is what `RELEASE_DISPATCH_BUMP_INPUT` is for. Where the workflow declares
+inputs beyond the level, read them off `RELEASE_DISPATCH_INPUTS` and ask rather
+than leaving a required one unset; a dispatch missing a required input fails
+before the run starts.
+
+**`workflow_dispatch:` alone is not this model.** It is the ordinary manual-run
+hatch and most workflows in a repo carry one, so a scan matching it by itself
+names whichever file sorted first — a docs deploy, a lint job. The recon requires
+a second signal: the workflow identifies itself as a release (its file name or
+its `name:`), or it declares an input that carries a level. A workflow with both
+`release:` and `workflow_dispatch:` stays `release-triggered`; the hatch is an
+escape route, not how the repo publishes.
+
+**Where do the notes go?** This is the one thing that differs from the two
+triggered models above, and `RELEASE_CHANGELOG_UNRELEASED` answers it. A
+dispatched workflow usually builds the release body from the changelog's
+`Unreleased` section, which means the notes have to be **committed before the
+dispatch** — so they are reviewed as part of that commit, the way `bump-commit`
+reviews them, and `RELEASE_NOTES_BASELINE` is empty because there is no separate
+notes review to run. Write the notes into `Unreleased` without retitling it (the
+workflow does that) and land them through `/anchor:commit`; only then dispatch.
+
+The traps:
+
+- **The dispatch returns immediately and publishes nothing yet.** `gh workflow
+  run` exits as soon as the run is queued. Everything that makes the release —
+  the bump, the changelog retitle, the tag, the published body — happens inside
+  the run, so watch it to a terminal state before reporting a release.
+- **A worksheet in `Unreleased` can be published verbatim.** Where the workflow
+  proxies that section into the release body, whatever is sitting there ships.
+  Reconcile it against `RELEASE_RANGE` before dispatching.
+- **The bump level may be inferred from the notes rather than taken from the
+  input.** Some release drivers read the level back from the changelog's
+  headings, so the input and the notes have to agree — a `Removed` section with
+  content and a `patch` input is a contradiction one of the two will win.
+- **The workflow pushes to the default branch, so pull afterward.** Same as
+  `release-triggered`: its commit carries generated content, and skipping the
+  pull leaves the next push rejected as non-fast-forward.
 
 ## `bump-commit` — no release CI, so the bump is a commit here
 

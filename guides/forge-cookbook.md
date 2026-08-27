@@ -440,6 +440,44 @@ per-MR checkbox decides — read the MR's `squash` field to see which way it's s
 glab mr view <iid> --output json | jq '{squash}'
 ```
 
+## Dispatch a release workflow
+
+The publish step for the `dispatch-triggered` model (see
+`guides/release-models.md`): the workflow derives the version, tags, and
+publishes, so the only thing to get right here is the input name. It comes from
+the recon block's `RELEASE_DISPATCH_BUMP_INPUT` — a workflow is free to call it
+anything, and `bump` is a convention rather than a contract:
+
+```bash
+# GitHub — one -f per input. The workflow file is named by path or by basename;
+# the default branch's copy is the one that runs unless --ref says otherwise.
+gh workflow run <workflow> -f <bump-input>=minor
+
+# What the workflow declares, when the recon block isn't at hand:
+gh workflow view <workflow> --yaml
+
+# The dispatch prints nothing and exits as soon as the run is queued, so the run
+# has to be found before it can be watched. It is not the newest run for the
+# commit — the projection and test jobs share that commit:
+gh run list --workflow <workflow> --limit 1 --json databaseId,status,url
+```
+
+A wrong input name fails at the API rather than in the run, so nothing is
+published while you work it out:
+
+```text
+HTTP 422: Unexpected inputs provided: ["bogus"]
+```
+
+Omitting a required one is rejected the same way, before the run starts. Both are
+argument errors rather than authorization ones — read the name off the workflow
+instead of retrying.
+
+GitLab has no equivalent for a tag-gated pipeline. Its nearest shape is a
+manual job in a pipeline that already exists (`glab ci run --variables k:v` for
+a fresh one), which is a different model — a repo that publishes that way is
+documenting a path the four inferred models don't cover.
+
 ## Publish a release
 
 Creating a release is the publish step for the `release-triggered` and
