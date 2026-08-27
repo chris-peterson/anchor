@@ -23,6 +23,10 @@
 - Worktree isolation. `scripts/worktree.sh`, the `--worktree <path>` flag on every helper, and `guides/worktree-isolation.md` are gone; a write flow against a repo the session didn't start in now operates directly in that checkout via `--repo <path>`, the same as a read flow; `--repo` takes any checkout, a linked worktree included. Anyone passing `--worktree` gets an unrecognized-argument error — pass `--repo` instead. `RESOLVED_VIA` reports `repo` or `cwd` only, and TARGET-08 is retired (TARGET-09/10 renumber to 08/09).
 - `templates/cr-review.md` is gone. Its placement and finding-shape rules — narrowest anchor that carries the remark, one concern per finding, consequence over observation, the reviewer's own wording verbatim — are in the `review` skill, which is where the behavior they govern lives.
 
+### Fixed
+
+- Naming a target repo no longer needs `tack` installed. `/anchor:issue shipyard` run from a different checkout filed against the checkout you were standing in; a name now resolves through `gh` / `glab`, matched on the basename exactly across the hosts you're logged in to. `TARGET_VIA=tack` is now `resolved`, and `TARGET_LOCAL` names the working directory's repo only when its `origin` is the target — so a write flow against a repo you aren't standing in needs `--repo`.
+
 ## 1.7.0
 
 ### Added
