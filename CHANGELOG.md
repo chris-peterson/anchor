@@ -12,6 +12,7 @@
 - Review backends now default per skill. `/anchor:prepare-review`, `/anchor:issue`, and `/anchor:release` review one drafted document, so they open it in your editor and take whatever you save as the artifact; `/anchor:commit` and `/anchor:review` review a changeset and keep `revdiff`. Set `anchor.reviewBackend`, or `anchor.<skill>.reviewBackend`, to name one tool for everything as before.
 - The editor a review opens resolves past git's own chain: with no `core.editor`, `VISUAL`, or `EDITOR` set, `anchor` reaches for a blocking VS Code on your `PATH` (`code --wait`) and then git's compiled default. A session exporting `GIT_EDITOR=true` — the common agent-harness shape — no longer means no editor at all.
 - A review re-opened after `changes-requested` compares against the draft you graded, not the description the forge holds, so the second pass shows what your feedback changed.
+- The build tooling moves to shipyard v2. A projection job commits `plugin.json`, `hooks.json`, and `suite.describe` to the branch on every push, so a committed artifact matches its source at all times instead of only after a release; `scripts/shipyard` and the `just check` / `plugin-json` / `describe` recipes are gone, and seeing the projection locally is `just generate`. Releases are dispatched with a bump level rather than triggered by publishing a tag.
 
 ### Removed
 

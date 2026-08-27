@@ -14,9 +14,7 @@ commit, not as a follow-up.
 ## Commands
 
 ```bash
-just check          # validate source and preview the pending projection (no write)
-just generate       # regenerate plugin.json and docs/ from plugin.yml and the sources
-just describe       # resync plugin.yml's suite.describe from skills/rules/hooks
+just generate       # project source into plugin.json, hooks.json, describe, and docs/
 just docs           # render the docs site and serve it locally
 
 just test           # every suite this platform runs, via tests/run-all.sh
@@ -45,12 +43,25 @@ guides/                   reference the skills and rules read at runtime
 templates/                the output shapes the skills produce, read at runtime
 tests/                    bash suites, one per script under test
 SPEC.md / STATUS.md       requirements and their coverage
-docs/                     docsify site (index.html, _sidebar.md, favicon are source)
+docs/                     docsify site; only README, _sidebar, ambient-rules, whats-new, favicon are source
 ```
 
-`.claude-plugin/plugin.json`, `plugin.yml`'s `suite.describe` block, and most of
-`docs/` are **generated** by `shipyard` from the sources above. Never hand-edit a
-generated file; edit its source and run `just generate`.
+`.claude-plugin/plugin.json`, `hooks/hooks.json`, `plugin.yml`'s `suite.describe`
+block, and most of `docs/` are **generated** by
+[shipyard](https://github.com/chris-peterson/shipyard) from the sources above.
+Never hand-edit a generated file; edit its source and let the projection follow.
+
+The projection job in `.github/workflows/project.yml` is that writer: it runs
+`shipyard generate` on every push and commits the result to the branch, so a
+committed artifact matches its source at all times and the diff a reviewer
+approves is what lands. `just generate` runs the same projectors locally when
+you want to see the result before pushing.
+
+Releases are dispatched, not tagged by hand: run the **Release** workflow with a
+bump level, and shipyard derives the version from `plugin.yml`, retitles
+`CHANGELOG.md`'s `## Unreleased` section, commits, tags that commit, and
+publishes. Write the notes into `## Unreleased` first — reading what landed is
+what picks the level.
 
 ## Conventions
 
@@ -100,4 +111,7 @@ generated file; edit its source and run `just generate`.
 - **Release model** — who owns the version bump: a CI workflow triggered by a
   published release or tag push, a bump commit in the repo, or nobody. Resolved
   by `scripts/release-recon.sh`; a wrong read collides with the workflow's own
-  commit, which is why it is established before anything is drafted.
+  commit, which is why it is established before anything is drafted. A workflow
+  reached by `workflow_dispatch` — this repo's own shape — reads as
+  `bump-commit` until
+  [#78](https://github.com/chris-peterson/anchor/issues/78) lands.

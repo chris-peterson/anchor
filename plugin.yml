@@ -1,7 +1,7 @@
 # Canonical descriptor for the anchor plugin — edit here, never plugin.json.
 # shipyard projects this into .claude-plugin/plugin.json and the marketplace
 # catalog (the suite: block). suite.describe is generated from the
-# skills/rules/hooks sources — run `just build`, don't hand-edit it.
+# skills/rules/hooks sources — the projection job writes it, don't hand-edit it.
 
 name: anchor
 version: 1.7.0
