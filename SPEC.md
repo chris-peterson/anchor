@@ -408,14 +408,34 @@ established before anything is proposed or written.
   repo and gather the release state via a single recon script, acting only on the
   keys it surfaces.
 - **[RELEASE-02]** The system shall establish the repo's release model —
-  `release-triggered`, `tag-triggered`, `bump-commit`, or `no-version-artifact` —
-  before recommending a version or editing any file.
+  `release-triggered`, `tag-triggered`, `dispatch-triggered`, `bump-commit`, or
+  `no-version-artifact` — before recommending a version or editing any file.
 - **[RELEASE-03]** The system shall detect a release-triggered model from the CI
   workflow's trigger block rather than from a `release` key appearing anywhere in
   the file, so a job named `release` is not read as a trigger.
-- **[RELEASE-04]** While the release model is `release-triggered` or `tag-triggered`,
-  the system shall not bump the version manifest, regenerate it, or edit the
-  changelog, because the workflow owns those.
+- **[RELEASE-03a]** The system shall recognize a release workflow whose only
+  trigger is `workflow_dispatch` as CI-owning the bump rather than as
+  `bump-commit`, and shall name that workflow. Because a manual-run trigger is
+  also the ordinary escape hatch that most workflows carry, the system shall
+  require a second signal — the workflow identifying itself as a release, or
+  declaring an input that carries a semver level — rather than matching the
+  trigger alone. A workflow declaring `release` or a tag trigger alongside
+  `workflow_dispatch` shall keep the model that trigger names.
+- **[RELEASE-03b]** Where the release model is `dispatch-triggered`, the system
+  shall report the inputs that workflow declares and which of them carries the
+  semver level, and shall dispatch using that declared name rather than an
+  assumed one.
+- **[RELEASE-03c]** Where a repo's own documentation states how it publishes, the
+  system shall read that statement and follow it over the inferred release model,
+  reporting in one line that it did. Where a repo states nothing, the system shall
+  behave as though the statement were absent.
+- **[RELEASE-04]** While a CI workflow owns the bump — `release-triggered`,
+  `tag-triggered`, or `dispatch-triggered` — the system shall not bump the version
+  manifest, regenerate it, or tag, because the workflow owns those.
+- **[RELEASE-04a]** Where the release model is `dispatch-triggered`, the system
+  shall write the notes into the changelog's accruing section without retitling
+  it, land them through `/anchor:commit` before dispatching, and confirm the
+  dispatch with the author even though no separate notes review ran.
 - **[RELEASE-05]** Where the release model is `no-version-artifact`, the system shall
   report what the range contains and stop rather than manufacture a version or a
   publish step.
@@ -444,7 +464,8 @@ established before anything is proposed or written.
   categorized notes it drafted.
 - **[RELEASE-15]** When a publish fires a release workflow, the system shall watch
   that workflow to a terminal state and then fast-forward the local checkout onto
-  the commit it pushed, performing that pull rather than offering it.
+  the commit it pushed, performing that pull rather than offering it. A dispatch
+  returning once the run is queued shall not be reported as a release.
 - **[RELEASE-16]** Where the version manifest is generated from a canonical
   descriptor, the system shall bump the descriptor and regenerate rather than edit
   the manifest.

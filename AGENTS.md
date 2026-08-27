@@ -111,7 +111,7 @@ what picks the level.
 - **Release model** — who owns the version bump: a CI workflow triggered by a
   published release or tag push, a bump commit in the repo, or nobody. Resolved
   by `scripts/release-recon.sh`; a wrong read collides with the workflow's own
-  commit, which is why it is established before anything is drafted. A workflow
-  reached by `workflow_dispatch` — this repo's own shape — reads as
-  `bump-commit` until
-  [#78](https://github.com/chris-peterson/anchor/issues/78) lands.
+  commit, which is why it is established before anything is drafted. This repo's
+  own shape is `dispatch-triggered`: the **Release** workflow owns the bump, so
+  `/anchor:release` commits the notes and dispatches rather than editing
+  `plugin.yml`.
