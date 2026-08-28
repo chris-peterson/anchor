@@ -1,6 +1,6 @@
 {
   "name": "anchor",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "Consistency across the code-change lifecycle: issue, change request, review, release.",
   "author": {
     "name": "chris-peterson"

@@ -4,7 +4,7 @@
 # skills/rules/hooks sources — the projection job writes it, don't hand-edit it.
 
 name: anchor
-version: 1.9.0
+version: 1.9.1
 description: "Consistency across the code-change lifecycle: issue, change request, review, release."
 author: chris-peterson
 repository: https://github.com/chris-peterson/anchor
