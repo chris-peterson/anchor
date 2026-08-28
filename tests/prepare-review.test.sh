@@ -551,5 +551,51 @@ out=$(bash "$prepare_review_sh" --repo "$repo" --cr 7)
   || fail "--cr must resolve a merged MR; got CR_PREEXISTING=$(key "$out" CR_PREEXISTING)"
 [[ "$(key "$out" CR_IID)" == 7 ]] || fail "--cr should resolve MR 7; got $(key "$out" CR_IID)"
 ok "--cr resolves a merged MR regardless of state"
+# --- NOTHING_TO_REVIEW: the dead end exits, rather than reporting a state -----
+#
+# On the default branch with a clean tree and nothing ahead there is no branch to
+# open a CR from and no work to put in one. Reported as a key alone this is
+# indistinguishable from any other block, so a caller can summarize it away and
+# carry on to whatever came after the CR step; the non-zero exit is what makes
+# the dead end an event. Every other key is still emitted, so the caller can say
+# which condition it hit.
+repo="$(make_repo github.com dead-end)"
+: > "$CR_JSON"
+git -C "$repo" checkout --quiet main
+set +e
+out=$(bash "$prepare_review_sh" --repo "$repo" --no-open 2>"$work/dead-end.err")
+status=$?
+set -e
+[[ "$status" -eq 65 ]] || fail "expected exit 65 on the dead end; got $status"
+[[ "$(key "$out" NOTHING_TO_REVIEW)" == 1 ]] \
+  || fail "expected NOTHING_TO_REVIEW=1; got: $out"
+[[ "$(key "$out" ON_DEFAULT_BRANCH)" == 1 && "$(key "$out" AHEAD)" == 0 ]] \
+  || fail "expected the diagnosis keys alongside it; got: $out"
+[[ -n "$(key "$out" FILE_LINKS)" ]] \
+  || fail "expected the whole block before the exit; got: $out"
+grep -q 'nothing to review' "$work/dead-end.err" \
+  || fail "expected the reason on stderr; got: $(cat "$work/dead-end.err")"
+ok "the default branch with nothing ahead exits 65 after the full block"
+
+# The states that still have somewhere to go keep exiting 0 — the new exit is
+# scoped to the dead end, not to being on the default branch.
+repo="$(make_repo github.com default-dirty)"
+: > "$CR_JSON"
+git -C "$repo" checkout --quiet main
+printf 'work\n' > "$repo/wip.txt"
+out=$(bash "$prepare_review_sh" --repo "$repo" --no-open)
+[[ "$(key "$out" NOTHING_TO_REVIEW)" == 0 ]] \
+  || fail "expected NOTHING_TO_REVIEW=0 with work to review; got: $out"
+[[ "$(key "$out" NEEDS_BRANCH)" == 1 && "$(key "$out" NEEDS_COMMIT)" == 1 ]] \
+  || fail "expected the branch+commit route; got: $out"
+ok "uncommitted work on the default branch still routes rather than exiting"
+
+repo="$(make_repo github.com feat-ahead)"
+: > "$CR_JSON"
+gh_pr_json "$(git -C "$repo" rev-parse HEAD)"
+out=$(bash "$prepare_review_sh" --repo "$repo")
+[[ "$(key "$out" NOTHING_TO_REVIEW)" == 0 ]] \
+  || fail "expected NOTHING_TO_REVIEW=0 on a feature branch; got: $out"
+ok "a feature branch with a CR reports NOTHING_TO_REVIEW=0"
 
 echo "all prepare-review tests passed"

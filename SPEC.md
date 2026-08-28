@@ -189,6 +189,15 @@ check.
   acting only on the keys it surfaces.
 - **[PREPARE-02]** If the branch is not yet pushed, then the system shall direct the
   user to `/anchor:commit` (which commits and pushes) rather than pushing itself.
+- **[PREPARE-02a]** If HEAD is the default branch with a clean tree and nothing
+  ahead of it, then the recon script shall report `NOTHING_TO_REVIEW=1` and exit
+  non-zero, and the system shall report that the flow does not apply and stop.
+  There is no branch to open a CR from and nothing to put in one, so the run has
+  no route forward. The exit status carries it because a key alone does not: the
+  caller is often a chain that named this skill among several, and a state
+  reported only in the block can be summarized into "that step was moot" and
+  passed over — which drops the CR from the chain silently, with the steps after
+  it (a merge, a release) still running.
 - **[PREPARE-03]** The system shall open a draft CR against the already-pushed branch
   and shall not push.
 - **[PREPARE-03a]** Where the CR is inferred from the branch rather than named
