@@ -8,9 +8,16 @@ version: 1.8.0
 description: "Consistency across the code-change lifecycle: issue, change request, review, release."
 author: chris-peterson
 repository: https://github.com/chris-peterson/anchor
-icon: docs/favicon.svg
 license: MIT
 keywords: [commit, issue, pull-request, merge-request, review, git, forge, ai, claude-code]
+
+validate:
+  accept:
+    - warning: root
+      path: CLAUDE.md
+      because: >-
+        CLAUDE.md at the root is this repo's own agent instructions, not context
+        the plugin ships. It points at AGENTS.md, which every agent reads.
 
 # → marketplace.json entry
 marketplace:
