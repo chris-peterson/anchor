@@ -28,19 +28,22 @@ The four verbosity dials are listed in lifecycle order, and they descend:
 
 | Key | Default | What that gets you |
 |---|---|---|
-| `anchor.reviewBackend` | per skill | Unset, each skill picks the shape its artifact wants: `editor` for the ones reviewing a single drafted document (`prepare-review`, `issue`, `release`), `revdiff` for the ones reviewing a changeset (`commit`, `review`). Setting it names one tool for all of them. |
-| `anchor.<skill>.reviewBackend` | the umbrella key, else the skill's own default | A skill reviews in the backend above until you give that skill its own. |
-| `anchor.reviewBudgetMins` | `10` | Descriptions are written for ten minutes of focused review — enough for the change and the topics around it. |
-| `anchor.issueVerbosity` | `75` | Issue bodies run long: the people who pick the work up need the context in the issue. |
-| `anchor.commitVerbosity` | `50` | Commit bodies run to the why plus the context the diff doesn't show. |
-| `anchor.crVerbosity` | `25` | CR descriptions stay near the brief end — a reviewer on a deadline wants pointing, not explaining. |
-| `anchor.releaseVerbosity` | `10` | Release notes run to each change as its effect on someone using the project, and stop. |
-| `anchor.mrVerbosity` / `anchor.prVerbosity` | `anchor.crVerbosity` | No forge split — GitLab and GitHub get the same length until you set one. |
-| `anchor.watchPipelineAfterPush` | `true` | Every push-side skill watches the pipeline that push started and reports it. |
-| `anchor.<skill>.watchPipelineAfterPush` | the umbrella key | A skill follows the setting above until you give that skill its own. |
-| `anchor.workTrackerBaseUri` | none | Mentioning a bare ticket id gets you no link — mention a full URL, or set this. |
-| `anchor.commitRules` / `issueRules` / `crRules` / `mrRules` / `prRules` | none | The default commit, issue, and CR rules apply with nothing layered on. |
-| `anchor.crTemplateRepo` | none | Template resolution stops at what the repo and the forge supply. |
+| [`anchor.reviewBackend`](#key-reviewbackend) | per skill | Each skill picks the shape its artifact wants — `editor` for a drafted document, `revdiff` for a changeset. Setting it names one tool for all of them. |
+| [`anchor.<skill>.reviewBackend`](#key-skill-reviewbackend) | the umbrella key, else per skill | A skill reviews in the backend above until you give that skill its own. |
+| [`anchor.reviewBudgetMins`](#key-reviewbudgetmins) | `10` | Descriptions are written for ten minutes of focused review — enough for the change and the topics around it. |
+| [`anchor.issueVerbosity`](#key-issueverbosity) | `75` | Issue bodies run long: the people who pick the work up need the context in the issue. |
+| [`anchor.commitVerbosity`](#key-commitverbosity) | `50` | Commit bodies run to the why plus the context the diff doesn't show. |
+| [`anchor.crVerbosity`](#key-crverbosity) | `25` | CR descriptions stay near the brief end — a reviewer on a deadline wants pointing, not explaining. |
+| [`anchor.releaseVerbosity`](#key-releaseverbosity) | `10` | Release notes run to each change as its effect on someone using the project, and stop. |
+| [`anchor.mrVerbosity`](#key-mr-pr-verbosity) / [`anchor.prVerbosity`](#key-mr-pr-verbosity) | `anchor.crVerbosity` | No forge split — GitLab and GitHub get the same length until you set one. |
+| [`anchor.watchPipelineAfterPush`](#key-watchpipelineafterpush) | `true` | Every push-side skill watches the pipeline that push started and reports it. |
+| [`anchor.<skill>.watchPipelineAfterPush`](#key-skill-watchpipelineafterpush) | the umbrella key | A skill follows the setting above until you give that skill its own. |
+| [`anchor.workTrackerBaseUri`](#key-worktrackerbaseuri) | none | Mentioning a bare ticket id gets you no link — mention a full URL, or set this. |
+| [`anchor.commitRules`](#key-commitrules) | none | The default commit-message rules apply, with nothing layered on. |
+| [`anchor.issueRules`](#key-issuerules) | none | The default issue rules apply, with nothing layered on. |
+| [`anchor.crRules`](#key-crrules) | none | The default CR-description rules apply, with nothing layered on. |
+| [`anchor.mrRules`](#key-mr-pr-rules) / [`anchor.prRules`](#key-mr-pr-rules) | none | No forge split — GitLab and GitHub get the same rules until you set one. |
+| [`anchor.crTemplateRepo`](#key-crtemplaterepo) | none | Template resolution stops at what the repo and the forge supply. |
 
 Absent keys keep these; the skills never invent a value for a key you haven't
 set.
@@ -49,27 +52,209 @@ set.
 
 Keys use git's standard camelCase convention (like `init.defaultBranch` or
 `commit.gpgSign`). git stores and matches them case-insensitively, so the case is
-purely for readability. Defaults are in the table above rather than repeated in
-each row.
+purely for readability. Defaults are in [the table above](#defaults) rather than
+repeated in each entry.
 
-| Key | Example | Effect |
-|---|---|---|
-| `anchor.workTrackerBaseUri` | `git config anchor.workTrackerBaseUri https://app.clickup.com/t/` | The base URL of your work tracker. When you mention a ticket, `commit` adds a `Refs:` trailer and `prepare-review` links it in the CR. See [Work-tracker references](#work-tracker-references). |
-| `anchor.reviewBackend` | `git config anchor.reviewBackend revdiff` | Which review tool the skills launch, overriding the per-skill defaults in [A backend per artifact](#a-backend-per-artifact): `revdiff` or `editor`. Both return a normalized review verdict, which is the whole point of the key — git's own difftool is deliberately not on the list, because a changeset shown without a verdict ends in "you saw it, approve?", and that is a rubber stamp rather than a review. `revdiff` is a terminal-native reviewer that also handles hg/jj repos; it needs the revdiff plugin installed — `anchor` delegates to its terminal-overlay launcher to open the TUI. `editor` is the other shape of the step: instead of commenting on the draft, you edit it. How the chosen tool renders the diff is its own knob, not an `anchor.*` key: see [Review-backend config](#review-backend-config) (per backend: [`revdiff`](#review-backend-config-revdiff), [`editor`](#review-backend-config-editor)). |
-| `anchor.<skill>.reviewBackend` | `git config anchor.commit.reviewBackend editor` | The same choice for one skill, overriding the umbrella key above. See [A backend per artifact](#a-backend-per-artifact). |
-| `anchor.reviewBudgetMins` | `git config anchor.reviewBudgetMins 10` | How many minutes of focused attention you expect this CR to get. It's an *input*, not a length cap: a tight budget (≈5) makes `prepare-review` lead with the essentials and cut asides hard; a generous one (≈30) keeps more supporting context and depth. It steers *what to include*, not the tone — a tight budget is no license for punchy or marketing framing. For *how long* the result runs, see `crVerbosity` below and [Length knobs](#length-knobs). |
-| `anchor.issueVerbosity` | `git config anchor.issueVerbosity 100` | Where an issue body sits between brevity and thoroughness. It sits highest of the four because the audience is the people who'll do the work, and what reads as detail to anyone else saves them a conversation. Below `100` the prose tightens in order — callouts, then the approach's explanation down to its load-bearing decisions, then Context's second paragraph. **Acceptance criteria are never abbreviated**: they say what done means, so they're the issue's floor the way the deep links are the CR's. |
-| `anchor.commitVerbosity` | `git config anchor.commitVerbosity 25` | The same dial applied to the commit message body. Below `100` the body tightens in order — asides, then the decisions-and-alternatives prose, then the context paragraph — down to a floor of one sentence of *why*. The subject line's format rules and the `Refs:` trailer stand at every setting, and a trivial change still earns a subject-only message. |
-| `anchor.crVerbosity` | `git config anchor.crVerbosity 50` | Where a CR description sits between brevity and thoroughness, as an integer from 1 to 100. It is not a word budget — nothing is counted or truncated; the number says how hard to lean on brevity when the two pull against each other. `100` is the [CR-description template](/templates/cr-description)'s full shape; below that the prose tightens, in the order the [verbosity guide](/guides/cr-verbosity) sets out. **It abbreviates sections, never removes them** — which sections a description has is the template's call, so one that meets its condition is present at every setting, down to its floor. It never cuts the *why* sentence or the Review guide's deep links, and it steers length only, never register. See the `mr`/`pr` overrides below. |
-| `anchor.mrVerbosity` / `anchor.prVerbosity` | `git config anchor.prVerbosity 25` | Forge-specific overrides of `crVerbosity`: `mrVerbosity` applies on GitLab, `prVerbosity` on GitHub. When set, the forge-specific key replaces `crVerbosity` for that forge; otherwise `crVerbosity` applies. |
-| `anchor.releaseVerbosity` | `git config anchor.releaseVerbosity 40` | The same dial applied to release notes. It sits lowest of the four: the audience is everyone using the project, and most of them are reading to find out whether this release affects them. Below `100` the notes shed rationale first, then the consequences a reader can infer, down to a floor of each change stated as its effect on someone using the project. **Every entry survives at every setting**, as do a breaking change's migration steps — the dial shortens entries, it doesn't drop them. |
-| `anchor.commitRules` | `git config anchor.commitRules "prefix the subject with the affected module"` | An extra rule layered onto `anchor`'s default commit-message rules, applied to every message it drafts. |
-| `anchor.issueRules` | `git config anchor.issueRules "always include an acceptance-criteria checklist"` | An extra rule layered onto `anchor`'s default issue rules, applied to every issue the `issue` skill drafts. |
-| `anchor.crTemplateRepo` | `git config anchor.crTemplateRepo my-group/ci-templates` | A repo holding the CR template to use when neither this repo nor the forge's own inheritance supplies one. `prepare-review` reads it last, so it never overrides a template the team already ships. Give it as `group/project` on GitLab or `owner/repo` on GitHub; the template is looked for in that repo's usual locations. |
-| `anchor.crRules` | `git config anchor.crRules "@-mention the on-call lead"` | An extra rule layered onto the default CR-description rules — the forge-agnostic default. See the `mr`/`pr` overrides below. |
-| `anchor.mrRules` / `anchor.prRules` | `git config anchor.prRules "fill in the Risk & rollback section"` | Forge-specific overrides of `crRules`: `mrRules` applies on GitLab, `prRules` on GitHub. When set, the forge-specific key replaces `crRules` for that forge; otherwise `crRules` applies. |
-| `anchor.watchPipelineAfterPush` | `git config anchor.watchPipelineAfterPush false` | Whether a skill that pushes then watches the pipeline that push triggered and reports it. Applies to every push-side skill (`commit`, `resolve-feedback`, `prepare-review`). See [Watching the pipeline after a push](#watching-the-pipeline-after-a-push). |
-| `anchor.<skill>.watchPipelineAfterPush` | `git config anchor.prepare-review.watchPipelineAfterPush false` | The same knob for one skill, overriding the umbrella key above. |
+### `anchor.workTrackerBaseUri` :id=key-worktrackerbaseuri
+
+```bash
+git config anchor.workTrackerBaseUri https://app.clickup.com/t/
+```
+
+The base URL of your work tracker. When you mention a ticket, `commit` adds a
+`Refs:` trailer and `prepare-review` links it in the CR. See
+[Work-tracker references](#work-tracker-references).
+
+### `anchor.reviewBackend` :id=key-reviewbackend
+
+```bash
+git config anchor.reviewBackend revdiff
+```
+
+Which review tool the skills launch, overriding the per-skill defaults in
+[A backend per artifact](#a-backend-per-artifact): `revdiff` or `editor`.
+
+Both return a normalized review verdict, which is the whole point of the key —
+git's own difftool is deliberately not on the list, because a changeset shown
+without a verdict ends in "you saw it, approve?", and that is a rubber stamp
+rather than a review.
+
+`revdiff` is a terminal-native reviewer that also handles hg/jj repos; it needs
+the revdiff plugin installed. `editor` is the other shape of the step: instead of
+commenting on the draft, you edit it.
+
+How the chosen tool renders the diff is its own knob, not an `anchor.*` key: see
+[Review-backend config](#review-backend-config) (per backend:
+[`revdiff`](#review-backend-config-revdiff), [`editor`](#review-backend-config-editor)).
+
+### `anchor.<skill>.reviewBackend` :id=key-skill-reviewbackend
+
+```bash
+git config anchor.commit.reviewBackend editor
+```
+
+The same choice for one skill, overriding the umbrella key above. See
+[A backend per artifact](#a-backend-per-artifact).
+
+### `anchor.reviewBudgetMins` :id=key-reviewbudgetmins
+
+```bash
+git config anchor.reviewBudgetMins 10
+```
+
+How many minutes of focused attention you expect this CR to get. It's an
+*input*, not a length cap: a tight budget (≈5) makes `prepare-review` lead with
+the essentials and cut asides hard; a generous one (≈30) keeps more supporting
+context and depth.
+
+It steers *what to include*, not the tone — a tight budget is no license for
+punchy or marketing framing. For *how long* the result runs, see
+[`anchor.crVerbosity`](#key-crverbosity) and [Length knobs](#length-knobs).
+
+### `anchor.issueVerbosity` :id=key-issueverbosity
+
+```bash
+git config anchor.issueVerbosity 100
+```
+
+Where an issue body sits between brevity and thoroughness. It sits highest of
+the four because the audience is the people who'll do the work, and what reads
+as detail to anyone else saves them a conversation.
+
+Below `100` the prose tightens in order — callouts, then the approach's
+explanation down to its load-bearing decisions, then Context's second paragraph.
+**Acceptance criteria are never abbreviated**: they say what done means, so
+they're the issue's floor the way the deep links are the CR's.
+
+### `anchor.commitVerbosity` :id=key-commitverbosity
+
+```bash
+git config anchor.commitVerbosity 25
+```
+
+The same dial applied to the commit message body. Below `100` the body tightens
+in order — asides, then the decisions-and-alternatives prose, then the context
+paragraph — down to a floor of one sentence of *why*.
+
+The subject line's format rules and the `Refs:` trailer stand at every setting,
+and a trivial change still earns a subject-only message.
+
+### `anchor.crVerbosity` :id=key-crverbosity
+
+```bash
+git config anchor.crVerbosity 50
+```
+
+Where a CR description sits between brevity and thoroughness, as an integer from
+1 to 100. It is not a word budget — nothing is counted or truncated; the number
+says how hard to lean on brevity when the two pull against each other.
+
+`100` is the [CR-description template](/templates/cr-description)'s full shape;
+below that the prose tightens, in the order the
+[verbosity guide](/guides/cr-verbosity) sets out.
+
+**It abbreviates sections, never removes them** — which sections a description
+has is the template's call, so one that meets its condition is present at every
+setting, down to its floor. It never cuts the *why* sentence or the Review
+guide's deep links, and it steers length only, never register. See the
+[`mr` / `pr` overrides](#key-mr-pr-verbosity) below.
+
+### `anchor.mrVerbosity` / `anchor.prVerbosity` :id=key-mr-pr-verbosity
+
+```bash
+git config anchor.prVerbosity 25
+```
+
+Forge-specific overrides of [`anchor.crVerbosity`](#key-crverbosity):
+`mrVerbosity` applies on GitLab, `prVerbosity` on GitHub. When set, the
+forge-specific key replaces `crVerbosity` for that forge; otherwise `crVerbosity`
+applies.
+
+### `anchor.releaseVerbosity` :id=key-releaseverbosity
+
+```bash
+git config anchor.releaseVerbosity 40
+```
+
+The same dial applied to release notes. It sits lowest of the four: the audience
+is everyone using the project, and most of them are reading to find out whether
+this release affects them.
+
+Below `100` the notes shed rationale first, then the consequences a reader can
+infer, down to a floor of each change stated as its effect on someone using the
+project. **Every entry survives at every setting**, as do a breaking change's
+migration steps — the dial shortens entries, it doesn't drop them.
+
+### `anchor.commitRules` :id=key-commitrules
+
+```bash
+git config anchor.commitRules "prefix the subject with the affected module"
+```
+
+An extra rule layered onto `anchor`'s default commit-message rules, applied to
+every message it drafts.
+
+### `anchor.issueRules` :id=key-issuerules
+
+```bash
+git config anchor.issueRules "always include an acceptance-criteria checklist"
+```
+
+An extra rule layered onto `anchor`'s default issue rules, applied to every issue
+the `issue` skill drafts.
+
+### `anchor.crRules` :id=key-crrules
+
+```bash
+git config anchor.crRules "@-mention the on-call lead"
+```
+
+An extra rule layered onto the default CR-description rules — the forge-agnostic
+default. See the [`mr` / `pr` overrides](#key-mr-pr-rules) below.
+
+### `anchor.mrRules` / `anchor.prRules` :id=key-mr-pr-rules
+
+```bash
+git config anchor.prRules "fill in the Risk & rollback section"
+```
+
+Forge-specific overrides of [`anchor.crRules`](#key-crrules): `mrRules` applies
+on GitLab, `prRules` on GitHub. When set, the forge-specific key replaces
+`crRules` for that forge; otherwise `crRules` applies.
+
+### `anchor.crTemplateRepo` :id=key-crtemplaterepo
+
+```bash
+git config anchor.crTemplateRepo my-group/ci-templates
+```
+
+A repo holding the CR template to use when neither this repo nor the forge's own
+inheritance supplies one. `prepare-review` reads it last, so it never overrides a
+template the team already ships.
+
+Give it as `group/project` on GitLab or `owner/repo` on GitHub; the template is
+looked for in that repo's usual locations.
+
+### `anchor.watchPipelineAfterPush` :id=key-watchpipelineafterpush
+
+```bash
+git config anchor.watchPipelineAfterPush false
+```
+
+Whether a skill that pushes then watches the pipeline that push triggered and
+reports it. Applies to every push-side skill (`commit`, `resolve-feedback`,
+`prepare-review`). See
+[Watching the pipeline after a push](#watching-the-pipeline-after-a-push).
+
+### `anchor.<skill>.watchPipelineAfterPush` :id=key-skill-watchpipelineafterpush
+
+```bash
+git config anchor.prepare-review.watchPipelineAfterPush false
+```
+
+The same knob for one skill, overriding the umbrella key above.
+
+## In depth
 
 ### Work-tracker references
 
