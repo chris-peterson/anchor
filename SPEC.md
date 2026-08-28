@@ -793,6 +793,14 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   too long to be a useful guard, and what it reliably does instead is discard a
   draft mid-edit. Where the evidence is unavailable rather than negative, the
   system shall keep waiting.
+- **[DIFF-29]** The system shall carry the calling session's tab label onto the
+  split it opens, marked to say a review is waiting there, and shall open the
+  review anyway where the label cannot be set. A split takes focus, and the
+  terminal draws the tab from the session holding it, so a pane carrying no
+  label of its own empties the tab the user navigates their windows by, for as
+  long as the review is open. The mark belongs in that label rather than in the
+  pane's own appearance, which no escape sequence reaches and which would cost
+  the split a profile of its own.
 
 ### CONFIG — Configuration
 

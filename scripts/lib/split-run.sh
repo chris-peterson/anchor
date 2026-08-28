@@ -126,6 +126,17 @@ anchor_split_run() {
   # ITERM_SESSION_ID is "w0t0p0:UUID"; AppleScript's session id is the UUID.
   # The paths reach it as argv and the pane runs a script, so neither has to
   # survive a second round of quoting.
+  #
+  # The pane opens focused, and iTerm2 draws the tab from whichever session holds
+  # the focus — a new one carries none of the session variables a title format
+  # reads, so the tab label empties the moment the review opens. Copying the
+  # caller's rendered name onto the pane keeps the label the user was reading,
+  # and the 👀 leading it says which of their windows is waiting on them to read
+  # something. The mark lives in the name because that is a session's own string:
+  # a pane background would need a profile to carry it, where this needs nothing.
+  # The copy is attempted, not required: the pane is already running the review
+  # by the time it happens, and an error there would be reported as a split that
+  # never opened.
   pane=$(osascript - "${ITERM_SESSION_ID##*:}" "$launch" "$sentinel" <<'APPLESCRIPT' 2>&1
 on run argv
     set targetId to item 1 of argv
@@ -135,6 +146,7 @@ on run argv
             repeat with t in tabs of w
                 repeat with s in sessions of t
                     if id of s is targetId then
+                        set paneName to name of s
                         tell s
                             if (columns of s) >= 160 and (columns of s) > ((rows of s) * 2) then
                                 set newSession to split vertically with same profile command cmd
@@ -142,6 +154,9 @@ on run argv
                                 set newSession to split horizontally with same profile command cmd
                             end if
                         end tell
+                        try
+                            set name of newSession to "👀 " & paneName
+                        end try
                         return id of newSession
                     end if
                 end repeat

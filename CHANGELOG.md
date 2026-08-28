@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- A review pane carries the tab label of the session it split from, behind a 👀 saying a review is waiting there. The pane opens focused and iTerm2 draws the tab from whichever session holds the focus, so a tab titled from session variables — the way `beacon` labels one — went blank for as long as the review was open.
+
 ## 1.9.0
 
 ### Changed
