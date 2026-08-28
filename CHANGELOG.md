@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Reviews open in a split of the terminal session you called `anchor` from, instead of a separate window. A GUI editor no longer opens a tab behind the terminal you are watching, and a skill waiting on a review names the tool it opened rather than appearing to have skipped the step. **`revdiff` reviews need a session `anchor` can split, which today means iTerm2** — anywhere else the review reports `no-verdict` naming what is missing, rather than dying inside the viewer.
+- An open review waits as long as you take over it. The elapsed-time cap is gone: a cap generous enough not to interrupt guarded nothing, and what it reliably did was discard a draft mid-edit. The wait now ends early only when the pane closes without returning a result.
+
+### Fixed
+
+- `/anchor:prepare-review` stops when there is nothing to review. On the default branch with a clean tree and nothing ahead there is no branch to open a change request from, and the recon script now exits non-zero instead of reporting that as a state a caller can read past — so a chain of commit, prepare-review and release no longer runs the release with the change-request step silently dropped.
+- The configuring guide's key reference is readable. Each `anchor.*` key is its own section now — the `git config` example as a code block, the explanation across the full width — because as a table the column carrying every explanation was sized to a fraction of the page, and on macOS overlay scrollbars made the overflow read as an absent column. The Defaults table stays as the index and links into them.
+
 ## 1.8.0
 
 ### Added
