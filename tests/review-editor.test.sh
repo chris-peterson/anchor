@@ -170,13 +170,13 @@ ok "editor: a diff-only review -> no-verdict, cause on stderr"
 unset ANCHOR_EDITOR_LAUNCHER
 export EDITOR_STUB_MODE=keep
 
-# A stub revdiff launcher, so the umbrella backend resolves without the plugin.
-cat > "$bin/stub-launch-revdiff.sh" <<'EOF'
+# A stub split runner, so a revdiff review resolves without opening a pane.
+cat > "$bin/stub-split-runner.sh" <<'EOF'
 #!/usr/bin/env bash
 exit 0
 EOF
-chmod +x "$bin/stub-launch-revdiff.sh"
-export ANCHOR_REVDIFF_LAUNCHER="$bin/stub-launch-revdiff.sh"
+chmod +x "$bin/stub-split-runner.sh"
+export ANCHOR_SPLIT_RUNNER="$bin/stub-split-runner.sh"
 
 backend_of() { jq -r .backend <<<"$(json_of "$1")"; }
 
@@ -220,7 +220,8 @@ key_of() { sed -n "s/^$1=//p" <<<"$2"; }
 # what DIFF-17 reports as unavailable. The cases wanting the other answer set
 # ANCHOR_EDITOR_LAUNCHER, which stands in for both halves.
 probe() {
-  ( cd "$repo" && PATH="$bin:/usr/bin:/bin" GIT_EDITOR=true TMUX='' TERM_PROGRAM='' \
+  ( cd "$repo" && PATH="$bin:/usr/bin:/bin" GIT_EDITOR=true TMUX='' \
+      ITERM_SESSION_ID='' ANCHOR_SPLIT_RUNNER='' \
       bash "$dispatch" "$@" </dev/null )
 }
 
@@ -372,5 +373,32 @@ r=$(resolve "$codebin")
 [ "$r" = "my-editor --wait" ] || fail "core.editor should win over both new rungs, got '$r'"
 git -C "$repo" config --unset core.editor
 ok "resolve: a configured editor wins over both"
+
+# The iTerm2 host splits the session anchor was called from, so it exists only
+# where that session can be named. TERM_PROGRAM says which terminal is running;
+# ITERM_SESSION_ID is what the AppleScript matches a session on, and a review
+# offered on the former alone dead-ends in "session not found".
+cat > "$bin/host-editor.sh" <<EOF
+#!/usr/bin/env bash
+source "$here/../scripts/lib/review-editor.sh"
+printf '%s' "\$(anchor_editor_host "\${1:-vi}")"
+EOF
+chmod +x "$bin/host-editor.sh"
+
+host() {
+  ( cd "$repo" && TMUX='' ANCHOR_EDITOR_LAUNCHER='' ANCHOR_SPLIT_RUNNER='' \
+      TERM_PROGRAM="${2:-}" ITERM_SESSION_ID="$1" \
+      bash "$bin/host-editor.sh" vi </dev/null )
+}
+
+h=$(host '' iTerm.app)
+[ "$h" != iterm2 ] || fail "an iTerm2 terminal with no session id cannot be split, got '$h'"
+ok "host: the iTerm2 host needs the session id, not just the terminal name"
+
+if [ "$(uname -s)" = Darwin ] && command -v osascript >/dev/null 2>&1; then
+  h=$(host 'w0t0p0:DEADBEEF-0000-0000-0000-000000000000')
+  [ "$h" = iterm2 ] || fail "a named iTerm2 session should select the iterm2 host, got '$h'"
+  ok "host: a named iTerm2 session selects the iterm2 host"
+fi
 
 echo "# all checks passed"

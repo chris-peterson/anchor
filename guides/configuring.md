@@ -181,13 +181,17 @@ It reads that file itself, so the same preferences apply whether you run it by
 hand or `anchor` opens it.
 
 Prefer the file over the matching `REVDIFF_*` environment variables. `anchor`
-opens the TUI through the revdiff plugin's terminal-overlay launcher, and the
-overlays it uses (`tmux display-popup`, `kitty @ launch`, `zellij run`) spawn from
-a long-running server process whose environment predates your shell rc; the
-launcher forwards only `EDITOR` and `VISUAL` into it. So an
+opens the TUI in a split of your terminal session, and a split starts with a
+named set of the caller's environment — `PATH`, the locale, and
+`EDITOR`/`VISUAL` — rather than a copy of your shell's. So an
 `export REVDIFF_WRAP=true` in `.zshrc` reaches a `revdiff` you start yourself and
-can miss the one `anchor` opens. See
+can miss the one `anchor` opens. `REVDIFF_CONFIG` is the exception: `anchor`
+reads it and passes the path through as `--config`. See
 [revdiff's options](https://revdiff.com/docs.html#options) for the full list.
+
+revdiff renders in a terminal, so this backend needs a session `anchor` can
+split — iTerm2 today. Where there is none, a revdiff review reports `no-verdict`
+naming that rather than opening on nothing.
 
 #### Review-backend config: `editor`
 
@@ -228,10 +232,38 @@ the VS Code family: `--wait` is the flag it knows blocks, so any other editor is
 a `core.editor` away rather than a guess.
 
 A *terminal* editor needs a terminal, and the session `anchor` runs in has none,
-so it opens one: a tmux popup inside tmux, an iTerm2 window on macOS. Anywhere
+so it opens one: a tmux popup inside tmux, a split of the calling session on
+iTerm2 — sideways on a wide window, below on a narrow one, and closed again when
+you quit the editor. Anywhere
 else, point `ANCHOR_EDITOR_LAUNCHER` at a script that takes the file path and
-opens your editor on it, blocking until it closes. `ANCHOR_EDITOR_TIMEOUT`
-(default 1800s) bounds how long `anchor` waits on a window that never closes.
+opens your editor on it, blocking until it closes.
+
+`anchor` waits as long as you take. What ends the wait early is the pane closing
+without reporting a result, which means the editor never got to save.
+
+##### Picking a terminal editor
+
+The job here is narrow: read one markdown document, change a few lines, quit.
+There is no project to navigate and no build to run, so what suits it is an
+editor you can drive without learning it first — a different question from which
+editor you want for a day of code.
+
+| Editor | Install | Why you'd pick it |
+| --- | --- | --- |
+| **[microsoft/edit](https://github.com/microsoft/edit)** — recommended | `brew install msedit` | No modes, and a menu bar that shows you the keys, so nothing has to be memorized before you can save. VS Code-style controls in one small binary. Installs as `edit`. |
+| [helix](https://github.com/helix-editor/helix) | `brew install helix` | Modal, but selection-first: pick the text, then act on it, with a prompt that shows what each key does as you type it. Worth the learning if you'd also live in it — tree-sitter and LSP are built in. Runs as `hx`. |
+| [amp](https://github.com/jmacdonald/amp) | see [amp.rs](https://amp.rs) | Vim's modal model, simplified. The comfortable pick if Vim already is. |
+| [fresh](https://github.com/sinelaw/fresh) | see the repo | No modes and no configuration, with IDE features — LSP, multi-cursor, a command palette — if you want the editor to do more than take a draft. |
+
+Point git at the one you pick:
+
+```bash
+git config --global core.editor edit
+```
+
+**Quitting without saving is not an abort.** An unchanged buffer comes back as
+`approved`, which is what you want when the draft already reads correctly. To
+stop the flow instead, empty the buffer.
 
 ### A backend per artifact
 

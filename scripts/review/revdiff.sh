@@ -10,46 +10,32 @@
 #   review_details_json  the header details, a JSON array of {label,value}
 #
 # revdiff is a terminal TUI, so it needs a terminal to render, and anchor
-# launches review from a background Bash call with no controlling TTY. Launching
-# `revdiff` directly there fails ("could not open a new TTY"). So this adapter
-# delegates terminal launching to the revdiff plugin's
-# launch-revdiff.sh, which opens revdiff in a terminal overlay (tmux/zellij/
-# kitty/iTerm2/…), captures the annotations to stdout, and exits with revdiff's
-# code (0 none / 10 annotations / other failure). anchor keeps range resolution
-# and normalization; the launcher owns the terminal.
+# launches review from a background Bash call with no controlling TTY. The
+# terminal is a split of the calling iTerm2 session, opened by
+# scripts/lib/split-run.sh — the same runner the editor backend uses.
 #
-# The launcher is discovered in the revdiff plugin's cache, which couples anchor
-# to that plugin's internal file layout. TODO: consider filing a revdiff issue
-# for a stable launch entrypoint (e.g. a `revdiff` overlay mode, or a plugin-
-# exposed launcher path) so this can call a supported interface instead — set
-# ANCHOR_REVDIFF_LAUNCHER to override discovery in the meantime.
-#
+# anchor drives the revdiff binary itself. Two parts of that invocation are not
+# obvious and are worth keeping written down:
+#   * exit-code-on-annotations goes in as an environment variable rather than a
+#     flag, because an old revdiff ignores an unknown env var and hard-fails on
+#     an unknown flag.
+#   * annotations come back through --output rather than stdout, since the pane's
+#     stdout belongs to the terminal.
+# revdiff's exit codes are 0 (clean quit), 10 (annotations captured), anything
+# else a failure. Its warnings go to stderr on a successful review too, so stderr
+# is replayed only when the run actually failed.
+
 # revdiff carries no per-hunk review state and no commit-message round-trip
 # anchor consumes yet, so those dimensions are null/off; on the revdiff backend
 # the caller confirms the commit message itself. (The fork's editable
 # `(description)` output isn't parsed here yet — see the DIFF plan.)
 
+# shellcheck source=../lib/split-run.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/split-run.sh"
+
 # revdiff annotates with diff-side markers but does not track per-hunk review or
 # round-trip an edited commit message / description.
 revdiff_caps='{"producesVerdict":true,"perHunkReview":false,"editableCommitMessage":false,"editableDescription":false,"sideMarkers":true}'
-
-# Resolve the terminal-overlay launcher: an explicit override (also the seam
-# tests use), else the newest launch-revdiff.sh in the revdiff plugin's cache.
-revdiff_launcher() {
-  if [[ -n "${ANCHOR_REVDIFF_LAUNCHER:-}" ]]; then
-    printf '%s\n' "$ANCHOR_REVDIFF_LAUNCHER"
-    return
-  fi
-  local reset
-  reset=$(shopt -p nullglob)
-  shopt -s nullglob
-  local -a matches=(
-    "$HOME"/.claude/plugins/cache/*/revdiff/*/.claude-plugin/skills/revdiff/scripts/launch-revdiff.sh
-  )
-  eval "$reset"
-  [[ ${#matches[@]} -gt 0 ]] || return 0
-  printf '%s\n' "${matches[@]}" | sort -V | tail -1
-}
 
 # Parse revdiff's markdown annotations into the DIFF comments array. Each block is
 #   ## <file> (file-level)         | ## <file>:<line> (+|-)  | ## <file>:<a>-<b> (+|-)
@@ -98,15 +84,23 @@ revdiff_parse_comments() {
 # review_details_json); shellcheck can't follow that cross-file.
 # shellcheck disable=SC2154
 emit_review() {
-  local launcher
-  launcher=$(revdiff_launcher)
-  if [[ -z "$launcher" || ! -x "$launcher" ]]; then
-    echo "review-diff.sh: revdiff launcher not found (install the revdiff plugin, or set ANCHOR_REVDIFF_LAUNCHER)" >&2
-    jq -cn --argjson caps "$revdiff_caps" '{
+  revdiff_unavailable() {
+    echo "review-diff.sh: $1" >&2
+    jq -cn --argjson caps "$revdiff_caps" --arg rc "$2" '{
       backend:"revdiff", verdict:"no-verdict",
       reviewCompleteness:null, reviewer:null, comments:[], editedFields:[],
-      capabilities:($caps + {producesVerdict:false}), raw:{exitCode:"absent"}}' \
+      capabilities:($caps + {producesVerdict:false}), raw:{exitCode:$rc}}' \
       | { read -r out; echo "REVIEW_VERDICT=no-verdict"; echo "REVIEW_OUTPUT=$out"; }
+  }
+
+  local revdiff_bin
+  revdiff_bin=$(command -v revdiff 2>/dev/null || true)
+  if [[ -z "$revdiff_bin" ]]; then
+    revdiff_unavailable "revdiff is not installed (brew install umputun/apps/revdiff)" absent
+    return
+  fi
+  if ! anchor_split_available; then
+    revdiff_unavailable "revdiff needs a terminal to render, and this session has nowhere to open one — it opens in a split of the calling iTerm2 session" no-host
     return
   fi
 
@@ -117,8 +111,7 @@ emit_review() {
     jq -r '.[] | "- **\(.label):** \(.value)"' <<<"$review_details_json"
   } > "$desc_file"
 
-  # The launcher adds --output and REVDIFF_EXIT_CODE_ON_ANNOTATIONS itself and
-  # returns the annotations on stdout, so pass only the refs and the header.
+  # The refs and the seeded header; the invocation's own flags are added below.
   local -a args=("--description-file=$desc_file")
   if [[ "$review_mode" == "files" ]]; then
     args+=("--compare-old=$files_left" "--compare-new=$files_right")
@@ -130,12 +123,26 @@ emit_review() {
     esac
   fi
 
-  local annotations rc=0
-  annotations=$("$launcher" "${args[@]}") || rc=$?
-
-  local out_file
+  local out_file err_file
   out_file=$(mktemp "${TMPDIR:-/tmp}/revdiff-out.XXXXXX")
-  printf '%s' "$annotations" > "$out_file"
+  err_file=$(mktemp "${TMPDIR:-/tmp}/revdiff-err.XXXXXX")
+
+  local cmd arg
+  cmd="REVDIFF_EXIT_CODE_ON_ANNOTATIONS=true $(anchor_split_sq "$revdiff_bin")"
+  cmd="$cmd $(anchor_split_sq "--output=$out_file")"
+  if [[ -n "${REVDIFF_CONFIG:-}" && -f "${REVDIFF_CONFIG}" ]]; then
+    cmd="$cmd $(anchor_split_sq "--config=$REVDIFF_CONFIG")"
+  fi
+  for arg in "${args[@]}"; do cmd="$cmd $(anchor_split_sq "$arg")"; done
+  # The pane closes the moment a fast-failing revdiff exits, taking the error
+  # text with it, so stderr is captured rather than drawn.
+  cmd="$cmd 2>$(anchor_split_sq "$err_file")"
+
+  local rc=0
+  anchor_split_run "$cmd" || rc=$?
+  if [[ "$rc" -ne 0 && "$rc" -ne 10 && -s "$err_file" ]]; then
+    cat "$err_file" >&2
+  fi
 
   # The fork echoes the seeded --description back as a `(description)` block on
   # quit (and would carry an edited message there). The description round-trip
@@ -174,7 +181,7 @@ emit_review() {
       raw:{exitCode:$rc}
     }')
 
-  rm -f "$out_file" "$desc_file"
+  rm -f "$out_file" "$err_file" "$desc_file"
   echo "REVIEW_VERDICT=$verdict"
   echo "REVIEW_OUTPUT=$out"
 }

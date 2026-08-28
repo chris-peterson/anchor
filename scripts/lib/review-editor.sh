@@ -13,6 +13,8 @@
 # that takes both halves: an editor git can name, and somewhere to put it. A
 # consumer that offers the editor route on the first half alone dead-ends the
 # user in a `no-verdict` naming a host problem they were never warned about.
+# shellcheck source=split-run.sh
+source "$(dirname "${BASH_SOURCE[0]}")/split-run.sh"
 
 # A no-op editor is treated as unset (DIFF-16): an agent harness commonly exports
 # `GIT_EDITOR=true` to keep git from ever opening one, and honoring that would
@@ -88,10 +90,9 @@ anchor_editor_host() {
   # A real TTY — anchor invoked from the user's own shell rather than an agent.
   if [[ -t 0 ]]; then printf 'tty'; return; fi
 
-  if [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]] \
-     && [[ "${TERM_PROGRAM:-}" == "iTerm.app" ]] && command -v osascript >/dev/null 2>&1; then
-    printf 'iterm2'; return
-  fi
+  # Asked of the runner that would do the opening, so the probe and the launch
+  # cannot disagree about whether a split is reachable.
+  if anchor_split_available; then printf 'iterm2'; return; fi
 
   printf ''
 }

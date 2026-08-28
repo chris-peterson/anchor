@@ -27,30 +27,39 @@ trap cleanup EXIT
 bin="$work/bin"
 mkdir -p "$bin"
 
-# --- stub launch-revdiff.sh: the adapter delegates terminal launching to the
-# revdiff plugin's launcher (annotations on stdout, exit 0/10/other). This stub
-# stands in via ANCHOR_REVDIFF_LAUNCHER: prints $REVDIFF_STUB_OUTPUT, exits
-# $REVDIFF_STUB_RC, records its args to $REVDIFF_ARGS_FILE, and copies the
-# seeded header (--description-file, which the adapter deletes on return) to
-# $REVDIFF_DESC_CAPTURE.
-cat > "$bin/stub-launch-revdiff.sh" <<'EOF'
+# --- stub split runner: the adapter builds revdiff's command string and hands
+# it to scripts/lib/split-run.sh, which opens it in a pane. This stub stands in
+# via ANCHOR_SPLIT_RUNNER, so the suite drives the real command string rather
+# than a launcher's argv: it unpacks the string back into an argv, records it to
+# $REVDIFF_ARGS_FILE, copies the seeded header (--description-file, which the
+# adapter deletes on return) to $REVDIFF_DESC_CAPTURE, writes
+# $REVDIFF_STUB_OUTPUT to the --output file the adapter named, and exits
+# $REVDIFF_STUB_RC.
+cat > "$bin/stub-split-runner.sh" <<'EOF'
 #!/usr/bin/env bash
+cmd=${1#REVDIFF_EXIT_CODE_ON_ANNOTATIONS=true }
+cmd=${cmd% 2>*}
+eval "set -- $cmd"
+shift   # the revdiff binary itself
 [ -n "${REVDIFF_ARGS_FILE:-}" ] && printf '%s\n' "$@" > "$REVDIFF_ARGS_FILE"
-if [ -n "${REVDIFF_DESC_CAPTURE:-}" ]; then
-  for a in "$@"; do
-    case "$a" in --description-file=*) cp "${a#*=}" "$REVDIFF_DESC_CAPTURE" ;; esac
-  done
-fi
-printf '%s' "${REVDIFF_STUB_OUTPUT:-}"
+out=""
+for a in "$@"; do
+  case "$a" in
+    --output=*) out="${a#*=}" ;;
+    --description-file=*)
+      [ -n "${REVDIFF_DESC_CAPTURE:-}" ] && cp "${a#*=}" "$REVDIFF_DESC_CAPTURE" ;;
+  esac
+done
+[ -n "$out" ] && printf '%s' "${REVDIFF_STUB_OUTPUT:-}" > "$out"
 exit "${REVDIFF_STUB_RC:-0}"
 EOF
-chmod +x "$bin/stub-launch-revdiff.sh"
-export ANCHOR_REVDIFF_LAUNCHER="$bin/stub-launch-revdiff.sh"
+chmod +x "$bin/stub-split-runner.sh"
+export ANCHOR_SPLIT_RUNNER="$bin/stub-split-runner.sh"
 
-# --- stub revdiff: never executed (the adapter drives the launcher), but the
-# resolver looks the tool up on PATH, so the suite has to carry one to test
-# against a machine that has revdiff rather than whatever the host happens to
-# have installed.
+# --- stub revdiff: never executed (the stub runner intercepts the command), but
+# the adapter resolves the tool on PATH before building it, so the suite has to
+# carry one to test against a machine that has revdiff rather than whatever the
+# host happens to have installed.
 printf '#!/usr/bin/env bash\nexit 0\n' > "$bin/revdiff"
 chmod +x "$bin/revdiff"
 
@@ -124,12 +133,21 @@ export REVDIFF_STUB_RC=1 REVDIFF_STUB_OUTPUT=""; o=$(run --previous); j=$(json_o
 [ "$(jq -r .raw.exitCode <<<"$j")" = 1 ]     || fail "revdiff rc1 raw.exitCode"
 ok "revdiff: rc 1 -> no-verdict (error)"
 
-# launcher not found -> no-verdict, producesVerdict false
-export ANCHOR_REVDIFF_LAUNCHER="$work/nonexistent-launcher"; o=$(run --previous); j=$(json_of "$o")
-[ "$(verdict_of "$o")" = no-verdict ]                         || fail "missing-launcher verdict"
-[ "$(jq -r .capabilities.producesVerdict <<<"$j")" = false ] || fail "missing-launcher producesVerdict"
-ok "revdiff: launcher not found -> no-verdict, producesVerdict false"
-export ANCHOR_REVDIFF_LAUNCHER="$bin/stub-launch-revdiff.sh"   # restore
+# nowhere to open a pane -> no-verdict, producesVerdict false. revdiff is a TUI,
+# so a session that cannot put a terminal on screen has no review to show, and
+# saying so beats launching into a host error.
+o=$( cd "$repo" && ANCHOR_SPLIT_RUNNER='' ITERM_SESSION_ID='' bash "$dispatch" --previous ); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = no-verdict ]                        || fail "no-host verdict"
+[ "$(jq -r .raw.exitCode <<<"$j")" = no-host ]               || fail "no-host raw.exitCode"
+[ "$(jq -r .capabilities.producesVerdict <<<"$j")" = false ] || fail "no-host producesVerdict"
+ok "revdiff: nowhere to open a pane -> no-verdict, producesVerdict false"
+
+# revdiff not installed -> no-verdict naming the absent tool, not a pane opened
+# on nothing.
+o=$( cd "$repo" && PATH="/usr/bin:/bin" bash "$dispatch" --previous ); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = no-verdict ]           || fail "absent-revdiff verdict"
+[ "$(jq -r .raw.exitCode <<<"$j")" = absent ]   || fail "absent-revdiff raw.exitCode"
+ok "revdiff: not installed -> no-verdict, producesVerdict false"
 
 # ref translation: --previous (HEAD~1...HEAD) -> revdiff base HEAD~1 against HEAD
 export REVDIFF_ARGS_FILE="$work/args.txt"

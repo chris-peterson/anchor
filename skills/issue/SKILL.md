@@ -230,9 +230,18 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill issue --files \
   --detail repo=<repo>
 ```
 
-`--skill issue` selects this skill's backend (`anchor.issue.reviewBackend`, then `anchor.reviewBackend`, then the `editor` default); `--print-backend` reports which one that is, whether it's available, and — when the run would open something other than what the preference named — that name too, without opening anything. Say which tool you're opening in one line whenever it reports the substitution.
+`--skill issue` selects this skill's backend (`anchor.issue.reviewBackend`, then `anchor.reviewBackend`, then the `editor` default). Ask which one it will be before launching, under the **same `--skill` the launch uses** — the probe resolves the backend the way the launch does, so a bare one answers for a different skill's default and names a tool this review will never open:
 
-Don't announce the launch — the backend puts the draft on screen itself, an editor window or a terminal overlay on revdiff, so a line saying the review is open describes what the user can already see; the next thing you say is the verdict.
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill issue --print-backend
+```
+
+Then say in one line where the draft is about to appear:
+
+- **`REVIEW_BACKEND=editor`** — the editor renders wherever its host puts it, and on a GUI editor that is a window behind the terminal the user is watching. A review silently waiting in another window is indistinguishable from nothing having opened, so name it.
+- **`REVIEW_BACKEND_CONFIGURED` present** — the run is opening something other than what the preference named. Name that too.
+
+That line is the whole announcement. Don't narrate the launch itself — revdiff's overlay lands in the terminal the user is already looking at, so a sentence saying the review is open describes what they can see; after the one line, the next thing you say is the verdict.
 
 Read the verdict back with the **BashOutput tool** (not `tail` / `$(...)`). Only `REVIEW_VERDICT` `approved` is approval; an `approved` result carrying `editedFields` with `target: "issue-body"` — the `editor` backend, where the saved buffer *is* the body — means file that text verbatim rather than re-drafting from it; `changes-requested` carries comments in `REVIEW_OUTPUT.comments` to fold in before re-presenting — ungraded, so every one of them, and the re-open's left-hand side is the previous draft (copied aside to a sibling path with `.prev` before the extension) so the second pass shows what the feedback changed; `incomplete` / `no-verdict` mean the review didn't complete — surface what happened and take the fallback ladder rather than treating silence as approval. A result that carries **no parseable `REVIEW_VERDICT` at all** (empty stdout, stderr only — the dispatcher exited before reporting) is the same case: report what the output showed and verify with the user; nothing is filed on an unverified result. (The full verdict contract matches the `prepare-review` skill's Step 4.)
 

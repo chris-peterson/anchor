@@ -748,6 +748,42 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   than the artifact the forge holds. The second pass is asked to grade what the
   feedback changed, and re-showing the original comparison answers the question
   the first pass already answered.
+- **[DIFF-24]** Where a consumer probes for the backend (DIFF-17), it shall probe
+  under the same skill the launch will use, and shall name the tool it opens
+  whenever that tool renders outside the terminal the user is watching. The probe
+  resolves per skill (CONFIG-15), so one run without the skill answers for another
+  skill's default and reports a tool the review will never open; and a review
+  waiting in a window behind the terminal is indistinguishable from nothing having
+  opened, which reads as a step that was skipped rather than one blocking on the
+  user.
+- **[DIFF-25]** The system shall open a review that needs a terminal in a split
+  of the session it was called from, and shall return the split when the review
+  closes. The review and the terminal that asked for it stay in one place, where
+  a separate window can rest behind the one the user is watching, and a review
+  silently waiting on them is indistinguishable from one that never opened. The
+  host shall be selected on whether the calling session can be named, since a
+  split addresses a session rather than a terminal application, and the same
+  answer shall serve the probe (DIFF-17) and the launch so the two cannot
+  disagree.
+- **[DIFF-26]** The system shall run the command it opens in a split with the
+  environment it resolved that command against — at least the executable search
+  path, the locale, and the editor a review tool spawns for itself. A split's
+  command is not run through a login shell, so it starts with the terminal
+  application's own environment: a tool resolved against the caller's is then
+  looked up again in an environment that lacks it, and the pane dies before
+  rendering anything.
+- **[DIFF-27]** The system shall drive the diff viewer itself rather than
+  through another plugin's launcher, and shall report `no-verdict` naming the
+  missing piece where the viewer is absent or the session cannot be split.
+  Reaching into a sibling plugin's file layout couples the review to a path that
+  plugin is free to change.
+- **[DIFF-28]** The system shall wait on an open review for as long as the
+  reviewer takes, and shall end the wait early only on evidence that no result is
+  coming — the pane closing without reporting one. A review is read and typed
+  into at human pace, so an elapsed-time cap generous enough not to interrupt is
+  too long to be a useful guard, and what it reliably does instead is discard a
+  draft mid-edit. Where the evidence is unavailable rather than negative, the
+  system shall keep waiting.
 
 ### CONFIG — Configuration
 

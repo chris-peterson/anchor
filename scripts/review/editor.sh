@@ -36,15 +36,14 @@
 # --print-backend probe needs the same answers without opening anything.
 # shellcheck source=../lib/review-editor.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/review-editor.sh"
+# shellcheck source=../lib/split-run.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/split-run.sh"
 
 editor_caps='{"producesVerdict":true,"perHunkReview":false,"editableCommitMessage":true,"editableDescription":true,"sideMarkers":false}'
 
 # Cut point between the editable artifact and the read-only context below it.
 # git's own marker, minus the leading `#`, since `#` lines are kept here.
 editor_scissors='------------------------ >8 ------------------------'
-
-# How long to wait on an editor opened in a detached window before giving up.
-editor_timeout="${ANCHOR_EDITOR_TIMEOUT:-1800}"
 
 editor_emit() {
   local verdict="$1" rc="$2" note="${3:-}" edited_json="${4:-[]}"
@@ -71,18 +70,12 @@ editor_emit() {
 # hosts take (they run `sh -c`, not an argv).
 editor_sq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 
-# Block until a sentinel file appears, then return the exit code it holds. The
-# detached-window hosts below can't hand back the editor's status directly.
+# Read the exit code a popup left in its sentinel. `display-popup -E` has
+# already blocked until the command exited, so this reads a file that is written
+# by the time it is called; the loop covers the write landing a moment late.
 editor_await() {
-  local sentinel="$1" waited=0
-  while [[ ! -s "$sentinel" ]]; do
-    sleep 1
-    waited=$((waited + 1))
-    if [[ "$waited" -ge "$editor_timeout" ]]; then
-      echo "review-diff.sh: editor did not close within ${editor_timeout}s" >&2
-      return 124
-    fi
-  done
+  local sentinel="$1"
+  while [[ ! -s "$sentinel" ]]; do sleep 1; done
   cat "$sentinel"
 }
 
@@ -117,15 +110,7 @@ editor_launch() {
       return "$rc"
       ;;
     iterm2)
-      sentinel=$(mktemp "${TMPDIR:-/tmp}/anchor-editor-rc.XXXXXX")
-      cmd="$ed $(editor_sq "$file"); printf %s \$? > $(editor_sq "$sentinel"); exit"
-      osascript >/dev/null 2>&1 <<APPLESCRIPT || true
-tell application "iTerm2"
-  create window with default profile command "/bin/sh -c $(printf '%s' "$(editor_sq "$cmd")" | sed 's/\\/\\\\/g; s/"/\\"/g')"
-end tell
-APPLESCRIPT
-      rc=$(editor_await "$sentinel") || rc=124
-      rm -f "$sentinel"
+      anchor_split_run "$ed $(editor_sq "$file")" || rc=$?
       return "$rc"
       ;;
   esac

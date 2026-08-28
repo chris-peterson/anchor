@@ -252,10 +252,23 @@ gate themselves.
 The notes are one drafted document, so this skill defaults to the `editor`
 backend: they open in the user's editor and whatever they save *is* the notes. A
 configured viewer, or an editor with nowhere to open, gets the diff viewer
-instead — where the baseline is empty, so it reads as all additions. Ask
-`--print-backend` which one it will be, and say so in one line when it reports
-`REVIEW_BACKEND_CONFIGURED` — the run opening something other than what the
-preference named.
+instead — where the baseline is empty, so it reads as all additions. Ask which
+one it will be under the **same `--skill` the launch uses**: the probe resolves
+the backend the way the launch does, so a bare one answers for a different
+skill's default and names a tool this review will never open.
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill release --print-backend
+```
+
+Then say in one line where the notes are about to appear, before you launch:
+
+- **`REVIEW_BACKEND=editor`** — the editor renders wherever its host puts it, and
+  on a GUI editor that is a window behind the terminal the user is watching. A
+  review silently waiting in another window is indistinguishable from nothing
+  having opened, so name it.
+- **`REVIEW_BACKEND_CONFIGURED` present** — the run is opening something other
+  than what the preference named. Name that too.
 
 Then open the notes against `RELEASE_NOTES_BASELINE` (the empty left-hand side
 the recon block created) through the **dispatcher** — not the backend directly.
