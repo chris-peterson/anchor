@@ -9,6 +9,11 @@ default:
 generate:
     {{shipyard}} generate
 
+# read what the projection job would commit, without keeping it; `git restore .` discards
+check:
+    {{shipyard}} generate
+    git --no-pager diff --stat
+
 # render the docsify docs site and serve it locally
 docs:
     {{shipyard}} build-docs
