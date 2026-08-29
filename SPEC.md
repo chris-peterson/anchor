@@ -774,13 +774,16 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   split addresses a session rather than a terminal application, and the same
   answer shall serve the probe (DIFF-17) and the launch so the two cannot
   disagree.
-- **[DIFF-26]** The system shall run the command it opens in a split with the
-  environment it resolved that command against — at least the executable search
-  path, the locale, and the editor a review tool spawns for itself. A split's
-  command is not run through a login shell, so it starts with the terminal
-  application's own environment: a tool resolved against the caller's is then
-  looked up again in an environment that lacks it, and the pane dies before
-  rendering anything.
+- **[DIFF-26]** The system shall run the command it opens in a split in the
+  directory and the environment it resolved that command against — at least the
+  working directory, the executable search path, the locale, and the editor a
+  review tool spawns for itself. A split's command is not run through a login
+  shell, so it starts in the terminal application's own environment and whatever
+  directory that inherits: a tool resolved against the caller's environment is
+  looked up again in one that lacks it and the pane dies before rendering
+  anything, and a range of refs resolved against the repo under review is
+  re-resolved wherever the pane happens to stand, which draws a different repo's
+  diff — or an empty one, where that repo is clean.
 - **[DIFF-27]** The system shall drive the diff viewer itself rather than
   through another plugin's launcher, and shall report `no-verdict` naming the
   missing piece where the viewer is absent or the session cannot be split.
@@ -795,12 +798,16 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   system shall keep waiting.
 - **[DIFF-29]** The system shall carry the calling session's tab label onto the
   split it opens, marked to say a review is waiting there, and shall open the
-  review anyway where the label cannot be set. A split takes focus, and the
-  terminal draws the tab from the session holding it, so a pane carrying no
-  label of its own empties the tab the user navigates their windows by, for as
-  long as the review is open. The mark belongs in that label rather than in the
-  pane's own appearance, which no escape sequence reaches and which would cost
-  the split a profile of its own.
+  review anyway where the label cannot be set. The terminal draws the tab from
+  the session holding the focus (DIFF-30), so a pane carrying no label of its own
+  empties the tab the user navigates their windows by, for as long as the review
+  is open. The mark belongs in that label rather than in the pane's own
+  appearance, which no escape sequence reaches and which would cost the split a
+  profile of its own.
+- **[DIFF-30]** The system shall move the input focus to the split it opens. A
+  split opened through the terminal's scripting interface is created without
+  being selected, so the review draws in a pane the keyboard does not reach and
+  the reviewer types into the session that is waiting on them instead.
 
 ### CONFIG — Configuration
 

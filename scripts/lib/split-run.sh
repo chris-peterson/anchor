@@ -88,6 +88,36 @@ end run
 APPLESCRIPT
 }
 
+# Write the `/bin/sh` script the pane runs: the caller's context, then the
+# command string $1, then the command's status to the sentinel path the script
+# takes as its own argument.
+#
+# iTerm2 runs a split's command directly rather than through a login shell, and
+# starts it in the terminal's own environment and whatever directory that
+# inherits. Everything in the command was resolved against the caller's, so the
+# pane has to run in the caller's:
+#   * the working directory, because a review is asked for as git refs, which
+#     name commits only in the repo the dispatcher resolved them against — a pane
+#     standing anywhere else renders that other repo's diff, or an empty one.
+#   * PATH, to find the binary at all: iTerm2's own is `/usr/bin:/bin:…` and
+#     nothing a profile added, so a lookup over there reports "not found" for a
+#     tool that is plainly installed and the pane dies on 127 before drawing.
+#   * the locale, because these artifacts are markdown a TUI has to render.
+#   * EDITOR/VISUAL, because revdiff opens an editor of its own for a multi-line
+#     annotation.
+anchor_split_launch_script() {
+  local cmd="$1" name value
+  printf '#!/bin/sh\n'
+  printf 'cd %s || exit 1\n' "$(anchor_split_sq "$PWD")"
+  printf 'export PATH=%s\n' "$(anchor_split_sq "$PATH")"
+  for name in LANG LC_ALL EDITOR VISUAL; do
+    value="${!name:-}"
+    [[ -z "$value" ]] || printf 'export %s=%s\n' "$name" "$(anchor_split_sq "$value")"
+  done
+  printf '%s\n' "$cmd"
+  printf 'rc=$?; printf %%s "$rc" > "$1.tmp" && mv -f "$1.tmp" "$1"\n'
+}
+
 # Run the `sh` command string $1 in a split, and return the command's own status.
 anchor_split_run() {
   local cmd="$1" sentinel launch pane rc=0
@@ -102,40 +132,27 @@ anchor_split_run() {
   sentinel=$(mktemp "${TMPDIR:-/tmp}/anchor-split-rc.XXXXXX")
   launch=$(mktemp "${TMPDIR:-/tmp}/anchor-split-launch.XXXXXX")
 
-  # iTerm2 runs a split's command directly rather than through a login shell, so
-  # the pane starts on iTerm2's own PATH — `/usr/bin:/bin:…` and nothing a
-  # profile added. The command was resolved against the caller's environment, so
-  # the pane has to run in it: PATH to find the binary at all (a lookup over
-  # there reports "not found" for a tool that is plainly installed, and the pane
-  # dies on 127 before drawing anything), the locale because these artifacts are
-  # markdown a TUI has to render, and EDITOR/VISUAL because revdiff opens an
-  # editor of its own for a multi-line annotation.
-  {
-    printf '#!/bin/sh\n'
-    printf 'export PATH=%s\n' "$(anchor_split_sq "$PATH")"
-    local name value
-    for name in LANG LC_ALL EDITOR VISUAL; do
-      value="${!name:-}"
-      [[ -z "$value" ]] || printf 'export %s=%s\n' "$name" "$(anchor_split_sq "$value")"
-    done
-    printf '%s\n' "$cmd"
-    printf 'rc=$?; printf %%s "$rc" > "$1.tmp" && mv -f "$1.tmp" "$1"\n'
-  } > "$launch"
+  anchor_split_launch_script "$cmd" > "$launch"
   chmod +x "$launch"
 
   # ITERM_SESSION_ID is "w0t0p0:UUID"; AppleScript's session id is the UUID.
   # The paths reach it as argv and the pane runs a script, so neither has to
   # survive a second round of quoting.
   #
-  # The pane opens focused, and iTerm2 draws the tab from whichever session holds
-  # the focus — a new one carries none of the session variables a title format
-  # reads, so the tab label empties the moment the review opens. Copying the
-  # caller's rendered name onto the pane keeps the label the user was reading,
-  # and the 👀 leading it says which of their windows is waiting on them to read
-  # something. The mark lives in the name because that is a session's own string:
-  # a pane background would need a profile to carry it, where this needs nothing.
-  # The copy is attempted, not required: the pane is already running the review
-  # by the time it happens, and an error there would be reported as a split that
+  # A split opened this way is created but not selected: the tab keeps the
+  # calling session current, so the review renders beside a terminal that goes
+  # on taking the keystrokes meant for it. `select` hands the pane the keyboard
+  # the review is read and annotated with.
+  #
+  # iTerm2 then draws the tab from whichever session holds that focus, and the
+  # new one carries none of the session variables a title format reads, so the
+  # tab label would empty for the length of the review. Copying the caller's
+  # rendered name onto the pane keeps the label the user was reading, and the 👀
+  # leading it says which of their windows is waiting on them to read something.
+  # The mark lives in the name because that is a session's own string: a pane
+  # background would need a profile to carry it, where this needs nothing. The
+  # copy is attempted, not required: the pane is already running the review by
+  # the time it happens, and an error there would be reported as a split that
   # never opened.
   pane=$(osascript - "${ITERM_SESSION_ID##*:}" "$launch" "$sentinel" <<'APPLESCRIPT' 2>&1
 on run argv
@@ -157,6 +174,7 @@ on run argv
                         try
                             set name of newSession to "👀 " & paneName
                         end try
+                        select newSession
                         return id of newSession
                     end if
                 end repeat

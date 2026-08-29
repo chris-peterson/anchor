@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- A review pane takes the keyboard when it opens. iTerm2 creates a split made through AppleScript without selecting it, so the review drew beside a terminal that went on taking the keystrokes meant for it, and reading the diff started with finding the pane and clicking into it.
+- A review pane runs in the repo the review is about. The pane starts in whatever directory iTerm2 hands it, so a review of a repo other than your working directory — `--repo`, or a `/anchor:*` run against a named project — re-resolved the git range over there and drew that repo's diff, or nothing at all where it happened to be clean.
+
 ## 1.9.1
 
 ### Fixed
