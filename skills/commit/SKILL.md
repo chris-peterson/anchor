@@ -229,7 +229,7 @@ Before committing, open the pending changeset — the working tree vs `HEAD`, th
 
 **Launch as a background call** (`run_in_background: true`): the dispatcher blocks until the review closes, so a foreground call would hold the turn open until the Bash timeout.
 
-**Don't announce the launch.** The backend puts the diff on screen itself — a terminal overlay, on revdiff — so the user can see it. A line saying the review is open, and what's in it, describes what the tool is already showing. The next thing you say is the verdict (or what the review asked for).
+**Print the manifest as you launch.** The backend draws one file at a time and never shows the set, so the message that launches the review carries a table of the files under review with their `+`/`−` counts (Step 1's `STAT` covers the same paths), the repo and branch, the backend, and the drafted commit message riding with them. The shape is in `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "show what is going under review". Nothing else about the launch is output — not the command, not the flags, not the wait. After the table, the next thing you say is the verdict (or what the review asked for).
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill commit --local --message-file <commit-msg-path> --path <p> [--path <p>...]
@@ -276,6 +276,8 @@ Carry the **same `--path` list** through from Steps 1 and 5, so the commit holds
 `commit.sh` picks the push variant itself — `-u origin <branch>` for a branch with no upstream, plain `git push` otherwise, `git push --force-with-lease` when you pass `--force-with-lease`. It also **refuses to commit onto the default branch** unless you pass `--allow-default-branch`; the Step 4 branch guard means you're normally already on a feature branch, so pass that flag only for the deliberate "commit to `<default>`" case the user chose there. Target a non-cwd checkout with `--repo <checkout>`, same as the other helpers.
 
 Read the helper's stdout — `COMMIT_SHA`, `BRANCH`, `PUSH_MODE`, and `PUSHED=ok` on success. Report the outcome and nothing more — `Committed <COMMIT_SHA>, pushed to <BRANCH>` — followed by any comments an `approved` review left unaddressed. If the push is rejected (non-fast-forward, protected branch, auth), `commit.sh` leaves git's error on stderr and exits non-zero; surface that and stop rather than retrying or force-pushing without the lease.
+
+**The forge's own "create a pull request" link is not the handoff.** Pushing a new branch makes GitHub print a `Create a pull request for '<branch>'` URL, and GitLab prints its `merge_requests/new` equivalent; both are in the push output you just read. Don't relay either one. That URL opens the forge's web form, which lands the CR non-draft, with the project template's checklist intact and no Review guide — the shape `/anchor:prepare-review` exists to replace (`${CLAUDE_PLUGIN_ROOT}/rules/use-forge-clis.md`). Where the next step comes up, name the skill: **`/anchor:prepare-review` opens the CR against the branch this just pushed.**
 
 ## Step 7: Report the pipeline the push triggered
 

@@ -192,7 +192,12 @@ The `--title` / `--detail` overrides matter here: without them the header
 describes the local `HEAD`, which on a CR you didn't write is somebody else's
 change labelled with your last commit.
 
-**Don't announce the launch** — the backend puts the diff on screen itself.
+**Print the manifest as you launch** — a table of the CR's changed files with
+their `+`/`−` counts, plus the CR number, its author, and the backend. This is
+somebody else's change, so the set is what says whether you are about to review
+what they asked you to. The shape is in
+`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "show what is going
+under review". Nothing else about the launch is output.
 
 Read the result with the **BashOutput tool**. This skill reads the verdict
 differently from its siblings, because here the reviewer's comments are the

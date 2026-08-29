@@ -54,6 +54,32 @@ where a step prescribes exact output (e.g. `Committed [short-sha]`), emit that
 and nothing more. The user reads decisions and results, never the derivation
 behind them.
 
+## Exception: show what is going under review
+
+A review asks the user to grade something, and the tool draws it one file — or
+one buffer — at a time. The *set* is what it never shows: which files are in
+scope, how much each one moved, which repo and branch they belong to, and what
+rides alongside them. So print that manifest as a table in the message that
+launches the review, and let the tool render the contents.
+
+> Opening the review in a split — revdiff, `chris-peterson/anchor` on `main`,
+> with the drafted commit message:
+>
+> | File | Change |
+> |------|--------|
+> | `scripts/lib/split-run.sh` | +45 −29 |
+> | `tests/split-run.test.sh` | +76, new file |
+> | `SPEC.md` | +18 −15 |
+
+Name the drafted artifact riding with the diff — the commit message, the CR
+description, the release notes — because the backend shows it in a pane or a
+header the user has no reason to look for.
+
+The manifest is the launch's half of the loop that "echo back feedback" closes:
+the user grades a scope you named, and you repeat back what they said about it.
+The rest of the launch stays silent — the command, its flags, the backend
+resolution, the wait.
+
 ## Exception: echo back feedback from a review tool
 
 The one input you *do* surface verbatim is feedback that reached you through a

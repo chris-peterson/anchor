@@ -385,7 +385,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --bac
 
 `CURRENT_DESC_PATH` is the left-hand side — what the forge holds now. It's context for the draft, not the subject: on a CR this run opened, the forge's `--fill` baseline is the commit body, so there's little of it to compare against.
 
-**Don't announce the launch.** The backend puts the artifact on screen itself — an editor window, or a terminal overlay on revdiff — so the user can see it. A line saying the review is open, and what's in it, describes what the tool is already showing. The next thing you say is the verdict, the feedback echoed back, or the one-line write result.
+**Print the manifest as you launch.** The subject here is one drafted document, so the table names the CR (number and title), the repo and branch, the backend, and the sections the draft carries — an editor window opens behind the terminal, and a review the user cannot see is one they never grade. The shape is in `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "show what is going under review". Nothing else about the launch is output. After the table, the next thing you say is the verdict, the feedback echoed back, or the one-line write result.
 
 When the background command completes, read its stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trips the command-substitution gate. The last lines carry `REVIEW_VERDICT` (`approved` / `changes-requested` / `incomplete` / `no-verdict`) and `REVIEW_OUTPUT` (compact JSON — the DIFF contract in `SPEC.md`). **Don't read silence as success** — only `approved` is approval:
 

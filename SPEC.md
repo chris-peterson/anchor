@@ -930,6 +930,12 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   description through `/anchor:prepare-review`, an issue through `/anchor:issue`,
   release notes through `/anchor:release` — rather than a bare `create` /
   `--body` / `--generate-notes`.
+- **[RULE-04a]** The system shall not offer the CR-creation URL a push prints as
+  the way to open a change request, and shall name `/anchor:prepare-review`
+  instead. GitHub prints a `Create a pull request` link on a new branch's push
+  and GitLab a `merge_requests/new` one, in output the system has just read; the
+  form behind it lands the same CR a bare `create` would — non-draft, template
+  checklist intact, no Review guide — with the drafting moved onto the user.
 - **[RULE-05]** While deciding whether a history rewrite is safe, the system shall
   read push state and the CR draft flag fresh at the moment of the rewrite
   rather than from an earlier turn.
@@ -967,6 +973,15 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   to respect a per-user temp dir. Both positions are correct at once, and the
   reconciliation is stated where each is written rather than left as two files
   that disagree.
+- **[UX-07]** When the system opens a review, it shall print, in the message that
+  launches it, a manifest of what is under review — the files and how much each
+  moved for a changeset, the artifact and its sections for a drafted document,
+  along with the repo, the branch or change request it belongs to, and the
+  backend about to draw it. A review tool renders one file or one buffer at a
+  time and never shows the set, so a reviewer cannot tell from the tool whether
+  the scope in front of them is the scope they asked for. The rest of the launch
+  stays silent under UX-01: the command, its flags, the backend resolution, and
+  the wait are plumbing.
 ### CONFIRM — Approval before publishing
 
 Everything the system publishes goes out under the user's credentials and in

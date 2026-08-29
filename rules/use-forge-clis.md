@@ -20,6 +20,12 @@ follow-up fix).
   project template, drafts the canonical Review guide, and reports whether the
   source branch will be deleted on merge (`--remove-source-branch` on GitLab;
   GitHub has only the repo-wide setting, so it offers to turn that on).
+
+  **The link a push prints is the same raw create, one step further away.**
+  Pushing a new branch makes GitHub emit a `Create a pull request for '<branch>'`
+  URL and GitLab a `merge_requests/new` one. Relaying that URL hands the user the
+  web form, which lands exactly the CR a bare `create` would and puts the
+  drafting on them. Say `/anchor:prepare-review` instead.
 - **Filing or updating an issue → `/anchor:issue`**, never a bare
   `gh issue create --body` / `glab issue create --description`. The skill leads
   the issue with *why* the work is needed, written for a reader who's never seen

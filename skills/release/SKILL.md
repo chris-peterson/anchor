@@ -261,7 +261,11 @@ skill's default and names a tool this review will never open.
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill release --print-backend
 ```
 
-Then say in one line where the notes are about to appear, before you launch:
+Then print the manifest the launch carries — a table naming the repo, the version
+being released, the range the notes cover, the backend from that probe, and the
+sections the draft holds. The shape is in
+`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "show what is going under
+review". Two facts from the probe belong in it:
 
 - **`REVIEW_BACKEND=editor`** — the editor renders wherever its host puts it, and
   on a GUI editor that is a window behind the terminal the user is watching. A

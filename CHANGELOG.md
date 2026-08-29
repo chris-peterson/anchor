@@ -2,7 +2,13 @@
 
 ## Unreleased
 
+### Changed
+
+- Opening a review tells you what is in it. The launch message now carries a table of the files under review and how much each moved — or, for a drafted issue, CR description, or release notes, the artifact and its sections — with the repo, the branch or change request, and the tool about to draw them. A diff viewer shows one file at a time and an editor shows one buffer, so the set was the one thing nothing put in front of you before you started grading it.
+
 ### Fixed
+
+- The link a push prints is no longer offered as the way to open a change request. GitHub prints `Create a pull request for '<branch>'` on a new branch's push and GitLab a `merge_requests/new` URL; that form lands the CR non-draft, with the project template's checklist intact and no Review guide, and leaves the writing to you. `/anchor:prepare-review` is what `/anchor:commit` hands off to.
 
 - A review pane takes the keyboard when it opens. iTerm2 creates a split made through AppleScript without selecting it, so the review drew beside a terminal that went on taking the keystrokes meant for it, and reading the diff started with finding the pane and clicking into it.
 - A review pane runs in the repo the review is about. The pane starts in whatever directory iTerm2 hands it, so a review of a repo other than your working directory — `--repo`, or a `/anchor:*` run against a named project — re-resolved the git range over there and drew that repo's diff, or nothing at all where it happened to be clean.
