@@ -63,17 +63,26 @@
 
 ## 1.6.1
 
-**Full Changelog**: https://github.com/chris-peterson/anchor/compare/v1.6.0...v1.6.1
+### Fixed
+
+- **A commit stages the paths it names, not the whole tree.** Two sessions sharing a checkout meant `git add -A` swept whichever files the other session had in flight into this session's review and into its commit, under a message that never mentioned them — invisibly, since the diffstat and the diff both read as one coherent changeset. `commit-preflight.sh`, `review-diff.sh --local`, and `commit.sh` take a repeatable `--path` relative to the repo root; a foreign index entry is reported as `OTHER_STAGED`, left staged, and kept out of the commit. A `--path` matching nothing stops the flow rather than committing the rest, and an absolute path is refused.
+- **A review reads the repo its flags name, wherever they sit in the command.** `review-diff.sh` honored `--repo`, `--worktree`, `--skill`, and `--backend` only ahead of the mode flag, so writing them after it — the natural order once 1.6.0 put the mode first — dropped them and reviewed the working-directory repo instead. A clean repo shows an empty diff, and quitting an empty viewer exits 0, which the flow read as approval. Context flags now parse in one pass over the whole argv, an unrecognized option or stray positional exits 64, and an empty range reports no-verdict instead of opening a viewer. `look-ahead.sh` had the same bug for `--repo`.
+- **Uploading an image to GitLab works.** The recipe passed `glab api -F "file=@image.png"`; `-F` is short for `--field`, which JSON-encodes the file and mangles binary content, returning HTTP 400. `--form` sends real multipart data and glab authenticates it like any other call, so the fallback to `curl` with a token pulled from glab's credential store is gone.
+- **A dirty tree stops `prepare-review` with that as the message**, rather than diagnosing how the tree got that way.
 
 ## 1.6.0
 
-## What's Changed
-* Let the review step take an edit, not a comment by @chris-peterson in https://github.com/chris-peterson/anchor/pull/65
-* review a change request by @chris-peterson in https://github.com/chris-peterson/anchor/pull/66
-* Give anchor's review a caller that isn't a skill by @chris-peterson in https://github.com/chris-peterson/anchor/pull/61
+### Added
 
+- **`/anchor:review` reviews someone else's change request.** anchor covered the lifecycle from the author's side; what arrives when a teammate asks for a review is a CR number or a URL, and nothing took one. The skill resolves a CR from a number, URL, or branch, reads the description before the diff, shows every change in the review backend, then posts findings as inline threads on the lines they belong to. The diff is unfiltered and has no skip path, and an `incomplete` verdict halts — a review that saw part of a change and signed off on all of it is worth less than no review. It posts comments and never records a forge verdict: leaving comments and approving are separate acts, and `gh pr review --approve` is reported as yours to run. The head SHA is pinned when the diff is fetched and re-read before the first write, so an author who pushes mid-review gets a refusal instead of comments landing on a diff nobody read.
+- **`anchor diff old.md new.md` runs the two-file review from outside a skill.** Anything with two files to compare — a hook, a shell, an agent doing one comparison — had to re-derive `review-diff.sh --files` or go without. Stdout carries the payload and nothing else, so `anchor diff a b > review.json` yields a file jq reads; the exit code says only whether the command ran, never what the review found. `install-cli` writes the PATH wrapper and its zsh completion in one step, and a SessionStart hook reports a wrapper left behind by an older build.
+- **Verbosity is a dial per artifact.** `anchor.crVerbosity` steered CR descriptions and nothing steered the rest, so a preference for shorter commit messages or longer issues had nothing to set. Issues, commits, CRs, and release notes now default to 75, 50, 25, and 10 — each step out from the work widens the audience and narrows what they came for. That moves the CR default from 50 to 25; `crVerbosity 50` restores the previous length. Every dial shortens prose and drops nothing: a commit's subject rules and `Refs:` trailer hold at every setting, acceptance criteria are never condensed, and release entries keep their breaking-change migration steps.
 
-**Full Changelog**: https://github.com/chris-peterson/anchor/compare/v1.5.0...v1.6.0
+### Changed
+
+- **The review backend settles against what is installed.** A configured backend used to name a tool the run then assumed was present. Where the tool is missing, the report names it rather than standing in for it — "the revdiff launcher isn't installed" tells you what to fix. Below a reachable viewer the skills walk a ladder: link the drafted artifact's own file, offer the editor backend where one is reachable, otherwise read the change in the conversation.
+- **git's difftool is off the review-backend menu.** A difftool puts the diff on screen and then reports no verdict, so the flow ended in the same question an absent viewer would have asked — except you had now read something, making it "you saw it, approve?". That turns a tooling failure into an approval, which is what the verdict contract exists to prevent. Nothing degrades into it, and it is not selectable.
+- **The docs home page is generated from `plugin.yml`** instead of restating it, so a skill's own description and the page describing it cannot disagree. What stays hand-written is what only a person can say: the lifecycle diagram, the session previews, the quickstart, and why these skills exist.
 
 ## 1.5.0
 
