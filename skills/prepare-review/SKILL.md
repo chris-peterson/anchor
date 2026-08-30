@@ -370,6 +370,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --pri
 - `REVIEW_BACKEND=revdiff` (or another viewer) — either the user configured one, or no editor was reachable and an installed viewer stood in. The user comments and you fold the comments in.
 - `REVIEW_BACKEND_AVAILABLE=0` — nothing usable; skip to the fallback ladder below.
 - `REVIEW_BACKEND_CONFIGURED` present — the run is opening something other than what the preference named: a configured tool that isn't installed, or the default editor with nowhere to open it. Say which one you're opening in one line, so it isn't discovered as a surprise window.
+- `REVIEW_BACKEND_SOURCE` / `REVIEW_EDITOR_SOURCE` — where each half of the choice came from. `default` on either means anchor picked it and the user has no preference on file, which is the hint the manifest carries (`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`, "when anchor picked the tool"). `REVIEW_EDITOR` names the editor about to open, so the line can say what it would replace.
 - `REVIEW_EDITOR_AVAILABLE=0|1` — whether the fallback ladder may offer the editor rung. Carry it forward; it costs nothing here and it's the difference between offering a route that works and one that dead-ends.
 
 Pass what it returned to the launch (`--backend <REVIEW_BACKEND>`) so the review opens in the tool the probe found rather than re-resolving the config.

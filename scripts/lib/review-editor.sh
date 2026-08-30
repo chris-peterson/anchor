@@ -33,40 +33,81 @@ anchor_editor_usable() {
 # take `--wait`; anything else is a `core.editor` away (DIFF-16).
 anchor_editor_candidates=(code code-insiders)
 
-# Resolve the editor git would use — GIT_EDITOR, core.editor, VISUAL, EDITOR —
-# and then two rungs of anchor's own, because git's chain runs out while this
-# backend still has somewhere to go. `git var GIT_EDITOR` answers git's half in
-# one call, but it reads the environment variable first, so the rungs are walked
-# by hand here to keep the scrub above in front of each one.
+# The editor the user's own configuration names — git's chain, GIT_EDITOR then
+# core.editor then VISUAL then EDITOR, with the no-op scrub above in front of
+# each rung. `git var GIT_EDITOR` answers git's half in one call, but it reads
+# the environment variable first, so the rungs are walked by hand here. Empty
+# when the user has configured nothing.
 #
-# Past the user's configuration come a blocking VS Code and git's compiled
-# default, in that order. `code --wait` renders through the `gui` host, which
-# needs no terminal at all, where `vi` needs one some host puts up — so the
-# reachable one goes first. Both sit below every configured value, which is what
-# keeps naming an editor a decision rather than a hint.
-anchor_editor_resolve() {
-  local ed candidate
+# Split out because two questions need it: which editor to open, and whether the
+# user chose it — the launch names a config key only for one anchor picked.
+anchor_editor_configured() {
+  local ed
   ed=$(git var GIT_EDITOR 2>/dev/null || true)
   anchor_editor_usable "$ed" || ed=$(git config --get core.editor 2>/dev/null || true)
   anchor_editor_usable "$ed" || ed="${VISUAL:-}"
   anchor_editor_usable "$ed" || ed="${EDITOR:-}"
+  anchor_editor_usable "$ed" || ed=""
+  printf '%s' "$ed"
+}
+
+# git's compiled default — what a plain `git commit` opens here. It answers only
+# with the environment's own editors out of the way entirely, since it honors an
+# empty or no-op value as the answer rather than falling through, and each of
+# them is walked and discounted above. TERM is pinned because git names no
+# editor at all on a dumb terminal: that answers for the stdio git was handed,
+# where this backend renders in a terminal the host opens (DIFF-17).
+anchor_editor_compiled_default() {
+  ( unset GIT_EDITOR VISUAL EDITOR; TERM=xterm git var GIT_EDITOR ) 2>/dev/null || true
+}
+
+# Does this session have somewhere to put a terminal — a tmux popup, the calling
+# iTerm2 session's split, the user's own shell. Asked of the host selector with
+# no editor named, so resolution and launch cannot disagree about it.
+anchor_editor_terminal_host() {
+  [[ -n "$(anchor_editor_host "")" ]]
+}
+
+# Resolve the editor to open: what the user configured, and past that two rungs
+# of anchor's own, because git's chain runs out while this backend still has
+# somewhere to go. An editor the user never configured is still an editor they
+# have, and the alternative is refusing a review on a machine where `git commit`
+# would have opened one.
+#
+# Which of the two rungs comes first turns on where anchor can draw. With a
+# terminal to open, git's compiled default is both the editor a plain
+# `git commit` opens here and the one that renders in the pane anchor labels and
+# focuses (DIFF-25, DIFF-29, DIFF-30) rather than a window behind the terminal.
+# With nowhere to put a terminal, a blocking GUI editor is the only rung that
+# reaches anything at all. Both sit below every configured value, which is what
+# keeps naming an editor a decision rather than a hint.
+anchor_editor_resolve() {
+  local ed candidate
+  ed=$(anchor_editor_configured)
+  if [[ -n "$ed" ]]; then printf '%s' "$ed"; return; fi
+
+  if anchor_editor_terminal_host; then ed=$(anchor_editor_compiled_default); fi
+
   if ! anchor_editor_usable "$ed"; then
     ed=""
     for candidate in "${anchor_editor_candidates[@]}"; do
       if command -v "$candidate" >/dev/null 2>&1; then ed="$candidate --wait"; break; fi
     done
   fi
-  # git's compiled default — what a plain `git commit` opens here. It answers
-  # only with the environment's own editors out of the way entirely, since it
-  # honors an empty or no-op value as the answer rather than falling through,
-  # and each of them was already walked and discounted above. TERM is pinned
-  # because git names no editor at all on a dumb terminal: that answers for the
-  # stdio git was handed, where this backend renders in a terminal the host
-  # opens (DIFF-17).
-  anchor_editor_usable "$ed" \
-    || ed=$( (unset GIT_EDITOR VISUAL EDITOR; TERM=xterm git var GIT_EDITOR) 2>/dev/null || true)
+
+  # Nothing to host a terminal and no blocking GUI editor either. The compiled
+  # default still names the editor, so the launch reports the host it cannot
+  # find rather than an absent editor the user does have.
+  anchor_editor_usable "$ed" || ed=$(anchor_editor_compiled_default)
   anchor_editor_usable "$ed" || ed=""
   printf '%s' "$ed"
+}
+
+# Where the resolved editor came from. The launch turns its configuration hint
+# on this: a rung anchor picked is worth naming a key for, a value the user typed
+# is not.
+anchor_editor_source() {
+  if [[ -n "$(anchor_editor_configured)" ]]; then printf 'config'; else printf 'default'; fi
 }
 
 # Name where the editor $1 can be put on screen, or nothing when there is

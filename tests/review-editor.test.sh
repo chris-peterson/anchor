@@ -38,7 +38,10 @@ mkdir -p "$bin"
 cat > "$bin/stub-editor.sh" <<'EOF'
 #!/usr/bin/env bash
 buffer="$1"
-[ -n "${EDITOR_BUFFER_CAPTURE:-}" ] && cp "$buffer" "$EDITOR_BUFFER_CAPTURE"
+if [ -n "${EDITOR_BUFFER_CAPTURE:-}" ]; then
+  cp "$buffer" "$EDITOR_BUFFER_CAPTURE"
+  printf '%s\n' "$buffer" > "$EDITOR_BUFFER_CAPTURE.path"
+fi
 case "${EDITOR_STUB_MODE:-keep}" in
   replace)
     scissors='------------------------ >8 ------------------------'
@@ -103,6 +106,12 @@ grep -q '>8' "$EDITOR_BUFFER_CAPTURE"                 || fail "scissors line mis
 grep -q 'Stale text' "$EDITOR_BUFFER_CAPTURE"         || fail "the diff against the prior file is not below the scissors"
 ok "editor: buffer is artifact + scissors + the change under review"
 
+# The editor reads the name to pick its mode, so a markdown artifact opens under
+# a `.md` buffer and markdown preview is a keystroke away.
+[[ "$(cat "$EDITOR_BUFFER_CAPTURE.path")" == *.md ]] \
+  || fail "a markdown artifact should open in a .md buffer, got $(cat "$EDITOR_BUFFER_CAPTURE.path")"
+ok "editor: a markdown artifact opens in a .md buffer"
+
 # --- saved changed -> the saved text IS the artifact ------------------------
 export EDITOR_STUB_MODE=replace
 export EDITOR_STUB_TEXT='# Rewritten by hand
@@ -145,6 +154,10 @@ o=$(run --skill commit --local --message-file "$msg"); j=$(json_of "$o")
 [ "$(jq -r '.editedFields[0].edited' <<<"$j")" = "$EDITOR_STUB_TEXT" ] || fail "edited message not adopted"
 grep -q 'three' "$EDITOR_BUFFER_CAPTURE" || fail "staged diff should sit below the scissors"
 ok "editor: --message-file -> editedFields[commit-message], diff below the scissors"
+
+[[ "$(cat "$EDITOR_BUFFER_CAPTURE.path")" == *.txt ]] \
+  || fail "a commit message should open in a .txt buffer, got $(cat "$EDITOR_BUFFER_CAPTURE.path")"
+ok "editor: a commit message opens in a .txt buffer"
 
 # The seeded message is the editable region, so it is not repeated as a header row.
 [ "$(grep -c 'The body explains why' "$EDITOR_BUFFER_CAPTURE")" = 1 ] \
@@ -240,6 +253,30 @@ o=$( cd "$repo" && PATH="$bin:/usr/bin:/bin" ANCHOR_EDITOR_LAUNCHER="$bin/stub-e
 [ "$(key_of REVIEW_BACKEND_AVAILABLE "$o")" = 1 ] || fail "a reachable editor makes the selected editor backend available"
 [ "$(key_of REVIEW_EDITOR_AVAILABLE "$o")" = 1 ]  || fail "a reachable editor should be reported as offerable"
 ok "probe: a reachable editor is reported on its own axis"
+
+# Whether the tool about to open is one the user chose (UX-07). The backend here
+# comes from a config key and the editor from anchor's own ladder, so the launch
+# has a hint to print for one and not the other.
+[ "$(key_of REVIEW_BACKEND_SOURCE "$o")" = config ] || fail "a configured backend should report source=config"
+[ "$(key_of REVIEW_EDITOR_SOURCE "$o")" = default ] || fail "an unconfigured editor should report source=default"
+[ -n "$(key_of REVIEW_EDITOR "$o")" ]               || fail "the probe should name the editor it would open"
+ok "probe: the backend and editor each report whether the user chose them"
+
+o=$( cd "$repo" && PATH="$bin:/usr/bin:/bin" ANCHOR_EDITOR_LAUNCHER="$bin/stub-editor.sh" \
+     GIT_EDITOR='my-editor --wait' bash "$dispatch" --skill commit --print-backend )
+[ "$(key_of REVIEW_EDITOR "$o")" = 'my-editor --wait' ] || fail "a configured editor should be named verbatim"
+[ "$(key_of REVIEW_EDITOR_SOURCE "$o")" = config ]      || fail "a configured editor should report source=config"
+ok "probe: a configured editor is named, and reported as the user's choice"
+
+# The editor pair answers for the editor backend, so a run that opens a viewer
+# carries no hint to print about an editor it never opens.
+git -C "$repo" config anchor.commit.reviewBackend revdiff
+o=$( cd "$repo" && PATH="$viewerbin:$bin:/usr/bin:/bin" bash "$dispatch" --skill commit --print-backend )
+[ "$(key_of REVIEW_BACKEND "$o")" = revdiff ]  || fail "the viewer should be what opens here"
+[ -z "$(key_of REVIEW_EDITOR "$o")" ]          || fail "a viewer run should not name an editor"
+[ -z "$(key_of REVIEW_EDITOR_SOURCE "$o")" ]   || fail "a viewer run should not report an editor source"
+git -C "$repo" config --unset anchor.commit.reviewBackend
+ok "probe: a viewer run reports no editor pair"
 
 git -C "$repo" config anchor.commit.reviewBackend definitely-not-installed
 o=$(probe --skill commit --print-backend)
@@ -343,12 +380,30 @@ chmod +x "$codebin/code"
 # TERM is pinned per case rather than inherited: git names no editor at all on a
 # dumb terminal, and a CI step and Claude Code's Bash tool both run without one,
 # so a suite that reads whatever TERM the developer has passes here and fails
-# there.
-resolve() { ( cd "$repo" && PATH="$1:/usr/bin:/bin" TERM="${2-dumb}" GIT_EDITOR=true bash "$bin/resolve-editor.sh" ); }
+# there. Every host signal is pinned for the same reason — which rung anchor
+# picks turns on whether a terminal can be hosted, so a suite that inherits the
+# developer's iTerm2 session reads a different ladder than CI does. `</dev/null`
+# takes the `tty` host out along with them.
+resolve() {
+  ( cd "$repo" && PATH="$1:/usr/bin:/bin" TERM="${2-dumb}" GIT_EDITOR=true \
+      TMUX='' ANCHOR_EDITOR_LAUNCHER='' ITERM_SESSION_ID='' \
+      ANCHOR_SPLIT_RUNNER="${3-}" bash "$bin/resolve-editor.sh" </dev/null )
+}
 
+# With a terminal to host, the editor a plain `git commit` opens wins over a
+# GUI editor anchor merely found: it renders in the pane anchor labels and
+# focuses, where VS Code opens a window behind the terminal.
+r=$(resolve "$codebin" dumb "$bin/stub-split-runner.sh")
+[ -n "$r" ] || fail "git's compiled default should resolve with a terminal host"
+[ "$r" != "code --wait" ] || fail "a hostable terminal should outrank the GUI rung, got '$r'"
+case "$r" in true|:|*/true) fail "a no-op compiled default should be discounted" ;; esac
+ok "resolve: with a terminal host, git's own compiled default"
+
+# And with nowhere to put a terminal, the GUI rung is the only one that reaches
+# anything at all.
 r=$(resolve "$codebin")
-[ "$r" = "code --wait" ] || fail "a blocking VS Code on PATH should be reached, got '$r'"
-ok "resolve: past git's chain, a blocking VS Code on PATH"
+[ "$r" = "code --wait" ] || fail "with no terminal host, a blocking VS Code should be reached, got '$r'"
+ok "resolve: with nowhere to host one, a blocking VS Code on PATH"
 
 # A dumb terminal is git's answer about the stdio git itself was handed. This
 # backend puts the editor in a terminal the host opens (DIFF-17), which is a
@@ -358,7 +413,7 @@ for term in dumb xterm; do
   [ -n "$r" ] || fail "git's own compiled default should still resolve (TERM=$term)"
   case "$r" in true|:|*/true) fail "a no-op compiled default should be discounted (TERM=$term)" ;; esac
 done
-ok "resolve: and below that, git's own compiled default, dumb terminal or not"
+ok "resolve: with neither, the compiled default still names the editor"
 
 # The no-op scrub reaches this rung's inputs too (DIFF-16): a harness that
 # exports EDITOR=true would otherwise hand git a value git happily reports, and

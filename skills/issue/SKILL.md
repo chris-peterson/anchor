@@ -240,6 +240,7 @@ Then say in one line where the draft is about to appear:
 
 - **`REVIEW_BACKEND=editor`** — the editor renders wherever its host puts it, and on a GUI editor that is a window behind the terminal the user is watching. A review silently waiting in another window is indistinguishable from nothing having opened, so name it.
 - **`REVIEW_BACKEND_CONFIGURED` present** — the run is opening something other than what the preference named. Name that too.
+- **`REVIEW_BACKEND_SOURCE` / `REVIEW_EDITOR_SOURCE` = `default`** — anchor picked that half rather than the user. Add the configuration hint from `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "when anchor picked the tool"; `REVIEW_EDITOR` names the editor about to open.
 
 Say it as part of the manifest the launch carries — a table naming the repo, the issue (its number and title when updating one), the backend from that probe, and the sections the draft holds. The shape is in `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "show what is going under review". Nothing else about the launch is output; after the table, the next thing you say is the verdict.
 

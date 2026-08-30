@@ -273,6 +273,10 @@ review". Two facts from the probe belong in it:
   having opened, so name it.
 - **`REVIEW_BACKEND_CONFIGURED` present** — the run is opening something other
   than what the preference named. Name that too.
+- **`REVIEW_BACKEND_SOURCE` / `REVIEW_EDITOR_SOURCE` = `default`** — anchor
+  picked that half rather than the user. Add the configuration hint from
+  `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "when anchor picked the
+  tool"; `REVIEW_EDITOR` names the editor about to open.
 
 Then open the notes against `RELEASE_NOTES_BASELINE` (the empty left-hand side
 the recon block created) through the **dispatcher** — not the backend directly.

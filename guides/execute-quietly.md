@@ -75,6 +75,24 @@ Name the drafted artifact riding with the diff — the commit message, the CR
 description, the release notes — because the backend shows it in a pane or a
 header the user has no reason to look for.
 
+### When anchor picked the tool, say which key would pick it instead
+
+The probe reports where each half of the choice came from —
+`REVIEW_BACKEND_SOURCE` and, for an editor review, `REVIEW_EDITOR_SOURCE`. On
+`default`, anchor coalesced onto something rather than opening what the user
+asked for, and the tool itself is the last place that would ever mention it. Add
+one line under the table naming the key, and the value that would have produced
+what they're looking at:
+
+> Both picked by anchor — `git config anchor.prepare-review.reviewBackend
+> <editor|revdiff>` chooses the shape, `git config --global core.editor
+> <editor>` the editor.
+
+Only for the half that says `default`; a choice the user typed needs no hint,
+which is what retires the line once they've made one. Say it in the launch
+message and nowhere else — this is a hint sitting next to the thing it's about,
+not advice to lead with.
+
 The manifest is the launch's half of the loop that "echo back feedback" closes:
 the user grades a scope you named, and you repeat back what they said about it.
 The rest of the launch stays silent — the command, its flags, the backend

@@ -393,14 +393,22 @@ git config core.editor "code --wait"   # or set VISUAL / EDITOR
 | 1 | `GIT_EDITOR` | Ignored when it is a no-op (`true`, `:`) — the way an agent harness keeps git from opening editors. Honoring it would open nothing, change nothing, and read as approval. |
 | 2 | `git config core.editor` | The one to set if you want this decided per repo or globally. |
 | 3 | `VISUAL`, then `EDITOR` | Where git looks next. Claude Code exposes no editor setting of its own, and its transcript viewer documents these two, so one value can steer both it and `anchor`. |
-| 4 | A blocking VS Code on `PATH` | `code --wait`, then `code-insiders --wait`. `anchor`'s own preference, not git's. |
-| 5 | git's compiled default | Whatever a plain `git commit` opens here, usually `vi`. |
+| 4 | git's compiled default | Whatever a plain `git commit` opens here, usually `vi` — when there is a terminal to host it. |
+| 5 | A blocking VS Code on `PATH` | `code --wait`, then `code-insiders --wait`. `anchor`'s own preference, not git's, and where it lands with nowhere to put a terminal. |
 
-Rungs 4 and 5 are where `anchor` goes past git: git's chain ends at 5, and a
+Rungs 4 and 5 are where `anchor` goes past git: git's chain ends at 4, and a
 session that exports `GIT_EDITOR=true` with nothing else set would otherwise
-have no editor at all on a machine where `git commit` opens one. VS Code sits
-above `vi` because it renders in its own window, where a terminal editor needs a
-terminal `anchor` has to find (see below).
+have no editor at all on a machine where `git commit` opens one.
+
+Which of the two comes first depends on where `anchor` can draw. Inside tmux or
+an iTerm2 session it can open a terminal (see below), so it takes the editor
+`git commit` would open and puts it in a pane it labels, focuses, and closes
+behind you. With nowhere to host a terminal — a plain SSH session, a CI step —
+VS Code's own window is the only thing that reaches you at all.
+
+Both rungs are `anchor` guessing. When it lands on one, it says so as it opens
+the review and names the key that would settle it — so the hint arrives next to
+the editor you didn't pick, and stops once you have.
 
 To change it, set rung 2 or 3 — both override everything under them:
 
@@ -412,7 +420,7 @@ export VISUAL="code --wait"                     # this shell, and Ctrl+G with it
 
 A GUI editor has to **block** — `--wait` on VS Code, `-w` on Sublime and
 TextMate. Without it the editor returns the instant it opens and `anchor` reads
-an untouched draft as one you approved. That's also why rung 4 stays narrow to
+an untouched draft as one you approved. That's also why rung 5 stays narrow to
 the VS Code family: `--wait` is the flag it knows blocks, so any other editor is
 a `core.editor` away rather than a guess.
 
@@ -472,6 +480,10 @@ git config anchor.commit.reviewBackend editor  # commit messages in $EDITOR
 in both directions, so an umbrella `editor` plus
 `anchor.prepare-review.reviewBackend revdiff` edits everything but the CR
 description.
+
+Until you set one of them, the launch message says the tool was `anchor`'s pick
+and names the key — the same hint the editor ladder prints, for the other half
+of the choice.
 
 **What `editor` does with the draft.** It opens the artifact in a buffer with the
 change under review below a scissors line, the way `git commit --verbose` does:

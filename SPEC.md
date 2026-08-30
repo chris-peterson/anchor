@@ -686,6 +686,10 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   scissors line, adopt the saved text verbatim as the artifact, and return it in
   `editedFields` rather than re-drafting from it. It shall not strip lines
   beginning with `#`, which are headings in the markdown artifacts it carries.
+  The buffer shall carry the extension of the artifact's own format — `.md` for
+  the three markdown artifacts, `.txt` for a commit message — since an editor
+  picks its syntax mode and its markdown preview from the name rather than the
+  content, and a reviewer reading a description wants the rendered shape.
 - **[DIFF-14]** If the editor returns an empty artifact, or exits non-zero, then
   the system shall report `no-verdict` and shall publish nothing the review
   gated.
@@ -697,10 +701,16 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   (`core.editor`, then `VISUAL`, then `EDITOR`), and shall treat a no-op editor
   supplied by the environment as unset, so a review that opened nothing is never
   read as approval. Where none of those name one, it shall continue past git's
-  chain — a blocking editor found on `PATH` first, then git's own compiled
-  default — since an editor the user never configured is still an editor they
+  chain — since an editor the user never configured is still an editor they
   have, and the alternative is refusing a review on a machine where `git commit`
-  would have opened one. The compiled default shall be read independent of the
+  would have opened one. Which rung it continues to shall turn on whether a
+  terminal can be hosted: with one, git's own compiled default, which is both
+  the editor a plain `git commit` opens there and the one that renders in the
+  pane the system labels and focuses (DIFF-25, DIFF-29, DIFF-30); with nowhere
+  to put a terminal, a blocking editor found on `PATH`, which is then the only
+  rung that reaches anything. Where neither answers, the compiled default shall
+  still name the editor, so the launch reports the host it cannot find rather
+  than an absent editor the user does have. The compiled default shall be read independent of the
   ambient terminal and of the no-op values already discounted above: git names no
   editor at all when the terminal it was handed is dumb, which answers for git's
   own stdio rather than for a backend that renders in a terminal the host opens
@@ -979,7 +989,15 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   along with the repo, the branch or change request it belongs to, and the
   backend about to draw it. A review tool renders one file or one buffer at a
   time and never shows the set, so a reviewer cannot tell from the tool whether
-  the scope in front of them is the scope they asked for. The rest of the launch
+  the scope in front of them is the scope they asked for. Where the backend or
+  the editor was one the system settled on rather than one the user configured,
+  that message shall additionally name the configuration key that would choose
+  it and the value producing what is on screen. A review opens in whatever the
+  resolution ladder coalesced onto, and the tool it opens is the last place that
+  would mention the preference exists — so the moment the user is looking at a
+  choice they didn't make is the moment to say it is a choice. The hint shall
+  stand only for the half that was defaulted, which retires it as soon as they
+  set one. The rest of the launch
   stays silent under UX-01: the command, its flags, the backend resolution, and
   the wait are plumbing.
 ### CONFIRM — Approval before publishing

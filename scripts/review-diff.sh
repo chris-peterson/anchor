@@ -70,6 +70,13 @@ set -euo pipefail
 #       REVIEW_BACKEND=<name>              what to pass to --backend
 #       REVIEW_BACKEND_AVAILABLE=0|1       0 = nothing usable is installed
 #       REVIEW_BACKEND_CONFIGURED=<name>   only when config asked for another
+#       REVIEW_BACKEND_SOURCE=override|config|default
+#       REVIEW_EDITOR=<command>            the editor an editor review opens
+#       REVIEW_EDITOR_SOURCE=config|default
+#         The last three say whether the tool about to open is one the user
+#         chose, so a launch that coalesced onto a default can name the key that
+#         would make it a choice (UX-07). REVIEW_EDITOR pair only when the
+#         editor backend is what would run.
 #       REVIEW_EDITOR_AVAILABLE=0|1        1 = --backend editor would reach an
 #         editor. Reported on its own axis because it answers a different
 #         question: not "which viewer shows the changeset" but "can the user be
@@ -209,6 +216,15 @@ if [[ "$print_backend" == "1" ]]; then
   # nowhere to open. Either way the caller has a name to say out loud, so the
   # tool that opens isn't discovered as a surprise window.
   [[ "$backend" == "$preferred" ]] || echo "REVIEW_BACKEND_CONFIGURED=$preferred"
+  # Whether the tool about to open is one the user chose. A review opens in
+  # whatever anchor coalesced onto when nothing is configured, and the reviewer
+  # has no way to tell that from the tool itself — so the launch names the key
+  # that would make it a choice, and this is what tells it to (UX-07).
+  echo "REVIEW_BACKEND_SOURCE=$resolved_backend_source"
+  if [[ "$backend" == "editor" ]]; then
+    echo "REVIEW_EDITOR=$(anchor_editor_resolve)"
+    echo "REVIEW_EDITOR_SOURCE=$(anchor_editor_source)"
+  fi
   echo "REVIEW_EDITOR_AVAILABLE=$editor_available"
   exit 0
 fi

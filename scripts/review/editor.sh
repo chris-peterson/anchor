@@ -38,6 +38,8 @@
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/review-editor.sh"
 # shellcheck source=../lib/split-run.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/split-run.sh"
+# shellcheck source=../lib/tmpfile.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../lib/tmpfile.sh"
 
 editor_caps='{"producesVerdict":true,"perHunkReview":false,"editableCommitMessage":true,"editableDescription":true,"sideMarkers":false}'
 
@@ -77,6 +79,17 @@ editor_await() {
   local sentinel="$1"
   while [[ ! -s "$sentinel" ]]; do sleep 1; done
   cat "$sentinel"
+}
+
+# The extension the buffer takes. An editor picks its syntax mode from the name,
+# not the content, so `.md` is what puts markdown preview a keystroke away for
+# the three artifacts that are markdown; a commit message is git's plain-text
+# shape and takes `.txt`.
+editor_buffer_ext() {
+  case "${1:-}" in
+    commit-message) printf 'txt' ;;
+    *)              printf 'md' ;;
+  esac
 }
 
 # Open $2 in the resolved editor $1 and return the editor's exit status, in
@@ -164,7 +177,7 @@ emit_review() {
 
   local original buffer
   original=$(cat "$artifact_file")
-  buffer=$(mktemp "${TMPDIR:-/tmp}/anchor-editor.XXXXXX")
+  buffer=$(anchor_tmpfile anchor-editor "$(editor_buffer_ext "$artifact_target")")
 
   {
     printf '%s\n\n' "$original"
