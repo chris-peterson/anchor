@@ -10,6 +10,13 @@
 # watching, and a review silently waiting on them is indistinguishable from one
 # that never opened.
 
+# Statuses `anchor_split_run` reports for its own failures rather than the
+# command's, kept apart so an adapter can name the cause instead of quoting a
+# status the command never produced. Each is printed on stderr as well; a
+# command returning the same number is what that text disambiguates.
+anchor_split_rc_no_result=124   # the pane went away before writing a status
+anchor_split_rc_no_pane=125     # the session could not be split, so nothing ran
+
 # Shell-quote one argument for the command string the pane's `sh` reads.
 anchor_split_sq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 
@@ -62,7 +69,7 @@ anchor_split_await() {
     ticks=$((ticks + 1))
     if [[ $((ticks % 15)) -eq 0 ]] && ! anchor_split_alive "$pane"; then
       echo "review-diff.sh: the review pane closed without reporting a result" >&2
-      return 125
+      return "$anchor_split_rc_no_result"
     fi
   done
   cat "$sentinel"
@@ -189,7 +196,7 @@ APPLESCRIPT
     # sentinel nothing will write.
     echo "review-diff.sh: could not split the iTerm2 session: $pane" >&2
     rm -f "$sentinel" "$launch"
-    return 125
+    return "$anchor_split_rc_no_pane"
   }
 
   rc=$(anchor_split_await "$sentinel" "$pane") || rc=$?

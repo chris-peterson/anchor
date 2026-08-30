@@ -141,6 +141,33 @@ o=$(run --skill prepare-review --files "$prior" "$draft"); j=$(json_of "$o")
 ok "editor: non-zero editor exit -> no-verdict, status in raw.exitCode"
 unset EDITOR_STUB_RC
 
+# The terminal the editor was drawing in went away before it could answer —
+# closing the review pane rather than quitting the editor. That is the host's
+# failure, not a status the editor returned, so it comes back named. Driven
+# through the launcher seam by returning the split runner's own code, which is
+# also the one case a real editor could imitate by exiting 124 itself.
+export EDITOR_STUB_MODE=fail EDITOR_STUB_RC=124
+o=$(run --skill prepare-review --files "$prior" "$draft" 2>"$work/err.txt"); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = no-verdict ]                || fail "a closed pane -> want no-verdict"
+[ "$(jq -r .raw.exitCode <<<"$j")" = pane-closed ]   || fail "raw.exitCode should name the cause, got $(jq -c .raw <<<"$j")"
+grep -q 'quit the editor itself' "$work/err.txt"     || fail "the remedy should reach stderr"
+ok "editor: a closed review pane -> no-verdict, cause named rather than numbered"
+unset EDITOR_STUB_RC
+export EDITOR_STUB_MODE=keep
+
+# And with no host at all, the editor was never asked — a third cause, kept
+# apart from the two above so none of them is reported as the others. PATH is
+# pinned to the stubs: inherit the developer's and the ladder finds their real
+# VS Code, whose `gui` host needs no terminal — the case then launches an editor
+# for real and waits for someone to close it.
+o=$( cd "$repo" && PATH="$bin:/usr/bin:/bin" ANCHOR_EDITOR_LAUNCHER='' TMUX='' \
+     ITERM_SESSION_ID='' ANCHOR_SPLIT_RUNNER='' GIT_EDITOR=true \
+     bash "$dispatch" --skill prepare-review --backend editor \
+     --files "$prior" "$draft" </dev/null 2>/dev/null ); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = no-verdict ]            || fail "nowhere to open -> want no-verdict"
+[ "$(jq -r .raw.exitCode <<<"$j")" = no-host ]   || fail "raw.exitCode should be no-host, got $(jq -c .raw <<<"$j")"
+ok "editor: nowhere to open the editor -> no-verdict, no-host"
+
 # --- a drafted commit message rides the same path --------------------------
 export EDITOR_STUB_MODE=replace
 export EDITOR_STUB_TEXT='Rewrite the subject

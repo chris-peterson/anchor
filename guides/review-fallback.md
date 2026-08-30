@@ -89,6 +89,12 @@ The exception is a backend that was never tried: where the probe named a
 substitute because the configured tool is absent, launching the substitute is a
 first attempt, not a retry.
 
+**`raw.exitCode: "pane-closed"` is not this case, and not a rung.** The tool
+works; its terminal went away before it could answer — a `⌘W` on the pane
+instead of a quit from the editor's own menu. Say that, say the draft is
+intact, and offer to open it again. Descending the ladder here hands the user a
+chat walkthrough of something their editor would have shown them properly.
+
 ## Naming the fix
 
 Every rung here is a workaround for a machine with no diff viewer on it, and

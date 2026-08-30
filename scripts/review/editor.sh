@@ -28,6 +28,13 @@
 #   emptied, or the editor exited non-zero (vim's `:cq`) -> no-verdict, which
 #                            already halts the flow and is never read as approval
 #
+# Quitting an unchanged buffer is `approved` — the reviewer read the draft and
+# it needed nothing. What is not approval is the editor never getting to answer:
+# the terminal it was drawing in went away, or there was none to draw in. Those
+# ride out as named `raw.exitCode` causes — `pane-closed`, `no-pane`, `no-host` —
+# so a consumer can say what happened rather than quote a status the editor never
+# returned.
+#
 # An editor carries one artifact, so a review with no drafted artifact (a
 # diff-only range review) is `no-verdict` with the cause on stderr rather than a
 # silent pass — set a visual backend for those skills.
@@ -92,8 +99,14 @@ editor_buffer_ext() {
   esac
 }
 
+# Nothing to open the editor in. Its own status, distinct from the two the split
+# runner reports, so the three causes reach `emit_review` apart from each other
+# and none of them is quoted back to the user as an editor's exit code.
+editor_rc_no_host=123
+
 # Open $2 in the resolved editor $1 and return the editor's exit status, in
-# whichever host `anchor_editor_host` picked for this session.
+# whichever host `anchor_editor_host` picked for this session — or one of the
+# statuses above, where the host never got the editor on screen.
 editor_launch() {
   local ed="$1" file="$2" rc=0 cmd sentinel
 
@@ -108,7 +121,7 @@ editor_launch() {
       sentinel=$(mktemp "${TMPDIR:-/tmp}/anchor-editor-rc.XXXXXX")
       cmd="$ed $(editor_sq "$file"); printf %s \$? > $(editor_sq "$sentinel")"
       tmux display-popup -E -w 90% -h 90% "$cmd" >/dev/null 2>&1 || true
-      rc=$(editor_await "$sentinel") || rc=124
+      rc=$(editor_await "$sentinel") || rc="$anchor_split_rc_no_result"
       rm -f "$sentinel"
       return "$rc"
       ;;
@@ -129,7 +142,7 @@ editor_launch() {
   esac
 
   echo "review-diff.sh: no way to open '$ed' — a terminal editor needs a terminal, and this session has none. Run inside tmux, configure a blocking GUI editor (git config core.editor 'code --wait'), or point ANCHOR_EDITOR_LAUNCHER at a script that opens one." >&2
-  return 125
+  return "$editor_rc_no_host"
 }
 
 # Consumes the review-request variables the dispatcher exports before sourcing
@@ -206,10 +219,27 @@ emit_review() {
   saved=$(printf '%s' "$saved" | sed -e :a -e '/^[[:space:]]*$/{$d;N;ba' -e '}')
   rm -f "$buffer"
 
-  if [[ "$rc" -ne 0 ]]; then
-    editor_emit no-verdict "$rc" "editor exited $rc"
-    return
-  fi
+  # A failure the host owns rides out as a named cause the way the viewer
+  # backend's `absent` / `no-host` do, not as a number. Quoting one back as the
+  # editor's exit code names a step that never happened — the editor was never
+  # asked, or was still running when its terminal went away — and leaves the
+  # user with a status to interpret instead of the thing to do next.
+  case "$rc" in
+    0) ;;
+    "$editor_rc_no_host")
+      editor_emit no-verdict no-host "no way to open the editor"
+      return ;;
+    "$anchor_split_rc_no_pane")
+      editor_emit no-verdict no-pane "the review pane could not be opened"
+      return ;;
+    "$anchor_split_rc_no_result")
+      echo "review-diff.sh: quit the editor itself to finish a review — closing its pane or tab takes the editor with it before it can report. Your draft is intact; re-run to review it again." >&2
+      editor_emit no-verdict pane-closed "the review pane closed before the editor exited"
+      return ;;
+    *)
+      editor_emit no-verdict "$rc" "editor exited $rc"
+      return ;;
+  esac
 
   if [[ -z "${saved//[[:space:]]/}" ]]; then
     editor_emit no-verdict 0 "artifact emptied — aborted"

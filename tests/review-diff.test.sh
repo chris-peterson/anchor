@@ -133,6 +133,18 @@ export REVDIFF_STUB_RC=1 REVDIFF_STUB_OUTPUT=""; o=$(run --previous); j=$(json_o
 [ "$(jq -r .raw.exitCode <<<"$j")" = 1 ]     || fail "revdiff rc1 raw.exitCode"
 ok "revdiff: rc 1 -> no-verdict (error)"
 
+# The pane went away before revdiff could report — closing it rather than
+# quitting the review. Named, not numbered: the split runner's status is not one
+# revdiff returned, and the remedy is to open it again rather than to walk the
+# fallback ladder.
+export REVDIFF_STUB_RC=124 REVDIFF_STUB_OUTPUT=""
+o=$(run --previous 2>"$work/err.txt"); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = no-verdict ]                        || fail "a closed pane -> want no-verdict"
+[ "$(jq -r .raw.exitCode <<<"$j")" = pane-closed ]           || fail "raw.exitCode should name the cause, got $(jq -c .raw <<<"$j")"
+[ "$(jq -r .capabilities.producesVerdict <<<"$j")" = false ] || fail "a pane that never reported graded nothing"
+grep -q 'quit the review to finish it' "$work/err.txt"       || fail "the remedy should reach stderr"
+ok "revdiff: a closed review pane -> no-verdict, cause named rather than numbered"
+
 # nowhere to open a pane -> no-verdict, producesVerdict false. revdiff is a TUI,
 # so a session that cannot put a terminal on screen has no review to show, and
 # saying so beats launching into a host error.

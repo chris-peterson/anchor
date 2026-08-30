@@ -692,7 +692,13 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   content, and a reviewer reading a description wants the rendered shape.
 - **[DIFF-14]** If the editor returns an empty artifact, or exits non-zero, then
   the system shall report `no-verdict` and shall publish nothing the review
-  gated.
+  gated. Where the editor never reported at all — the terminal it was drawing in
+  went away, could not be opened, or there was none to open — the result shall
+  name that cause rather than carry a numeric status, since the number would
+  attribute to the editor an exit it never made and leaves the user a status to
+  interpret in place of the thing to do. A cause the reviewer can act on shall
+  be reported with its remedy, and a terminal taken down mid-edit shall be
+  reported as re-openable rather than as a tool that cannot grade the change.
 - **[DIFF-15]** Where the editor backend is selected for a review that has no
   drafted artifact, the system shall report `no-verdict` naming the
   configuration that resolves it, rather than reporting a diff it cannot show as

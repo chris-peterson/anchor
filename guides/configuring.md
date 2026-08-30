@@ -458,6 +458,12 @@ git config --global core.editor edit
 `approved`, which is what you want when the draft already reads correctly. To
 stop the flow instead, empty the buffer.
 
+**Quit the editor, don't close its pane.** A terminal editor is drawing inside a
+pane `anchor` opened, so `⌘W` and `⌘Q` reach iTerm2 rather than the editor and
+take it down mid-edit — the review reports `pane-closed` and nothing it gated
+happens. Leave through the editor's own File → Exit, whose key its menu bar
+shows. Your draft survives either way; re-run to review it again.
+
 ### A backend per artifact
 
 Which shape suits an artifact varies, so each skill has its own default —

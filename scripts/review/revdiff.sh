@@ -144,6 +144,19 @@ emit_review() {
     cat "$err_file" >&2
   fi
 
+  # The pane never reported, so there is nothing to parse and no status revdiff
+  # returned. Named the way an absent viewer is, since quoting the split
+  # runner's number would read as a verdict revdiff produced.
+  if [[ "$rc" -eq "$anchor_split_rc_no_result" || "$rc" -eq "$anchor_split_rc_no_pane" ]]; then
+    if [[ "$rc" -eq "$anchor_split_rc_no_result" ]]; then
+      revdiff_unavailable "quit the review to finish it — closing its pane or tab takes revdiff with it before it can report. Nothing was graded; re-run to review again." pane-closed
+    else
+      revdiff_unavailable "the review pane could not be opened" no-pane
+    fi
+    rm -f "$out_file" "$err_file" "$desc_file"
+    return
+  fi
+
   # The fork echoes the seeded --description back as a `(description)` block on
   # quit (and would carry an edited message there). The description round-trip
   # isn't consumed yet (see the DIFF plan), so drop those blocks and derive the
