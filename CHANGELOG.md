@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- With no editor configured, a review opens the one `git commit` opens — usually `vi`, in the pane `anchor` labels and focuses — rather than a VS Code window behind your terminal. `anchor` reached for a blocking VS Code first because a terminal editor needed a terminal nothing was putting up; it puts one up itself now. Where it can't (a plain SSH session, a CI step), VS Code is still what answers. Set `core.editor` to name your own and both rungs step aside.
+- A review that opens something you didn't choose says so, and names the key that would choose it. Nothing about the resolution ladder is visible from inside the tool it lands on, so the launch message carries one line for the defaulted half — the backend, the editor, or both — and stops once you've set one.
+- A drafted document opens in a buffer named for what it is: `.md` for a change-request description, issue body, or release notes, `.txt` for a commit message. The buffer carried no extension, so an editor opened markdown as plain text with its preview out of reach.
+
+### Fixed
+
+- A review that never got to answer says what happened instead of quoting an exit code. Closing the review pane rather than quitting the editor reported "the editor exited 125" — a status the editor never returned, since it was still running when its terminal went away, and one that stood for two other causes besides. The three are named now (`pane-closed`, `no-pane`, `no-host`), a closed pane comes with the remedy, and your draft is intact either way.
+- A pane closed mid-review is offered again rather than walked through in chat. The tool works and the draft survives, so descending the fallback ladder there replaced an editor with a chat transcript of the same thing.
+
 ## 1.9.2
 
 ### Changed
