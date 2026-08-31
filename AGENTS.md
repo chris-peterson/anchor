@@ -19,7 +19,7 @@ just docs           # render the docs site and serve it locally
 
 just test           # every suite this platform runs, via tests/run-all.sh
 bash tests/<name>.test.sh                                  # one suite
-shellcheck hooks/*.sh scripts/*.sh scripts/review/*.sh tests/*.sh
+shellcheck hooks/*.sh scripts/*.sh scripts/review/*.sh scripts/review/backends/*.sh tests/*.sh
 ```
 
 `tests/run-all.sh` discovers `tests/*.test.sh`, so a new suite needs no wiring in
@@ -38,7 +38,8 @@ skills/<name>/SKILL.md    one skill per lifecycle step; the prompt is the implem
 rules/                    ambient rules injected into every session by hooks/emit-rules.sh
 scripts/                  the deterministic helpers the skills shell out to
 scripts/lib/              sourced-only helpers (context resolution, portable temp paths)
-scripts/review/           per-backend review adapters (revdiff, editor)
+scripts/review/           one adapter per mode (edit.sh, diff.sh)
+scripts/review/backends/  the tool-specific half of a diff mode review, one file per viewer
 guides/                   reference the skills and rules read at runtime
 templates/                the output shapes the skills produce, read at runtime
 tests/                    bash suites, one per script under test
@@ -71,8 +72,9 @@ what picks the level.
   `mktemp` disagree about where an `XXXXXX` run may sit in a template.
 - **shellcheck is a zero-finding baseline** at the default severity, so any new
   finding fails CI. `scripts/lib/*.sh` is sourced-only and lints *through* its
-  callers; `scripts/review/*.sh` lints standalone because the dispatcher builds
-  the adapter path at run time and `external-sources` can't reach it.
+  callers; `scripts/review/*.sh` and `scripts/review/backends/*.sh` lint standalone
+  because those paths are built at run time and `external-sources` can't reach
+  them.
 - **The script decides facts; the skill decides judgment.** Whether HEAD is out
   for review, what the pipeline returned, which release model a repo follows —
   deterministic, and it belongs in `scripts/`. What the change is *for*, and
@@ -99,10 +101,21 @@ what picks the level.
   The neutral term exists so a skill can be written once.
 - **Ambient rule** — standing guidance a `SessionStart` hook injects into every
   session, whether or not a skill is invoked.
+- **Review mode** — the shape a review takes: `edit`, where the reviewer is
+  handed the drafted artifact and what they save *is* the artifact, or `diff`,
+  where they are shown a changeset and comment on it. The subject picks it —
+  `edit` where there is nothing to diff against, `diff` everywhere else.
+- **Review backend** — the tool that runs a mode: the user's editor in `edit`
+  (`anchor.edit.backend`, else `core.editor` and its chain), a viewer in `diff`
+  (`anchor.diff.backend`, else git's own `diff.tool`, else `revdiff`). The mode
+  has no key — the subject settles it — and the tool is the half that does, one
+  key per mode. A difftool has nowhere to leave an annotation, so its backend
+  reads the reviewer's answer out of the working tree: the files they edited come
+  back as the feedback.
 - **Review contract** — the tool-agnostic result `scripts/review-diff.sh`
   returns: a verdict (`approved` · `changes-requested` · `incomplete` ·
   `no-verdict`) plus normalized comments and capabilities, produced from a
-  backend's native output by its adapter. An absent or unparseable verdict is
+  tool's native output by its adapter. An absent or unparseable verdict is
   `no-verdict` and halts the flow — it is never read as approval.
 - **Squash gate** — the deterministic "is HEAD out for review?" decision in
   `scripts/squash-check.sh` that governs amend-vs-new-commit.

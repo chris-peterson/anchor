@@ -9,7 +9,7 @@
 set -euo pipefail
 
 # Hermetic: ignore the user's global/system git config so backend selection is
-# controlled per-case here, not by a global anchor.reviewBackend.
+# controlled per-case here, not by a global anchor.diff.backend.
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -79,7 +79,6 @@ verdict_of() { sed -n 's/^REVIEW_VERDICT=//p' <<<"$1"; }
 json_of()    { sed -n 's/^REVIEW_OUTPUT=//p' <<<"$1"; }
 
 # ============================ revdiff adapter =============================
-git -C "$repo" config anchor.reviewBackend revdiff
 
 # rc 0, no annotations -> approved, no comments, completeness null
 export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""; o=$(run --previous); j=$(json_of "$o")
@@ -184,43 +183,41 @@ grep -qx -- '- \*\*body:\*\* The body explains why.' "$REVDIFF_DESC_CAPTURE" \
 unset REVDIFF_DESC_CAPTURE
 ok "--message-file seeds subject as the title and body as a body row"
 
-# ============================ backend selection ==========================
-git -C "$repo" config --unset anchor.reviewBackend
+# ======================= mode and backend selection ======================
 export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
 o=$(run --previous); j=$(json_of "$o")
-[ "$(jq -r .backend <<<"$j")" = revdiff ] || fail "default backend should be revdiff"
-ok "backend: defaults to revdiff when anchor.reviewBackend is unset"
+[ "$(jq -r .mode <<<"$j")" = diff ]       || fail "a git range should resolve to diff mode"
+[ "$(jq -r .backend <<<"$j")" = revdiff ] || fail "diff mode's default backend should be revdiff"
+ok "mode: a git range takes diff mode, and revdiff runs it"
 
-git -C "$repo" config anchor.reviewBackend bogus
-if run --previous 2>/dev/null; then fail "unknown backend should exit non-zero"; fi
-ok "backend: unknown backend exits non-zero"
-git -C "$repo" config --unset anchor.reviewBackend
+if run --mode bogus --previous 2>/dev/null; then fail "unknown mode should exit non-zero"; fi
+ok "mode: an unknown mode exits non-zero"
 
 # ================== backend resolution against installed tools ============
 # The resolver only considers tools that are there, so these run under a PATH
 # built for the case: a system PATH carries no viewer, and $bin carries revdiff.
 system_path="/usr/bin:/bin"
 
-pb() { ( cd "$repo" && PATH="$1" bash "$dispatch" --print-backend ); }
+pb() { ( cd "$repo" && PATH="$1" bash "$dispatch" --probe ); }
 
 o=$(pb "$bin:$PATH")
 grep -qx 'REVIEW_BACKEND=revdiff' <<<"$o" || fail "revdiff installed -> want revdiff, got: $o"
 ok "backend: prefers revdiff when its tool is installed"
 
-git -C "$repo" config anchor.reviewBackend definitely-not-installed
+git -C "$repo" config anchor.diff.backend definitely-not-installed
 o=$(pb "$bin:$PATH")
 grep -qx 'REVIEW_BACKEND=revdiff' <<<"$o" \
   || fail "absent preferred tool -> want the installed viewer, got: $o"
 grep -qx 'REVIEW_BACKEND_CONFIGURED=definitely-not-installed' <<<"$o" \
   || fail "substitution should name what config asked for, got: $o"
-git -C "$repo" config --unset anchor.reviewBackend
+git -C "$repo" config --unset anchor.diff.backend
 ok "backend: substitutes an installed viewer when the preferred tool is absent"
 
 # With nothing to stand in, the probe still names what was asked for — the
 # degradation below is the run's business, not a claim that revdiff is installed.
 o=$(pb "$system_path")
-grep -qx 'REVIEW_BACKEND=revdiff' <<<"$o"     || fail "no viewer -> want the configured name, got: $o"
-grep -qx 'REVIEW_BACKEND_AVAILABLE=0' <<<"$o" || fail "no viewer -> want AVAILABLE=0, got: $o"
+grep -qx 'REVIEW_BACKEND=revdiff' <<<"$o" || fail "no viewer -> want the configured name, got: $o"
+grep -qx 'REVIEW_AVAILABLE=0' <<<"$o"     || fail "no viewer -> want AVAILABLE=0, got: $o"
 ok "backend: with nothing installed the probe reports the preference, unavailable"
 
 # The run keeps the configured adapter, whose report names the tool that is
@@ -235,23 +232,21 @@ ok "backend: no viewer installed keeps the configured adapter, never a difftool"
 # `git` is not a backend at all (DIFF-18): a changeset shown without a verdict
 # invites "you saw it, approve?", so the difftool is off the menu entirely and
 # asking for it fails the same way any other typo does.
-git -C "$repo" config anchor.reviewBackend git
-rc=0
-o=$( cd "$repo" && PATH="$system_path" bash "$dispatch" --previous 2>&1 ) || rc=$?
-[ "$rc" -eq 64 ] || fail "git backend -> want exit 64 for an unknown backend, got $rc: $o"
-grep -q "unknown review backend 'git'" <<<"$o" \
-  || fail "git backend -> want the unknown-backend error naming it, got: $o"
-! grep -q 'REVIEW_VERDICT=' <<<"$o" || fail "git backend -> nothing should be reviewed, got: $o"
-git -C "$repo" config --unset anchor.reviewBackend
+git -C "$repo" config anchor.diff.backend git
+o=$( cd "$repo" && PATH="$system_path" bash "$dispatch" --previous 2>&1 )
+grep -q 'REVIEW_VERDICT=no-verdict' <<<"$o" \
+  || fail "git backend -> want no-verdict, got: $o"
+grep -q "no adapter for diff backend 'git'" <<<"$o" \
+  || fail "git backend -> want the no-adapter error naming it, got: $o"
+! grep -q 'REVIEW_VERDICT=approved' <<<"$o" || fail "git backend -> nothing should be approved, got: $o"
+git -C "$repo" config --unset anchor.diff.backend
 ok "backend: git is not selectable — the difftool is off the menu (DIFF-18)"
 
-# editor is selectable but never substituted in, so an absent viewer doesn't
+# edit mode is selectable but never substituted in, so an absent viewer doesn't
 # turn a changeset review into an editor buffer.
-git -C "$repo" config anchor.reviewBackend editor
-o=$(pb "$system_path")
-grep -qx 'REVIEW_BACKEND=editor' <<<"$o" || fail "editor configured -> want editor, got: $o"
-git -C "$repo" config --unset anchor.reviewBackend
-ok "backend: editor stays selected and is never substituted in"
+o=$( cd "$repo" && PATH="$system_path" bash "$dispatch" --probe --mode edit )
+grep -qx 'REVIEW_MODE=edit' <<<"$o" || fail "--mode edit -> want edit, got: $o"
+ok "mode: a mode asked for with --mode stays selected and is never substituted away"
 
 # ================== context flags anywhere in the argv ====================
 # `--repo` used to be leading-only, so an invocation that appended it reviewed
@@ -265,7 +260,6 @@ git -C "$other" config user.name "T"
 git -C "$other" config commit.gpgsign false
 printf 'untouched\n' > "$other/b.txt"; git -C "$other" add -A; git -C "$other" commit --quiet -m only
 
-git -C "$repo" config anchor.reviewBackend revdiff
 export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
 export REVDIFF_DESC_CAPTURE="$work/desc.md"
 o=$( cd "$other" && bash "$dispatch" --previous --repo "$repo" )
@@ -281,12 +275,10 @@ o=$( cd "$other" && bash "$dispatch" --previous --repo "$repo" --title '--repo' 
 ok "context: a flag-shaped option value is not read as a context flag"
 
 # per-skill backend selection still resolves when --skill trails the mode
-git -C "$repo" config anchor.trailing.reviewBackend revdiff
 export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
 o=$( cd "$other" && bash "$dispatch" --previous --repo "$repo" --skill trailing )
 [ "$(jq -r .backend <<<"$(json_of "$o")")" = revdiff ] \
   || fail "trailing --skill did not select the per-skill backend: $(json_of "$o")"
-git -C "$repo" config --unset anchor.trailing.reviewBackend
 ok "context: --skill after the mode still selects the per-skill backend"
 
 # a misspelled flag is an error, not a silently dropped argument
@@ -303,7 +295,6 @@ ok "context: an extra positional argument exits 64"
 # A new file has to reach the index to show up in `git diff HEAD`, which is why
 # --local stages at all. It stages only what it was given: the reviewer of a
 # shared checkout should not be handed another session's in-flight file.
-git -C "$repo" config anchor.reviewBackend revdiff
 git -C "$repo" reset --quiet
 printf 'new and mine\n' > "$repo/mine.txt"
 printf 'not mine\n' > "$repo/other-session.txt"
@@ -328,7 +319,6 @@ rm -f "$repo/other-session.txt"
 # ================== empty range ==========================================
 # Nothing to show means nothing was reviewed, and a viewer quit on an empty diff
 # is indistinguishable from an approval — so the dispatcher never launches one.
-git -C "$repo" config anchor.reviewBackend revdiff
 export REVDIFF_ARGS_FILE="$work/empty-args.txt"; rm -f "$REVDIFF_ARGS_FILE"
 o=$( cd "$other" && bash "$dispatch" --local 2>/dev/null ); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = no-verdict ] || fail "empty range -> $(verdict_of "$o"), want no-verdict"

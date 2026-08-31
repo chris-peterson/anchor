@@ -3,7 +3,7 @@
 A review reaches this guide from two places, and they are the same case:
 
 - the probe said nothing usable is installed
-  (`REVIEW_BACKEND_AVAILABLE=0`), or
+  (`REVIEW_AVAILABLE=0`), or
 - the review ran and came back `no-verdict`, `incomplete`, or with no parseable
   `REVIEW_VERDICT` at all — the backend closed early, died, or never launched.
 
@@ -38,7 +38,7 @@ renders markdown properly. A fenced block in a terminal is not a rendered
 document, and for anything with a table or a nested fence, the file is the only
 honest way to read it.
 
-**Offer the editor** when the probe reported `REVIEW_EDITOR_AVAILABLE=1`. That
+**Offer the editor** when the probe reported `REVIEW_EDIT_AVAILABLE=1`. That
 rung is a real review, not a consolation: the dispatcher opens the artifact in
 the user's own editor with the change under review below a scissors line, and
 whatever they save comes back through the contract as `editedFields`, adopted
@@ -50,7 +50,7 @@ being offered the same tool twice.
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill <skill> --backend editor …
 ```
 
-`REVIEW_EDITOR_AVAILABLE=0` means a launch would reach no editor — nothing
+`REVIEW_EDIT_AVAILABLE=0` means a launch would reach no editor — nothing
 resolves along the chain (`core.editor`, `VISUAL`, `EDITOR`, a blocking VS Code
 on `PATH`, git's compiled default, with a no-op `GIT_EDITOR` discounted per
 DIFF-16), or there is nowhere to put one. Don't offer it, and don't launch it to

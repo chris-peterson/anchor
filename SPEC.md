@@ -30,8 +30,14 @@ behavior, not an independent authority — review them against the source.
   session's context.
 - **Review contract** — the tool-agnostic result `review-diff.sh` returns: a
   `verdict` (`approved` · `changes-requested` · `incomplete` · `no-verdict`)
-  plus normalized comments and capabilities, produced from the backend's native
-  output by a per-backend adapter (revdiff by default). Defined under DIFF.
+  plus normalized comments and capabilities, produced from the tool's native
+  output by an adapter. Defined under DIFF.
+- **Review mode** — the shape a review takes: `edit`, where the reviewer is handed
+  the drafted artifact and what they save is the artifact, or `diff`, where they
+  are shown a changeset and comment on it. Picked by the subject (CONFIG-15).
+- **Review backend** — the tool that runs a mode: the user's editor in `edit`, a
+  viewer in `diff`. A mode may have several; the two questions are resolved
+  apart, so a new viewer is not a new mode.
 - **Squash gate** — the deterministic "is HEAD out for review?" decision
   (`squash-check.sh`) that governs squash-vs-new-commit.
 - **Deep link** — a line-anchored forge URL in a CR description that lands a
@@ -240,7 +246,7 @@ check.
   to the user in a visual review (the current description vs. the draft, via the
   review wrapper) before any write prompt, and shall write it to the CR on a clean
   verdict without a further chat confirmation.
-- **[PREPARE-14]** If no review backend is installed, or no CR exists to diff
+- **[PREPARE-14]** If no review tool is installed, or no CR exists to diff
   against, then the system shall present the description as text in its own reply
   and offer write / copy-only / edit, defaulting to write.
 - **[PREPARE-15]** Before opening the description review, the system shall verify
@@ -595,8 +601,8 @@ and writing nothing.
 
 Diff review is tool-agnostic. Each review skill launches review through one
 dispatcher (`review-diff.sh`), which resolves the diff range, drives the
-configured backend, and normalizes the tool's native output to the contract
-below via a per-backend adapter. Which backend, and its default, is CONFIG-15's
+configured mode in the configured tool, and normalizes that tool's native output
+to the contract below via an adapter. Which mode, and its default, is CONFIG-15's
 to say — stated once there rather than restated per consumer. The shape borrows
 its two axes — an outcome `verdict` kept separate from a per-comment `action` —
 from SARIF (`result.kind` vs `result.level`) and reviewdog; its verdict names
@@ -608,7 +614,8 @@ this" nullability from SARIF's `notApplicable`.
 
 ```
 {
-  backend:            "revdiff" | "editor",
+  mode:               "edit" | "diff",
+  backend:            string,          // the tool that ran it — an editor, or a diff tool
   verdict:            "approved" | "changes-requested" | "incomplete" | "no-verdict",
   reviewCompleteness: "complete" | "partial" | null,   // null = backend cannot say
   reviewer:           string | null,
@@ -634,25 +641,31 @@ this" nullability from SARIF's `notApplicable`.
 
 **Verdict mapping:**
 
-| `verdict` | revdiff | editor | meaning |
+| `verdict` | `diff` (revdiff) | `edit` | meaning |
 |---|---|---|---|
 | `approved` | exit 0 | saved, changed or not | clean — proceed |
 | `changes-requested` | exit 10 | — | blocking feedback to address |
 | `incomplete` | — | — | not every hunk was reviewed; for a backend that tracks per-hunk review (`capabilities.perHunkReview`) |
-| `no-verdict` | exit 1 | buffer emptied, or a non-zero exit | no usable verdict — the cause (closed early, tool error, or an aborted edit) is read from `raw.exitCode` and `capabilities.producesVerdict` |
+| `no-verdict` | exit 1 | closed without saving, buffer emptied, or a non-zero exit | no usable verdict — the cause (closed early, tool error, or an aborted edit) is read from `raw.exitCode` and `capabilities.producesVerdict` |
 
-The `editor` backend has no `changes-requested` row because it returns text, not
-comments: an editor's whole answer is the revised artifact, which is why the
-column below `changes-requested` is empty rather than mapped to some exit code.
+`edit` has no `changes-requested` row because it returns text, not comments: an
+editor's whole answer is the revised artifact, which is why the column below
+`changes-requested` is empty rather than mapped to some exit code.
 
 - **[DIFF-01]** The system shall launch diff review through the dispatcher, never
   raw `git difftool`, so the result is normalized and the verdict is populated.
 - **[DIFF-02]** While a review runs, the system shall launch the dispatcher as a
   background call and read its result with the BashOutput tool rather than `tail`
   or command substitution.
-- **[DIFF-03]** The system shall drive the backend CONFIG-15 selects through a
-  per-backend adapter that maps the tool's native output onto the normalized
-  result.
+- **[DIFF-03]** The system shall drive the mode CONFIG-15 selects through one
+  adapter per mode, and shall report the mode and the tool that ran it as separate
+  fields, so a consumer reads the shape of the review apart from what happened to
+  run it. A mode adapter shall own what every tool running that mode needs alike —
+  locating the tool, hosting it, seeding the header, and shaping the normalized
+  result — and shall delegate to a per-tool backend only what is that tool's own:
+  its invocation, its output parsing, and the mapping from its exit status onto a
+  verdict. A second tool for a mode is then a backend file beside the first rather
+  than a second copy of the mode.
 - **[DIFF-04]** The system shall report the verdict as one of `approved`,
   `changes-requested`, `incomplete`, or `no-verdict`, mapped from the backend's
   native signal per the verdict table.
@@ -671,25 +684,26 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   consumer a second, disagreeing answer.
 - **[DIFF-09]** The system shall carry each comment's backend-verbatim text in
   `raw` so feedback the normalization cannot represent is not lost.
-- **[DIFF-11]** The system shall resolve the backend against the tools it can
-  actually open: where the preferred backend cannot open — a diff viewer that is
-  not installed, or an `editor` with no editor to reach (DIFF-16, DIFF-17) — it
-  shall substitute one that can, and where none can it shall keep the preferred
-  backend, whose report names what is missing, and hand the flow to the fallback
-  ladder (DIFF-20). Substitution shall turn on where the preference came from
-  rather than which backend it names: a backend named in the configuration shall
-  be kept whether or not it can open, so its own report names the missing piece —
-  substituting a diff viewer for a configured `editor` would answer a different
-  question than the caller asked — while a backend that came from the per-skill
-  default (CONFIG-15) is a choice nobody made and shall give way, rather than
-  dead-ending a flow in a host problem the user was never warned about.
+- **[DIFF-11]** The system shall resolve both axes against what can actually
+  open, and shall substitute on each independently. On the **mode** axis: a mode
+  the subject picked (CONFIG-15) that cannot open — `edit` with no editor to reach
+  (DIFF-16, DIFF-17) — shall give way to one that can, since it is a choice nobody
+  made and dead-ending a flow in a host problem the user was never warned about is
+  worse; a mode named in the configuration shall be kept whether or not it can
+  open, so its own report names the missing piece, substituting a viewer for a
+  configured `edit` answering a different question than the caller asked. On the
+  **backend** axis, asked of `diff` alone: a viewer that is not installed shall
+  give way to one that is, and where none is installed the resolved name shall be
+  kept so the report still names what was preferred and the flow hands off to the
+  fallback ladder (DIFF-20). Substituting within a mode shall never cross modes —
+  an absent viewer resolves to another viewer, never to the editor.
 - **[DIFF-12]** If the dispatcher reports no parseable verdict — no
   `REVIEW_VERDICT` line, empty output, or output the consumer cannot read — then
   the system shall treat the review as `no-verdict`, halt the action the review
   gates, and verify with the user in chat. Absent output is never approval; a
   dispatcher that fails before reporting produces silence, which is
   indistinguishable from success unless the consumer treats it as failure.
-- **[DIFF-13]** Where the selected backend is `editor`, the system shall open the
+- **[DIFF-13]** Where the selected mode is `edit`, the system shall open the
   drafted artifact in the user's editor with the change under review below a
   scissors line, adopt the saved text verbatim as the artifact, and return it in
   `editedFields` rather than re-drafting from it. It shall not strip lines
@@ -698,19 +712,26 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   the three markdown artifacts, `.txt` for a commit message — since an editor
   picks its syntax mode and its markdown preview from the name rather than the
   content, and a reviewer reading a description wants the rendered shape.
-- **[DIFF-14]** If the editor returns an empty artifact, or exits non-zero, then
-  the system shall report `no-verdict` and shall publish nothing the review
-  gated. Where the editor never reported at all — the terminal it was drawing in
-  went away, could not be opened, or there was none to open — the result shall
-  name that cause rather than carry a numeric status, since the number would
-  attribute to the editor an exit it never made and leaves the user a status to
-  interpret in place of the thing to do. A cause the reviewer can act on shall
-  be reported with its remedy, and a terminal taken down mid-edit shall be
-  reported as re-openable rather than as a tool that cannot grade the change.
-- **[DIFF-15]** Where the editor backend is selected for a review that has no
-  drafted artifact, the system shall report `no-verdict` naming the
-  configuration that resolves it, rather than reporting a diff it cannot show as
-  reviewed.
+- **[DIFF-14]** The system shall take the editor's save as the reviewer's
+  answer: a saved buffer is `approved` and its text is the artifact, while a
+  buffer left unsaved, or saved empty, is `no-verdict` with nothing the review
+  gated published. Saving costs the same keystroke as quitting and is an act
+  rather than the absence of one, where a quit is also what an editor does when
+  the reviewer walked away from it. The save shall be read from the buffer
+  rather than from how the editor left, so a draft saved into a terminal that
+  went away afterwards is still the answer; an editor that exits non-zero (vim's
+  `:cq`) shall abort whatever was saved, that being the editor's own way of
+  saying so. Where nothing was saved, the result shall name the cause rather
+  than carry a numeric status — the reviewer left without saving, or the
+  terminal it was drawing in went away, could not be opened, or there was none
+  to open — since a number would attribute to the editor an exit it never made
+  and leaves the user a status to interpret in place of the thing to do. A cause
+  the reviewer can act on shall be reported with its remedy, and a terminal
+  taken down mid-edit shall be reported as re-openable rather than as a tool
+  that cannot grade the change.
+- **[DIFF-15]** Where `edit` is selected for a review that has no drafted
+  artifact, the system shall report `no-verdict` naming the configuration that
+  resolves it, rather than reporting a diff it cannot show as reviewed.
 - **[DIFF-16]** The system shall resolve the editor as git resolves it
   (`core.editor`, then `VISUAL`, then `EDITOR`), and shall treat a no-op editor
   supplied by the environment as unset, so a review that opened nothing is never
@@ -733,22 +754,33 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   it block, and the search shall be limited to editors whose blocking flag is
   known, since a non-blocking editor returns before the user has typed and reads
   as an artifact they approved.
-- **[DIFF-17]** When asked to report the backend rather than run a review, the
-  system shall consider only tools it can open, emit the one a review would open
-  along with whether anything usable is available, name the preferred backend
-  whenever it substituted another, and shall launch nothing. It shall not
-  substitute the editor backend for an absent diff viewer, which would answer a
-  different question than the caller asked. It shall additionally report, on its
-  own axis, whether an editor review would reach an editor — resolvable per
-  DIFF-16 *and* with somewhere to open it — since the editor is a rung the
+- **[DIFF-17]** When asked to report how a review resolves rather than run one, the
+  system shall consider only tools it can open, emit the mode a review would run
+  in and the tool that would run it, report where each of those two came from,
+  name the preferred one on either axis whenever it substituted another, report
+  whether anything usable is available, and shall launch nothing. It shall not
+  substitute `edit` for an absent viewer, which would answer a different question
+  than the caller asked. It shall additionally report, on its own axis, whether an
+  `edit` review would reach an editor — resolvable per DIFF-16 *and* with
+  somewhere to open it — since the editor is a rung the
   fallback ladder offers rather than a viewer the probe selects, and offering it
   where a launch would reach nothing dead-ends the user in a host error.
-- **[DIFF-18]** The system shall not offer git's difftool as a selectable review
-  backend. A difftool puts the changeset on screen and speaks no contract, so its
-  review ends exactly where an absent viewer's would — except the user has now
-  read something, which makes "you saw it, approve?" the natural next question
-  and a rubber stamp the likely answer. Every route below a real viewer is the
-  fallback ladder (DIFF-20).
+- **[DIFF-18]** The system shall drive git's difftool as a `diff` backend, and
+  shall read its verdict from the working tree rather than from the tool. A
+  difftool speaks no contract of its own, so a review that only put the changeset
+  on screen would end where an absent viewer's does — the user has read
+  something, which makes "you saw it, approve?" the natural next question and a
+  rubber stamp the likely answer. What it does have is a way for the reviewer to
+  *write*: the system shall snapshot every reviewed file before the tool opens,
+  and shall report each file the reviewer changed, carrying the diff of what they
+  wrote as the comment. Edits are therefore `changes-requested` and an untouched
+  tree is `approved`, since the write is an act where reading is not. The
+  reviewer shall need no marker convention — a fix typed into the code, a
+  question in the file's own comment syntax, and a `TODO:` are all the same
+  signal, and the reading of them is the model's (UX-08). The system shall not
+  read the tool's own exit status as a verdict, since `git difftool` drops it and
+  tools disagree about what non-zero means; a failure to launch is a review that
+  never happened.
 - **[DIFF-19]** Where a git-range review's subject is not the local `HEAD`, the
   system shall accept a caller-supplied title and detail rows and use them in
   place of the computed header, so a range fetched from another author's change
@@ -760,8 +792,7 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   is approved: a window that opened is not evidence it was read, and the two
   cases are indistinguishable. For a drafted artifact it shall surface the
   draft's own file path and, where DIFF-17 reports an editor is reachable, offer
-  the editor backend, whose saved buffer returns a graded result through
-  DIFF-13. Its floor shall be reading the change in the conversation — the
+  `edit` mode, whose saved buffer returns a graded result through DIFF-13. Its floor shall be reading the change in the conversation — the
   artifact in full, or a changeset walked file by file — never a summary
   standing in for the change, since approval of a summary grades the summary.
 - **[DIFF-21]** If the resolved range holds no changes, then the system shall
@@ -781,7 +812,7 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   than the artifact the forge holds. The second pass is asked to grade what the
   feedback changed, and re-showing the original comparison answers the question
   the first pass already answered.
-- **[DIFF-24]** Where a consumer probes for the backend (DIFF-17), it shall probe
+- **[DIFF-24]** Where a consumer probes for the mode (DIFF-17), it shall probe
   under the same skill the launch will use, and shall name the tool it opens
   whenever that tool renders outside the terminal the user is watching. The probe
   resolves per skill (CONFIG-15), so one run without the skill answers for another
@@ -898,17 +929,35 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   value into the 1–100 band, saying so once, rather than refusing to draft. The
   defaults shall descend along the lifecycle — issue, commit, CR, release — as
   each step widens the artifact's audience.
-- **[CONFIG-15]** Where `anchor.<skill>.reviewBackend` is set, the system shall
-  select that skill's review backend from it, preferring it over
-  `anchor.reviewBackend` in both directions; with neither set, it shall prefer
-  the default for that skill — `editor` where the review's subject is one drafted
-  document, `revdiff` where it is a changeset. The preference names a tool, not a
-  guarantee that it can open — what a run uses is settled against what it can
-  (DIFF-11). Which shape suits an artifact varies, so both the choice and its
-  default are per skill rather than one switch for the plugin: a changeset is
-  what per-hunk annotation is for, while a review whose two sides are text
-  against text marks every line as added and asks the reviewer to comment their
-  way to a rewrite of a document the editor could have handed them.
+- **[CONFIG-15]** The system shall take a review's mode from its subject and
+  shall offer no configuration key for it: `edit` where the subject is a single
+  file with no prior version to compare against, `diff` everywhere else. Which
+  shape fits is a property of the review rather than a preference — the question
+  is whether it has a diff to show. Text against a blank left side marks every
+  line as added and asks the reviewer to comment their way to a rewrite of a
+  document an editor could have handed them, while real hunks — a left side with
+  text in it, or a git range, which names a base by construction — are what
+  per-hunk annotation is for. A key would only let a user ask for the shape that
+  does not fit, and the shape the subject picked is still not a guarantee that it
+  can open (DIFF-11). The subject rather than the invoking skill decides it, so
+  one skill's review lands in whichever shape fits the review it is actually
+  opening: a first draft and a revision of the same artifact are different
+  subjects.
+- **[CONFIG-15a]** The system shall make the tool that runs a mode configurable,
+  one key per mode and symmetric between them: `anchor.edit.backend` names the
+  editor, ranking above git's own chain (DIFF-16) as the narrower statement, and
+  `anchor.diff.backend` names the viewer, `revdiff` absent it. The tool is the
+  half that is a preference, where the mode is not. A single key naming a mode and
+  a tool together has nowhere to say *which* viewer and makes the editor's own name
+  ride a second, parallel set of report fields; where such a superseded key is
+  set, the system shall report that it no longer does anything and name the keys
+  that replaced it, so a configuration written against the old shape is neither
+  silently obeyed nor silently ignored.
+- **[CONFIG-15b]** Where a consumer probes before launching (DIFF-17, DIFF-24), the
+  system shall answer from the same subject the launch will carry, and the consumer
+  shall pass it — the review's mode flag and, for a two-path review, both paths. A
+  probe given no subject answers for a review nobody is about to open, which is the
+  failure DIFF-24's same-`--skill` rule guards against one argument over.
 
 ### FORGE — Forge integration & output
 
@@ -1014,6 +1063,17 @@ column below `changes-requested` is empty rather than mapped to some exit code.
   set one. The rest of the launch
   stays silent under UX-01: the command, its flags, the backend resolution, and
   the wait are plumbing.
+- **[UX-08]** Where a review returns the reviewer's own edits rather than
+  annotations (DIFF-18), the system shall read each edit as either a fix or a
+  note and act on it accordingly: a fix is already in the working tree and is
+  kept, while a note the reviewer wrote in the file's comment syntax shall be
+  answered and its lines removed before anything is committed. The separation is
+  judgment and belongs to the model — the script can report what changed but not
+  which kind of change it was — and the removal is not optional, since a question
+  addressed to the author is a comment on the change rather than part of it and
+  reaches the default branch if it survives. The system shall verify the removal
+  against the files the reviewer touched before re-reviewing, since a line left
+  behind is invisible in a diff already read once.
 ### CONFIRM — Approval before publishing
 
 Everything the system publishes goes out under the user's credentials and in

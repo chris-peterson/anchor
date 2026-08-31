@@ -6,13 +6,11 @@
 #   REVIEW_VERDICT=<approved|changes-requested|incomplete|no-verdict>
 #   REVIEW_OUTPUT=<normalized json>   (the DIFF contract; see SPEC.md "DIFF")
 #
-# The backend is `anchor.<skill>.reviewBackend` when the caller passed --skill,
-# else `anchor.reviewBackend`, else the per-skill default in
-# `skill_default_backend` — `editor` for the skills whose review is one drafted
-# document, `revdiff` for the ones whose subject is a changeset. Each adapter
-# lives in scripts/review/<backend>.sh and defines emit_review, mapping the
-# tool's native output onto the normalized result. Range/header resolution is
-# backend-agnostic and stays here.
+# The mode follows the subject: `edit` where the review is one file with no prior
+# version, `diff` everywhere else. Adapters live in scripts/review/, one per mode,
+# and each defines emit_review; a diff tool's own half lives under
+# scripts/review/backends/. Range/header resolution is mode-agnostic and stays
+# here.
 #
 # Three review modes, each named for what it shows:
 #   --local      local changes — working tree vs the last commit (stages the
@@ -57,27 +55,41 @@ set -euo pipefail
 #   --path <p>  a path for --local to stage, repeatable, resolved against the repo
 #     root. Only these are staged: a whole-tree add would pull a session sharing
 #     the checkout into this review (see scripts/lib/stage-paths.sh).
-#   --skill <name>  names the invoking skill, which selects the backend
-#     (anchor.<skill>.reviewBackend over anchor.reviewBackend) and tells an
-#     adapter which artifact is under review.
-#   --backend <name>  drive this backend, ignoring the config keys — what a
-#     caller passes back after probing with --print-backend, so the review runs
-#     in the tool the probe said was there.
-#   --print-backend  report which backend a review would run in, and exit
-#     without launching anything — the probe a skill runs before deciding
-#     whether a visual review is available at all. It considers only *installed*
-#     tools, so what it names is something the caller can actually open:
-#       REVIEW_BACKEND=<name>              what to pass to --backend
-#       REVIEW_BACKEND_AVAILABLE=0|1       0 = nothing usable is installed
-#       REVIEW_BACKEND_CONFIGURED=<name>   only when config asked for another
+# A review is resolved on two axes, and they are not the same question:
+#
+#   mode     the shape the review takes — `edit` or `diff`. The subject decides
+#            it (subject_default_mode); there is no key, because the shape that
+#            fits is a property of what is being reviewed rather than a taste.
+#   backend  the tool that runs that mode, and the half that *is* a taste:
+#            `anchor.edit.backend` names the editor (else git's chain),
+#            `anchor.diff.backend` the viewer (else git's own `diff.tool`, else
+#            revdiff). A mode can grow more backends without touching the mode
+#            question.
+#
+#   --skill <name>  tells an adapter which artifact is under review. It does not
+#     pick the mode — the subject does, always.
+#   --mode <edit|diff>  run this mode rather than the one the subject picks —
+#     what a caller passes back after probing, so the review opens in the shape
+#     the probe said was reachable.
+#   --backend <name>  run this tool within the mode, ignoring the config key.
+#   --probe  report how a review would resolve, and exit without launching
+#     anything — what a skill asks before deciding whether a visual review is
+#     available at all. Pass it the same mode flag and paths as the launch: the
+#     default reads the subject, so a bare probe on a `--files` review answers
+#     for a review nobody is about to open. It considers only tools that can
+#     actually open:
+#       REVIEW_MODE=edit|diff              what to pass to --mode
+#       REVIEW_MODE_SOURCE=override|config|subject
+#       REVIEW_MODE_CONFIGURED=<mode>      only when the run uses another
+#       REVIEW_BACKEND=<command>           the tool that will open — an editor
+#         in `edit` mode, a viewer in `diff`
 #       REVIEW_BACKEND_SOURCE=override|config|default
-#       REVIEW_EDITOR=<command>            the editor an editor review opens
-#       REVIEW_EDITOR_SOURCE=config|default
-#         The last three say whether the tool about to open is one the user
-#         chose, so a launch that coalesced onto a default can name the key that
-#         would make it a choice (UX-07). REVIEW_EDITOR pair only when the
-#         editor backend is what would run.
-#       REVIEW_EDITOR_AVAILABLE=0|1        1 = --backend editor would reach an
+#       REVIEW_BACKEND_CONFIGURED=<name>   only when a named viewer was replaced
+#       REVIEW_AVAILABLE=0|1               0 = this mode cannot open here
+#         The SOURCE pair says whether what is about to open is something the
+#         user chose, so a launch that coalesced onto a default can name the key
+#         that would make it a choice (UX-07).
+#       REVIEW_EDIT_AVAILABLE=0|1          1 = --mode edit would reach an
 #         editor. Reported on its own axis because it answers a different
 #         question: not "which viewer shows the changeset" but "can the user be
 #         handed the drafted artifact to edit" — the rung a skill offers when
@@ -86,12 +98,15 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 # shellcheck source=lib/review-editor.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/review-editor.sh"
+# shellcheck source=lib/review-difftool.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/review-difftool.sh"
 # shellcheck source=lib/stage-paths.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/stage-paths.sh"
 CTX_REPO=""
 review_skill=""
+mode_override=""
 backend_override=""
-print_backend=0
+probe_only=0
 stage_paths=()
 # One pass over the whole argv, so a caller that writes `--repo` after the mode
 # still retargets. These used to be leading-only: a `--repo` that arrived after
@@ -105,9 +120,10 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
     --skill)    review_skill="${2:?--skill needs a name}"; shift 2 ;;
+    --mode)     mode_override="${2:?--mode needs edit or diff}"; shift 2 ;;
     --backend)  backend_override="${2:?--backend needs a name}"; shift 2 ;;
     --path)     stage_paths+=("${2:?--path needs a path}"); shift 2 ;;
-    --print-backend) print_backend=1; shift ;;
+    --probe)    probe_only=1; shift ;;
     --title|--detail|--message-file)
                 rest+=("$1" "${2:?$1 needs a value}"); shift 2 ;;
     *)          rest+=("$1"); shift ;;
@@ -116,116 +132,183 @@ done
 set -- "${rest[@]+"${rest[@]}"}"
 ctx_resolve_repo
 
-# Which shape suits an artifact varies, so the default is per skill (CONFIG-15).
-# A review whose subject is a changeset gets the diff viewer — that is what
-# per-hunk annotation is for. A review whose subject is one drafted document
-# gets the editor: its `--files` pair is text against text, so the diff viewer
-# marks every line as added and asks the reviewer to comment their way to a
-# rewrite, where the editor hands them the document and takes back what they
-# saved.
-skill_default_backend() {
-  case "${1:-}" in
-    prepare-review|issue|release) printf 'editor' ;;
-    *)                            printf 'revdiff' ;;
-  esac
+# What the review is about, read off argv here because the probe answers before
+# the subject parsers run and those parsers shift argv away.
+subject_flag="${1:-}"
+subject_left=""
+[[ "$subject_flag" != "--files" ]] || subject_left="${2:-}"
+
+# The mode default turns on one question: has this review got a diff to show
+# (CONFIG-15)?
+#
+# A `--files` review with an empty left side is one file with no prior version —
+# every line of it new. A viewer marks the whole thing as added and asks the
+# reviewer to comment their way to a rewrite of a document an editor could have
+# handed them, so that case takes `edit`. Everything else names a base to compare
+# against — a left side with text in it, or a git range — and per-hunk annotation
+# on real hunks is what `diff` is for.
+subject_default_mode() {
+  [[ "$subject_flag" == "--files" ]] || { printf 'diff'; return; }
+  # Whitespace counts as empty: a `> file` that captured an absent description
+  # leaves a newline, and one newline is not a prior version.
+  if [[ -n "$subject_left" ]] && grep -q '[^[:space:]]' "$subject_left" 2>/dev/null; then
+    printf 'diff'
+  else
+    printf 'edit'
+  fi
 }
 
-# resolve_backend's answers, set rather than printed: a `$(...)` call would run
-# the function in a subshell and drop the source along with it. The source is
-# whether the name came from `--backend`, from a config key, or from the per-skill
-# default — substitution reads it, since a preference the user typed is honored
-# even when it cannot open and a default is not.
+# The superseded key, reported once. `anchor.reviewBackend` held a mode and a
+# tool in one slot — `editor` named a shape, `revdiff` a program. The shape is
+# not configurable at all now, and the tool has a key per mode, so there is
+# nothing here to read the old value into. Say so rather than ignoring it, and
+# remove this once nobody is on it.
+report_superseded_key() {
+  local legacy=""
+  [[ -z "$review_skill" ]] || legacy=$(git config "anchor.${review_skill}.reviewBackend" 2>/dev/null || true)
+  [[ -n "$legacy" ]] || legacy=$(git config anchor.reviewBackend 2>/dev/null || true)
+  [[ -n "$legacy" ]] || return 0
+  echo "review-diff.sh: anchor.reviewBackend ('$legacy') no longer does anything. The review's shape now follows what it is reviewing, and the tool is anchor.edit.backend (an editor) or anchor.diff.backend (a viewer)." >&2
+}
+
+# Resolution answers are set rather than printed: a `$(...)` call would run the
+# function in a subshell and drop the source along with it. The source is where
+# the name came from, and substitution reads it — a tool the user typed is
+# honored even when it cannot open, where one anchor picked is not.
+resolved_mode=""
+resolved_mode_source=""
 resolved_backend=""
 resolved_backend_source=""
 
-# The key resolves per skill first, the way anchor.<skill>.watchPipelineAfterPush
-# does.
+# The mode has no key. Which shape fits is a property of the review — one file
+# with nothing to compare against has no diff to show — so reading it off the
+# subject is the answer, and a key would only let a user ask for the shape that
+# does not fit. A probe therefore has to be given the same subject the launch
+# will get, or it answers a different review's question. `--mode` stays, since
+# that is how a probe hands its answer to the launch.
+resolve_mode() {
+  if [[ -n "$mode_override" ]]; then
+    resolved_mode="$mode_override"
+    resolved_mode_source=override
+    return
+  fi
+  resolved_mode=$(subject_default_mode)
+  resolved_mode_source=subject
+}
+
+# Which tool runs the resolved mode — the half that is a preference, so each mode
+# has one key for it. `edit` falls through to git's own editor chain and anchor's
+# rungs past it (scripts/lib/review-editor.sh); `diff` falls through to revdiff.
 resolve_backend() {
-  local b="$backend_override" src=override
+  local b="$backend_override"
+  if [[ "$resolved_mode" == "edit" ]]; then
+    if [[ -n "$b" ]]; then
+      resolved_backend="$b"; resolved_backend_source=override; return
+    fi
+    resolved_backend=$(anchor_editor_resolve)
+    resolved_backend_source=$(anchor_editor_source)
+    return
+  fi
+  local src=override
   if [[ -z "$b" ]]; then
     src=config
-    [[ -z "$review_skill" ]] || b=$(git config "anchor.${review_skill}.reviewBackend" 2>/dev/null || true)
-    [[ -n "$b" ]] || b=$(git config anchor.reviewBackend 2>/dev/null || true)
+    b=$(git config anchor.diff.backend 2>/dev/null || true)
+    # The mirror of `edit` falling through to git's editor chain: a `diff.tool`
+    # the user set is a tool they already chose for reading a diff, and anchor's
+    # own preference for an annotating viewer is not a reason to override them.
+    [[ -n "$b" ]] || b=$(anchor_difftool_configured)
   fi
-  if [[ -z "$b" ]]; then
-    src=default
-    b=$(skill_default_backend "$review_skill")
-  fi
+  if [[ -z "$b" ]]; then src=default; b=revdiff; fi
   resolved_backend="$b"
   resolved_backend_source="$src"
 }
 
-# The editor backend opens whatever editor git resolves, so it has no binary of
-# its own to look for; revdiff is named after its.
-#
-# This stays a PATH question on purpose. A *configured* editor backend that
-# cannot reach an editor still belongs to the editor adapter, whose `no-verdict`
-# names the missing piece — degrading it to a diff viewer would answer the diff
-# question when the caller asked the artifact one. The sharper
-# `anchor_editor_available` is asked where the decision is what to open or offer:
-# `installed_backend` below, and the `--print-backend` probe.
-backend_installed() {
-  [[ "$1" == "editor" ]] || command -v "$1" >/dev/null 2>&1
+# Can this mode open here at all? `edit` needs an editor *and* somewhere to draw
+# it; `diff` needs its viewer on PATH.
+mode_available() {
+  case "$1" in
+    edit) anchor_editor_available ;;
+    # A viewer answers on PATH; a difftool answers to git, which can launch a
+    # name that is no binary of its own.
+    *)    command -v "$resolved_backend" >/dev/null 2>&1 \
+            || anchor_difftool_known "$resolved_backend" ;;
+  esac
 }
 
-# The resolved backend, or an installed one standing in for it. Nothing installed
-# leaves the name as resolved — the probe reports that alongside
-# REVIEW_BACKEND_AVAILABLE=0, so a caller still learns what was preferred.
-#
-# Substitution runs in both directions, and what it turns on is where the name
-# came from rather than which name it is. A *configured* backend is kept whether
-# or not it can open, so its own report names the missing piece: asking for the
-# editor and getting a diff viewer answers a question the user didn't ask. A
-# *defaulted* one is a choice nobody made, so an editor with nowhere to open
-# gives way to an installed viewer rather than dead-ending a flow in a host
-# problem the user was never warned about.
-installed_backend() {
+# The mode to run, or the one that can open standing in for it. A mode the
+# *subject* picked is anchor's own read, so an `edit` with nowhere to open gives
+# way to a viewer rather than dead-ending a flow in a host problem the user was
+# never warned about. A mode a caller *asked* for with --mode is kept whether or
+# not it can open, so its own report names the missing piece: that flag is how a
+# probe's answer reaches the launch, and quietly running a different shape than
+# the one just reported is the disagreement the probe exists to prevent.
+usable_mode() {
   local preferred="$1"
-  if [[ "$preferred" == "editor" ]]; then
-    if [[ "$resolved_backend_source" == "default" ]] \
-       && ! anchor_editor_available && backend_installed revdiff; then
-      printf '%s' revdiff; return
-    fi
-    printf '%s' editor; return
+  if [[ "$preferred" == "edit" && "$resolved_mode_source" == "subject" ]] \
+     && ! anchor_editor_available && command -v revdiff >/dev/null 2>&1; then
+    printf 'diff'; return
   fi
-  if backend_installed "$preferred"; then printf '%s' "$preferred"; return; fi
-  if backend_installed revdiff; then printf '%s' revdiff; return; fi
   printf '%s' "$preferred"
 }
 
-if [[ "$print_backend" == "1" ]]; then
+# The viewer to run, or an installed one standing in for it. This is the
+# within-mode question and it is asked of `diff` alone: a named viewer that is
+# not installed coalesces onto the default rather than dead-ending, and nothing
+# installed leaves the name as resolved so the probe's REVIEW_AVAILABLE=0 still
+# reports what was preferred.
+usable_backend() {
+  local preferred="$1"
+  [[ "$resolved_mode" == "diff" ]] || { printf '%s' "$preferred"; return; }
+  if command -v "$preferred" >/dev/null 2>&1 || anchor_difftool_known "$preferred"; then
+    printf '%s' "$preferred"; return
+  fi
+  if command -v revdiff >/dev/null 2>&1; then printf '%s' revdiff; return; fi
+  printf '%s' "$preferred"
+}
+
+# Both axes, resolved together and in order — the backend question is asked of a
+# settled mode, and a mode that gave way re-asks it.
+resolve_review() {
+  resolve_mode
   resolve_backend
-  preferred="$resolved_backend"
-  backend=$(installed_backend "$preferred")
-  editor_available=0
-  anchor_editor_available && editor_available=1
-  echo "REVIEW_BACKEND=$backend"
-  if [[ "$backend" == "editor" ]]; then
-    # Selected, so its own reachability is the answer to "is anything usable
-    # here" — a configured editor backend with nowhere to open an editor is as
-    # unavailable as an absent viewer, and saying otherwise sends the caller to
-    # launch a review that reports a host problem instead of showing anything.
-    echo "REVIEW_BACKEND_AVAILABLE=$editor_available"
-  elif backend_installed "$backend"; then
-    echo "REVIEW_BACKEND_AVAILABLE=1"
-  else
-    echo "REVIEW_BACKEND_AVAILABLE=0"
+  local m
+  m=$(usable_mode "$resolved_mode")
+  if [[ "$m" != "$resolved_mode" ]]; then
+    preferred_mode="$resolved_mode"
+    resolved_mode="$m"
+    resolved_backend=""; resolved_backend_source=""
+    resolve_backend
   fi
+  preferred_backend="$resolved_backend"
+  resolved_backend=$(usable_backend "$resolved_backend")
+}
+preferred_mode=""
+preferred_backend=""
+
+if [[ "$probe_only" == "1" ]]; then
+  report_superseded_key
+  resolve_review
+  edit_available=0
+  anchor_editor_available && edit_available=1
+  echo "REVIEW_MODE=$resolved_mode"
+  echo "REVIEW_MODE_SOURCE=$resolved_mode_source"
   # What the preference named, reported only when the run would use something
-  # else — a config key that named an absent viewer, or a defaulted editor with
-  # nowhere to open. Either way the caller has a name to say out loud, so the
-  # tool that opens isn't discovered as a surprise window.
-  [[ "$backend" == "$preferred" ]] || echo "REVIEW_BACKEND_CONFIGURED=$preferred"
-  # Whether the tool about to open is one the user chose. A review opens in
-  # whatever anchor coalesced onto when nothing is configured, and the reviewer
-  # has no way to tell that from the tool itself — so the launch names the key
-  # that would make it a choice, and this is what tells it to (UX-07).
+  # else — a mode the subject picked with nowhere to open, or a key that named an
+  # absent viewer. Either way the caller has a name to say out loud, so what
+  # opens isn't discovered as a surprise window.
+  [[ -z "$preferred_mode" ]] || echo "REVIEW_MODE_CONFIGURED=$preferred_mode"
+  echo "REVIEW_BACKEND=$resolved_backend"
   echo "REVIEW_BACKEND_SOURCE=$resolved_backend_source"
-  if [[ "$backend" == "editor" ]]; then
-    echo "REVIEW_EDITOR=$(anchor_editor_resolve)"
-    echo "REVIEW_EDITOR_SOURCE=$(anchor_editor_source)"
+  [[ "$resolved_backend" == "$preferred_backend" ]] || echo "REVIEW_BACKEND_CONFIGURED=$preferred_backend"
+  if mode_available "$resolved_mode"; then
+    echo "REVIEW_AVAILABLE=1"
+  else
+    # A mode that is selected but cannot open is as unavailable as an absent
+    # viewer; saying otherwise sends the caller to launch a review that reports a
+    # host problem instead of showing anything.
+    echo "REVIEW_AVAILABLE=0"
   fi
-  echo "REVIEW_EDITOR_AVAILABLE=$editor_available"
+  echo "REVIEW_EDIT_AVAILABLE=$edit_available"
   exit 0
 fi
 
@@ -262,7 +345,7 @@ determine_commit_range() {
 
 # --- Resolve the review request (mode-agnostic vars the adapter reads) --------
 
-review_mode="range"
+review_subject="range"
 files_left=""
 files_right=""
 diff_range=""
@@ -272,7 +355,7 @@ review_details_json="[]"
 message_file=""
 
 if [[ "${1:-}" == "--files" ]]; then
-  review_mode="files"
+  review_subject="files"
   shift
   files_left="${1:?Usage: review-diff.sh --files <left> <right> [--title <t>] [--detail label=value]...}"
   files_right="${2:?Usage: review-diff.sh --files <left> <right> [--title <t>] [--detail label=value]...}"
@@ -422,35 +505,37 @@ else
   [[ -n "$override_details_json" ]] && review_details_json="$override_details_json"
 fi
 
-# --- Select the backend and delegate -----------------------------------------
+# --- Select the mode's adapter and delegate ----------------------------------
 
-# The resolved name is validated before substitution, so a typo in the config
-# still fails loudly rather than being silently replaced by an installed viewer.
-resolve_backend
-backend="$resolved_backend"
-adapter="$(dirname "${BASH_SOURCE[0]}")/review/${backend}.sh"
+report_superseded_key
+resolve_review
+review_mode="$resolved_mode"
+review_backend="$resolved_backend"
+
+# One adapter per mode. Within `diff`, the tool's own half lives in
+# review/backends/<tool>.sh, which that adapter sources — so a second viewer is a
+# file beside revdiff's rather than a branch here.
+adapter="$(dirname "${BASH_SOURCE[0]}")/review/${review_mode}.sh"
 if [[ ! -r "$adapter" ]]; then
-  echo "review-diff.sh: unknown review backend '$backend' (no adapter at $adapter). Set anchor.reviewBackend to editor or revdiff." >&2
+  echo "review-diff.sh: unknown review mode '$review_mode' (no adapter at $adapter)." >&2
   exit 64
 fi
-backend=$(installed_backend "$backend")
-# A machine with no viewer installed keeps the configured adapter, whose report
+# A machine with no viewer installed keeps the resolved adapter, whose report
 # names the tool that is missing. There is nothing below it to degrade into —
 # git's difftool is not a backend (DIFF-18) because a changeset shown without a
 # verdict invites "you saw it, approve?", which is the rubber stamp the contract
 # exists to prevent. The skill's fallback ladder (guides/review-fallback.md) is
 # the rung below.
-adapter="$(dirname "${BASH_SOURCE[0]}")/review/${backend}.sh"
 
 # An empty range has nothing to show, and a viewer opened on nothing is quit the
 # same way an approved review is — so launching one manufactures an `approved`
 # for a changeset nobody saw. Report `no-verdict` naming the repo the range
 # resolved against, which is also what surfaces a review pointed at the wrong
 # checkout (DIFF-21).
-if [[ "$review_mode" == "range" ]] && git diff --quiet "$diff_range" -- 2>/dev/null; then
+if [[ "$review_subject" == "range" ]] && git diff --quiet "$diff_range" -- 2>/dev/null; then
   echo "review-diff.sh: $diff_range is empty in $(git rev-parse --show-toplevel) (target resolved via ${RESOLVED_VIA:-cwd}) — nothing to review" >&2
-  jq -cn --arg b "$backend" --arg r "$diff_range" '{
-    backend:$b, verdict:"no-verdict",
+  jq -cn --arg m "$review_mode" --arg b "$review_backend" --arg r "$diff_range" '{
+    mode:$m, backend:$b, verdict:"no-verdict",
     reviewCompleteness:null, reviewer:null, comments:[], editedFields:[],
     capabilities:{producesVerdict:false, perHunkReview:false,
                   editableCommitMessage:false, editableDescription:false,
@@ -462,7 +547,8 @@ fi
 
 # The review-request contract the sourced adapter reads. Exported so the
 # adapter (sourced below) counts as a consumer — it runs in this same shell.
-export review_mode diff_range files_left files_right review_title review_details_json
+export review_subject review_mode review_backend
+export diff_range files_left files_right review_title review_details_json
 export message_file review_skill
 
 # shellcheck source=/dev/null

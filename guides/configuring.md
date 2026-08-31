@@ -28,8 +28,8 @@ The four verbosity dials are listed in lifecycle order, and they descend:
 
 | Key | Default | What that gets you |
 |---|---|---|
-| [`anchor.reviewBackend`](#key-reviewbackend) | per skill | Each skill picks the shape its artifact wants — `editor` for a drafted document, `revdiff` for a changeset. Setting it names one tool for all of them. |
-| [`anchor.<skill>.reviewBackend`](#key-skill-reviewbackend) | the umbrella key, else per skill | A skill reviews in the backend above until you give that skill its own. |
+| [`anchor.edit.backend`](#key-edit-backend) | `core.editor`, then git's chain | Which editor an `edit` review opens. |
+| [`anchor.diff.backend`](#key-diff-backend) | `revdiff` | Which viewer a `diff` review opens. |
 | [`anchor.reviewBudgetMins`](#key-reviewbudgetmins) | `10` | Descriptions are written for ten minutes of focused review — enough for the change and the topics around it. |
 | [`anchor.issueVerbosity`](#key-issueverbosity) | `75` | Issue bodies run long: the people who pick the work up need the context in the issue. |
 | [`anchor.commitVerbosity`](#key-commitverbosity) | `50` | Commit bodies run to the why plus the context the diff doesn't show. |
@@ -65,36 +65,41 @@ The base URL of your work tracker. When you mention a ticket, `commit` adds a
 `Refs:` trailer and `prepare-review` links it in the CR. See
 [Work-tracker references](#work-tracker-references).
 
-### `anchor.reviewBackend` :id=key-reviewbackend
+### `anchor.edit.backend` :id=key-edit-backend
 
 ```bash
-git config anchor.reviewBackend revdiff
+git config anchor.edit.backend hx
 ```
 
-Which review tool the skills launch, overriding the per-skill defaults in
-[A backend per artifact](#a-backend-per-artifact): `revdiff` or `editor`.
+Which editor an `edit` review opens. Unset, the editor is git's own — `core.editor`,
+then `VISUAL`, then `EDITOR`, then the rungs anchor adds past them
+([Review config: `edit`](#review-config-edit)). Set, it wins over all of those:
+it is the narrower statement, naming the editor you want *for reviewing* rather
+than for everything git opens one for.
 
-Both return a normalized review verdict, which is the whole point of the key —
-git's own difftool is deliberately not on the list, because a changeset shown
-without a verdict ends in "you saw it, approve?", and that is a rubber stamp
-rather than a review.
+### `anchor.diff.backend` :id=key-diff-backend
 
-`revdiff` is a terminal-native reviewer that also handles hg/jj repos; it needs
-the revdiff plugin installed. `editor` is the other shape of the step: instead of
-commenting on the draft, you edit it.
+```bash
+git config anchor.diff.backend revdiff
+```
+
+Which viewer a `diff` review opens. Unset, the tool is git's own
+[`diff.tool`](#difftool-reviews) if you've set one, and `revdiff` otherwise —
+a terminal-native reviewer that also handles hg/jj repos, from the revdiff
+plugin. A viewer named here that isn't installed gives way to one that is, named
+in a line so it isn't a surprise, and one neither anchor nor git can launch
+reports that rather than opening.
+
+These two are the *tool* half of a review, one key per mode, and they are the
+only half you set: which mode a review runs in follows what it is reviewing
+([A mode per subject](#a-mode-per-subject)). Whichever tool runs, it returns a
+normalized verdict — git's own difftool is deliberately not selectable, because
+a changeset shown without a verdict ends in "you saw it, approve?", and that is a
+rubber stamp rather than a review.
 
 How the chosen tool renders the diff is its own knob, not an `anchor.*` key: see
-[Review-backend config](#review-backend-config) (per backend:
-[`revdiff`](#review-backend-config-revdiff), [`editor`](#review-backend-config-editor)).
-
-### `anchor.<skill>.reviewBackend` :id=key-skill-reviewbackend
-
-```bash
-git config anchor.commit.reviewBackend editor
-```
-
-The same choice for one skill, overriding the umbrella key above. See
-[A backend per artifact](#a-backend-per-artifact).
+[Review config](#review-config) (per mode:
+[`diff`](#review-config-diff), [`edit`](#review-config-edit)).
 
 ### `anchor.reviewBudgetMins` :id=key-reviewbudgetmins
 
@@ -341,7 +346,7 @@ A per-skill key wins over the umbrella one in both directions, so an umbrella
 `false` plus `anchor.commit.watchPipelineAfterPush true` reports the commit you
 just made and nothing else.
 
-### Review-backend config
+### Review config :id=review-config
 
 `anchor` hands the review backend only what the review *is*: the diff range (or
 the two paths), the header, and the channel it reads the verdict back from. How
@@ -349,7 +354,7 @@ the diff *looks* stays the tool's own knob, so set your preferences in the tool'
 config rather than looking for an `anchor.*` key. `anchor` passes no presentation
 flags, so nothing it sends overrides what you set there.
 
-#### Review-backend config: `revdiff`
+#### Review config: `diff` (revdiff) :id=review-config-diff
 
 revdiff reads
 [`~/.config/revdiff/config`](https://revdiff.com/docs.html#config-file), an INI
@@ -378,9 +383,35 @@ revdiff renders in a terminal, so this backend needs a session `anchor` can
 split — iTerm2 today. Where there is none, a revdiff review reports `no-verdict`
 naming that rather than opening on nothing.
 
-#### Review-backend config: `editor`
+#### Review config: your own `diff.tool` :id=difftool-reviews
 
-The `editor` backend opens the editor git would open, so the knob is git's own:
+Set `diff.tool` and reviews open in it — the same fall-through `edit` mode makes
+to `core.editor`, for the same reason: a tool you already chose for reading a
+diff is the one you want.
+
+A difftool has no way to leave an annotation, so **what you write is the
+review.** anchor snapshots every file before opening the tool and compares them
+after, so the diff you make *is* the feedback:
+
+- **Fix it in place** — type the correction into the code. It's already in your
+  working tree; the commit picks it up.
+- **Ask a question** — leave it in the file's own comment syntax. `// why is
+  this ordered?`, `# TODO: handle nil`, whatever you'd normally write.
+- **Change nothing** — quit. An untouched tree is the approval.
+
+There's no marker to learn and nothing to strip: anchor reads what you wrote and
+sorts the fixes from the questions, answering the questions and taking the
+comment lines back out before the commit. Anything you touched sends the review
+round again, so you see the result of your own edit before it lands.
+
+`--dir-diff` opens the whole changeset at once instead of prompting file by file,
+and symlinks the working-tree side so your edits reach the real files. The tool's
+own exit code is ignored — plenty of them use non-zero to mean "the files
+differ", and the tree already said what you meant.
+
+#### Review config: `edit` :id=review-config-edit
+
+The `edit` mode opens the editor git would open, so the knob is git's own:
 
 ```bash
 git config core.editor "code --wait"   # or set VISUAL / EDITOR
@@ -436,60 +467,75 @@ without reporting a result, which means the editor never got to save.
 
 ##### Picking a terminal editor
 
-The job here is narrow: read one markdown document, change a few lines, quit.
+The job here is narrow: read one markdown document, change a few lines, save.
 There is no project to navigate and no build to run, so what suits it is an
-editor you can drive without learning it first — a different question from which
-editor you want for a day of code.
+editor whose save and quit you can reach without stopping to think — a different
+question from which editor you want for a day of code.
 
 | Editor | Install | Why you'd pick it |
 | --- | --- | --- |
-| **[microsoft/edit](https://github.com/microsoft/edit)** — recommended | `brew install msedit` | No modes, and a menu bar that shows you the keys, so nothing has to be memorized before you can save. VS Code-style controls in one small binary. Installs as `edit`. |
-| [helix](https://github.com/helix-editor/helix) | `brew install helix` | Modal, but selection-first: pick the text, then act on it, with a prompt that shows what each key does as you type it. Worth the learning if you'd also live in it — tree-sitter and LSP are built in. Runs as `hx`. |
+| **[helix](https://github.com/helix-editor/helix)** — recommended | `brew install helix` | Modal, but selection-first: pick the text, then act on it, with a prompt that names every key as you type it, so nothing has to be memorized first. Worth the learning if you'd also live in it — tree-sitter and LSP are built in. Runs as `hx`. |
 | [amp](https://github.com/jmacdonald/amp) | see [amp.rs](https://amp.rs) | Vim's modal model, simplified. The comfortable pick if Vim already is. |
 | [fresh](https://github.com/sinelaw/fresh) | see the repo | No modes and no configuration, with IDE features — LSP, multi-cursor, a command palette — if you want the editor to do more than take a draft. |
 
 Point git at the one you pick:
 
 ```bash
-git config --global core.editor edit
+git config --global core.editor hx
 ```
 
-**Quitting without saving is not an abort.** An unchanged buffer comes back as
-`approved`, which is what you want when the draft already reads correctly. To
-stop the flow instead, empty the buffer.
+**Saving is what approves the draft.** Save it — `:wq` in helix, unchanged if it
+already reads right — and what you saved *is* the artifact. Quit without saving
+and the flow halts with nothing committed, filed, or published.
+
+The save is read from the buffer, not from how the editor left, so saving and
+then losing the terminal still counts: what you wrote is on disk and `anchor`
+takes it. Exiting non-zero (vim's `:cq`) aborts whatever you saved, since that
+is the editor's own way of saying stop.
 
 **Quit the editor, don't close its pane.** A terminal editor is drawing inside a
 pane `anchor` opened, so `⌘W` and `⌘Q` reach iTerm2 rather than the editor and
-take it down mid-edit — the review reports `pane-closed` and nothing it gated
-happens. Leave through the editor's own File → Exit, whose key its menu bar
-shows. Your draft survives either way; re-run to review it again.
+take it down mid-edit. If you saved first, that save is your answer and the
+review is graded on it; if you didn't, the review reports `pane-closed` and
+nothing it gated happens. Your draft survives either way; re-run to review it
+again.
 
-### A backend per artifact
+### A mode per subject :id=a-mode-per-subject
 
-Which shape suits an artifact varies, so each skill has its own default —
-decided by whether its review has a changeset in it.
+A review resolves on two axes, and only one of them is yours to set:
 
-| Skill | Default | Why |
+- **mode** — the shape: `edit` or `diff`. **Not configurable.** Which shape fits
+  is a property of what's being reviewed, so the subject answers it and there's
+  no key to get it wrong with.
+- **backend** — the tool that runs the shape, and the half that *is* a
+  preference: [`anchor.edit.backend`](#key-edit-backend) for the editor,
+  [`anchor.diff.backend`](#key-diff-backend) for the viewer. A mode can grow more
+  tools without changing what the mode means.
+
+The mode turns on one question: **has this review got a diff to show?**
+
+| Subject | Mode | Why |
 |---|---|---|
-| `commit`, `review` | `revdiff` | The subject is a changeset, and per-hunk annotation is what a diff viewer is for. |
-| `prepare-review`, `issue`, `release` | `editor` | The subject is one drafted document. Its two sides are text against text, so a diff viewer marks every line as added and asks you to comment your way to a rewrite; the editor hands you the document and takes back what you saved. |
+| One file with no prior version — a first issue body, a description on a CR that has none, release notes with an empty baseline | `edit` | There is nothing to diff. A viewer marks every line as added and asks you to comment your way to a rewrite of a document an editor could have handed you. |
+| Anything else — a changeset, or a draft revised against the version before it | `diff` | Real hunks, and per-hunk annotation is what a viewer is for. A git range names a base by construction, so it always lands here. |
 
-Either way you can name the other one:
+The subject decides, not the skill that asked. `/anchor:issue` opens an editor
+when it files a new body and a viewer when it updates one; the second pass of a
+`/anchor:prepare-review` description lands in the viewer, which is where "what
+did the feedback change" is legible.
+
+What you name is the tool each shape opens:
 
 ```bash
-git config anchor.reviewBackend revdiff        # every artifact in the TUI
-git config anchor.commit.reviewBackend editor  # commit messages in $EDITOR
+git config anchor.diff.backend revdiff   # the viewer a diff review opens
+git config anchor.edit.backend hx        # the editor an edit review opens
 ```
 
-`anchor.commit.*`, `anchor.prepare-review.*`, `anchor.issue.*`, and
-`anchor.release.*` cover the four artifacts `anchor` drafts. A per-skill key wins
-in both directions, so an umbrella `editor` plus
-`anchor.prepare-review.reviewBackend revdiff` edits everything but the CR
-description.
+Both are global to the repo: the tool that suits a shape suits it wherever the
+shape comes up, so there is no per-skill split to keep in sync.
 
 Until you set one of them, the launch message says the tool was `anchor`'s pick
-and names the key — the same hint the editor ladder prints, for the other half
-of the choice.
+and names the key — the same hint the editor ladder prints.
 
 **What `editor` does with the draft.** It opens the artifact in a buffer with the
 change under review below a scissors line, the way `git commit --verbose` does:
@@ -499,15 +545,15 @@ Add retry to checkout
 
 The gateway drops idle connections, so the first call after …
 ------------------------ >8 ------------------------
-Everything below this line is ignored. Save to accept the text above;
-empty it to abort, and nothing this review gates will happen.
+Everything below this line is ignored. Save to approve the text above,
+unchanged if it already reads right. Quit without saving to abort, and
+nothing this review gates will happen.
 ```
 
 Whatever you save above that line **is** the artifact — `anchor` takes it
-verbatim rather than re-drafting from it. Empty the buffer (or exit non-zero,
-vim's `:cq`) and the flow halts with nothing committed, filed, or published.
-Unlike `git commit`, lines beginning with `#` are kept: three of the four
-artifacts are markdown, where `#` is a heading.
+verbatim rather than re-drafting from it. Unlike `git commit`, lines beginning
+with `#` are kept: three of the four artifacts are markdown, where `#` is a
+heading.
 
 **When the tool isn't there.** `anchor` asks which backend a review can actually
 open before it opens one — so a `revdiff` you haven't installed yet gets you the

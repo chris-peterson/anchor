@@ -62,15 +62,20 @@ review that found something left you amending, and an amend on a pushed branch i
 a force-push with a rule attached. Now the review happens while the change is
 still just files.
 
-## Review runs on a backend you choose
+## Review runs in the best-fit mode for what changed
 
-Diff review goes through one dispatcher that normalizes whatever tool you use to
-a single verdict, so the skills don't care which reviewer is installed.
+Review goes through one dispatcher that normalizes whatever tool you use to a
+single verdict, so the skills don't care which reviewer is installed. What they
+do care about is the *shape*, and that follows what you're reviewing.
 
-| Backend | How to select it | What it gives you |
-|---|---|---|
-| [revdiff](https://revdiff.com) | the default since 1.4.0 | A terminal-native reviewer that also handles hg and jj, with diff-side markers on each annotation |
-| `editor` | `git config anchor.reviewBackend editor` | The drafted artifact in your own editor — whatever you save is what lands, instead of comments to fold in |
+| Mode | When you get it | What runs it | What it gives you |
+|---|---|---|---|
+| `diff` | anything with a base to compare against — a changeset, or a draft revised against the version before it | your `diff.tool`, else [revdiff](https://revdiff.com); `anchor.diff.backend` names one directly | A terminal-native reviewer with diff-side markers, or the difftool you already use — where what you edit in place *is* the review |
+| `edit` | one file with no prior version — a first issue body, release notes with an empty baseline | `anchor.edit.backend`, else your `core.editor` | The drafted artifact in your own editor — whatever you save is what lands, instead of comments to fold in |
+
+The shape isn't a setting — which one fits is a property of the change, so
+there's no key to get it wrong with. The *tool* is yours to name:
+`anchor.edit.backend` for the editor, `anchor.diff.backend` for the viewer.
 
 With no viewer installed, the skills walk the change with you in chat rather
 than opening git's difftool: a changeset on screen with no verdict behind it

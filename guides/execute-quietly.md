@@ -78,18 +78,20 @@ header the user has no reason to look for.
 ### When anchor picked the tool, say which key would pick it instead
 
 The probe reports where each half of the choice came from —
-`REVIEW_BACKEND_SOURCE` and, for an editor review, `REVIEW_EDITOR_SOURCE`. On
-`default`, anchor coalesced onto something rather than opening what the user
-asked for, and the tool itself is the last place that would ever mention it. Add
-one line under the table naming the key, and the value that would have produced
-what they're looking at:
+`REVIEW_MODE_SOURCE` for the shape and `REVIEW_BACKEND_SOURCE` for the tool
+running it. `subject` on the first and `default` on the second both mean anchor
+picked it rather than the user, and the tool itself is the last place that would
+ever mention it. Add one line under the table naming the key, and the value that
+would have produced what they're looking at:
 
-> Both picked by anchor — `git config anchor.prepare-review.reviewBackend
-> <editor|revdiff>` chooses the shape, `git config --global core.editor
-> <editor>` the editor.
+> Editor picked by anchor — `git config anchor.edit.backend <editor>` chooses it
+> (`anchor.diff.backend` for the viewer).
 
-Only for the half that says `default`; a choice the user typed needs no hint,
-which is what retires the line once they've made one. Say it in the launch
+The mode has no key to name, so the hint is only ever about the tool: where the
+shape anchor picked isn't the one wanted, the fix is the subject, not a setting.
+
+Only for the half anchor picked; a choice the user typed needs no hint, which is
+what retires the line once they've made one. Say it in the launch
 message and nowhere else — this is a hint sitting next to the thing it's about,
 not advice to lead with.
 

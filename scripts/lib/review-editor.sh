@@ -4,12 +4,13 @@
 # Sourced, not executed. Two consumers need the same answers for different
 # reasons, which is why this is a lib rather than private to the adapter:
 #
-#   scripts/review/editor.sh  opens the artifact, and needs the host to open it in
-#   scripts/review-diff.sh    reports whether the editor route is offerable at all
-#                             (--print-backend), without opening anything
+#   scripts/review/edit.sh    opens the artifact, and needs the host to open it in
+#   scripts/review-diff.sh    resolves the editor as edit mode's backend and
+#                             reports whether that route is offerable at all
+#                             (--probe), without opening anything
 #
-# The dispatcher's probe question is not "is a binary on PATH" — the editor
-# backend has no binary of its own. It is "would a launch reach an editor", and
+# The dispatcher's probe question is not "is a binary on PATH" — edit mode has no
+# binary of its own. It is "would a launch reach an editor", and
 # that takes both halves: an editor git can name, and somewhere to put it. A
 # consumer that offers the editor route on the first half alone dead-ends the
 # user in a `no-verdict` naming a host problem they were never warned about.
@@ -33,9 +34,9 @@ anchor_editor_usable() {
 # take `--wait`; anything else is a `core.editor` away (DIFF-16).
 anchor_editor_candidates=(code code-insiders)
 
-# The editor the user's own configuration names — git's chain, GIT_EDITOR then
-# core.editor then VISUAL then EDITOR, with the no-op scrub above in front of
-# each rung. `git var GIT_EDITOR` answers git's half in one call, but it reads
+# The editor the user's own configuration names — anchor.edit.backend, then
+# git's chain, GIT_EDITOR then core.editor then VISUAL then EDITOR, with the
+# no-op scrub above in front of each rung. `git var GIT_EDITOR` answers git's half in one call, but it reads
 # the environment variable first, so the rungs are walked by hand here. Empty
 # when the user has configured nothing.
 #
@@ -43,7 +44,11 @@ anchor_editor_candidates=(code code-insiders)
 # user chose it — the launch names a config key only for one anchor picked.
 anchor_editor_configured() {
   local ed
-  ed=$(git var GIT_EDITOR 2>/dev/null || true)
+  # anchor's own key first: `edit` mode's tool half, the mirror of
+  # anchor.diff.backend. Above git's chain because it is the narrower statement —
+  # which editor to review in, not which to open for everything.
+  ed=$(git config anchor.edit.backend 2>/dev/null || true)
+  anchor_editor_usable "$ed" || ed=$(git var GIT_EDITOR 2>/dev/null || true)
   anchor_editor_usable "$ed" || ed=$(git config --get core.editor 2>/dev/null || true)
   anchor_editor_usable "$ed" || ed="${VISUAL:-}"
   anchor_editor_usable "$ed" || ed="${EDITOR:-}"

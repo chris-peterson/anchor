@@ -160,8 +160,8 @@ ok "GitHub: seeds a findings file carrying the pinned head"
 # --- The header overrides review-diff.sh grew for this (DIFF-19) -------------
 range="$(key "$out" DIFF_RANGE)"
 # Drive the dispatcher far enough to build the header, through a stub adapter
-# that prints what it was handed instead of launching anything. The dispatcher
-# only keeps a backend whose tool is installed, so `dump` needs to be on PATH.
+# that prints what it was handed instead of launching anything. An adapter is
+# picked by mode, so the stub is a mode named `dump`.
 mkdir -p "$work/fake-scripts/review"
 cp "$review_diff_sh" "$work/fake-scripts/review-diff.sh"
 cp -R "$here/../scripts/lib" "$work/fake-scripts/lib"
@@ -177,7 +177,7 @@ EOF
 printf '#!/usr/bin/env bash\nexit 0\n' > "$bin/dump"
 chmod +x "$bin/dump"
 
-hdr=$(cd "$repo" && bash "$work/fake-scripts/review-diff.sh" --backend dump "$range" \
+hdr=$(cd "$repo" && bash "$work/fake-scripts/review-diff.sh" --mode dump "$range" \
         --title 'Add the feature' --detail CR=https://example/7 --detail author=contributor)
 [[ "$(key "$hdr" TITLE)" == "Add the feature" ]] \
   || fail "range mode ignored --title: $(key "$hdr" TITLE)"
@@ -187,7 +187,7 @@ hdr=$(cd "$repo" && bash "$work/fake-scripts/review-diff.sh" --backend dump "$ra
   || fail "overridden details still carry the local commit's rows"
 ok "review-diff: git-range --title/--detail replace the local-HEAD header (DIFF-19)"
 
-hdr=$(cd "$repo" && bash "$work/fake-scripts/review-diff.sh" --backend dump "$range")
+hdr=$(cd "$repo" && bash "$work/fake-scripts/review-diff.sh" --mode dump "$range")
 [[ "$(jq -r '[.[] | select(.label == "commit")] | length' <<<"$(key "$hdr" DETAILS)")" == 1 ]] \
   || fail "without overrides the computed header should still describe the local commit"
 ok "review-diff: without overrides the computed range header is unchanged"

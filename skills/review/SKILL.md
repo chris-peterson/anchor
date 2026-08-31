@@ -156,23 +156,24 @@ range is not filtered: a review that saw part of a change and signed off on all
 of it is worth less than no review, and the only way the user can stand behind
 findings is to have seen what produced them.
 
-Ask the dispatcher which backend to open — it resolves this skill's key over the
-umbrella one and considers only installed tools:
+Ask the dispatcher how this review resolves — it takes this skill's mode key
+over the umbrella one, falls back to what the subject picks, and considers only
+tools that can actually open:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill review --print-backend
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill review --probe
 ```
 
 Two answers mean **don't launch** — this skill's subject is a changeset, and
 neither reaches one:
 
-- **`REVIEW_BACKEND_AVAILABLE=0`** — nothing usable is installed.
-- **`REVIEW_BACKEND=editor`** — the editor backend edits a single drafted
-  artifact and refuses a diff-only review (DIFF-15), so launching it reports a
-  configuration error instead of showing the CR. Name the key that selected it
-  (`anchor.review.reviewBackend`, else the umbrella `anchor.reviewBackend`) and
-  say this skill needs a viewer; `REVIEW_EDITOR_AVAILABLE` is about a different
-  question and doesn't rescue it here.
+- **`REVIEW_AVAILABLE=0`** — nothing usable is installed.
+- **`REVIEW_MODE=edit`** — edit mode edits a single drafted artifact and refuses
+  a diff-only review (DIFF-15), so launching it would report a configuration
+  error instead of showing the CR. A CR's changeset is a diff subject, so this
+  answer means something is wrong rather than something is configured: say the
+  skill needs a viewer and what the probe reported. `REVIEW_EDIT_AVAILABLE` is
+  about a different question and doesn't rescue it here.
 
 Either way, go to the changeset rung of
 `${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md` — file by file, in your reply —
@@ -183,7 +184,7 @@ the viewer blocks until closed:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill review \
-  --backend <REVIEW_BACKEND> [--repo <path>] <DIFF_RANGE> \
+  --mode <REVIEW_MODE> [--repo <path>] <DIFF_RANGE> \
   --title '<CR_TITLE>' \
   --detail CR=<CR_URL> --detail author=<CR_AUTHOR> --detail files=<CHANGED_FILES>
 ```
@@ -204,15 +205,18 @@ differently from its siblings, because here the reviewer's comments are the
 *product* rather than an obstacle:
 
 - **`changes-requested`** — the expected outcome. `REVIEW_OUTPUT.comments` are
-  findings the user typed; carry them into Step 4 verbatim.
+  findings the user typed; carry them into Step 4 verbatim. One whose `target` is
+  `file` with a diff in its body is a finding they typed *into the code* through
+  a difftool — read it per `${CLAUDE_PLUGIN_ROOT}/guides/reviewer-edits.md` and carry
+  what it says, not the patch, into the summary.
 - **`approved`** — every change was read and nothing was flagged. That is a real
   review with no inline findings; Step 4 still writes the summary.
 - **`incomplete`** — the backend is telling you not every hunk was reviewed.
   Name what went unseen and re-open the viewer. Do not build a document over it:
   this verdict is exactly the rubber-stamp the step exists to prevent.
 - **`no-verdict`** — the review did not complete. `capabilities.producesVerdict:
-  false` means the backend graded nothing; `backend: "editor"` means the editor
-  backend was selected anyway and refused
+  false` means the backend graded nothing; `mode: "edit"` means edit mode was
+  selected anyway and refused
   the changeset (DIFF-15), which the probe above catches first; otherwise read
   `raw.exitCode`. Say what happened in one line, then walk the changeset rung of
   `${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md` — file by file, in your reply.

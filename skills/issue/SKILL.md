@@ -221,7 +221,7 @@ After the issue lands, print its URL.
 
 ### Edit
 
-The review is the preferred edit surface but **optional** — it runs when a review backend is available. The body is one drafted document, so this skill defaults to the `editor` backend: it opens in the user's editor and whatever they save *is* the body. A configured [revdiff](https://revdiff.com), or an editor with nowhere to open, gets the diff viewer instead, where the user comments and you fold the comments in. Open the current body vs. the draft (when updating) or the draft alone, via the dispatcher as a **background** Bash call so it doesn't hold the turn open:
+The review is the preferred edit surface but **optional** — it runs when a review backend is available. Which one follows the subject: filing a new issue leaves `<current-path>` empty, so the body is all new and `edit` mode takes it — it opens in the user's editor and whatever they save *is* the body. Updating an existing issue has a current body to diff against, so [revdiff](https://revdiff.com) takes it and the user comments where you fold the comments in. A configured backend, or an editor with nowhere to open, overrides that. Open the current body vs. the draft (when updating) or the draft alone, via the dispatcher as a **background** Bash call so it doesn't hold the turn open:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill issue --files \
@@ -230,20 +230,21 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill issue --files \
   --detail repo=<repo>
 ```
 
-`--skill issue` selects this skill's backend (`anchor.issue.reviewBackend`, then `anchor.reviewBackend`, then the `editor` default). Ask which one it will be before launching, under the **same `--skill` the launch uses** — the probe resolves the backend the way the launch does, so a bare one answers for a different skill's default and names a tool this review will never open:
+`--skill issue` tells the adapter the artifact is an issue body; the mode itself follows the subject. Ask which one it will be before launching, under the **same `--files` pair the launch uses** — the probe resolves the mode the way the launch does, so a bare one answers for a different review and names a tool this one will never open:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill issue --print-backend
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill issue --probe \
+  --files <current-path> <draft-path>
 ```
 
 Then say in one line where the draft is about to appear:
 
-- **`REVIEW_BACKEND=editor`** — the editor renders wherever its host puts it, and on a GUI editor that is a window behind the terminal the user is watching. A review silently waiting in another window is indistinguishable from nothing having opened, so name it.
-- **`REVIEW_BACKEND_CONFIGURED` present** — the run is opening something other than what the preference named. Name that too.
-- **`REVIEW_BACKEND_SOURCE` / `REVIEW_EDITOR_SOURCE` = `default`** — anchor picked that half rather than the user. Add the configuration hint from `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "when anchor picked the tool"; `REVIEW_EDITOR` names the editor about to open.
+- **`REVIEW_MODE=edit`** — the editor renders wherever its host puts it, and on a GUI editor that is a window behind the terminal the user is watching. A review silently waiting in another window is indistinguishable from nothing having opened, so name it.
+- **`REVIEW_MODE_CONFIGURED` present** — the run is opening something other than what the preference named. Name that too.
+- **`REVIEW_MODE_SOURCE=subject` / `REVIEW_BACKEND_SOURCE=default`** — anchor picked that half rather than the user. Add the configuration hint from `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "when anchor picked the tool"; `REVIEW_BACKEND` names the tool about to open.
 
 Say it as part of the manifest the launch carries — a table naming the repo, the issue (its number and title when updating one), the backend from that probe, and the sections the draft holds. The shape is in `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "show what is going under review". Nothing else about the launch is output; after the table, the next thing you say is the verdict.
 
-Read the verdict back with the **BashOutput tool** (not `tail` / `$(...)`). Only `REVIEW_VERDICT` `approved` is approval; an `approved` result carrying `editedFields` with `target: "issue-body"` — the `editor` backend, where the saved buffer *is* the body — means file that text verbatim rather than re-drafting from it; `changes-requested` carries comments in `REVIEW_OUTPUT.comments` to fold in before re-presenting — ungraded, so every one of them, and the re-open's left-hand side is the previous draft (copied aside to a sibling path with `.prev` before the extension) so the second pass shows what the feedback changed; `incomplete` / `no-verdict` mean the review didn't complete — surface what happened and take the fallback ladder rather than treating silence as approval. A result that carries **no parseable `REVIEW_VERDICT` at all** (empty stdout, stderr only — the dispatcher exited before reporting) is the same case: report what the output showed and verify with the user; nothing is filed on an unverified result. (The full verdict contract matches the `prepare-review` skill's Step 4.)
+Read the verdict back with the **BashOutput tool** (not `tail` / `$(...)`). Only `REVIEW_VERDICT` `approved` is approval; an `approved` result carrying `editedFields` with `target: "issue-body"` — `edit` mode, where the saved buffer *is* the body — means file that text verbatim rather than re-drafting from it; `changes-requested` carries comments in `REVIEW_OUTPUT.comments` to fold in before re-presenting — ungraded, so every one of them, and one whose `target` is `file` with a diff in its body is the reviewer's own edit rather than an annotation (`${CLAUDE_PLUGIN_ROOT}/guides/reviewer-edits.md`), and the re-open's left-hand side is the previous draft (copied aside to a sibling path with `.prev` before the extension) so the second pass shows what the feedback changed; `incomplete` / `no-verdict` mean the review didn't complete — surface what happened and take the fallback ladder rather than treating silence as approval. A result that carries **no parseable `REVIEW_VERDICT` at all** (empty stdout, stderr only — the dispatcher exited before reporting) is the same case: report what the output showed and verify with the user; nothing is filed on an unverified result. (The full verdict contract matches the `prepare-review` skill's Step 4.)
 
 Ungraded for any reason — nothing installed, or a review that came back without a verdict — walks the ladder in `${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md` with the drafted body as the artifact. It is a drafted document, so the document rungs apply and the changeset walk doesn't.

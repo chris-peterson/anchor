@@ -249,16 +249,19 @@ published body, `bump-commit` and `dispatch-triggered` put them in a commit.
 The workflow owns the bump; the notes never enter a commit, so they get the review
 gate themselves.
 
-The notes are one drafted document, so this skill defaults to the `editor`
-backend: they open in the user's editor and whatever they save *is* the notes. A
-configured viewer, or an editor with nowhere to open, gets the diff viewer
-instead — where the baseline is empty, so it reads as all additions. Ask which
-one it will be under the **same `--skill` the launch uses**: the probe resolves
-the backend the way the launch does, so a bare one answers for a different
-skill's default and names a tool this review will never open.
+Which mode takes the notes follows the subject. An empty
+`RELEASE_NOTES_BASELINE` — nothing accrued yet — makes the notes all new, so the
+`edit` mode takes them: they open in the user's editor and whatever they
+save *is* the notes. A baseline with sections already in it has real hunks, so
+`diff` takes it. A configured mode, or an editor with nowhere to open,
+overrides that. Ask which one it will be under the **same `--skill` and the same
+`--files` pair the launch uses**: the probe resolves the mode the way the launch
+does, so a bare one answers for a different review and names a tool this one
+will never open.
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill release --print-backend
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill release --probe \
+  --files <RELEASE_NOTES_BASELINE> <RELEASE_NOTES_PATH>
 ```
 
 Then print the manifest the launch carries — a table naming the repo, the version
@@ -267,16 +270,16 @@ sections the draft holds. The shape is in
 `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "show what is going under
 review". Two facts from the probe belong in it:
 
-- **`REVIEW_BACKEND=editor`** — the editor renders wherever its host puts it, and
+- **`REVIEW_MODE=edit`** — the editor renders wherever its host puts it, and
   on a GUI editor that is a window behind the terminal the user is watching. A
   review silently waiting in another window is indistinguishable from nothing
   having opened, so name it.
-- **`REVIEW_BACKEND_CONFIGURED` present** — the run is opening something other
-  than what the preference named. Name that too.
-- **`REVIEW_BACKEND_SOURCE` / `REVIEW_EDITOR_SOURCE` = `default`** — anchor
+- **`REVIEW_MODE_CONFIGURED` present** — the run is opening a different shape
+  than the preference named. Name that too.
+- **`REVIEW_MODE_SOURCE=subject` / `REVIEW_BACKEND_SOURCE=default`** — anchor
   picked that half rather than the user. Add the configuration hint from
   `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "when anchor picked the
-  tool"; `REVIEW_EDITOR` names the editor about to open.
+  tool"; `REVIEW_BACKEND` names the tool about to open.
 
 Then open the notes against `RELEASE_NOTES_BASELINE` (the empty left-hand side
 the recon block created) through the **dispatcher** — not the backend directly.
@@ -294,7 +297,9 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill release --files \
 Map `REVIEW_VERDICT` as the other skills do: only `approved` proceeds — and where
 it carries `editedFields` with `target: "release-notes"`, the saved buffer *is*
 the notes, so publish that text verbatim rather than re-drafting from it;
-`changes-requested` means fold in every comment (they're ungraded) and re-open
+`changes-requested` means fold in every comment (they're ungraded — and one whose
+`target` is `file` with a diff in its body is the reviewer's own edit, read per
+`${CLAUDE_PLUGIN_ROOT}/guides/reviewer-edits.md`) and re-open
 against the previous draft — copied aside to a sibling path with `.prev` before
 the extension — so the second pass shows what the feedback changed; `incomplete`
 and `no-verdict` mean the reviewer didn't grade it. A result with **no parseable `REVIEW_VERDICT`** (empty stdout,
