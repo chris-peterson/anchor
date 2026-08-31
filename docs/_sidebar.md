@@ -10,7 +10,7 @@
   - [release](/skills/release)
   - [pipeline](/skills/pipeline)
   - [issue](/skills/issue)
-  - [issues](/skills/issues)
+  - [backlog](/skills/backlog)
 - [Ambient rules](/ambient-rules)
 - [Hooks](/hooks)
 - Templates

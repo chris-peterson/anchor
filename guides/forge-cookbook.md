@@ -524,7 +524,7 @@ glab release list --per-page 5
 
 ## Issue list
 
-Listing/ranking issues (the `issues` skill). Fetch as JSON and rank client-side —
+Listing/ranking issues (the `backlog` skill). Fetch as JSON and rank client-side —
 neither CLI sorts by two keys in one pass.
 
 ```bash

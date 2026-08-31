@@ -18,7 +18,7 @@ behavior, not an independent authority — review them against the source.
 
 - **Skill** — a user-invocable command the plugin exposes: `/anchor:commit`,
   `/anchor:prepare-review`, `/anchor:review`, `/anchor:resolve-feedback`,
-  `/anchor:merge`, `/anchor:release`, `/anchor:issue`, `/anchor:issues`,
+  `/anchor:merge`, `/anchor:release`, `/anchor:issue`, `/anchor:backlog`,
   `/anchor:pipeline`.
 - **Forge** — GitHub or GitLab, selected by the `origin` remote; drives the CLI
   choice (`gh` for GitHub, `glab` for GitLab).
@@ -490,9 +490,9 @@ established before anything is proposed or written.
 
 ### ISSUES — Issues
 
-Authoring a single issue (the `issue` skill, ISSUES-01..06 and ISSUES-13..17)
-and surveying the backlog to pick the next one (the `issues` skill,
-ISSUES-07..12).
+Authoring a single issue: gathering the intent, drafting it, filing it, and
+triaging it with the project's own labels and milestones (the `issue` skill).
+Working the backlog it lands in is the `backlog` skill's half, in BACKLOG below.
 
 - **[ISSUES-01]** When invoked with an issue reference, the system shall update that
   issue against its current body as baseline; otherwise it shall create a new
@@ -500,7 +500,7 @@ ISSUES-07..12).
 - **[ISSUES-02]** Before drafting, the system shall gather the why, consumer, and
   acceptance criteria from the author.
 - **[ISSUES-03]** Where creating a new issue and it is unclear whether the need is
-  already tracked, the system shall offer to survey issues via the `issues` skill
+  already tracked, the system shall offer to survey issues via the `backlog` skill
   rather than searching the forge itself, and shall switch to the update path if
   the need turns out to be already tracked.
 - **[ISSUES-04]** If the author has no approach in mind, then the system shall file
@@ -509,35 +509,43 @@ ISSUES-07..12).
   author.
 - **[ISSUES-06]** The system shall lead the issue with why and write for a reader
   unfamiliar with the system.
-- **[ISSUES-07]** The system shall list forge issues for a target repo, defaulting
-  to the issues assigned to the invoking user in the open state.
-- **[ISSUES-08]** The system shall interpret the invocation query to refine scope
-  (assignee, label, state), keeping the default view when the query does not call
-  for something else.
-- **[ISSUES-09]** The system shall rank the listed issues by soonest due date first,
-  then by most recently updated, with issues lacking a due date sorted after those
-  with one.
-- **[ISSUES-10]** Where the forge has no per-issue due date (GitHub), the system
-  shall use the issue's milestone due date as its due date, and treat it as absent
-  otherwise.
-- **[ISSUES-11]** The system shall present the ranked issues and recommend the
-  top-ranked one as the next to work on, offering to open it for viewing.
-- **[ISSUES-12]** The system shall not write to the forge; its output is limited to
-  listing, ranking, and opening an issue for viewing.
-- **[ISSUES-13]** When writing an issue, the system shall apply the labels that fit
+- **[ISSUES-07]** When writing an issue, the system shall apply the labels that fit
   it from the target project's existing label set, and shall not create a label the
   project does not define.
-- **[ISSUES-14]** Where more than one of those labels plausibly fits, or where none
+- **[ISSUES-08]** Where more than one of those labels plausibly fits, or where none
   fits an issue a reader would expect to be labelled, the system shall ask the
   author rather than choosing, and shall accept no label as the answer.
-- **[ISSUES-15]** When writing an issue, the system shall consider only the
+- **[ISSUES-09]** When writing an issue, the system shall consider only the
   project's open milestones, attaching one where exactly one plausibly fits, asking
   the author where several do, and attaching none where none does.
-- **[ISSUES-16]** Where the issue already exists, the system shall only add the
+- **[ISSUES-10]** Where the issue already exists, the system shall only add the
   labels and milestone it lacks, and shall not remove or replace the ones already on
   it.
-- **[ISSUES-17]** The system shall present the labels and milestone with the drafted
+- **[ISSUES-11]** The system shall present the labels and milestone with the drafted
   body for one approval rather than gating them separately.
+
+### BACKLOG — Backlog
+
+The backlog as a body of work — grooming it, planning against it, sequencing it,
+and picking what to work on next (the `backlog` skill). The requirements below
+cover the survey: listing and ranking what is filed, recommending a next pick,
+and writing nothing.
+
+- **[BACKLOG-01]** The system shall list forge issues for a target repo, defaulting
+  to the issues assigned to the invoking user in the open state.
+- **[BACKLOG-02]** The system shall interpret the invocation query to refine scope
+  (assignee, label, state), keeping the default view when the query does not call
+  for something else.
+- **[BACKLOG-03]** The system shall rank the listed issues by soonest due date first,
+  then by most recently updated, with issues lacking a due date sorted after those
+  with one.
+- **[BACKLOG-04]** Where the forge has no per-issue due date (GitHub), the system
+  shall use the issue's milestone due date as its due date, and treat it as absent
+  otherwise.
+- **[BACKLOG-05]** The system shall present the ranked issues and recommend the
+  top-ranked one as the next to work on, offering to open it for viewing.
+- **[BACKLOG-06]** The system shall not write to the forge; its output is limited to
+  listing, ranking, and opening an issue for viewing.
 
 ### CI — Pipeline
 

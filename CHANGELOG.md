@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- The backlog survey is `/anchor:backlog`. It sat one letter from `/anchor:issue`, so the skill that reads and the skill that writes were told apart by a plural — in a listing, in the docs sidebar, and in whatever you typed. The name now says what it surveys. Same behavior, same ranking; `/anchor:issues` no longer resolves.
+
 ## 1.10.0
 
 ### Changed

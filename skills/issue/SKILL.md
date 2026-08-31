@@ -1,11 +1,11 @@
 ---
 name: issue
-description: File a new forge issue (or update an existing one) that leads with WHY the work is needed. Use when filing, creating, drafting, or updating a single issue or ticket. To find, browse, or pick which issue to work on next, use the `issues` skill instead.
+description: File a new forge issue (or update an existing one) that leads with WHY the work is needed. Use when filing, creating, drafting, or updating a single issue or ticket. To find, browse, or pick which issue to work on next, use the `backlog` skill instead.
 ---
 
 # Issue
 
-File a new issue whose job is to convey *why* the work is needed and *how* the author intends to approach it — written for a reader who has never seen this part of the system. This is the singular, authoring counterpart to the `issues` skill: `issue` *drafts and writes* one issue (a new one, or an update to a known one), while `issues` *surveys the backlog* to find the next thing to work on. An issue describes work **to be done**, so unlike `commit` and `prepare-review` there is no diff to read from: the raw material is the author's intent, gathered up front.
+File a new issue whose job is to convey *why* the work is needed and *how* the author intends to approach it — written for a reader who has never seen this part of the system. This is the authoring counterpart to the `backlog` skill: `issue` *drafts and writes* one issue (a new one, or an update to a known one), while `backlog` *surveys what is already filed* to find the next thing to work on. An issue describes work **to be done**, so unlike `commit` and `prepare-review` there is no diff to read from: the raw material is the author's intent, gathered up front.
 
 **Don't narrate your work.** Every step below is an operating instruction, not a script to read aloud — follow the execute-quietly discipline: `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. For this skill, the only things worth surfacing are a question you need answered, the drafted issue with its options, and the final URL.
 
@@ -28,7 +28,7 @@ flowchart TD
 
     subgraph "Step 3: Guard against duplicates"
         Why --> FromCreate{Creating a new issue?}
-        FromCreate -->|Yes, unsure| Check["Offer /issues to check for a match"]
+        FromCreate -->|Yes, unsure| Check["Offer /backlog to check for a match"]
         Check --> Match{Already tracked?}
         Match -->|Yes| Reuse["Switch to update: fetch its body as baseline"]
     end
@@ -110,7 +110,7 @@ Wait for answers before drafting. If the only open item is the WHY, ask:
 
 This step runs only on the **create** path — skip it when updating a known issue. A duplicate issue splits the discussion, so before drafting a brand-new issue, make sure one doesn't already cover this need.
 
-Finding and picking issues is the `issues` skill's job — don't re-implement a forge search here. If it's unclear whether this need is already tracked, say so and offer to run `issues` (scoped to a keyword or two distilled from the intent — the subject of the work, not the WHY prose) to survey open and closed issues first. If the user already knows it's new, or a quick look turns up nothing that genuinely overlaps, continue to Step 4 without further comment.
+Finding and picking issues is the `backlog` skill's job — don't re-implement a forge search here. If it's unclear whether this need is already tracked, say so and offer to run `backlog` (scoped to a keyword or two distilled from the intent — the subject of the work, not the WHY prose) to survey open and closed issues first. If the user already knows it's new, or a quick look turns up nothing that genuinely overlaps, continue to Step 4 without further comment.
 
 If it turns out the need *is* already tracked, this is an update, not a new issue: take that issue's number and switch to the update path — fetch its current body as the baseline (the Step 1 fetch), then draft against it.
 

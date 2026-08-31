@@ -57,9 +57,9 @@ suite:
   # >>> shipyard:describe — generated from source by `shipyard gen-describe`; do not edit >>>
   describe:
     skills:
+      backlog: List and rank the forge issues assigned to you so you can pick what to work on next — ranked by soonest due date, then most recently updated.
       commit: Stage changes, run tests, review the diff and drafted commit message with the user, then commit and push once they approve.
       issue: File a new forge issue (or update an existing one) that leads with WHY the work is needed.
-      issues: List and rank the forge issues assigned to you so you can pick what to work on next — ranked by soonest due date, then most recently updated.
       merge: Merge an approved change request once its gates are green — waiting on the pipeline if needed — then clean up the branch.
       pipeline: Report a commit's forge pipeline state, or watch until it settles.
       prepare-review: Open the PR/MR on an already-pushed branch, rebase on the default branch if behind, and draft a description that tells reviewers WHY the change exists.

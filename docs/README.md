@@ -34,7 +34,7 @@ The two skills you reach for most, in motion:
 
 `anchor` drives the forge through its official CLI, so the skills that touch a
 change request, issue, pipeline, or release (`prepare-review`, `review`,
-`resolve-feedback`, `merge`, `release`, `pipeline`, `issue`, `issues`) need the
+`resolve-feedback`, `merge`, `release`, `pipeline`, `issue`, `backlog`) need the
 one for your `origin` remote installed and authenticated with read+write scope.
 `commit` works without it. Install
 [`gh`](https://cli.github.com) for GitHub or

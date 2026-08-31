@@ -1,11 +1,11 @@
 ---
-name: issues
-description: List and rank the forge issues assigned to you so you can pick what to work on next — ranked by soonest due date, then most recently updated. Use whenever finding, browsing, surveying, or choosing the next issue/ticket to pick up, even when the user doesn't say "issues" — e.g. "what's next?", "what should I work on?", "anything due soon?", "show my open tickets". For filing or updating a single issue, use the `issue` skill instead.
+name: backlog
+description: List and rank the forge issues assigned to you so you can pick what to work on next — ranked by soonest due date, then most recently updated. Use whenever finding, browsing, surveying, or choosing the next issue/ticket to pick up, even when the user doesn't say "backlog" — e.g. "what's next?", "what should I work on?", "anything due soon?", "show my open issues", "show my open tickets". For filing or updating a single issue, use the `issue` skill instead.
 ---
 
-# Issues
+# Backlog
 
-Find and rank the issues that are candidates for your next unit of work, so you can choose one — the plural, read-only counterpart to the `issue` skill. Where `issue` *authors* a single issue (file a new one, or update a known one), `issues` *surveys* the backlog: it fetches, ranks, and points at the next thing to pick up. It never writes to the forge.
+Find and rank the issues that are candidates for your next unit of work, so you can choose one — the read-only counterpart to the `issue` skill. Where `issue` *authors* a single issue (file a new one, or update a known one), `backlog` *surveys* what is already filed: it fetches, ranks, and points at the next thing to pick up. It never writes to the forge.
 
 The default view answers "what's next?" — **your** open issues, ranked by **soonest due date, then most recently updated**. So the item most likely to be next sits at the top.
 
@@ -16,7 +16,7 @@ Issues = GitHub issues or GitLab issues. Pick the forge tool by the `origin` rem
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
 flowchart TD
-    Start(["/issues [query]"]) --> Scope["Step 1: Resolve the scope from the query"]
+    Start(["/backlog [query]"]) --> Scope["Step 1: Resolve the scope from the query"]
     Scope --> Fetch["Step 2: Fetch (forge JSON)"]
     Fetch --> Rank["Step 3: Rank — due first, then most-recently-updated"]
     Rank --> Present["Step 4: Present the list + recommend next"]
@@ -44,7 +44,7 @@ Act on `TARGET_VIA`:
 
 ## Step 1: Resolve the scope from the query
 
-The query after `/issues` (if any) refines *which* issues to list. Map it to filter flags; when it's empty or a bare "what's next?", use the defaults. Never invent a filter the user didn't ask for — the default view is the point.
+The query after `/backlog` (if any) refines *which* issues to list. Map it to filter flags; when it's empty or a bare "what's next?", use the defaults. Never invent a filter the user didn't ask for — the default view is the point.
 
 | The user says… | Scope |
 |----------------|-------|
