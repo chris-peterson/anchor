@@ -218,14 +218,22 @@ emit_review() {
     fi
   } > "$buffer"
 
-  # Stamping the buffer into the past is what makes a save detectable without
-  # reading an mtime, which `stat` spells differently on each platform: any write
-  # the editor performs lands the buffer newer than this reference, whether it
-  # wrote in place or renamed a new file over the top.
+  # Did the editor write? The reference is stamped *from the buffer* (`touch -r`),
+  # so the two are equal going in and `-nt` is false until something writes; any
+  # write at all lands the buffer in the present and wins, whether the editor
+  # wrote in place or renamed a new file over the top. Equal-by-construction is
+  # what makes the test decisive at every timestamp granularity — a reference
+  # stamped "now" instead races the write it is meant to detect, and loses that
+  # race wherever mtimes compare by the second (macOS ships bash 3.2, which does).
+  #
+  # Comparing content instead would be simpler and wrong: an editor that saves the
+  # draft unchanged writes the same bytes as one that never opened, and those are
+  # opposite verdicts here — approval versus abort.
   local write_ref
   write_ref=$(anchor_tmpfile anchor-editor-ref txt)
-  touch -t 200001010000 "$buffer"
   : > "$write_ref"
+  touch -t 200001010000 "$buffer"
+  touch -r "$buffer" "$write_ref"
 
   local rc=0
   editor_launch "$ed" "$buffer" || rc=$?
