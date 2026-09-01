@@ -4,7 +4,7 @@
 #
 # Sourced, not executed. Two callers need the same answers and neither can ask
 # the other: the dispatcher resolves `diff` mode's tool and reports whether it
-# can open (`--probe`), and scripts/review/diff.sh has to pick an adapter for the
+# can open (`--probe`), and scripts/review/modes/diff.sh has to pick an adapter for the
 # name before it sources one.
 #
 # A difftool is not a PATH question. A name can be one git ships a recipe for

@@ -717,18 +717,19 @@ editor's whole answer is the revised artifact, which is why the column below
 - **[DIFF-09]** The system shall carry each comment's tool-verbatim text in
   `raw` so feedback the normalization cannot represent is not lost.
 - **[DIFF-11]** The system shall resolve both axes against what can actually
-  open, and shall substitute on each independently. On the **mode** axis: a mode
-  the subject picked (CONFIG-15) that cannot open — `edit` with no editor to reach
-  (DIFF-16, DIFF-17) — shall give way to one that can, since it is a choice nobody
-  made and dead-ending a flow in a host problem the user was never warned about is
-  worse; a mode named in the configuration shall be kept whether or not it can
-  open, so its own report names the missing piece, substituting a viewer for a
-  configured `edit` answering a different question than the caller asked. On the
-  **tool** axis, asked of `diff` alone: a viewer that is not installed shall
-  give way to one that is, and where none is installed the resolved name shall be
-  kept so the report still names what was preferred and the flow hands off to the
-  fallback ladder (DIFF-20). Substituting within a mode shall never cross modes —
-  an absent viewer resolves to another viewer, never to the editor.
+  open. On the **mode** axis: a mode the subject picked (CONFIG-15) that cannot
+  open — `edit` with no editor to reach (DIFF-16, DIFF-17) — shall give way to
+  one that *can*, since it is a choice nobody made; a mode named in the
+  configuration shall be kept whether or not it can open, so its own report names
+  the missing piece, substituting a viewer for a configured `edit` answering a
+  different question than the caller asked. Giving way requires the other mode to
+  be openable in full, program and host together (DIFF-25a): where neither can
+  open, the subject's mode is kept, because a report naming the editor that is
+  missing serves the user better than one naming a viewer they are no closer to
+  reaching. On the **tool** axis there is no substitution: a viewer the user named
+  is the viewer reported, installed or not, and the flow hands off to the fallback
+  ladder (DIFF-20) rather than opening a tool nobody chose and returning its
+  verdict as theirs.
 - **[DIFF-12]** If the dispatcher reports no parseable verdict — no
   `REVIEW_VERDICT` line, empty output, or output the consumer cannot read — then
   the system shall treat the review as `no-verdict`, halt the action the review
@@ -760,7 +761,11 @@ editor's whole answer is the revised artifact, which is why the column below
   and leaves the user a status to interpret in place of the thing to do. A cause
   the reviewer can act on shall be reported with its remedy, and a terminal
   taken down mid-edit shall be reported as re-openable rather than as a tool
-  that cannot grade the change.
+  that cannot grade the change. Where an editor the system knows returned
+  without waiting — a GUI editor invoked without the flag that makes it block
+  (DIFF-16) — the report shall name that editor and that flag, since nothing was
+  written in that case either and reporting it as the reviewer declining to save
+  attributes to them a decision they were never offered.
 - **[DIFF-15]** Where `edit` is selected for a review that has no drafted
   artifact, the system shall report `no-verdict` naming the configuration that
   resolves it, rather than reporting a diff it cannot show as reviewed.
@@ -790,7 +795,12 @@ editor's whole answer is the revised artifact, which is why the column below
   system shall consider only tools it can open, emit the mode a review would run
   in and the tool that would run it, report where each of those two came from,
   name the preferred one on either axis whenever it substituted another, report
-  whether anything usable is available, and shall launch nothing. It shall not
+  whether anything usable is available, and shall launch nothing. Availability
+  shall take both halves of what a mode needs — the program *and* somewhere to
+  draw it (DIFF-25a) — in `diff` as in `edit`: a viewer that is plainly installed
+  with no terminal to render it in opens no more than an editor with nowhere to
+  go, and reporting it available sends the caller to launch a review the host
+  answers with `no-host`. It shall not
   substitute `edit` for an absent viewer, which would answer a different question
   than the caller asked. It shall additionally report, on its own axis, whether an
   `edit` review would reach an editor — resolvable per DIFF-16 *and* with
@@ -852,15 +862,27 @@ editor's whole answer is the revised artifact, which is why the column below
   waiting in a window behind the terminal is indistinguishable from nothing having
   opened, which reads as a step that was skipped rather than one blocking on the
   user.
-- **[DIFF-25]** The system shall open a review that needs a terminal in a split
-  of the session it was called from, and shall return the split when the review
-  closes. The review and the terminal that asked for it stay in one place, where
-  a separate window can rest behind the one the user is watching, and a review
-  silently waiting on them is indistinguishable from one that never opened. The
-  host shall be selected on whether the calling session can be named, since a
-  split addresses a session rather than a terminal application, and the same
-  answer shall serve the probe (DIFF-17) and the launch so the two cannot
-  disagree.
+- **[DIFF-25]** The system shall open a review that needs a terminal where the
+  session it was called from can put one — a popup or a split of that session —
+  and shall return the borrowed screen when the review closes. The review and the
+  terminal that asked for it stay in one place, where a separate window can rest
+  behind the one the user is watching, and a review silently waiting on them is
+  indistinguishable from one that never opened. Where the host addresses a
+  session rather than a terminal application, it shall be selected on whether the
+  calling session can be named. The same answer shall serve the probe (DIFF-17)
+  and the launch so the two cannot disagree.
+- **[DIFF-25a]** The system shall resolve that host independently of the review's
+  mode, from one ranked set, so `edit` and `diff` reach equally far. A host is a
+  place to draw a program the reviewer reads and types into, and which program it
+  is does not change where it can be drawn; resolving them apart is what leaves
+  one mode reaching a host the other cannot, so a machine that can open a drafted
+  document cannot be shown its own changeset. A host that serves one mode and not
+  the other shall say so rather than be reached by a second selector — a blocking
+  GUI editor's own window serves `edit` alone, since no such window renders a
+  changeset. The set shall hold no host that cannot be selected: the system runs
+  as a plugin, whose scripts the harness invokes with no controlling terminal, so
+  a host addressing the caller's own terminal is a rung the fallback ladder
+  reasons about for nothing.
 - **[DIFF-26]** The system shall run the command it opens in a split in the
   directory and the environment it resolved that command against — at least the
   working directory, the executable search path, the locale, and the editor a
@@ -978,8 +1000,14 @@ editor's whole answer is the revised artifact, which is why the column below
 - **[CONFIG-15a]** The system shall make the tool that runs a mode configurable,
   one key per mode and symmetric between them: `anchor.edit.tool` names the
   editor, ranking above git's own chain (DIFF-16) as the narrower statement, and
-  `anchor.diff.tool` names the viewer, `revdiff` absent it. The tool is the
-  half that is a preference, where the mode is not. A single key naming a mode and
+  `anchor.diff.tool` names the viewer, falling through to git's own `diff.tool`.
+  The tool is the half that is a preference, where the mode is not. **No viewer
+  shall be assumed past those keys**: where neither names one, the system shall
+  report that and name the keys that would, rather than selecting a viewer on the
+  user's behalf. A recommended viewer is still only a recommendation — it reaches
+  a review by being named, the same as any other — and a tool the user did not
+  choose returns a verdict recorded as theirs, which is the one thing a review
+  must not manufacture. A single key naming a mode and
   a tool together has nowhere to say *which* viewer and makes the editor's own name
   ride a second, parallel set of report fields; where such a superseded key is
   set, the system shall report that it no longer does anything and name the keys
@@ -1049,6 +1077,12 @@ editor's whole answer is the revised artifact, which is why the column below
 
 - **[UX-01]** The system shall not narrate its plumbing; it shall speak only
   when the user must act or decide.
+- **[UX-01a]** Where the system reports a step that did not complete, it shall
+  name what happened and what follows in terms the user can see — the editor
+  closed, the viewer is not installed, the pane went away — and not in the
+  vocabulary of its own internal guidance. Naming a numbered step of a fallback
+  sequence describes a document the user has not read and obliges them to ask
+  what the earlier steps were before they can answer.
 - **[UX-02]** When a skill starts while a task is already in progress, the
   system shall run silently inside the orchestrator's task list and not create
   its own.

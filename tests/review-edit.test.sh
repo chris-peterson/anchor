@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Functional test for `edit` mode (scripts/review/edit.sh) and the two axes the
+# Functional test for `edit` mode (scripts/review/modes/edit.sh) and the two axes the
 # dispatcher resolves — which mode a review runs in, and which tool runs it.
 #
 # Drives the real dispatcher with ANCHOR_EDITOR_LAUNCHER pointed at a stub that
@@ -153,6 +153,26 @@ o=$(run --skill prepare-review --mode edit --files "$prior" "$draft" 2>"$work/er
 grep -q 'without saving' "$work/err.txt"          || fail "the remedy should reach stderr"
 ok "edit: quit without saving -> no-verdict (abort), cause unsaved"
 
+# --- a GUI editor missing its wait flag is not the reviewer declining --------
+# Both cases write nothing, so they are indistinguishable at the buffer. Only
+# one of them has something the user can do about it, and reporting the other's
+# wording attributes a decision they were never offered (DIFF-14).
+git -C "$repo" config anchor.edit.tool code
+export EDITOR_STUB_MODE=quit
+o=$(run --skill prepare-review --mode edit --files "$prior" "$draft" 2>"$work/err.txt"); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = no-verdict ] || fail "no wait flag -> $(verdict_of "$o"), want no-verdict"
+grep -q -- '--wait' "$work/err.txt"   || fail "stderr should name the flag: $(cat "$work/err.txt")"
+[ "$(jq -r .raw.exitCode <<<"$j")" = unsaved ] || fail "still the unsaved class, nothing was written"
+[[ "$(jq -r .raw.output <<<"$j")" == *'--wait'* ]] \
+  || fail "raw.output should name the flag, got $(jq -r .raw.output <<<"$j")"
+grep -q 'without saving' "$work/err.txt" && fail "the declining-to-save wording should not fire here"
+# Invoked with the flag, an unsaved buffer is the reviewer's own choice again.
+git -C "$repo" config anchor.edit.tool 'code --wait'
+o=$(run --skill prepare-review --mode edit --files "$prior" "$draft" 2>"$work/err.txt")
+grep -q 'without saving' "$work/err.txt" || fail "with the flag set, the reviewer declined: $(cat "$work/err.txt")"
+git -C "$repo" config --unset anchor.edit.tool
+ok "edit: a GUI editor that returned without waiting names the flag it needs"
+
 # --- exited non-zero -> abort ----------------------------------------------
 export EDITOR_STUB_MODE=quit EDITOR_STUB_RC=3
 o=$(run --skill prepare-review --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
@@ -192,7 +212,7 @@ export EDITOR_STUB_MODE=save
 # VS Code, whose `gui` host needs no terminal — the case then launches an editor
 # for real and waits for someone to close it.
 o=$( cd "$repo" && PATH="$bin:/usr/bin:/bin" ANCHOR_EDITOR_LAUNCHER='' TMUX='' \
-     ITERM_SESSION_ID='' ANCHOR_SPLIT_RUNNER='' GIT_EDITOR=true \
+     ITERM_SESSION_ID='' ANCHOR_HOST_RUNNER='' GIT_EDITOR=true \
      bash "$dispatch" --skill prepare-review --mode edit \
      --files "$prior" "$draft" </dev/null 2>/dev/null ); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = no-verdict ]            || fail "nowhere to open -> want no-verdict"
@@ -242,12 +262,17 @@ unset ANCHOR_EDITOR_LAUNCHER
 export EDITOR_STUB_MODE=save
 
 # A stub split runner, so a revdiff review resolves without opening a pane.
-cat > "$bin/stub-split-runner.sh" <<'EOF'
+cat > "$bin/stub-host-runner.sh" <<'EOF'
 #!/usr/bin/env bash
 exit 0
 EOF
-chmod +x "$bin/stub-split-runner.sh"
-export ANCHOR_SPLIT_RUNNER="$bin/stub-split-runner.sh"
+chmod +x "$bin/stub-host-runner.sh"
+export ANCHOR_HOST_RUNNER="$bin/stub-host-runner.sh"
+
+# The viewer is named, because nothing names it for you: revdiff is anchor's
+# recommendation and reaches a review the same way any other viewer does, so a
+# case about *which* mode ran has to set the key or it measures the unset one.
+git -C "$repo" config anchor.diff.tool revdiff
 
 mode_of()    { jq -r .mode    <<<"$(json_of "$1")"; }
 tool_of() { jq -r .tool <<<"$(json_of "$1")"; }
@@ -290,19 +315,27 @@ ok "tool: anchor.edit.tool names edit mode's tool, over git's chain"
 if run --skill commit --mode bogus --previous 2>/dev/null; then fail "unknown mode should exit non-zero"; fi
 ok "mode: an unknown mode exits non-zero"
 
-# --- an unknown diff tool fails on its own axis, once there is nothing to
-# coalesce onto. With a viewer installed it never reaches the adapter check:
-# the within-mode substitution takes it to the installed one first.
+# --- a named viewer anchor cannot place stays named. Nothing stands in for it:
+# substituting a viewer the user didn't ask for would report a different tool's
+# verdict as theirs, so the report names the one that could not be placed.
 git -C "$repo" config anchor.diff.tool bogus-viewer
 v=$( ( cd "$repo" && PATH="$bin:/usr/bin:/bin" bash "$dispatch" --skill commit --previous ) 2>/dev/null )
 [ "$(verdict_of "$v")" = no-verdict ] \
-  || fail "an unknown diff tool with nothing installed should report no-verdict"
+  || fail "an unknown diff tool should report no-verdict"
 [ "$(jq -r .raw.exitCode <<<"$(json_of "$v")")" = unknown-tool ] \
   || fail "the cause should name it as a tool anchor has no adapter for"
-[ "$(tool_of "$(run --skill commit --previous)")" = revdiff ] \
-  || fail "with a viewer installed, an unknown one should coalesce onto it"
+[ "$(tool_of "$v")" = bogus-viewer ] \
+  || fail "the report should carry the viewer that was asked for, not a substitute"
+
+# --- with no viewer named at all, the review says which key names one rather
+# than picking anchor's recommendation on the user's behalf.
 git -C "$repo" config --unset anchor.diff.tool || true
-ok "tool: an unknown diff tool reports no-verdict, or coalesces where it can"
+v=$( ( cd "$repo" && PATH="$bin:/usr/bin:/bin" bash "$dispatch" --skill commit --previous ) 2>/dev/null )
+[ "$(verdict_of "$v")" = no-verdict ] || fail "an unset viewer should report no-verdict"
+[ "$(jq -r .raw.exitCode <<<"$(json_of "$v")")" = no-tool ] \
+  || fail "the cause should say no viewer is configured"
+git -C "$repo" config anchor.diff.tool revdiff
+ok "tool: a viewer anchor cannot place is named, and an unset one names the key"
 
 # ====================== the probe ==========================================
 # The skills ask how a review resolves before deciding whether a visual review is
@@ -323,7 +356,16 @@ key_of() { sed -n "s/^$1=//p" <<<"$2"; }
 # ANCHOR_EDITOR_LAUNCHER, which stands in for both halves.
 probe() {
   ( cd "$repo" && PATH="$bin:/usr/bin:/bin" GIT_EDITOR=true TMUX='' \
-      ITERM_SESSION_ID='' ANCHOR_SPLIT_RUNNER='' \
+      ITERM_SESSION_ID='' ANCHOR_HOST_RUNNER='' \
+      bash "$dispatch" "$@" </dev/null )
+}
+
+# The same, with a host supplied. `diff` needs one as much as `edit` does, so a
+# case about the *tool* axis has to hold the host axis open or it measures the
+# wrong thing.
+probe_hosted() {
+  ( cd "$repo" && PATH="$bin:/usr/bin:/bin" GIT_EDITOR=true TMUX='' \
+      ITERM_SESSION_ID='' ANCHOR_HOST_RUNNER="$bin/stub-host-runner.sh" \
       bash "$dispatch" "$@" </dev/null )
 }
 
@@ -368,25 +410,41 @@ o=$(probe --skill commit --probe)
 [ "$(key_of REVIEW_AVAILABLE "$o")" = 0 ]                      || fail "an absent binary should report unavailable"
 ok "probe: with no diff viewer installed at all, the probe reports unavailable"
 
-# With one installed, the probe coalesces onto it and names what config wanted.
+# An installed viewer that the user named is what opens. Nothing substitutes for
+# a named one, so the configured name is the reported name either way — what
+# moves is only whether it can open.
 cat > "$bin/revdiff" <<'EOF'
 #!/usr/bin/env bash
 exit 0
 EOF
 chmod +x "$bin/revdiff"
-o=$(probe --skill commit --probe)
-[ "$(key_of REVIEW_TOOL "$o")" = revdiff ]                               || fail "probe should coalesce onto the installed tool"
-[ "$(key_of REVIEW_AVAILABLE "$o")" = 1 ]                                   || fail "a coalesced tool is available"
-[ "$(key_of REVIEW_TOOL_CONFIGURED "$o")" = definitely-not-installed ]   || fail "the substitution should name what config asked for"
-ok "probe: coalesces onto an installed tool and names the configured one"
+git -C "$repo" config anchor.diff.tool revdiff
+o=$(probe_hosted --skill commit --probe)
+[ "$(key_of REVIEW_TOOL "$o")" = revdiff ]        || fail "the named viewer should be what opens"
+[ "$(key_of REVIEW_TOOL_SOURCE "$o")" = config ]  || fail "a named viewer is the user's own choice"
+[ "$(key_of REVIEW_AVAILABLE "$o")" = 1 ]         || fail "an installed viewer with a host is available"
+ok "probe: the viewer the user named is the one reported"
 
-# ...but never out of the mode: coalescing picks another viewer, never the
-# editor, which edits one artifact rather than showing a diff.
+# The other half of the same question. Both modes need a program *and* somewhere
+# to draw it, so a viewer that is plainly installed reports unavailable where
+# there is no terminal to render it in — the answer that keeps a consumer from
+# launching into a host problem it was never warned about.
+o=$(probe --skill commit --probe)
+[ "$(key_of REVIEW_TOOL "$o")" = revdiff ]  || fail "the installed viewer should still be named"
+[ "$(key_of REVIEW_AVAILABLE "$o")" = 0 ]      || fail "an installed viewer with nowhere to render is not available"
+ok "probe: a viewer with no host reports unavailable, as an editor does"
+
+# An unnamed viewer reports as unnamed rather than as anchor's recommendation,
+# and never flips the mode to edit — which edits one artifact rather than
+# showing a diff.
 rm -f "$bin/revdiff"
 git -C "$repo" config --unset anchor.diff.tool || true
-o=$(probe --skill commit --probe)
-[ "$(key_of REVIEW_MODE "$o")" = diff ] || fail "an absent viewer should never flip the mode to edit"
-ok "probe: an absent diff viewer never coalesces into edit mode"
+o=$(probe_hosted --skill commit --probe)
+[ "$(key_of REVIEW_MODE "$o")" = diff ]          || fail "an unnamed viewer should never flip the mode to edit"
+[ -z "$(key_of REVIEW_TOOL "$o")" ]              || fail "no key names a viewer, so none should be reported"
+[ "$(key_of REVIEW_TOOL_SOURCE "$o")" = unset ]  || fail "the source should say the key is unset"
+[ "$(key_of REVIEW_AVAILABLE "$o")" = 0 ]        || fail "an unnamed viewer cannot open"
+ok "probe: an unnamed viewer is reported as unset, and never becomes edit mode"
 
 # --mode drives the review directly, over what the subject would have picked.
 export ANCHOR_EDITOR_LAUNCHER="$bin/stub-editor.sh" EDITOR_STUB_MODE=save
@@ -452,14 +510,23 @@ for skill in commit review; do
 done
 ok "default: a git range opens the diff viewer with nothing configured"
 
-# A *defaulted* editor with nowhere to open gives way to an installed viewer, and
-# the probe names what it stepped aside from: nobody asked for the editor, and
-# dead-ending the flow in a host problem is worse than showing the diff (DIFF-11).
+# The mode gives way (DIFF-11) only to a `diff` review that can actually open,
+# and both modes now draw from one host set — so with no terminal anywhere there
+# is nothing to give way to, and the subject's `edit` is kept. Keeping it is the
+# more useful answer: its report names the editor problem, where a give-way would
+# trade it for a viewer problem the user is no closer to fixing.
 o=$(probe --skill prepare-review --probe --files "$nothing" "$draft")
-[ "$(key_of REVIEW_MODE "$o")" = diff ]              || fail "an unreachable subject-picked edit mode should give way to an installed viewer"
-[ "$(key_of REVIEW_AVAILABLE "$o")" = 1 ]            || fail "the viewer that stood in is available"
-[ "$(key_of REVIEW_MODE_CONFIGURED "$o")" = edit ]   || fail "the substitution should name the mode it replaced"
-ok "default: an unreachable defaulted editor gives way to an installed viewer"
+[ "$(key_of REVIEW_MODE "$o")" = edit ]        || fail "with no host for either mode, the subject's edit should be kept"
+[ "$(key_of REVIEW_AVAILABLE "$o")" = 0 ]      || fail "kept, and reported unavailable"
+[ "$(key_of REVIEW_EDIT_AVAILABLE "$o")" = 0 ] || fail "the edit axis should say the editor rung is out too"
+ok "default: with nowhere to open either mode, the subject's mode is kept"
+
+# Given a host, the subject's `edit` reaches an editor, so there is no occasion
+# to give way at all.
+o=$(probe_hosted --skill prepare-review --probe --files "$nothing" "$draft")
+[ "$(key_of REVIEW_MODE "$o")" = edit ]   || fail "a reachable editor should keep the subject's edit mode"
+[ "$(key_of REVIEW_AVAILABLE "$o")" = 1 ] || fail "an editor with a host is available"
+ok "default: a single file with a host to open it in stays in edit mode"
 
 # A *configured* one is kept and reports the missing piece itself.
 o=$(probe --skill prepare-review --probe --mode edit --files "$prior" "$draft")
@@ -492,13 +559,13 @@ chmod +x "$codebin/code"
 resolve() {
   ( cd "$repo" && PATH="$1:/usr/bin:/bin" TERM="${2-dumb}" GIT_EDITOR=true \
       TMUX='' ANCHOR_EDITOR_LAUNCHER='' ITERM_SESSION_ID='' \
-      ANCHOR_SPLIT_RUNNER="${3-}" bash "$bin/resolve-editor.sh" </dev/null )
+      ANCHOR_HOST_RUNNER="${3-}" bash "$bin/resolve-editor.sh" </dev/null )
 }
 
 # With a terminal to host, the editor a plain `git commit` opens wins over a
 # GUI editor anchor merely found: it renders in the pane anchor labels and
 # focuses, where VS Code opens a window behind the terminal.
-r=$(resolve "$codebin" dumb "$bin/stub-split-runner.sh")
+r=$(resolve "$codebin" dumb "$bin/stub-host-runner.sh")
 [ -n "$r" ] || fail "git's compiled default should resolve with a terminal host"
 [ "$r" != "code --wait" ] || fail "a hostable terminal should outrank the GUI rung, got '$r'"
 case "$r" in true|:|*/true) fail "a no-op compiled default should be discounted" ;; esac
@@ -546,7 +613,7 @@ EOF
 chmod +x "$bin/host-editor.sh"
 
 host() {
-  ( cd "$repo" && TMUX='' ANCHOR_EDITOR_LAUNCHER='' ANCHOR_SPLIT_RUNNER='' \
+  ( cd "$repo" && TMUX='' ANCHOR_EDITOR_LAUNCHER='' ANCHOR_HOST_RUNNER='' \
       TERM_PROGRAM="${2:-}" ITERM_SESSION_ID="$1" \
       bash "$bin/host-editor.sh" vi </dev/null )
 }
@@ -560,5 +627,53 @@ if [ "$(uname -s)" = Darwin ] && command -v osascript >/dev/null 2>&1; then
   [ "$h" = iterm2 ] || fail "a named iTerm2 session should select the iterm2 host, got '$h'"
   ok "host: a named iTerm2 session selects the iterm2 host"
 fi
+
+# ====================== the host layer (DIFF-25a) ==========================
+# A host is a place to draw a program, and which program does not change where it
+# can be drawn — so the two modes are asked of one ranked set. These drive the
+# dispatcher's selector directly: a launch would only show which host won.
+cat > "$bin/host-mode.sh" <<EOF
+#!/usr/bin/env bash
+source "$here/../scripts/lib/review-host.sh"
+printf '%s' "\$(anchor_review_host "\$1" "\${2:-}")"
+EOF
+chmod +x "$bin/host-mode.sh"
+
+host_for() {
+  ( cd "$repo" && PATH="$hostbin:$bin:/usr/bin:/bin" TMUX="${TMUX_ENV-}" \
+      ANCHOR_HOST_RUNNER='' ITERM_SESSION_ID='' \
+      bash "$bin/host-mode.sh" "$@" </dev/null )
+}
+
+# Selection asks whether tmux is on PATH, never runs it, so a stub answers — and
+# the case holds on a machine without tmux, which is where the asymmetry this
+# layer removes would otherwise go unmeasured.
+hostbin="$work/hostbin"; mkdir -p "$hostbin"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$hostbin/tmux"; chmod +x "$hostbin/tmux"
+
+# The asymmetry this layer exists to remove: `diff` used to reach iTerm2 alone,
+# so a review that could hand you a drafted document could not show you your own
+# changeset. Inside tmux both modes answer the same.
+TMUX_ENV='/tmp/fake-tmux,0,0'
+[ "$(host_for edit vi)" = tmux ] || fail "edit should reach the tmux host"
+[ "$(host_for diff)" = tmux ]    || fail "diff should reach the tmux host, as edit does"
+unset TMUX_ENV
+ok "host: both modes reach tmux, so neither reaches further than the other"
+
+# `gui` is the one host that serves a single mode, and it says so itself rather
+# than being kept out by a second selector: no editor window renders a changeset.
+[ "$(host_for edit 'code --wait')" = gui ] || fail "a blocking editor should select the gui host"
+[ "$(host_for diff 'code --wait')" != gui ] || fail "a viewer should never land in an editor's window"
+ok "host: the gui window answers edit alone"
+
+# What makes an editor a `gui` host is that it blocks, read off the command line
+# from the flag each editor anchor knows needs. An editor anchor does not know
+# is not guessed at: it goes looking for a terminal, and a `core.editor` is how
+# it says otherwise (DIFF-16).
+[ "$(host_for edit 'gvim -f')" = gui ]           || fail "gvim -f blocks, so it should select the gui host"
+[ "$(host_for edit 'bbedit -W')" = gui ]         || fail "bbedit -W blocks, so it should select the gui host"
+[ "$(host_for edit gvim)" != gui ]               || fail "gvim without -f does not block"
+[ "$(host_for edit 'my-editor --hold')" != gui ] || fail "an unrecognized flag should not read as blocking"
+ok "host: the wait flag each known editor needs is what selects the gui host"
 
 echo "# all checks passed"

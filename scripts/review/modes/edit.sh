@@ -45,14 +45,15 @@
 # diff-only range review) is `no-verdict` with the cause on stderr rather than a
 # silent pass — set a visual tool for those skills.
 #
-# Editor resolution and host selection live in the lib because the dispatcher's
-# --probe needs the same answers without opening anything.
-# shellcheck source=../lib/review-editor.sh
-source "$(dirname "${BASH_SOURCE[0]}")/../lib/review-editor.sh"
-# shellcheck source=../lib/split-run.sh
-source "$(dirname "${BASH_SOURCE[0]}")/../lib/split-run.sh"
-# shellcheck source=../lib/tmpfile.sh
-source "$(dirname "${BASH_SOURCE[0]}")/../lib/tmpfile.sh"
+# Editor resolution is in lib/review-editor.sh; host selection in
+# lib/review-host.sh. Both have a second caller — the dispatcher's --probe, and
+# `diff` mode.
+# shellcheck source=../../lib/review-editor.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../../lib/review-editor.sh"
+# shellcheck source=../../lib/review-host.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../../lib/review-host.sh"
+# shellcheck source=../../lib/tmpfile.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../../lib/tmpfile.sh"
 
 editor_caps='{"producesVerdict":true,"perHunkReview":false,"editableCommitMessage":true,"editableDescription":true,"sideMarkers":false}'
 
@@ -82,19 +83,6 @@ editor_emit() {
   echo "REVIEW_OUTPUT=$out"
 }
 
-# Shell-quote one argument for embedding in the command strings the overlay
-# hosts take (they run `sh -c`, not an argv).
-editor_sq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
-
-# Read the exit code a popup left in its sentinel. `display-popup -E` has
-# already blocked until the command exited, so this reads a file that is written
-# by the time it is called; the loop covers the write landing a moment late.
-editor_await() {
-  local sentinel="$1"
-  while [[ ! -s "$sentinel" ]]; do sleep 1; done
-  cat "$sentinel"
-}
-
 # The extension the buffer takes. An editor picks its syntax mode from the name,
 # not the content, so `.md` is what puts markdown preview a keystroke away for
 # the three artifacts that are markdown; a commit message is git's plain-text
@@ -106,50 +94,31 @@ editor_buffer_ext() {
   esac
 }
 
-# Nothing to open the editor in. Its own status, distinct from the two the split
-# runner reports, so the three causes reach `emit_review` apart from each other
-# and none of them is quoted back to the user as an editor's exit code.
+# Nothing to open the editor in. Its own status, distinct from the two a host
+# reports, so the three causes reach `emit_review` apart from each other and none
+# of them is quoted back to the user as an editor's exit code.
 editor_rc_no_host=123
 
 # Open $2 in the resolved editor $1 and return the editor's exit status, in
-# whichever host `anchor_editor_host` picked for this session — or one of the
-# statuses above, where the host never got the editor on screen.
+# whichever host the dispatcher picked for this session — or one of the statuses
+# above, where the host never got the editor on screen.
 editor_launch() {
-  local ed="$1" file="$2" rc=0 cmd sentinel
+  local ed="$1" file="$2" rc=0
 
-  case "$(anchor_editor_host "$ed")" in
-    launcher)
-      "$ANCHOR_EDITOR_LAUNCHER" "$file" || rc=$?
-      return "$rc"
-      ;;
-    tmux)
-      # display-popup -E blocks until the command exits but reports its own status,
-      # not the command's, so the status comes back through a sentinel.
-      sentinel=$(mktemp "${TMPDIR:-/tmp}/anchor-editor-rc.XXXXXX")
-      cmd="$ed $(editor_sq "$file"); printf %s \$? > $(editor_sq "$sentinel")"
-      tmux display-popup -E -w 90% -h 90% "$cmd" >/dev/null 2>&1 || true
-      rc=$(editor_await "$sentinel") || rc="$anchor_split_rc_no_result"
-      rm -f "$sentinel"
-      return "$rc"
-      ;;
-    gui)
-      # A blocking GUI editor needs no terminal at all, which makes running it
-      # directly both correct and the only path that works in a Git Bash session.
-      ( eval "$ed $(editor_sq "$file")" ) || rc=$?
-      return "$rc"
-      ;;
-    tty)
-      ( eval "$ed $(editor_sq "$file")" ) || rc=$?
-      return "$rc"
-      ;;
-    iterm2)
-      anchor_split_run "$ed $(editor_sq "$file")" || rc=$?
-      return "$rc"
-      ;;
-  esac
+  # The launcher takes the file rather than a command string, so it is opened
+  # here rather than through a host of its own.
+  if [[ -n "${ANCHOR_EDITOR_LAUNCHER:-}" ]]; then
+    "$ANCHOR_EDITOR_LAUNCHER" "$file" || rc=$?
+    return "$rc"
+  fi
 
-  echo "review-diff.sh: no way to open '$ed' — a terminal editor needs a terminal, and this session has none. Run inside tmux, configure a blocking GUI editor (git config core.editor 'code --wait'), or point ANCHOR_EDITOR_LAUNCHER at a script that opens one." >&2
-  return "$editor_rc_no_host"
+  if ! anchor_host_available edit "$ed"; then
+    echo "review-diff.sh: no way to open '$ed' — a terminal editor needs a terminal, and this session has none. Run inside tmux, configure a blocking GUI editor (git config core.editor 'code --wait'), or point ANCHOR_EDITOR_LAUNCHER at a script that opens one." >&2
+    return "$editor_rc_no_host"
+  fi
+
+  anchor_host_run "$ed $(anchor_host_sq "$file")" edit "$ed" || rc=$?
+  return "$rc"
 }
 
 # Consumes the review-request variables the dispatcher exports before sourcing
@@ -258,10 +227,10 @@ emit_review() {
     "$editor_rc_no_host")
       editor_emit no-verdict no-host "no way to open the editor"
       return ;;
-    "$anchor_split_rc_no_pane")
+    "$anchor_host_rc_no_pane")
       editor_emit no-verdict no-pane "the review pane could not be opened"
       return ;;
-    "$anchor_split_rc_no_result")
+    "$anchor_host_rc_no_result")
       # The pane went away before the editor could report its status. What the
       # editor did before that is on disk, so a saved buffer is graded like any
       # other and only an unsaved one is a review that never happened.
@@ -277,6 +246,18 @@ emit_review() {
   esac
 
   if [[ "$wrote" -eq 0 ]]; then
+    # A GUI editor invoked without its wait flag returns the instant it hands the
+    # file over, so nothing is written and the reviewer never saw a window. That
+    # is indistinguishable here from someone choosing not to save, and only one
+    # of the two has something to do about it — so where anchor knows the flag,
+    # it names it rather than reporting a decision the user never made.
+    local wait_flag
+    wait_flag=$(anchor_editor_wait_flag "$ed")
+    if [[ -n "$wait_flag" ]] && ! anchor_editor_blocking "$ed"; then
+      echo "review-diff.sh: '$ed' returned without waiting, so there was nothing to save — it needs $wait_flag to hold the review open. Set it: git config core.editor '$ed $wait_flag'" >&2
+      editor_emit no-verdict unsaved "$ed returned without waiting — needs $wait_flag"
+      return
+    fi
     echo "review-diff.sh: the editor closed without saving, so nothing was approved — saving is how a draft is approved, unchanged if it already reads right. Nothing this review gated has happened; re-run to review it again." >&2
     editor_emit no-verdict unsaved "closed without saving"
     return

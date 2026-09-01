@@ -28,14 +28,14 @@ bin="$work/bin"
 mkdir -p "$bin"
 
 # --- stub split runner: the adapter builds revdiff's command string and hands
-# it to scripts/lib/split-run.sh, which opens it in a pane. This stub stands in
-# via ANCHOR_SPLIT_RUNNER, so the suite drives the real command string rather
+# it to scripts/lib/review-host.sh, which opens it in a pane. This stub stands in
+# via ANCHOR_HOST_RUNNER, so the suite drives the real command string rather
 # than a launcher's argv: it unpacks the string back into an argv, records it to
 # $REVDIFF_ARGS_FILE, copies the seeded header (--description-file, which the
 # adapter deletes on return) to $REVDIFF_DESC_CAPTURE, writes
 # $REVDIFF_STUB_OUTPUT to the --output file the adapter named, and exits
 # $REVDIFF_STUB_RC.
-cat > "$bin/stub-split-runner.sh" <<'EOF'
+cat > "$bin/stub-host-runner.sh" <<'EOF'
 #!/usr/bin/env bash
 cmd=${1#REVDIFF_EXIT_CODE_ON_ANNOTATIONS=true }
 cmd=${cmd% 2>*}
@@ -53,8 +53,8 @@ done
 [ -n "$out" ] && printf '%s' "${REVDIFF_STUB_OUTPUT:-}" > "$out"
 exit "${REVDIFF_STUB_RC:-0}"
 EOF
-chmod +x "$bin/stub-split-runner.sh"
-export ANCHOR_SPLIT_RUNNER="$bin/stub-split-runner.sh"
+chmod +x "$bin/stub-host-runner.sh"
+export ANCHOR_HOST_RUNNER="$bin/stub-host-runner.sh"
 
 # --- stub revdiff: never executed (the stub runner intercepts the command), but
 # the adapter resolves the tool on PATH before building it, so the suite has to
@@ -71,6 +71,9 @@ git init --quiet -b main "$repo"
 git -C "$repo" config user.email "t@example.com"
 git -C "$repo" config user.name "T"
 git -C "$repo" config commit.gpgsign false
+# Nothing assumes a viewer, so the suite names the one it exercises. A hermetic
+# repo with this unset is the `no-tool` case, which has its own coverage below.
+git -C "$repo" config anchor.diff.tool revdiff
 printf 'one\n' > "$repo/a.txt"; git -C "$repo" add -A; git -C "$repo" commit --quiet -m first
 printf 'one\ntwo\n' > "$repo/a.txt"; git -C "$repo" add -A; git -C "$repo" commit --quiet -m second
 
@@ -147,7 +150,7 @@ ok "revdiff: a closed review pane -> no-verdict, cause named rather than numbere
 # nowhere to open a pane -> no-verdict, producesVerdict false. revdiff is a TUI,
 # so a session that cannot put a terminal on screen has no review to show, and
 # saying so beats launching into a host error.
-o=$( cd "$repo" && ANCHOR_SPLIT_RUNNER='' ITERM_SESSION_ID='' bash "$dispatch" --previous ); j=$(json_of "$o")
+o=$( cd "$repo" && ANCHOR_HOST_RUNNER='' ITERM_SESSION_ID='' bash "$dispatch" --previous ); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = no-verdict ]                        || fail "no-host verdict"
 [ "$(jq -r .raw.exitCode <<<"$j")" = no-host ]               || fail "no-host raw.exitCode"
 [ "$(jq -r .capabilities.producesVerdict <<<"$j")" = false ] || fail "no-host producesVerdict"
@@ -201,37 +204,54 @@ system_path="/usr/bin:/bin"
 pb() { ( cd "$repo" && PATH="$1" bash "$dispatch" --probe ); }
 
 o=$(pb "$bin:$PATH")
-grep -qx 'REVIEW_TOOL=revdiff' <<<"$o" || fail "revdiff installed -> want revdiff, got: $o"
-ok "tool: prefers revdiff when its tool is installed"
+grep -qx 'REVIEW_TOOL=revdiff' <<<"$o" || fail "named and installed -> want revdiff, got: $o"
+ok "tool: the viewer the key names is the one the probe reports"
 
+# A named viewer that isn't installed stays named. Substituting one the user
+# didn't ask for would report its verdict as theirs, so the probe says the named
+# tool cannot open rather than quietly naming another.
 git -C "$repo" config anchor.diff.tool definitely-not-installed
 o=$(pb "$bin:$PATH")
-grep -qx 'REVIEW_TOOL=revdiff' <<<"$o" \
-  || fail "absent preferred tool -> want the installed viewer, got: $o"
-grep -qx 'REVIEW_TOOL_CONFIGURED=definitely-not-installed' <<<"$o" \
-  || fail "substitution should name what config asked for, got: $o"
-git -C "$repo" config --unset anchor.diff.tool
-ok "tool: substitutes an installed viewer when the preferred tool is absent"
+grep -qx 'REVIEW_TOOL=definitely-not-installed' <<<"$o" \
+  || fail "an absent named tool should stay named, got: $o"
+grep -qx 'REVIEW_AVAILABLE=0' <<<"$o" \
+  || fail "an absent named tool cannot open, got: $o"
+! grep -q 'REVIEW_TOOL_CONFIGURED=' <<<"$o" \
+  || fail "nothing was substituted, so nothing should report as replaced: $o"
+git -C "$repo" config anchor.diff.tool revdiff
+ok "tool: an absent named viewer is reported by name, not swapped out"
 
-# With nothing to stand in, the probe still names what was asked for — the
-# degradation below is the run's business, not a claim that revdiff is installed.
+# No key at all is its own answer: the review names the keys that would pick a
+# viewer rather than reaching for anchor's recommendation on the user's behalf.
+git -C "$repo" config --unset anchor.diff.tool
+o=$(pb "$bin:$PATH")
+grep -qx 'REVIEW_TOOL=' <<<"$o"             || fail "no key -> want an empty tool, got: $o"
+grep -qx 'REVIEW_TOOL_SOURCE=unset' <<<"$o" || fail "no key -> want source=unset, got: $o"
+grep -qx 'REVIEW_AVAILABLE=0' <<<"$o"       || fail "no key -> want AVAILABLE=0, got: $o"
+r=$( cd "$repo" && PATH="$bin:$PATH" bash "$dispatch" --previous 2>&1 )
+grep -q 'REVIEW_VERDICT=no-verdict' <<<"$r" || fail "no key -> want no-verdict, got: $r"
+grep -q 'anchor.diff.tool' <<<"$r"          || fail "no key -> the report should name the key, got: $r"
+git -C "$repo" config anchor.diff.tool revdiff
+ok "tool: with no viewer named, the review names the key instead of choosing one"
+
+# Named, and installed nowhere: the probe reports the name and that it cannot open.
 o=$(pb "$system_path")
 grep -qx 'REVIEW_TOOL=revdiff' <<<"$o" || fail "no viewer -> want the configured name, got: $o"
 grep -qx 'REVIEW_AVAILABLE=0' <<<"$o"     || fail "no viewer -> want AVAILABLE=0, got: $o"
 ok "tool: with nothing installed the probe reports the preference, unavailable"
 
 # The run keeps the configured adapter, whose report names the tool that is
-# missing. There is nothing below it to degrade into: git's difftool is not a
-# tool (DIFF-18), because a diff nobody can grade invites "you saw it,
-# approve?" — the rung the skill's fallback ladder replaced.
+# missing. Nothing below it stands in — a viewer the user did not name would
+# report its verdict as theirs — so the flow hands off to the skill's fallback
+# ladder instead.
 o=$( cd "$repo" && PATH="$system_path" bash "$dispatch" --previous )
 [ "$(jq -r .tool <<<"$(json_of "$o")")" = revdiff ] \
   || fail "no viewer -> want the configured adapter, got: $(json_of "$o")"
 ok "tool: no viewer installed keeps the configured adapter, never a difftool"
 
-# `git` is not a tool at all (DIFF-18): a changeset shown without a verdict
-# invites "you saw it, approve?", so the difftool is off the menu entirely and
-# asking for it fails the same way any other typo does.
+# `git` names no tool. A difftool git can launch is selectable (DIFF-18) and
+# answers through `anchor_difftool_known`, but the bare binary is not one of
+# those names, so asking for it fails the way any other typo does.
 git -C "$repo" config anchor.diff.tool git
 o=$( cd "$repo" && PATH="$system_path" bash "$dispatch" --previous 2>&1 )
 grep -q 'REVIEW_VERDICT=no-verdict' <<<"$o" \
@@ -239,8 +259,8 @@ grep -q 'REVIEW_VERDICT=no-verdict' <<<"$o" \
 grep -q "no adapter for diff tool 'git'" <<<"$o" \
   || fail "git tool -> want the no-adapter error naming it, got: $o"
 ! grep -q 'REVIEW_VERDICT=approved' <<<"$o" || fail "git tool -> nothing should be approved, got: $o"
-git -C "$repo" config --unset anchor.diff.tool
-ok "tool: git is not selectable — the difftool is off the menu (DIFF-18)"
+git -C "$repo" config anchor.diff.tool revdiff
+ok "tool: git names no tool, so asking for it fails like any typo"
 
 # edit mode is selectable but never substituted in, so an absent viewer doesn't
 # turn a changeset review into an editor buffer.

@@ -67,8 +67,8 @@ launches the review, and let the tool render the contents.
 >
 > | File | Change |
 > |------|--------|
-> | `scripts/lib/split-run.sh` | +45 −29 |
-> | `tests/split-run.test.sh` | +76, new file |
+> | `scripts/lib/review-host.sh` | +45 −29 |
+> | `tests/review-host.test.sh` | +76, new file |
 > | `SPEC.md` | +18 −15 |
 
 Name the drafted artifact riding with the diff — the commit message, the CR

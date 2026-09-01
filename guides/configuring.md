@@ -29,7 +29,7 @@ The four verbosity dials are listed in lifecycle order, and they descend:
 | Key | Default | What that gets you |
 |---|---|---|
 | [`anchor.edit.tool`](#key-edit-tool) | `core.editor`, then git's chain | Which editor an `edit` review opens. |
-| [`anchor.diff.tool`](#key-diff-tool) | `revdiff` | Which viewer a `diff` review opens. |
+| [`anchor.diff.tool`](#key-diff-tool) | git's own `diff.tool` | Which viewer a `diff` review opens. Set neither and a `diff` review says so instead of opening. |
 | [`anchor.reviewBudgetMins`](#key-reviewbudgetmins) | `10` | Descriptions are written for ten minutes of focused review — enough for the change and the topics around it. |
 | [`anchor.issueVerbosity`](#key-issueverbosity) | `75` | Issue bodies run long: the people who pick the work up need the context in the issue. |
 | [`anchor.commitVerbosity`](#key-commitverbosity) | `50` | Commit bodies run to the why plus the context the diff doesn't show. |
@@ -84,18 +84,19 @@ git config anchor.diff.tool revdiff
 ```
 
 Which viewer a `diff` review opens. Unset, the tool is git's own
-[`diff.tool`](#difftool-reviews) if you've set one, and `revdiff` otherwise —
-a terminal-native reviewer that also handles hg/jj repos, from the revdiff
-plugin. A viewer named here that isn't installed gives way to one that is, named
-in a line so it isn't a surprise, and one neither anchor nor git can launch
-reports that rather than opening.
+[`diff.tool`](#difftool-reviews) if you've set one. With neither set, a `diff`
+review names these keys rather than opening a viewer you didn't pick — `anchor`
+recommends [revdiff](https://revdiff.com), a terminal-native reviewer. A viewer
+named here that neither `anchor` nor git can launch reports that rather than
+opening something else.
 
 These two are the *tool* half of a review, one key per mode, and they are the
 only half you set: which mode a review runs in follows what it is reviewing
 ([A mode per subject](#a-mode-per-subject)). Whichever tool runs, it returns a
-normalized verdict — git's own difftool is deliberately not selectable, because
-a changeset shown without a verdict ends in "you saw it, approve?", and that is a
-rubber stamp rather than a review.
+normalized verdict, including your own difftool — what you write in it is the
+review ([your own `diff.tool`](#difftool-reviews)). A changeset shown with no
+verdict at all ends in "you saw it, approve?", which is a rubber stamp rather
+than a review, so no tool reaches a review without one.
 
 How the chosen tool renders the diff is its own knob, not an `anchor.*` key: see
 [Review config](#review-config) (per mode:
@@ -379,9 +380,11 @@ can miss the one `anchor` opens. `REVDIFF_CONFIG` is the exception: `anchor`
 reads it and passes the path through as `--config`. See
 [revdiff's options](https://revdiff.com/docs.html#options) for the full list.
 
-revdiff renders in a terminal, so this tool needs a session `anchor` can
-split — iTerm2 today. Where there is none, a revdiff review reports `no-verdict`
-naming that rather than opening on nothing.
+revdiff renders in a terminal, so this tool needs somewhere `anchor` can put
+one: a tmux popup inside tmux, or a split of the calling session on iTerm2. It
+reaches exactly as far as an editor review does
+([Where a review opens](#review-hosts)). Where there is none, a revdiff review
+reports `no-verdict` naming that rather than opening on nothing.
 
 #### Review config: your own `diff.tool` :id=difftool-reviews
 
@@ -449,21 +452,32 @@ git config core.editor "code --wait"            # this repo only
 export VISUAL="code --wait"                     # this shell, and Ctrl+G with it
 ```
 
-A GUI editor has to **block** — `--wait` on VS Code, `-w` on Sublime and
-TextMate. Without it the editor returns the instant it opens and `anchor` reads
-an untouched draft as one you approved. That's also why rung 5 stays narrow to
-the VS Code family: `--wait` is the flag it knows blocks, so any other editor is
-a `core.editor` away rather than a guess.
+A GUI editor has to **block**, and the flag that makes it is part of how you
+invoke it — `--wait` on VS Code, `-w` on Sublime and TextMate, `-W` on BBEdit,
+`-f` on gvim. Without it the editor returns the instant it hands the file over,
+so there is nothing to save and the review reports that rather than reading an
+untouched draft as approval. `anchor` names the flag you're missing when that
+happens, so the fix arrives with the failure. Rung 5 stays narrow to the VS Code
+family for the same reason the flags are read rather than guessed: an editor
+`anchor` doesn't know is a `core.editor` away.
 
-A *terminal* editor needs a terminal, and the session `anchor` runs in has none,
-so it opens one: a tmux popup inside tmux, a split of the calling session on
-iTerm2 — sideways on a wide window, below on a narrow one, and closed again when
-you quit the editor. Anywhere
-else, point `ANCHOR_EDITOR_LAUNCHER` at a script that takes the file path and
-opens your editor on it, blocking until it closes.
+##### Where a review opens :id=review-hosts
 
-`anchor` waits as long as you take. What ends the wait early is the pane closing
-without reporting a result, which means the editor never got to save.
+A terminal editor needs a terminal, and so does a diff viewer. Claude Code gives
+a plugin none, so `anchor` puts one up — and both kinds of review reach the same
+set, in this order:
+
+| Host | When it's used |
+|---|---|
+| tmux popup | You're inside tmux. |
+| A blocking GUI editor's own window | `edit` reviews only — the editor draws its own window, so no terminal is needed. |
+| An iTerm2 split | The calling session can be named — sideways on a wide window, below on a narrow one, and closed again when you quit. |
+
+Anywhere else, point `ANCHOR_EDITOR_LAUNCHER` at a script that takes the file
+path and opens your editor on it, blocking until it closes.
+
+`anchor` waits as long as you take. What ends the wait early is the review
+closing without reporting a result, which means the editor never got to save.
 
 ##### Picking a terminal editor
 

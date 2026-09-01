@@ -68,15 +68,15 @@ diff_tool_command() {
   # before launching is what carries that context here.
   local bin="$1" out_file="$2" err_file="$3"
   local cmd
-  cmd="git difftool --no-prompt --tool=$(anchor_split_sq "$review_tool")"
+  cmd="git difftool --no-prompt --tool=$(anchor_host_sq "$review_tool")"
   if [[ "$review_subject" == "files" ]]; then
-    cmd="$cmd --no-index -- $(anchor_split_sq "$files_left") $(anchor_split_sq "$files_right")"
+    cmd="$cmd --no-index -- $(anchor_host_sq "$files_left") $(anchor_host_sq "$files_right")"
   else
     # --dir-diff opens the whole changeset once instead of prompting file by
     # file, and symlinks the working-tree side so an edit reaches the real file.
-    cmd="$cmd --dir-diff $(anchor_split_sq "$diff_range")"
+    cmd="$cmd --dir-diff $(anchor_host_sq "$diff_range")"
   fi
-  cmd="$cmd >$(anchor_split_sq "$out_file") 2>$(anchor_split_sq "$err_file")"
+  cmd="$cmd >$(anchor_host_sq "$out_file") 2>$(anchor_host_sq "$err_file")"
   printf '%s' "$cmd"
 }
 

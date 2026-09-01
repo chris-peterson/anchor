@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Functional test for scripts/lib/split-run.sh (anchor_split_launch_script).
+# Functional test for scripts/lib/review-host.sh (anchor_host_launch_script).
 #
 # The pane iTerm2 opens runs this generated script and nothing else, so what the
 # script carries is the whole of the pane's context. The launch is AppleScript
@@ -13,18 +13,18 @@
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=../scripts/lib/split-run.sh
-source "$here/../scripts/lib/split-run.sh"
+# shellcheck source=../scripts/lib/review-host.sh
+source "$here/../scripts/lib/review-host.sh"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok()   { echo "ok - $*"; }
 
-work="$(mktemp -d "${TMPDIR:-/tmp}/anchor-split-run-test.XXXXXX")"
+work="$(mktemp -d "${TMPDIR:-/tmp}/anchor-review-host-test.XXXXXX")"
 cleanup() { rm -rf "$work"; }
 trap cleanup EXIT
 
 # A space and a quote in the directory: both survive only through the quoting
-# anchor_split_sq does, and a pane that loses either lands somewhere else.
+# anchor_host_sq does, and a pane that loses either lands somewhere else.
 target="$work/re po's repo"
 mkdir -p "$target"
 
@@ -36,7 +36,7 @@ run_launch() {
 # --- the pane runs in the directory the command was resolved against
 launch="$work/launch-cwd.sh"
 sentinel="$work/rc-cwd"
-( cd "$target" && anchor_split_launch_script 'pwd -P > ../seen-cwd' > "$launch" )
+( cd "$target" && anchor_host_launch_script 'pwd -P > ../seen-cwd' > "$launch" )
 run_launch "$launch" "$sentinel"
 [ "$(cat "$work/seen-cwd")" = "$(cd "$target" && pwd -P)" ] || fail "pane ran in $(cat "$work/seen-cwd")"
 ok "the pane runs in the caller's directory, quoting and all"
@@ -46,7 +46,7 @@ ok "the pane runs in the caller's directory, quoting and all"
 # verdict, so a status the pane drops is a review that came back blank.
 launch="$work/launch-rc.sh"
 sentinel="$work/rc-status"
-( cd "$target" && anchor_split_launch_script '( exit 10 )' > "$launch" )
+( cd "$target" && anchor_host_launch_script '( exit 10 )' > "$launch" )
 run_launch "$launch" "$sentinel"
 [ "$(cat "$sentinel")" = 10 ] || fail "sentinel holds $(cat "$sentinel"), want 10"
 ok "the command's own status reaches the sentinel"
@@ -58,7 +58,7 @@ sentinel="$work/rc-env"
   cd "$target"
   # $PATH and $EDITOR belong to the pane's shell, not to this one.
   # shellcheck disable=SC2016
-  PATH="$work/bin:$PATH" EDITOR='my editor --wait' anchor_split_launch_script \
+  PATH="$work/bin:$PATH" EDITOR='my editor --wait' anchor_host_launch_script \
     'printf "%s\n%s\n" "$PATH" "$EDITOR" > ../seen-env' > "$launch"
 )
 run_launch "$launch" "$sentinel"
@@ -69,8 +69,29 @@ ok "the caller's PATH and EDITOR reach the pane"
 # --- an unset variable is left unset rather than exported empty, so the pane
 # falls back the way the caller would rather than to an empty editor
 launch="$work/launch-unset.sh"
-( cd "$target" && env -u VISUAL bash -c "source '$here/../scripts/lib/split-run.sh'; anchor_split_launch_script ':'" > "$launch" )
+( cd "$target" && env -u VISUAL bash -c "source '$here/../scripts/lib/review-host.sh'; anchor_host_launch_script ':'" > "$launch" )
 if grep -q 'VISUAL' "$launch"; then fail "an unset VISUAL was exported anyway"; fi
 ok "an unset variable is not exported"
 
-echo "PASS: split-run"
+# --- the dispatcher reaches the selected host's own runner. Driven through
+# `gui`, the one host that needs no terminal to put up: it is what a blocking
+# editor selects, and its runner evaluates the command string directly, so a
+# marker the command leaves behind is proof the dispatch landed.
+marker="$work/dispatched"
+rc=0
+( TMUX='' ANCHOR_HOST_RUNNER='' ITERM_SESSION_ID='' \
+  anchor_host_run "touch '$marker'" edit 'fake-editor --wait' ) || rc=$?
+[ "$rc" -eq 0 ]     || fail "the gui host should return the command's own status, got $rc"
+[ -f "$marker" ]    || fail "the dispatcher never reached the host's runner"
+ok "the dispatcher runs the command in the host it selected"
+
+# --- and reports its own status where no host can be reached, rather than
+# running the command somewhere it did not choose.
+rc=0
+( TMUX='' ANCHOR_HOST_RUNNER='' ITERM_SESSION_ID='' \
+  anchor_host_run "touch '$work/never'" diff ) </dev/null || rc=$?
+[ "$rc" -eq "$anchor_host_rc_no_pane" ] || fail "no host should report no-pane, got $rc"
+[ ! -f "$work/never" ]                   || fail "the command ran with no host to run it in"
+ok "with nowhere to open, the dispatcher runs nothing and says so"
+
+echo "PASS: review-host"
