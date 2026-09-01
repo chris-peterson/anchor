@@ -248,13 +248,24 @@ glab_mr_json() {
 JSON
 }
 
+# The approved description --open publishes. The CR is opened last, so every
+# create case below drives that mode rather than plain recon.
+approved_body="$work/approved.md"
+printf '## Context\n\napproved prose\n' > "$approved_body"
+open_cr() { bash "$prepare_review_sh" --repo "$1" --open --title 'A change' --body-file "$approved_body"; }
+
 # --- GitHub, repo setting off: the opened PR carries no preference -----------
 repo="$(make_repo github.com gh-off)"
 : > "$CR_JSON"
 gh_pr_json "$(git -C "$repo" rev-parse HEAD)"
 export DELETE_ON_MERGE=false
-out=$(bash "$prepare_review_sh" --repo "$repo")
-[[ "$(key "$out" CR_CREATED)" == 1 ]] || fail "expected the script to open the PR; got: $out"
+: > "$CALL_LOG"
+out=$(open_cr "$repo")
+[[ "$(key "$out" CR_CREATED)" == 1 ]] || fail "expected --open to open the PR; got: $out"
+grep -q 'gh pr create .*--body-file' "$CALL_LOG" \
+  || fail "the create must carry the approved body: $(cat "$CALL_LOG")"
+grep -q 'gh pr create .*--title A change' "$CALL_LOG" \
+  || fail "the create must carry the drafted title: $(cat "$CALL_LOG")"
 [[ "$(key "$out" DELETE_BRANCH_ON_MERGE)" == false ]] \
   || fail "expected DELETE_BRANCH_ON_MERGE=false with the repo setting off; got: $(key "$out" DELETE_BRANCH_ON_MERGE)"
 ok "GitHub with deleteBranchOnMerge off reports false"
@@ -264,7 +275,7 @@ repo="$(make_repo github.com gh-on)"
 : > "$CR_JSON"
 gh_pr_json "$(git -C "$repo" rev-parse HEAD)"
 export DELETE_ON_MERGE=true
-out=$(bash "$prepare_review_sh" --repo "$repo")
+out=$(open_cr "$repo")
 [[ "$(key "$out" DELETE_BRANCH_ON_MERGE)" == true ]] \
   || fail "expected true with the repo setting on; got: $(key "$out" DELETE_BRANCH_ON_MERGE)"
 ok "GitHub with deleteBranchOnMerge on reports true"
@@ -274,7 +285,7 @@ repo="$(make_repo github.com gh-err)"
 : > "$CR_JSON"
 gh_pr_json "$(git -C "$repo" rev-parse HEAD)"
 export DELETE_ON_MERGE=error
-out=$(bash "$prepare_review_sh" --repo "$repo")
+out=$(open_cr "$repo")
 [[ "$(key "$out" DELETE_BRANCH_ON_MERGE)" == unknown ]] \
   || fail "expected unknown when the setting read fails; got: $(key "$out" DELETE_BRANCH_ON_MERGE)"
 ok "GitHub reports unknown when the repo-setting read fails"
@@ -283,14 +294,16 @@ ok "GitHub reports unknown when the repo-setting read fails"
 # A field GitHub answers as null (a permission that hides it, a schema change) is
 # neither state. The whole KEY=value block has to survive it — the skill acts on
 # the block, so a script that exits early takes the rest of the recon with it.
+# Read here on the recon path, against a pre-existing PR, because that is the
+# block with something left after the key to truncate.
 repo="$(make_repo github.com gh-null)"
-: > "$CR_JSON"
 gh_pr_json "$(git -C "$repo" rev-parse HEAD)"
+cp "$CR_AFTER_CREATE" "$CR_JSON"
 export DELETE_ON_MERGE=null
 out=$(bash "$prepare_review_sh" --repo "$repo")
 [[ "$(key "$out" DELETE_BRANCH_ON_MERGE)" == unknown ]] \
   || fail "expected unknown for a null setting; got: $(key "$out" DELETE_BRANCH_ON_MERGE)"
-[[ -n "$(key "$out" FILE_LINKS)" ]] || fail "block truncated after the null setting: $out"
+[[ -n "$(key "$out" ANCHOR_CONFIG)" ]] || fail "block truncated after the null setting: $out"
 ok "GitHub reports unknown for a null setting without truncating the block"
 
 # --- GitLab: the create call still sets the per-MR flag ----------------------
@@ -298,10 +311,15 @@ repo="$(make_repo gitlab.com gl-create)"
 : > "$CR_JSON"
 : > "$CALL_LOG"
 glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false
-out=$(bash "$prepare_review_sh" --repo "$repo")
-[[ "$(key "$out" CR_CREATED)" == 1 ]] || fail "expected the script to open the MR; got: $out"
-grep -q 'glab mr create .*--remove-source-branch' "$CALL_LOG" \
+out=$(open_cr "$repo")
+[[ "$(key "$out" CR_CREATED)" == 1 ]] || fail "expected --open to open the MR; got: $out"
+# The logged create spans lines because --description carries the body verbatim,
+# so each flag is matched on its own rather than against one line.
+grep -q 'glab mr create' "$CALL_LOG" || fail "no create call: $(cat "$CALL_LOG")"
+grep -q -- '--remove-source-branch' "$CALL_LOG" \
   || fail "create call dropped --remove-source-branch: $(cat "$CALL_LOG")"
+grep -q 'approved prose' "$CALL_LOG" \
+  || fail "the create must carry the approved body: $(cat "$CALL_LOG")"
 [[ "$(key "$out" DELETE_BRANCH_ON_MERGE)" == true ]] \
   || fail "expected true for an MR created with --remove-source-branch; got: $(key "$out" DELETE_BRANCH_ON_MERGE)"
 ok "GitLab sets --remove-source-branch at create and reports true"
@@ -413,7 +431,7 @@ repo="$(template_repo gitlab.com tpl-gl-403)"
 out=$(bash "$prepare_review_sh" --repo "$repo")
 [[ "$(key "$out" TEMPLATE_SOURCE)" == none ]] \
   || fail "expected none when the lookup is gated; got: $(key "$out" TEMPLATE_SOURCE)"
-[[ -n "$(key "$out" FILE_LINKS)" ]] || fail "block truncated by the gated lookup: $out"
+[[ -n "$(key "$out" ANCHOR_CONFIG)" ]] || fail "block truncated by the gated lookup: $out"
 ok "a gated template lookup falls through without truncating the block"
 
 # --- anchor.crTemplateRepo is the backstop when nothing else answers ---------
@@ -467,46 +485,43 @@ ok "an empty hierarchy leaves the template unset"
 # --- CR state: only an open CR is the branch's target ------------------------
 #
 # A branch name that has been used before still resolves to its old CR on both
-# forges. Adopting a merged one sets CR_PREEXISTING=1 and skips the auto-open, so
-# the flow reaches the description step holding a CR that cannot receive it. What
-# kept that from landing a description on a merged CR was incidental — the
-# head-mismatch check firing because the old CR's head differs from local HEAD —
-# and on a reused branch whose old head happened to match, the write would go
-# through.
+# forges. Adopting a merged one sets CR_PREEXISTING=1, so the flow reaches the
+# description step holding a CR that cannot receive it. What kept that from
+# landing a description on a merged CR was incidental — the head-mismatch check
+# firing because the old CR's head differs from local HEAD — and on a reused
+# branch whose old head happened to match, the write would go through.
 
-# The branch lookup ignores a merged CR and opens a fresh draft; the one it
-# passed over is reported so the new draft is not unexplained.
+# The branch lookup ignores a merged CR and reports CR_PENDING; the one it passed
+# over is named so the number the later --open returns is not unexplained.
 for state in MERGED CLOSED; do
   repo="$(make_repo github.com "gh-state-${state}")"
   gh_pr_json "$(git -C "$repo" rev-parse HEAD)" "$state"
   cp "$CR_AFTER_CREATE" "$CR_JSON"          # the branch lookup finds this one
-  gh_pr_json "$(git -C "$repo" rev-parse HEAD)"   # what the create call installs
   export DELETE_ON_MERGE=true
   out=$(bash "$prepare_review_sh" --repo "$repo")
   [[ "$(key "$out" CR_PREEXISTING)" == 0 ]] \
     || fail "a $state PR must not be adopted; got CR_PREEXISTING=$(key "$out" CR_PREEXISTING)"
-  [[ "$(key "$out" CR_CREATED)" == 1 ]] \
-    || fail "expected a fresh draft over a $state PR; got: $out"
+  [[ "$(key "$out" CR_PENDING)" == 1 ]] \
+    || fail "expected a fresh draft to be pending over a $state PR; got: $out"
   [[ "$(key "$out" PRIOR_CR_STATE)" == "$state" ]] \
     || fail "expected PRIOR_CR_STATE=$state; got $(key "$out" PRIOR_CR_STATE)"
   [[ "$(key "$out" PRIOR_CR_IID)" == 7 ]] \
     || fail "expected the passed-over PR's number; got $(key "$out" PRIOR_CR_IID)"
-  ok "GitHub ignores a $state PR on the branch and opens a fresh draft"
+  ok "GitHub ignores a $state PR on the branch and reports a pending draft"
 done
 
 for state in merged closed locked; do
   repo="$(make_repo gitlab.com "gl-state-${state}")"
   glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false "$state"
   cp "$CR_AFTER_CREATE" "$CR_JSON"
-  glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false
   out=$(bash "$prepare_review_sh" --repo "$repo")
   [[ "$(key "$out" CR_PREEXISTING)" == 0 ]] \
     || fail "a $state MR must not be adopted; got CR_PREEXISTING=$(key "$out" CR_PREEXISTING)"
-  [[ "$(key "$out" CR_CREATED)" == 1 ]] \
-    || fail "expected a fresh draft over a $state MR; got: $out"
+  [[ "$(key "$out" CR_PENDING)" == 1 ]] \
+    || fail "expected a fresh draft to be pending over a $state MR; got: $out"
   [[ "$(key "$out" PRIOR_CR_STATE)" == "$state" ]] \
     || fail "expected PRIOR_CR_STATE=$state; got $(key "$out" PRIOR_CR_STATE)"
-  ok "GitLab ignores a $state MR on the branch and opens a fresh draft"
+  ok "GitLab ignores a $state MR on the branch and reports a pending draft"
 done
 
 # An open CR on the branch resolves exactly as before, and reports no prior CR.
@@ -517,7 +532,7 @@ export DELETE_ON_MERGE=true
 out=$(bash "$prepare_review_sh" --repo "$repo")
 [[ "$(key "$out" CR_PREEXISTING)" == 1 ]] \
   || fail "an OPEN PR should still be adopted; got: $out"
-[[ "$(key "$out" CR_CREATED)" == 0 ]] || fail "an open PR needs no fresh draft; got: $out"
+[[ "$(key "$out" CR_PENDING)" == 0 ]] || fail "an open PR needs no fresh draft; got: $out"
 [[ -z "$(key "$out" PRIOR_CR_STATE)" && -z "$(key "$out" PRIOR_CR_IID)" ]] \
   || fail "an open PR should report no prior CR; got $(key "$out" PRIOR_CR_STATE)"
 ok "an open PR on the branch resolves unchanged"
@@ -530,6 +545,44 @@ out=$(bash "$prepare_review_sh" --repo "$repo")
   || fail "an opened MR should still be adopted; got: $out"
 ok "an opened MR on the branch resolves unchanged"
 
+# --- --open is the write half, and it refuses to duplicate -------------------
+#
+# The description is approved before anything is published, so --open runs at the
+# end of a flow that started with recon. A CR opened in between (a teammate, a
+# second window) would make it a second CR carrying the same branch.
+repo="$(make_repo github.com gh-open-dup)"
+gh_pr_json "$(git -C "$repo" rev-parse HEAD)"
+cp "$CR_AFTER_CREATE" "$CR_JSON"
+export DELETE_ON_MERGE=true
+set +e
+out=$(bash "$prepare_review_sh" --repo "$repo" --open --title T --body-file "$approved_body")
+status=$?
+set -e
+[[ "$status" -ne 0 ]] || fail "--open over an open CR should fail; got: $out"
+grep -q '^CR_CREATE_ERROR=.*already open' <<<"$out" \
+  || fail "expected the already-open reason; got: $out"
+ok "--open refuses when a CR is already open on the branch"
+
+# --no-open is the URL-free path: nothing is queued, so nothing is published.
+repo="$(make_repo github.com gh-no-open)"
+: > "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo" --no-open)
+[[ "$(key "$out" CR_PENDING)" == 0 && -z "$(key "$out" CR_URL)" ]] \
+  || fail "--no-open should queue no CR; got: $out"
+ok "--no-open reports no pending CR"
+
+# The Step 4 review takes a pair of paths, and a pending CR holds no description
+# to be the left-hand one. An empty string there is a usage error the review
+# never opens past, so the baseline is an empty file instead.
+repo="$(make_repo github.com gh-baseline)"
+: > "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo")
+baseline="$(key "$out" CURRENT_DESC_PATH)"
+[[ -n "$baseline" ]] || fail "CURRENT_DESC_PATH must name a path with no CR open; got: $out"
+[[ -f "$baseline" ]] || fail "CURRENT_DESC_PATH must exist: $baseline"
+[[ ! -s "$baseline" ]] || fail "the baseline should be empty with no CR: $baseline"
+ok "a pending CR still gets an empty baseline file, not an empty path"
+
 # --cr names one specific CR, so it resolves whatever its state — the reason the
 # check is scoped to the branch-inferred path rather than applied in both.
 repo="$(make_repo github.com gh-state-explicit)"
@@ -540,7 +593,7 @@ out=$(bash "$prepare_review_sh" --repo "$repo" --cr 7)
 [[ "$(key "$out" CR_PREEXISTING)" == 1 ]] \
   || fail "--cr must resolve a merged PR; got CR_PREEXISTING=$(key "$out" CR_PREEXISTING)"
 [[ "$(key "$out" CR_IID)" == 7 ]] || fail "--cr should resolve PR 7; got $(key "$out" CR_IID)"
-[[ "$(key "$out" CR_CREATED)" == 0 ]] || fail "--cr must not open a second CR; got: $out"
+[[ "$(key "$out" CR_PENDING)" == 0 ]] || fail "--cr must not queue a second CR; got: $out"
 ok "--cr resolves a merged PR regardless of state"
 
 repo="$(make_repo gitlab.com gl-state-explicit)"
@@ -571,7 +624,7 @@ set -e
   || fail "expected NOTHING_TO_REVIEW=1; got: $out"
 [[ "$(key "$out" ON_DEFAULT_BRANCH)" == 1 && "$(key "$out" AHEAD)" == 0 ]] \
   || fail "expected the diagnosis keys alongside it; got: $out"
-[[ -n "$(key "$out" FILE_LINKS)" ]] \
+[[ -n "$(key "$out" ANCHOR_CONFIG)" ]] \
   || fail "expected the whole block before the exit; got: $out"
 grep -q 'nothing to review' "$work/dead-end.err" \
   || fail "expected the reason on stderr; got: $(cat "$work/dead-end.err")"

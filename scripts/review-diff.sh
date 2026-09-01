@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Dispatcher for anchor's visual diff review. Resolves the diff range and the
-# header from the requested mode, selects the review backend, and delegates the
-# launch-and-normalize to that backend's adapter, which prints the result on
+# header from the requested mode, selects the review tool, and delegates the
+# launch-and-normalize to that tool's adapter, which prints the result on
 # stdout so the caller acts on a single command's output:
 #   REVIEW_VERDICT=<approved|changes-requested|incomplete|no-verdict>
 #   REVIEW_OUTPUT=<normalized json>   (the DIFF contract; see SPEC.md "DIFF")
@@ -9,7 +9,7 @@
 # The mode follows the subject: `edit` where the review is one file with no prior
 # version, `diff` everywhere else. Adapters live in scripts/review/, one per mode,
 # and each defines emit_review; a diff tool's own half lives under
-# scripts/review/backends/. Range/header resolution is mode-agnostic and stays
+# scripts/review/tools/. Range/header resolution is mode-agnostic and stays
 # here.
 #
 # Three review modes, each named for what it shows:
@@ -60,10 +60,10 @@ set -euo pipefail
 #   mode     the shape the review takes — `edit` or `diff`. The subject decides
 #            it (subject_default_mode); there is no key, because the shape that
 #            fits is a property of what is being reviewed rather than a taste.
-#   backend  the tool that runs that mode, and the half that *is* a taste:
-#            `anchor.edit.backend` names the editor (else git's chain),
-#            `anchor.diff.backend` the viewer (else git's own `diff.tool`, else
-#            revdiff). A mode can grow more backends without touching the mode
+#   tool  the tool that runs that mode, and the half that *is* a taste:
+#            `anchor.edit.tool` names the editor (else git's chain),
+#            `anchor.diff.tool` the viewer (else git's own `diff.tool`, else
+#            revdiff). A mode can grow more tools without touching the mode
 #            question.
 #
 #   --skill <name>  tells an adapter which artifact is under review. It does not
@@ -71,7 +71,7 @@ set -euo pipefail
 #   --mode <edit|diff>  run this mode rather than the one the subject picks —
 #     what a caller passes back after probing, so the review opens in the shape
 #     the probe said was reachable.
-#   --backend <name>  run this tool within the mode, ignoring the config key.
+#   --tool <name>  run this tool within the mode, ignoring the config key.
 #   --probe  report how a review would resolve, and exit without launching
 #     anything — what a skill asks before deciding whether a visual review is
 #     available at all. Pass it the same mode flag and paths as the launch: the
@@ -81,10 +81,10 @@ set -euo pipefail
 #       REVIEW_MODE=edit|diff              what to pass to --mode
 #       REVIEW_MODE_SOURCE=override|config|subject
 #       REVIEW_MODE_CONFIGURED=<mode>      only when the run uses another
-#       REVIEW_BACKEND=<command>           the tool that will open — an editor
+#       REVIEW_TOOL=<command>           the tool that will open — an editor
 #         in `edit` mode, a viewer in `diff`
-#       REVIEW_BACKEND_SOURCE=override|config|default
-#       REVIEW_BACKEND_CONFIGURED=<name>   only when a named viewer was replaced
+#       REVIEW_TOOL_SOURCE=override|config|default
+#       REVIEW_TOOL_CONFIGURED=<name>   only when a named viewer was replaced
 #       REVIEW_AVAILABLE=0|1               0 = this mode cannot open here
 #         The SOURCE pair says whether what is about to open is something the
 #         user chose, so a launch that coalesced onto a default can name the key
@@ -105,7 +105,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/stage-paths.sh"
 CTX_REPO=""
 review_skill=""
 mode_override=""
-backend_override=""
+tool_override=""
 probe_only=0
 stage_paths=()
 # One pass over the whole argv, so a caller that writes `--repo` after the mode
@@ -121,7 +121,7 @@ while [[ $# -gt 0 ]]; do
     --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
     --skill)    review_skill="${2:?--skill needs a name}"; shift 2 ;;
     --mode)     mode_override="${2:?--mode needs edit or diff}"; shift 2 ;;
-    --backend)  backend_override="${2:?--backend needs a name}"; shift 2 ;;
+    --tool)  tool_override="${2:?--tool needs a name}"; shift 2 ;;
     --path)     stage_paths+=("${2:?--path needs a path}"); shift 2 ;;
     --probe)    probe_only=1; shift ;;
     --title|--detail|--message-file)
@@ -168,7 +168,7 @@ report_superseded_key() {
   [[ -z "$review_skill" ]] || legacy=$(git config "anchor.${review_skill}.reviewBackend" 2>/dev/null || true)
   [[ -n "$legacy" ]] || legacy=$(git config anchor.reviewBackend 2>/dev/null || true)
   [[ -n "$legacy" ]] || return 0
-  echo "review-diff.sh: anchor.reviewBackend ('$legacy') no longer does anything. The review's shape now follows what it is reviewing, and the tool is anchor.edit.backend (an editor) or anchor.diff.backend (a viewer)." >&2
+  echo "review-diff.sh: anchor.reviewBackend ('$legacy') no longer does anything. The review's shape now follows what it is reviewing, and the tool is anchor.edit.tool (an editor) or anchor.diff.tool (a viewer)." >&2
 }
 
 # Resolution answers are set rather than printed: a `$(...)` call would run the
@@ -177,8 +177,8 @@ report_superseded_key() {
 # honored even when it cannot open, where one anchor picked is not.
 resolved_mode=""
 resolved_mode_source=""
-resolved_backend=""
-resolved_backend_source=""
+resolved_tool=""
+resolved_tool_source=""
 
 # The mode has no key. Which shape fits is a property of the review — one file
 # with nothing to compare against has no diff to show — so reading it off the
@@ -199,28 +199,28 @@ resolve_mode() {
 # Which tool runs the resolved mode — the half that is a preference, so each mode
 # has one key for it. `edit` falls through to git's own editor chain and anchor's
 # rungs past it (scripts/lib/review-editor.sh); `diff` falls through to revdiff.
-resolve_backend() {
-  local b="$backend_override"
+resolve_tool() {
+  local b="$tool_override"
   if [[ "$resolved_mode" == "edit" ]]; then
     if [[ -n "$b" ]]; then
-      resolved_backend="$b"; resolved_backend_source=override; return
+      resolved_tool="$b"; resolved_tool_source=override; return
     fi
-    resolved_backend=$(anchor_editor_resolve)
-    resolved_backend_source=$(anchor_editor_source)
+    resolved_tool=$(anchor_editor_resolve)
+    resolved_tool_source=$(anchor_editor_source)
     return
   fi
   local src=override
   if [[ -z "$b" ]]; then
     src=config
-    b=$(git config anchor.diff.backend 2>/dev/null || true)
+    b=$(git config anchor.diff.tool 2>/dev/null || true)
     # The mirror of `edit` falling through to git's editor chain: a `diff.tool`
     # the user set is a tool they already chose for reading a diff, and anchor's
     # own preference for an annotating viewer is not a reason to override them.
     [[ -n "$b" ]] || b=$(anchor_difftool_configured)
   fi
   if [[ -z "$b" ]]; then src=default; b=revdiff; fi
-  resolved_backend="$b"
-  resolved_backend_source="$src"
+  resolved_tool="$b"
+  resolved_tool_source="$src"
 }
 
 # Can this mode open here at all? `edit` needs an editor *and* somewhere to draw
@@ -230,8 +230,8 @@ mode_available() {
     edit) anchor_editor_available ;;
     # A viewer answers on PATH; a difftool answers to git, which can launch a
     # name that is no binary of its own.
-    *)    command -v "$resolved_backend" >/dev/null 2>&1 \
-            || anchor_difftool_known "$resolved_backend" ;;
+    *)    command -v "$resolved_tool" >/dev/null 2>&1 \
+            || anchor_difftool_known "$resolved_tool" ;;
   esac
 }
 
@@ -256,7 +256,7 @@ usable_mode() {
 # not installed coalesces onto the default rather than dead-ending, and nothing
 # installed leaves the name as resolved so the probe's REVIEW_AVAILABLE=0 still
 # reports what was preferred.
-usable_backend() {
+usable_tool() {
   local preferred="$1"
   [[ "$resolved_mode" == "diff" ]] || { printf '%s' "$preferred"; return; }
   if command -v "$preferred" >/dev/null 2>&1 || anchor_difftool_known "$preferred"; then
@@ -266,40 +266,43 @@ usable_backend() {
   printf '%s' "$preferred"
 }
 
-# Both axes, resolved together and in order — the backend question is asked of a
+# Both axes, resolved together and in order — the tool question is asked of a
 # settled mode, and a mode that gave way re-asks it.
 resolve_review() {
   resolve_mode
-  resolve_backend
+  resolve_tool
   local m
   m=$(usable_mode "$resolved_mode")
   if [[ "$m" != "$resolved_mode" ]]; then
     preferred_mode="$resolved_mode"
     resolved_mode="$m"
-    resolved_backend=""; resolved_backend_source=""
-    resolve_backend
+    resolved_tool=""; resolved_tool_source=""
+    resolve_tool
   fi
-  preferred_backend="$resolved_backend"
-  resolved_backend=$(usable_backend "$resolved_backend")
+  preferred_tool="$resolved_tool"
+  resolved_tool=$(usable_tool "$resolved_tool")
 }
 preferred_mode=""
-preferred_backend=""
+preferred_tool=""
 
 if [[ "$probe_only" == "1" ]]; then
   report_superseded_key
   resolve_review
   edit_available=0
   anchor_editor_available && edit_available=1
+  # The two answers first, then where each came from, then what the preference
+  # named where the run would use something else. Grouping by axis put a source
+  # between the mode and the tool, which is the pair a reader is after.
   echo "REVIEW_MODE=$resolved_mode"
+  echo "REVIEW_TOOL=$resolved_tool"
   echo "REVIEW_MODE_SOURCE=$resolved_mode_source"
-  # What the preference named, reported only when the run would use something
-  # else — a mode the subject picked with nowhere to open, or a key that named an
-  # absent viewer. Either way the caller has a name to say out loud, so what
-  # opens isn't discovered as a surprise window.
+  echo "REVIEW_TOOL_SOURCE=$resolved_tool_source"
+  # Reported only when the run would use something else — a mode the subject
+  # picked with nowhere to open, or a key that named an absent viewer. Either way
+  # the caller has a name to say out loud, so what opens isn't discovered as a
+  # surprise window.
   [[ -z "$preferred_mode" ]] || echo "REVIEW_MODE_CONFIGURED=$preferred_mode"
-  echo "REVIEW_BACKEND=$resolved_backend"
-  echo "REVIEW_BACKEND_SOURCE=$resolved_backend_source"
-  [[ "$resolved_backend" == "$preferred_backend" ]] || echo "REVIEW_BACKEND_CONFIGURED=$preferred_backend"
+  [[ "$resolved_tool" == "$preferred_tool" ]] || echo "REVIEW_TOOL_CONFIGURED=$preferred_tool"
   if mode_available "$resolved_mode"; then
     echo "REVIEW_AVAILABLE=1"
   else
@@ -459,7 +462,7 @@ else
     base=$(git log -1 --format='%h %s' HEAD)
     if [[ -n "$message_file" ]]; then
       # Seed the drafted message: subject is the review's headline, the body row
-      # is the message prose the backend renders, so message + diff are reviewed
+      # is the message prose the tool renders, so message + diff are reviewed
       # together.
       review_title=$(head -1 "$message_file")
       msg_body=$(tail -n +3 "$message_file")
@@ -510,10 +513,10 @@ fi
 report_superseded_key
 resolve_review
 review_mode="$resolved_mode"
-review_backend="$resolved_backend"
+review_tool="$resolved_tool"
 
 # One adapter per mode. Within `diff`, the tool's own half lives in
-# review/backends/<tool>.sh, which that adapter sources — so a second viewer is a
+# review/tools/<tool>.sh, which that adapter sources — so a second viewer is a
 # file beside revdiff's rather than a branch here.
 adapter="$(dirname "${BASH_SOURCE[0]}")/review/${review_mode}.sh"
 if [[ ! -r "$adapter" ]]; then
@@ -522,7 +525,7 @@ if [[ ! -r "$adapter" ]]; then
 fi
 # A machine with no viewer installed keeps the resolved adapter, whose report
 # names the tool that is missing. There is nothing below it to degrade into —
-# git's difftool is not a backend (DIFF-18) because a changeset shown without a
+# git's difftool is not a tool (DIFF-18) because a changeset shown without a
 # verdict invites "you saw it, approve?", which is the rubber stamp the contract
 # exists to prevent. The skill's fallback ladder (guides/review-fallback.md) is
 # the rung below.
@@ -534,8 +537,8 @@ fi
 # checkout (DIFF-21).
 if [[ "$review_subject" == "range" ]] && git diff --quiet "$diff_range" -- 2>/dev/null; then
   echo "review-diff.sh: $diff_range is empty in $(git rev-parse --show-toplevel) (target resolved via ${RESOLVED_VIA:-cwd}) — nothing to review" >&2
-  jq -cn --arg m "$review_mode" --arg b "$review_backend" --arg r "$diff_range" '{
-    mode:$m, backend:$b, verdict:"no-verdict",
+  jq -cn --arg m "$review_mode" --arg b "$review_tool" --arg r "$diff_range" '{
+    mode:$m, tool:$b, verdict:"no-verdict",
     reviewCompleteness:null, reviewer:null, comments:[], editedFields:[],
     capabilities:{producesVerdict:false, perHunkReview:false,
                   editableCommitMessage:false, editableDescription:false,
@@ -547,7 +550,7 @@ fi
 
 # The review-request contract the sourced adapter reads. Exported so the
 # adapter (sourced below) counts as a consumer — it runs in this same shell.
-export review_subject review_mode review_backend
+export review_subject review_mode review_tool
 export diff_range files_left files_right review_title review_details_json
 export message_file review_skill
 

@@ -265,7 +265,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill release --probe \
 ```
 
 Then print the manifest the launch carries — a table naming the repo, the version
-being released, the range the notes cover, the backend from that probe, and the
+being released, the range the notes cover, the tool from that probe, and the
 sections the draft holds. The shape is in
 `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "show what is going under
 review". Two facts from the probe belong in it:
@@ -276,13 +276,13 @@ review". Two facts from the probe belong in it:
   having opened, so name it.
 - **`REVIEW_MODE_CONFIGURED` present** — the run is opening a different shape
   than the preference named. Name that too.
-- **`REVIEW_MODE_SOURCE=subject` / `REVIEW_BACKEND_SOURCE=default`** — anchor
+- **`REVIEW_MODE_SOURCE=subject` / `REVIEW_TOOL_SOURCE=default`** — anchor
   picked that half rather than the user. Add the configuration hint from
   `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "when anchor picked the
-  tool"; `REVIEW_BACKEND` names the tool about to open.
+  tool"; `REVIEW_TOOL` names the tool about to open.
 
 Then open the notes against `RELEASE_NOTES_BASELINE` (the empty left-hand side
-the recon block created) through the **dispatcher** — not the backend directly.
+the recon block created) through the **dispatcher** — not the tool directly.
 It blocks until closed, so launch it as a **background** Bash call and read its
 stdout with the **BashOutput tool**; `tail` / `$(...)` trips the
 command-substitution gate:

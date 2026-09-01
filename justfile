@@ -21,7 +21,7 @@ docs:
 
 # lint the shell scripts (mirrors the lint.yml CI job)
 lint:
-    shellcheck hooks/*.sh scripts/*.sh scripts/review/*.sh scripts/review/backends/*.sh tests/*.sh
+    shellcheck hooks/*.sh scripts/*.sh scripts/review/*.sh scripts/review/tools/*.sh tests/*.sh
 
 # run every test suite that declares this platform (test.yml runs the same script)
 test:

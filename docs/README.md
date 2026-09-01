@@ -81,7 +81,7 @@ The skills run with nothing else installed: with no diff viewer on the machine,
 the review is walked with you in chat. Each of these adds something when present
 and is skipped when absent.
 
-- **[revdiff](https://revdiff.com)** — the backend the skills reach for when
+- **[revdiff](https://revdiff.com)** — the tool the skills reach for when
   it's installed and you haven't said otherwise: a terminal-native diff reviewer
   (git, hg, and jj) that returns a normalized verdict and marks which diff side
   each annotation sits on. It carries no commit-message round-trip, so the skill

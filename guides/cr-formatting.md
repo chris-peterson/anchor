@@ -53,20 +53,45 @@ After the visualization choice, lean into markdown for the surrounding prose:
 ## Deep-link construction (Review guide)
 
 Always deep-link to the actual line, not just the file — reviewers should be one
-click away from the change you're pointing them at. **`FILE_LINKS` from
-`prepare-review`'s Step 1 block is the whole prefix**, per changed file: the CR
-URL, the view path the anchor actually scrolls on, and the path-hash the forge
-renders (`sha1` on GitLab, `sha256` on GitHub —
-`${CLAUDE_PLUGIN_ROOT}/scripts/deep-links.sh` computes it). Use the bare prefix
-for a file-level link; append the line part for a line link, which is all that
-differs by forge:
+click away from the change you're pointing them at. **Write a placeholder naming
+what you're pointing at, not a URL.** The destination is the path plus a
+distinctive token from the target line:
 
-- **GitLab:** append `_<old-line>_<new-line>`; line 82 on both sides gives `<prefix>_82_82`. For pure additions, use the new line number for both — the link still resolves.
-- **GitHub:** append `R<new-line>` for the right side, `L<old-line>` for the left; line 665 on the right gives `<prefix>R665`.
+```markdown
+- [`scripts/deep-links.sh`](anchor:scripts/deep-links.sh#--resolve) — the new mode
+- [`guides/cr-formatting.md`](<anchor:guides/cr-formatting.md#Deep-link construction>) — the convention
+- [`tests/deep-links.test.sh`](anchor:tests/deep-links.test.sh) — coverage
+```
 
-Don't hash a path yourself and don't hand-assemble the prefix. A 64-char hex
-anchor spliced into prose is where these links break, and the hash you'd compute
-is the one `FILE_LINKS` already handed you.
+Everything after the first `#` is the token, matched as a literal substring
+against the changed lines of the diff. Drop the `#` entirely for a file-level
+link. **The angle-bracket form is what carries a token with spaces or
+parentheses** — plain markdown, and the only form that survives a heading as a
+token.
+
+`${CLAUDE_PLUGIN_ROOT}/scripts/deep-links.sh` turns each placeholder into the
+finished URL — the view path the anchor scrolls on, the path-hash the forge
+renders (`sha1` on GitLab, `sha256` on GitHub), and the line part
+(`_<old>_<new>` on GitLab, `R<new>` on GitHub). `--check` resolves the tokens
+before the review opens; `--expand` writes the URLs in once the CR exists.
+
+**Never write a line number, and never assemble an anchor.** A hand-read number
+still resolves — the forge scrolls to *a* line, just not the one the bullet
+describes — and nothing about the rendered link says otherwise.
+
+Three things the resolver will send back, each an authoring fix rather than a
+tooling failure:
+
+| Report | What to do |
+|--------|------------|
+| `ambiguous` | Several changed lines carry the token. The candidates are listed with their content — copy a longer substring off the one you meant. |
+| `unchanged` | The token is in the file but on a line this diff didn't touch. Point at a changed line, or drop the token for a file-level link. |
+| `absent` | The token is nowhere in the file. Check it against the diff. |
+
+**Name the target in the link text when a file appears in more than one bullet.**
+`` [`scripts/deep-links.sh`] `` twice tells the reader nothing about which is
+which; `` [`deep-links.sh --resolve`] `` and `` [`deep-links.sh --verify`] `` do.
+One bullet per file needs nothing more than the path.
 
 ## Collapsible sections — fold heavy detail away
 

@@ -80,17 +80,22 @@ reviewers skim from the top and stop when they run out of time; put the most
 important files at the top. Pick tiers that fit the changeset; skip tiers with
 no meaningful material. Don't put time budgets in headers — let ordering speak.
 
+A bullet's destination names the path and a distinctive token from the line it
+points at; `anchor` resolves that to the line and writes the forge URL in. The
+angle-bracket form carries a token with spaces or parentheses, and a bullet with
+no token links the file.
+
 ```markdown
 **Critical path**
-- [`path/to/most-critical-file.ext:42`](<deep-link>) — the core change; everything else supports this
+- [`path/to/most-critical-file.ext`](anchor:path/to/most-critical-file.ext#resolveToken) — the core change; everything else supports this
 
 **Integration points**
-- [`path/to/caller.ext:18`](<deep-link>) — how the core change is wired in
-- [`path/to/config.ext:5`](<deep-link>) — new flag/setting
+- [`path/to/caller.ext`](<anchor:path/to/caller.ext### Wiring the resolver in>) — how the core change is wired in
+- [`path/to/config.ext`](anchor:path/to/config.ext#--new-flag) — new flag/setting
 
 **Ancillary**
-- [`path/to/tests.ext`](<deep-link>) — coverage for the new behavior
-- [`path/to/docs.md`](<deep-link>) — updated docs
+- [`path/to/tests.ext`](anchor:path/to/tests.ext) — coverage for the new behavior
+- [`path/to/docs.md`](anchor:path/to/docs.md) — updated docs
 
 **Mechanical** — renames, formatting, generated files. Skim only.
 ```
@@ -114,9 +119,10 @@ Mechanical*, or *Security-sensitive / Refactor / Cleanup*). Headers describe the
 **kind** of change, not the time it takes. "Critical" means: where a bug would
 hurt most, where a reviewer's judgment adds the most value, or where the core
 design decision lives. Always deep-link to the actual line — see
-[cr-formatting](/guides/cr-formatting) for forge-specific anchor construction.
-For trivial changesets (a single file, a one-line fix), skip the tiered guide and
-just link the file and say what to look for.
+[cr-formatting](/guides/cr-formatting) for the placeholder form and what to do
+when a token resolves to more than one line. For trivial changesets (a single
+file, a one-line fix), skip the tiered guide and just link the file and say what
+to look for.
 
 **At lower verbosity the links stay and the words around them shrink.** This is
 the section a low setting protects, because it's the highest value per minute a

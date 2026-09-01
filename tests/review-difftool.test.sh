@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Functional test for the difftool backend (scripts/review/backends/difftool.sh)
+# Functional test for the difftool adapter (scripts/review/tools/difftool.sh)
 # and the `diff.tool` fall-through the dispatcher resolves for it.
 #
 # Drives the real dispatcher with ANCHOR_SPLIT_RUNNER pointed at a stub that
@@ -10,7 +10,7 @@
 # feedback, and that a review they only read comes back approved. Requires jq.
 set -euo pipefail
 
-# Hermetic: ignore the user's global/system git config so backend selection is
+# Hermetic: ignore the user's global/system git config so tool selection is
 # controlled per-case here, not by their own diff.tool.
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
 
@@ -86,24 +86,24 @@ json_of()    { sed -n 's/^REVIEW_OUTPUT=//p' <<<"$1"; }
 git -C "$repo" config diff.tool stubtool
 o=$(run --skill commit --probe)
 [ "$(key_of REVIEW_MODE "$o")" = diff ]         || fail "a git range is still a diff subject"
-[ "$(key_of REVIEW_BACKEND "$o")" = stubtool ]  || fail "diff.tool should be what opens, got $(key_of REVIEW_BACKEND "$o")"
-[ "$(key_of REVIEW_BACKEND_SOURCE "$o")" = config ] || fail "a configured diff.tool is the user's choice"
+[ "$(key_of REVIEW_TOOL "$o")" = stubtool ]  || fail "diff.tool should be what opens, got $(key_of REVIEW_TOOL "$o")"
+[ "$(key_of REVIEW_TOOL_SOURCE "$o")" = config ] || fail "a configured diff.tool is the user's choice"
 [ "$(key_of REVIEW_AVAILABLE "$o")" = 1 ]       || fail "git can launch it, so it is available"
-ok "difftool: diff.tool is honored as diff mode's backend"
+ok "difftool: diff.tool is honored as diff mode's tool"
 
-# anchor.diff.backend still outranks it — the narrower statement wins.
-git -C "$repo" config anchor.diff.backend revdiff
+# anchor.diff.tool still outranks it — the narrower statement wins.
+git -C "$repo" config anchor.diff.tool revdiff
 o=$(run --skill commit --probe)
-[ "$(key_of REVIEW_BACKEND "$o")" = revdiff ] || fail "anchor.diff.backend should outrank diff.tool"
-git -C "$repo" config --unset anchor.diff.backend || true
-ok "difftool: anchor.diff.backend outranks diff.tool"
+[ "$(key_of REVIEW_TOOL "$o")" = revdiff ] || fail "anchor.diff.tool should outrank diff.tool"
+git -C "$repo" config --unset anchor.diff.tool || true
+ok "difftool: anchor.diff.tool outranks diff.tool"
 
 # --- read it, change nothing -> approved ------------------------------------
 export DIFFTOOL_STUB_MODE=read
 o=$(run --skill commit --local --path a.txt); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = approved ]            || fail "read-only -> $(verdict_of "$o"), want approved"
 [ "$(jq -r .mode <<<"$j")" = diff ]            || fail "mode should be diff"
-[ "$(jq -r .backend <<<"$j")" = stubtool ]     || fail "backend should name the tool"
+[ "$(jq -r .tool <<<"$j")" = stubtool ]     || fail "tool should name the tool"
 [ "$(jq '.comments|length' <<<"$j")" = 0 ]     || fail "nothing was written, so there is nothing to say"
 ok "difftool: a review the reviewer only read -> approved"
 

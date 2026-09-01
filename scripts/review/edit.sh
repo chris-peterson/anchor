@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # `edit` mode adapter for review-diff.sh (see SPEC.md "DIFF"). One adapter
-# serves the whole mode: the editor it drives is the mode's backend, resolved by
-# the dispatcher and handed over in review_backend, so a different editor is not
+# serves the whole mode: the editor it drives is the mode's tool, resolved by
+# the dispatcher and handed over in review_tool, so a different editor is not
 # a different adapter.
 #
 # Sourced by the dispatcher, which has already cd'd into the target repo and
 # resolved the review request into these variables:
 #   review_subject       "range" | "files"
-#   review_backend       the editor to open
+#   review_tool       the editor to open
 #   diff_range           the git range (range mode)
 #   files_left/right     the two paths (files mode)
 #   review_title         the header title
@@ -43,7 +43,7 @@
 #
 # An editor carries one artifact, so a review with no drafted artifact (a
 # diff-only range review) is `no-verdict` with the cause on stderr rather than a
-# silent pass — set a visual backend for those skills.
+# silent pass — set a visual tool for those skills.
 #
 # Editor resolution and host selection live in the lib because the dispatcher's
 # --probe needs the same answers without opening anything.
@@ -64,12 +64,12 @@ editor_emit() {
   local verdict="$1" rc="$2" note="${3:-}" edited_json="${4:-[]}"
   local out
   out=$(jq -cn \
-    --arg v "$verdict" --arg n "$note" --arg b "${review_backend:-}" \
+    --arg v "$verdict" --arg n "$note" --arg b "${review_tool:-}" \
     --argjson caps "$editor_caps" --argjson edited "$edited_json" \
     --arg rc "$rc" '
     {
       mode:"edit",
-      backend:$b,
+      tool:$b,
       verdict:$v,
       reviewCompleteness:null,
       reviewer:null,
@@ -187,7 +187,7 @@ emit_review() {
     return
   fi
 
-  local ed="${review_backend:-}"
+  local ed="${review_tool:-}"
   [[ -n "$ed" ]] || ed=$(anchor_editor_resolve)
   if ! anchor_editor_named "$ed"; then
     echo "review-diff.sh: no editor configured — set core.editor, VISUAL, or EDITOR." >&2
@@ -249,7 +249,7 @@ emit_review() {
   rm -f "$buffer"
 
   # A failure the host owns rides out as a named cause the way the viewer
-  # backend's `absent` / `no-host` do, not as a number. Quoting one back as the
+  # tool's `absent` / `no-host` do, not as a number. Quoting one back as the
   # editor's exit code names a step that never happened — the editor was never
   # asked, or was still running when its terminal went away — and leaves the
   # user with a status to interpret instead of the thing to do next.

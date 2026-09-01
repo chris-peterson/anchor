@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# revdiff — a `diff` mode backend. Sourced by ../diff.sh once the mode and the
+# revdiff — a `diff` mode tool. Sourced by ../diff.sh once the mode and the
 # tool are settled; it defines only what is revdiff's own, and the mode adapter
 # owns the host, the header, and the normalized result. The contract these
 # functions answer to is documented at the top of ../diff.sh.
@@ -17,16 +17,16 @@
 # round-trip an edited commit message / description.
 #
 # These two are read by ../diff.sh, which sources this file; shellcheck lints a
-# backend standalone (the dispatcher builds its path at run time) and so cannot
+# tool standalone (the dispatcher builds its path at run time) and so cannot
 # see the consumer.
 # shellcheck disable=SC2034
-diff_backend_caps='{"producesVerdict":true,"perHunkReview":false,"editableCommitMessage":false,"editableDescription":false,"sideMarkers":true}'
-diff_backend_install_hint='brew install umputun/apps/revdiff'
+diff_tool_caps='{"producesVerdict":true,"perHunkReview":false,"editableCommitMessage":false,"editableDescription":false,"sideMarkers":true}'
+diff_tool_install_hint='brew install umputun/apps/revdiff'
 
 # The `sh` command string that runs one review. The refs come from the request
 # variables the dispatcher exported; the flags are revdiff's own.
 # shellcheck disable=SC2154
-diff_backend_command() {
+diff_tool_command() {
   local bin="$1" out_file="$2" err_file="$3" desc_file="$4"
   local cmd arg
   local -a args=("--description-file=$desc_file")
@@ -63,7 +63,7 @@ diff_backend_command() {
 # yet (see the DIFF plan), so those blocks are dropped — otherwise a seeded
 # message would always read as changes-requested. TODO: when the round-trip
 # lands, route a changed `(description)` to editedFields[commit-message].
-diff_backend_comments() {
+diff_tool_comments() {
   local out_file="$1"
   [[ -s "$out_file" ]] || { echo '[]'; return; }
   jq -Rs '
@@ -102,7 +102,7 @@ diff_backend_comments() {
   ' "$out_file"
 }
 
-diff_backend_verdict() {
+diff_tool_verdict() {
   local rc="$1" comments="$2"
   case "$rc" in
     0)  printf 'approved' ;;

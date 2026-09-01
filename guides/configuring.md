@@ -28,8 +28,8 @@ The four verbosity dials are listed in lifecycle order, and they descend:
 
 | Key | Default | What that gets you |
 |---|---|---|
-| [`anchor.edit.backend`](#key-edit-backend) | `core.editor`, then git's chain | Which editor an `edit` review opens. |
-| [`anchor.diff.backend`](#key-diff-backend) | `revdiff` | Which viewer a `diff` review opens. |
+| [`anchor.edit.tool`](#key-edit-tool) | `core.editor`, then git's chain | Which editor an `edit` review opens. |
+| [`anchor.diff.tool`](#key-diff-tool) | `revdiff` | Which viewer a `diff` review opens. |
 | [`anchor.reviewBudgetMins`](#key-reviewbudgetmins) | `10` | Descriptions are written for ten minutes of focused review — enough for the change and the topics around it. |
 | [`anchor.issueVerbosity`](#key-issueverbosity) | `75` | Issue bodies run long: the people who pick the work up need the context in the issue. |
 | [`anchor.commitVerbosity`](#key-commitverbosity) | `50` | Commit bodies run to the why plus the context the diff doesn't show. |
@@ -65,10 +65,10 @@ The base URL of your work tracker. When you mention a ticket, `commit` adds a
 `Refs:` trailer and `prepare-review` links it in the CR. See
 [Work-tracker references](#work-tracker-references).
 
-### `anchor.edit.backend` :id=key-edit-backend
+### `anchor.edit.tool` :id=key-edit-tool
 
 ```bash
-git config anchor.edit.backend hx
+git config anchor.edit.tool hx
 ```
 
 Which editor an `edit` review opens. Unset, the editor is git's own — `core.editor`,
@@ -77,10 +77,10 @@ then `VISUAL`, then `EDITOR`, then the rungs anchor adds past them
 it is the narrower statement, naming the editor you want *for reviewing* rather
 than for everything git opens one for.
 
-### `anchor.diff.backend` :id=key-diff-backend
+### `anchor.diff.tool` :id=key-diff-tool
 
 ```bash
-git config anchor.diff.backend revdiff
+git config anchor.diff.tool revdiff
 ```
 
 Which viewer a `diff` review opens. Unset, the tool is git's own
@@ -348,7 +348,7 @@ just made and nothing else.
 
 ### Review config :id=review-config
 
-`anchor` hands the review backend only what the review *is*: the diff range (or
+`anchor` hands the review tool only what the review *is*: the diff range (or
 the two paths), the header, and the channel it reads the verdict back from. How
 the diff *looks* stays the tool's own knob, so set your preferences in the tool's
 config rather than looking for an `anchor.*` key. `anchor` passes no presentation
@@ -379,7 +379,7 @@ can miss the one `anchor` opens. `REVDIFF_CONFIG` is the exception: `anchor`
 reads it and passes the path through as `--config`. See
 [revdiff's options](https://revdiff.com/docs.html#options) for the full list.
 
-revdiff renders in a terminal, so this backend needs a session `anchor` can
+revdiff renders in a terminal, so this tool needs a session `anchor` can
 split — iTerm2 today. Where there is none, a revdiff review reports `no-verdict`
 naming that rather than opening on nothing.
 
@@ -507,9 +507,9 @@ A review resolves on two axes, and only one of them is yours to set:
 - **mode** — the shape: `edit` or `diff`. **Not configurable.** Which shape fits
   is a property of what's being reviewed, so the subject answers it and there's
   no key to get it wrong with.
-- **backend** — the tool that runs the shape, and the half that *is* a
-  preference: [`anchor.edit.backend`](#key-edit-backend) for the editor,
-  [`anchor.diff.backend`](#key-diff-backend) for the viewer. A mode can grow more
+- **tool** — the tool that runs the shape, and the half that *is* a
+  preference: [`anchor.edit.tool`](#key-edit-tool) for the editor,
+  [`anchor.diff.tool`](#key-diff-tool) for the viewer. A mode can grow more
   tools without changing what the mode means.
 
 The mode turns on one question: **has this review got a diff to show?**
@@ -527,8 +527,8 @@ did the feedback change" is legible.
 What you name is the tool each shape opens:
 
 ```bash
-git config anchor.diff.backend revdiff   # the viewer a diff review opens
-git config anchor.edit.backend hx        # the editor an edit review opens
+git config anchor.diff.tool revdiff   # the viewer a diff review opens
+git config anchor.edit.tool hx        # the editor an edit review opens
 ```
 
 Both are global to the repo: the tool that suits a shape suits it wherever the
@@ -555,11 +555,11 @@ verbatim rather than re-drafting from it. Unlike `git commit`, lines beginning
 with `#` are kept: three of the four artifacts are markdown, where `#` is a
 heading.
 
-**When the tool isn't there.** `anchor` asks which backend a review can actually
+**When the tool isn't there.** `anchor` asks which tool a review can actually
 open before it opens one — so a `revdiff` you haven't installed yet gets you the
 diff viewer you *do* have, named in one line rather than discovered as a surprise
 window. What substitutes is a *default*: a defaulted `editor` with nowhere to
-open gives way to an installed viewer, since nobody asked for it. A backend you
+open gives way to an installed viewer, since nobody asked for it. A tool you
 named in the config is kept whether or not it can open, and reports what's
 missing — handing you a diff viewer when you asked for the editor would answer a
 question you didn't ask.

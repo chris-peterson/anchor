@@ -5,11 +5,11 @@
 # Drives the real dispatcher against a stub revdiff launcher that writes fixture
 # markdown and exits with a chosen code. Asserts the normalized DIFF contract
 # the adapter emits, plus the dispatcher's own range, header, staging, and
-# backend-resolution behavior. Requires jq.
+# tool-resolution behavior. Requires jq.
 set -euo pipefail
 
-# Hermetic: ignore the user's global/system git config so backend selection is
-# controlled per-case here, not by a global anchor.diff.backend.
+# Hermetic: ignore the user's global/system git config so tool selection is
+# controlled per-case here, not by a global anchor.diff.tool.
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -83,7 +83,7 @@ json_of()    { sed -n 's/^REVIEW_OUTPUT=//p' <<<"$1"; }
 # rc 0, no annotations -> approved, no comments, completeness null
 export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""; o=$(run --previous); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = approved ]                 || fail "revdiff rc0 verdict"
-[ "$(jq -r .backend <<<"$j")" = revdiff ]           || fail "revdiff backend"
+[ "$(jq -r .tool <<<"$j")" = revdiff ]           || fail "revdiff tool"
 [ "$(jq '.comments|length' <<<"$j")" = 0 ]          || fail "revdiff rc0 no comments"
 [ "$(jq -r .reviewCompleteness <<<"$j")" = null ]   || fail "revdiff completeness=null"
 [ "$(jq -r 'has("severitySource")' <<<"$j")" = false ] || fail "revdiff still emits severitySource"
@@ -183,17 +183,17 @@ grep -qx -- '- \*\*body:\*\* The body explains why.' "$REVDIFF_DESC_CAPTURE" \
 unset REVDIFF_DESC_CAPTURE
 ok "--message-file seeds subject as the title and body as a body row"
 
-# ======================= mode and backend selection ======================
+# ======================= mode and tool selection ======================
 export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
 o=$(run --previous); j=$(json_of "$o")
 [ "$(jq -r .mode <<<"$j")" = diff ]       || fail "a git range should resolve to diff mode"
-[ "$(jq -r .backend <<<"$j")" = revdiff ] || fail "diff mode's default backend should be revdiff"
+[ "$(jq -r .tool <<<"$j")" = revdiff ] || fail "diff mode's default tool should be revdiff"
 ok "mode: a git range takes diff mode, and revdiff runs it"
 
 if run --mode bogus --previous 2>/dev/null; then fail "unknown mode should exit non-zero"; fi
 ok "mode: an unknown mode exits non-zero"
 
-# ================== backend resolution against installed tools ============
+# ================== tool resolution against installed tools ============
 # The resolver only considers tools that are there, so these run under a PATH
 # built for the case: a system PATH carries no viewer, and $bin carries revdiff.
 system_path="/usr/bin:/bin"
@@ -201,46 +201,46 @@ system_path="/usr/bin:/bin"
 pb() { ( cd "$repo" && PATH="$1" bash "$dispatch" --probe ); }
 
 o=$(pb "$bin:$PATH")
-grep -qx 'REVIEW_BACKEND=revdiff' <<<"$o" || fail "revdiff installed -> want revdiff, got: $o"
-ok "backend: prefers revdiff when its tool is installed"
+grep -qx 'REVIEW_TOOL=revdiff' <<<"$o" || fail "revdiff installed -> want revdiff, got: $o"
+ok "tool: prefers revdiff when its tool is installed"
 
-git -C "$repo" config anchor.diff.backend definitely-not-installed
+git -C "$repo" config anchor.diff.tool definitely-not-installed
 o=$(pb "$bin:$PATH")
-grep -qx 'REVIEW_BACKEND=revdiff' <<<"$o" \
+grep -qx 'REVIEW_TOOL=revdiff' <<<"$o" \
   || fail "absent preferred tool -> want the installed viewer, got: $o"
-grep -qx 'REVIEW_BACKEND_CONFIGURED=definitely-not-installed' <<<"$o" \
+grep -qx 'REVIEW_TOOL_CONFIGURED=definitely-not-installed' <<<"$o" \
   || fail "substitution should name what config asked for, got: $o"
-git -C "$repo" config --unset anchor.diff.backend
-ok "backend: substitutes an installed viewer when the preferred tool is absent"
+git -C "$repo" config --unset anchor.diff.tool
+ok "tool: substitutes an installed viewer when the preferred tool is absent"
 
 # With nothing to stand in, the probe still names what was asked for — the
 # degradation below is the run's business, not a claim that revdiff is installed.
 o=$(pb "$system_path")
-grep -qx 'REVIEW_BACKEND=revdiff' <<<"$o" || fail "no viewer -> want the configured name, got: $o"
+grep -qx 'REVIEW_TOOL=revdiff' <<<"$o" || fail "no viewer -> want the configured name, got: $o"
 grep -qx 'REVIEW_AVAILABLE=0' <<<"$o"     || fail "no viewer -> want AVAILABLE=0, got: $o"
-ok "backend: with nothing installed the probe reports the preference, unavailable"
+ok "tool: with nothing installed the probe reports the preference, unavailable"
 
 # The run keeps the configured adapter, whose report names the tool that is
 # missing. There is nothing below it to degrade into: git's difftool is not a
-# backend (DIFF-18), because a diff nobody can grade invites "you saw it,
+# tool (DIFF-18), because a diff nobody can grade invites "you saw it,
 # approve?" — the rung the skill's fallback ladder replaced.
 o=$( cd "$repo" && PATH="$system_path" bash "$dispatch" --previous )
-[ "$(jq -r .backend <<<"$(json_of "$o")")" = revdiff ] \
+[ "$(jq -r .tool <<<"$(json_of "$o")")" = revdiff ] \
   || fail "no viewer -> want the configured adapter, got: $(json_of "$o")"
-ok "backend: no viewer installed keeps the configured adapter, never a difftool"
+ok "tool: no viewer installed keeps the configured adapter, never a difftool"
 
-# `git` is not a backend at all (DIFF-18): a changeset shown without a verdict
+# `git` is not a tool at all (DIFF-18): a changeset shown without a verdict
 # invites "you saw it, approve?", so the difftool is off the menu entirely and
 # asking for it fails the same way any other typo does.
-git -C "$repo" config anchor.diff.backend git
+git -C "$repo" config anchor.diff.tool git
 o=$( cd "$repo" && PATH="$system_path" bash "$dispatch" --previous 2>&1 )
 grep -q 'REVIEW_VERDICT=no-verdict' <<<"$o" \
-  || fail "git backend -> want no-verdict, got: $o"
-grep -q "no adapter for diff backend 'git'" <<<"$o" \
-  || fail "git backend -> want the no-adapter error naming it, got: $o"
-! grep -q 'REVIEW_VERDICT=approved' <<<"$o" || fail "git backend -> nothing should be approved, got: $o"
-git -C "$repo" config --unset anchor.diff.backend
-ok "backend: git is not selectable — the difftool is off the menu (DIFF-18)"
+  || fail "git tool -> want no-verdict, got: $o"
+grep -q "no adapter for diff tool 'git'" <<<"$o" \
+  || fail "git tool -> want the no-adapter error naming it, got: $o"
+! grep -q 'REVIEW_VERDICT=approved' <<<"$o" || fail "git tool -> nothing should be approved, got: $o"
+git -C "$repo" config --unset anchor.diff.tool
+ok "tool: git is not selectable — the difftool is off the menu (DIFF-18)"
 
 # edit mode is selectable but never substituted in, so an absent viewer doesn't
 # turn a changeset review into an editor buffer.
@@ -274,12 +274,12 @@ o=$( cd "$other" && bash "$dispatch" --previous --repo "$repo" --title '--repo' 
 [ "$(verdict_of "$o")" = approved ] || fail "--title '--repo' should stay a title value: $o"
 ok "context: a flag-shaped option value is not read as a context flag"
 
-# per-skill backend selection still resolves when --skill trails the mode
+# per-skill tool selection still resolves when --skill trails the mode
 export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
 o=$( cd "$other" && bash "$dispatch" --previous --repo "$repo" --skill trailing )
-[ "$(jq -r .backend <<<"$(json_of "$o")")" = revdiff ] \
-  || fail "trailing --skill did not select the per-skill backend: $(json_of "$o")"
-ok "context: --skill after the mode still selects the per-skill backend"
+[ "$(jq -r .tool <<<"$(json_of "$o")")" = revdiff ] \
+  || fail "trailing --skill did not select the per-skill tool: $(json_of "$o")"
+ok "context: --skill after the mode still selects the per-skill tool"
 
 # a misspelled flag is an error, not a silently dropped argument
 rc=0; o=$( cd "$repo" && bash "$dispatch" --previous --repoo "$repo" 2>&1 ) || rc=$?

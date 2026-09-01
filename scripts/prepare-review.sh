@@ -4,7 +4,7 @@
 # acts on a single command's output — no per-step orchestration to narrate.
 #
 # Why a script (not skill prose): Step 1 is a string of deterministic recon and
-# safe setup — detect the forge, resolve or open the draft CR, count the gap to
+# safe setup — detect the forge, resolve the CR if one is open, count the gap to
 # the default branch, capture the current description, confirm local state
 # matches the CR head, read the template and anchor config. Run from the skill
 # each is its own tool call, and each is a slot where the model narrates "now
@@ -18,8 +18,9 @@
 #     script reports BEHIND and stops short of rebasing.
 #   - Force-push over a ready (non-draft) CR — reported via CR_DRAFT, gated by
 #     the skill.
-#   - Open a draft when one already exists, or when --no-open is passed — those
-#     resolve to the URL-free skip-deep-links path.
+#   - Open the CR. Recon reports CR_PENDING=1 where one is creatable and leaves
+#     it to `--open`, which the skill runs once the author has approved the
+#     description (see below).
 #   - Create the feature branch when HEAD is the default branch with work to
 #     review — the script reports NEEDS_BRANCH and the skill branches first.
 #   - Push. /anchor:commit now commits and pushes, so this script operates on an
@@ -27,6 +28,13 @@
 #     default branch with no CR yet and the branch isn't pushed, it reports
 #     NEEDS_PUSH and the skill directs the user to /anchor:commit rather than
 #     pushing here.
+#
+# Two phases, because the CR is opened last. The description's Review guide is
+# drafted with `anchor:` placeholders (see deep-links.sh), which resolve to lines
+# without a CR URL — so recon reports CR_PENDING and the author reviews a
+# complete draft before anything is published under their name. `--open` then
+# creates the draft CR with the approved body, and the skill expands the
+# placeholders against the URL it returns.
 #
 # Output lines (KEY=value, read from stdout):
 #   RESOLVED_VIA=<repo|cwd>      repo == an explicit --repo checkout;
@@ -57,7 +65,12 @@
 #                                (see Exit codes) — every other key is still
 #                                emitted first so the caller can say why.
 #   CR_PREEXISTING=<0|1>         a CR was already open before this run
-#   CR_CREATED=<0|1>             this script opened a draft CR
+#   CR_PENDING=<0|1>             1 == no CR is open, and the branch is in a state
+#                                one can be opened from. The description is
+#                                drafted and reviewed first; `--open` creates it
+#                                afterward. 0 with no CR_URL is the URL-free
+#                                skip-deep-links path (--no-open, or no forge)
+#   CR_CREATED=<0|1>             `--open` opened a draft CR (always 0 on recon)
 #   PRIOR_CR_IID=<iid/number>    a CR on this branch name that is not open, so it
 #                                is not this run's target; empty when the branch
 #                                carries none. Branch names get reused, so the
@@ -65,7 +78,8 @@
 #                                leaving a fresh draft looking unexplained
 #   PRIOR_CR_STATE=<state|>      that CR's state as the forge reports it —
 #                                merged/closed/locked, or MERGED/CLOSED
-#   CR_URL=<web url>             empty on the skip-deep-links path
+#   CR_URL=<web url>             empty until a CR exists — on CR_PENDING as well
+#                                as on the skip-deep-links path
 #   CR_IID=<iid/number>          empty when no CR
 #   CR_DRAFT=<true|false|>       the CR's draft flag (empty when no CR)
 #   CR_HEAD_SHA=<sha>            the CR head the reviewer sees (empty when no CR)
@@ -73,7 +87,8 @@
 #   WORKTREE_CLEAN=<0|1>
 #   STATE=<match|dirty|head-mismatch|dirty+head-mismatch>   drift vs the CR head
 #   CURRENT_DESC_PATH=<path>     temp file holding the CR's current description
-#                                (baseline for the Step 4 review); empty when no CR
+#                                (baseline for the Step 4 review). Always a path;
+#                                the file is empty where no CR holds one yet
 #   DESC_DRAFT_PATH=<path>       temp file the skill writes the drafted description
 #                                to (the review's right-hand side)
 #   TEMPLATE_PATH=<path>         the CR template to compose into, empty when the
@@ -101,8 +116,6 @@
 #                                failed — never collapsed into false, which the
 #                                skill would act on
 #   ANCHOR_CONFIG=<json>         {key: value} of anchor.* git config; {} when none
-#   FILE_LINKS=<json>            {path: deep-link prefix} per changed file, from
-#                                deep-links.sh — both forges; {} when no CR
 #
 # On an auth failure (or any failure) while opening the draft, it prints
 # CR_CREATE_ERROR=<message> and exits non-zero so the skill surfaces it and asks
@@ -121,11 +134,13 @@
 #   1   an operational failure (e.g. CR_CREATE_ERROR)
 #
 # Usage:
-#   prepare-review.sh             # resolve the CR, or open a draft on the
-#                                         # already-pushed branch; NEEDS_PUSH if unpushed
-#   prepare-review.sh --no-open    # never auto-open; no CR -> skip-deep-links path
-#   prepare-review.sh --repo <path>      # operate on a checkout other than the cwd repo
-#   prepare-review.sh --cr <iid|url>     # resolve a specific CR, not the current branch's
+#   prepare-review.sh                     # recon: resolve the CR, or report CR_PENDING
+#   prepare-review.sh --no-open           # no CR will be opened -> skip-deep-links path
+#   prepare-review.sh --repo <path>       # operate on a checkout other than the cwd repo
+#   prepare-review.sh --cr <iid|url>      # resolve a specific CR, not the current branch's
+#   prepare-review.sh --open --title <t> --body-file <path>
+#                                         # open the draft CR with the approved
+#                                         # description; emits the CR keys only
 #
 # --repo cds into the target checkout so every git/gh/glab call below targets it
 # (see scripts/lib/resolve-context.sh); the emitted RESOLVED_VIA reports whether
@@ -140,17 +155,28 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 # shellcheck source=lib/tmpfile.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/tmpfile.sh"
 
-auto_open=1
+will_open=1
+do_open=0
+open_title=""
+open_body=""
 CTX_REPO=""
 cr_ref=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --no-open)  auto_open=0; shift ;;
-    --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
-    --cr)       cr_ref="${2:?--cr needs an iid or URL}"; shift 2 ;;
+    --no-open)   will_open=0; shift ;;
+    --open)      do_open=1; shift ;;
+    --title)     open_title="${2:?--title needs a value}"; shift 2 ;;
+    --body-file) open_body="${2:?--body-file needs a path}"; shift 2 ;;
+    --repo)      CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
+    --cr)        cr_ref="${2:?--cr needs an iid or URL}"; shift 2 ;;
     *) echo "prepare-review.sh: unknown argument: $1" >&2; exit 64 ;;
   esac
 done
+
+if [[ "$do_open" -eq 1 ]]; then
+  [[ -n "$open_title" ]] || { echo "prepare-review.sh: --open needs --title" >&2; exit 64; }
+  [[ -r "$open_body" ]] || { echo "prepare-review.sh: --open needs a readable --body-file" >&2; exit 64; }
+fi
 
 # Retarget onto an explicit --repo checkout when given; otherwise stay in cwd
 # (byte-for-byte today's behavior). Sets RESOLVED_VIA, emitted below.
@@ -203,7 +229,7 @@ fi
 # --- Resolve (or open) the CR ------------------------------------------------
 
 cr_url=""; cr_iid=""; cr_draft=""; cr_head=""; cr_desc=""; cr_delete_branch=""
-cr_preexisting=0; cr_created=0
+cr_preexisting=0; cr_created=0; cr_pending=0
 prior_cr_iid=""; prior_cr_state=""
 
 # Pull a CR's url/iid/draft/headsha/description into the cr_* vars. Returns
@@ -269,6 +295,89 @@ resolve_cr() {
   esac
 }
 
+# --- Will the source branch be deleted on merge? -----------------------------
+#
+# GitLab answers per MR (captured in resolve_cr). GitHub has no per-PR field, so
+# the only standing answer is the repo-wide setting — which is why a PR anchor
+# opens can't carry the preference the way an MR does, and why the skill names it
+# when it's off. Scoped to a resolved CR on both forges: with no CR there's
+# nothing for the skill to say.
+delete_branch_on_merge=unknown
+read_delete_branch_on_merge() {
+  delete_branch_on_merge=unknown
+  [[ -n "$cr_url" ]] || return 0
+  local repo_json setting
+  case "$forge" in
+    github)
+      repo_json=$(gh repo view --json deleteBranchOnMerge 2>/dev/null || true)
+      setting=$(jq -r '.deleteBranchOnMerge | tostring' <<<"$repo_json" 2>/dev/null || true)
+      case "$setting" in
+        true|false) delete_branch_on_merge=$setting ;;
+      esac
+      ;;
+    gitlab)
+      case "$cr_delete_branch" in
+        true|false) delete_branch_on_merge=$cr_delete_branch ;;
+      esac
+      ;;
+  esac
+}
+
+# --- --open: create the draft CR with the approved description ---------------
+#
+# The last step of the flow, not the first. The body is the text the author
+# signed off on, placeholders and all; the skill expands those against the URL
+# this returns. Landing the approved prose first means a failed expansion leaves
+# a CR carrying what the author wrote rather than an empty one.
+if [[ "$do_open" -eq 1 ]]; then
+  if [[ "$forge" == "none" ]]; then
+    echo "CR_CREATE_ERROR=origin is not a recognized forge, so there is no CR to open"
+    exit 1
+  fi
+  if resolve_cr; then
+    echo "CR_CREATE_ERROR=a CR is already open on this branch ($cr_url) — write to it instead of opening another"
+    exit 1
+  fi
+  case "$forge" in
+    gitlab)
+      username=$(glab api user 2>/dev/null | jq -r '.username // empty' || true)
+      if ! create_err=$(glab mr create --draft --yes \
+            --title "$open_title" --description "$(cat "$open_body")" \
+            --target-branch "$default_branch" --remove-source-branch \
+            --assignee "$username" 2>&1); then
+        echo "CR_CREATE_ERROR=glab mr create failed: $create_err"
+        exit 1
+      fi
+      ;;
+    github)
+      # `gh pr create` has no branch-deletion flag — GitHub carries no per-PR
+      # field for it, only the repo-wide setting read below.
+      if ! create_err=$(gh pr create --draft --assignee @me \
+            --title "$open_title" --body-file "$open_body" 2>&1); then
+        echo "CR_CREATE_ERROR=gh pr create failed: $create_err"
+        exit 1
+      fi
+      ;;
+  esac
+  # The create reported success, so the CR exists. If the re-resolve fails
+  # (forge create→read lag), surface it rather than going quiet — the skill has
+  # an approved description in hand and nowhere recorded to expand it against.
+  if ! resolve_cr; then
+    echo "CR_CREATE_ERROR=opened the draft CR but could not resolve it back (forge lag?) — re-run prepare-review"
+    exit 1
+  fi
+  read_delete_branch_on_merge
+  echo "RESOLVED_VIA=$RESOLVED_VIA"
+  echo "FORGE=$forge"
+  echo "CR_CREATED=1"
+  echo "CR_URL=$cr_url"
+  echo "CR_IID=$cr_iid"
+  echo "CR_DRAFT=$cr_draft"
+  echo "DEFAULT_BRANCH=$default_branch"
+  echo "DELETE_BRANCH_ON_MERGE=$delete_branch_on_merge"
+  exit 0
+fi
+
 needs_commit=0
 needs_branch=0
 needs_push=0
@@ -314,74 +423,27 @@ elif [[ "$forge" != "none" && "$on_default" -eq 0 ]]; then
     # NEEDS_PUSH so the skill directs the user to /anchor:commit rather than
     # pushing an as-yet-unpushed branch here.
     needs_push=1
-  elif [[ "$auto_open" -eq 1 ]]; then
-    # The branch is pushed (by /anchor:commit) and no CR is open yet. Open a draft
-    # against it — assigned to me — without pushing; the remote branch the create
-    # call targets already exists. Branch deletion on merge is per-MR on GitLab
-    # and repo-wide on GitHub, so only the GitLab create can set it; both report
-    # the resulting state via DELETE_BRANCH_ON_MERGE below.
-    case "$forge" in
-      gitlab)
-        username=$(glab api user 2>/dev/null | jq -r '.username // empty' || true)
-        if ! create_err=$(glab mr create --draft --fill --yes \
-              --target-branch "$default_branch" --remove-source-branch \
-              --assignee "$username" 2>&1); then
-          echo "CR_CREATE_ERROR=glab mr create failed: $create_err"
-          exit 1
-        fi
-        ;;
-      github)
-        # `gh pr create` has no branch-deletion flag — GitHub carries no per-PR
-        # field for it.
-        if ! create_err=$(gh pr create --draft --fill --assignee @me 2>&1); then
-          echo "CR_CREATE_ERROR=gh pr create failed: $create_err"
-          exit 1
-        fi
-        ;;
-    esac
-    # The create reported success, so the CR exists. If the re-resolve fails
-    # (forge create→read lag), surface it rather than dropping to the URL-free
-    # path — going silent here would misreport an opened CR as "no CR".
-    if resolve_cr; then
-      cr_created=1
-    else
-      echo "CR_CREATE_ERROR=opened the draft CR but could not resolve it back (forge lag?) — re-run prepare-review"
-      exit 1
-    fi
+  elif [[ "$will_open" -eq 1 ]]; then
+    # The branch is pushed (by /anchor:commit) and no CR is open yet, so one can
+    # be. It is opened by `--open` once the author has approved the description,
+    # not here: the Review guide's deep links are drafted as placeholders that
+    # resolve without a CR URL, so nothing has to exist on the forge for the
+    # draft to be complete and reviewable.
+    cr_pending=1
   fi
 fi
 
-# --- Will the source branch be deleted on merge? -----------------------------
-#
-# GitLab answers per MR (captured in resolve_cr). GitHub has no per-PR field, so
-# the only standing answer is the repo-wide setting — which is why a PR anchor
-# opens can't carry the preference the way an MR does, and why the skill names it
-# when it's off. Scoped to a resolved CR on both forges: with no CR there's
-# nothing for the skill to say.
-
-delete_branch_on_merge=unknown
-if [[ -n "$cr_url" ]]; then
-  case "$forge" in
-    github)
-      repo_json=$(gh repo view --json deleteBranchOnMerge 2>/dev/null || true)
-      setting=$(jq -r '.deleteBranchOnMerge | tostring' <<<"$repo_json" 2>/dev/null || true)
-      case "$setting" in
-        true|false) delete_branch_on_merge=$setting ;;
-      esac
-      ;;
-    gitlab)
-      case "$cr_delete_branch" in
-        true|false) delete_branch_on_merge=$cr_delete_branch ;;
-      esac
-      ;;
-  esac
-fi
+read_delete_branch_on_merge
 
 # --- Capture the current description (baseline for the Step 4 diff) ----------
 
-current_desc_path=""
+# Always a file, empty where there is no CR to read one from — which is the usual
+# case now that the CR is opened last. The review dispatcher takes a pair of
+# paths, so an empty string here is a usage error rather than an empty left-hand
+# side, and the review the skill is about to open never launches.
+current_desc_path="$(anchor_tmpfile cr-desc-current)"
+: > "$current_desc_path"
 if [[ -n "$cr_url" ]]; then
-  current_desc_path="$(anchor_tmpfile cr-desc-current)"
   printf '%s' "$cr_desc" > "$current_desc_path"
 fi
 
@@ -622,14 +684,7 @@ while read -r name value; do
   anchor_cfg=$(jq -c --arg n "$name" --arg v "$value" '. + {($n): $v}' <<<"$anchor_cfg")
 done < <(git config --get-regexp '^anchor\.' 2>/dev/null || true)
 
-# --- Deep-link prefixes + draft path (both forges) ----------------------------
-
-file_links='{}'
-if [[ "$ahead" -gt 0 ]]; then
-  file_links=$(bash "$(dirname "${BASH_SOURCE[0]}")/deep-links.sh" \
-    --forge "$forge" --cr-url "$cr_url" --base "origin/${default_branch}" \
-    | sed -n 's/^FILE_LINKS=//p')
-fi
+# --- Draft path ---------------------------------------------------------------
 
 # The path Step 4 writes the drafted description to. Handed over here so drafting
 # costs no separate mktemp call.
@@ -649,6 +704,7 @@ echo "NEEDS_COMMIT=$needs_commit"
 echo "NEEDS_PUSH=$needs_push"
 echo "NOTHING_TO_REVIEW=$nothing_to_review"
 echo "CR_PREEXISTING=$cr_preexisting"
+echo "CR_PENDING=$cr_pending"
 echo "CR_CREATED=$cr_created"
 echo "PRIOR_CR_IID=$prior_cr_iid"
 echo "PRIOR_CR_STATE=$prior_cr_state"
@@ -666,7 +722,6 @@ echo "TEMPLATE_SOURCE=$template_source"
 echo "TEMPLATE_CANDIDATES=$template_candidates"
 echo "DELETE_BRANCH_ON_MERGE=$delete_branch_on_merge"
 echo "ANCHOR_CONFIG=$anchor_cfg"
-echo "FILE_LINKS=$file_links"
 
 # Exit last, so the block above is complete: the caller reports the dead end from
 # the same keys it reads on every other path, and only the status differs.

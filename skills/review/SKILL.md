@@ -194,7 +194,7 @@ describes the local `HEAD`, which on a CR you didn't write is somebody else's
 change labelled with your last commit.
 
 **Print the manifest as you launch** — a table of the CR's changed files with
-their `+`/`−` counts, plus the CR number, its author, and the backend. This is
+their `+`/`−` counts, plus the CR number, its author, and the tool. This is
 somebody else's change, so the set is what says whether you are about to review
 what they asked you to. The shape is in
 `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "show what is going
@@ -211,11 +211,11 @@ differently from its siblings, because here the reviewer's comments are the
   what it says, not the patch, into the summary.
 - **`approved`** — every change was read and nothing was flagged. That is a real
   review with no inline findings; Step 4 still writes the summary.
-- **`incomplete`** — the backend is telling you not every hunk was reviewed.
+- **`incomplete`** — the tool is telling you not every hunk was reviewed.
   Name what went unseen and re-open the viewer. Do not build a document over it:
   this verdict is exactly the rubber-stamp the step exists to prevent.
 - **`no-verdict`** — the review did not complete. `capabilities.producesVerdict:
-  false` means the backend graded nothing; `mode: "edit"` means edit mode was
+  false` means the tool graded nothing; `mode: "edit"` means edit mode was
   selected anyway and refused
   the changeset (DIFF-15), which the probe above catches first; otherwise read
   `raw.exitCode`. Say what happened in one line, then walk the changeset rung of
@@ -225,7 +225,7 @@ differently from its siblings, because here the reviewer's comments are the
 - **No verdict line at all** — treat as `no-verdict`; absent output is never a
   completed review.
 
-`reviewCompleteness` is `null` on a backend that cannot measure it — that means
+`reviewCompleteness` is `null` on a tool that cannot measure it — that means
 *unmeasured*, not *complete*. The obligation this step carries is the one you
 control: hand the viewer the entire `DIFF_RANGE`, every time.
 

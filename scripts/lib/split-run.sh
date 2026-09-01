@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run a command in a split of the calling iTerm2 session.
 #
-# Sourced, not executed. Both review backends want the same thing — a terminal
+# Sourced, not executed. Both review tools want the same thing — a terminal
 # for a TUI, opened where the user is already looking — so the split lives here
 # rather than twice in the adapters.
 #
