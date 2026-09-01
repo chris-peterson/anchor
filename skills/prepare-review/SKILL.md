@@ -447,6 +447,15 @@ It rewrites the draft in place and reports `EXPANDED=<n>`. All-or-nothing: an un
 
 When operating against a non-cwd repo these are the write path, so retarget them per "Operating against a non-cwd repo": add `-R <owner/name>` to `gh pr edit`, and substitute the URL-encoded project for `:fullpath` in the `glab api` PUT (plus `--hostname` for self-hosted).
 
+**4. Announce the write.** A landed description is the moment the session first has a reviewable thing, and siblings in the suite key off it. The write above is a forge CLI you ran, so no anchor process saw it happen — say so on anchor's behalf:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/announce.sh" cr.described \
+  "CR_IID=<CR_IID>" "CR_URL=<CR_URL>"
+```
+
+Only after a write that succeeded. Skip it on copy-only and wherever no description landed. It prints one line, exits 0 whatever happens, and nothing here reads its output — a plugin that cares is listening, and one that isn't installed costs nothing. The contract it satisfies is in the marketplace repo at `authoring/plugin-contract.md`.
+
 Report the write as one line once **Label it and set the milestone** below has run — the CR URL, that the description landed, and what the metadata came out as. **No CR to write to** (`skip-deep-links`, or the user picked copy-only): print the body for them to paste into the web UI themselves.
 
 ### Label it and set the milestone

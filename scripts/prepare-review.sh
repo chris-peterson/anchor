@@ -375,6 +375,12 @@ if [[ "$do_open" -eq 1 ]]; then
   echo "CR_DRAFT=$cr_draft"
   echo "DEFAULT_BRANCH=$default_branch"
   echo "DELETE_BRANCH_ON_MERGE=$delete_branch_on_merge"
+  # Announce the CR to whoever in the suite is listening. This is the only path
+  # that opens one, so it is the only path that has the fact to announce. The
+  # line repeats the fields above because a subscriber reads a whole tool output
+  # and cannot tell which run a loose `CR_IID=` belonged to.
+  "$(dirname "${BASH_SOURCE[0]}")/announce.sh" cr.opened \
+    "CR_IID=$cr_iid" "CR_URL=$cr_url" "CR_DRAFT=$cr_draft"
   exit 0
 fi
 
