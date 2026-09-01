@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# git's own difftool — a `diff` mode backend, and the one that answers for every
+# git's own difftool — a `diff` mode tool, and the one that answers for every
 # tool the user already configured for `git difftool`. Sourced by ../diff.sh;
 # the contract these functions answer to is documented at the top of that file.
 #
@@ -12,7 +12,7 @@
 # the files against the snapshot it took before launching and hands the skill the
 # diff of what the reviewer wrote, to read as feedback.
 #
-# So this backend is a `changes-requested` machine: a tool the reviewer wrote
+# So this tool is a `changes-requested` machine: a tool the reviewer wrote
 # through returns their edits, and one they only read returns the clean quit that
 # every difftool already uses to mean "nothing to say".
 #
@@ -24,16 +24,16 @@
 # A difftool sees a changeset and reports no per-hunk state, and the edits it
 # returns are the reviewer's own text rather than a round-trip of anchor's draft.
 # shellcheck disable=SC2034
-diff_backend_caps='{"producesVerdict":true,"perHunkReview":false,"editableCommitMessage":false,"editableDescription":false,"sideMarkers":false}'
-diff_backend_install_hint='set diff.tool, or difftool.<name>.cmd, to a tool git can launch'
+diff_tool_caps='{"producesVerdict":true,"perHunkReview":false,"editableCommitMessage":false,"editableDescription":false,"sideMarkers":false}'
+diff_tool_install_hint='set diff.tool, or difftool.<name>.cmd, to a tool git can launch'
 
 # Where the pre-launch snapshot lives, and the paths it covers.
 difftool_snapshot=""
 difftool_paths=()
 
 # The tool is git's to find, not PATH's — the same question the dispatcher asks
-# when it resolves the backend and reports whether it can open.
-diff_backend_available() { anchor_difftool_known "$1"; }
+# when it resolves the tool and reports whether it can open.
+diff_tool_available() { anchor_difftool_known "$1"; }
 
 # The files this review puts in front of the reviewer, as working-tree paths. A
 # `--files` review edits the proposed side; the left is a baseline copied aside.
@@ -49,7 +49,7 @@ difftool_reviewed_paths() {
 # Snapshot every reviewed file before the tool opens, so what the reviewer wrote
 # can be told apart from what was already there. Copies rather than hashes: the
 # comparison has to produce the *diff* of their edits, not just the fact of one.
-diff_backend_before() {
+diff_tool_before() {
   local path
   difftool_snapshot=$(mktemp -d "${TMPDIR:-/tmp}/anchor-review-snap.XXXXXX")
   difftool_paths=()
@@ -62,13 +62,13 @@ diff_backend_before() {
 }
 
 # shellcheck disable=SC2154
-diff_backend_command() {
+diff_tool_command() {
   # The header the mode adapter seeded goes unused: a difftool shows two file
   # trees and has nowhere to put a third thing. The manifest the skill prints
   # before launching is what carries that context here.
   local bin="$1" out_file="$2" err_file="$3"
   local cmd
-  cmd="git difftool --no-prompt --tool=$(anchor_split_sq "$review_backend")"
+  cmd="git difftool --no-prompt --tool=$(anchor_split_sq "$review_tool")"
   if [[ "$review_subject" == "files" ]]; then
     cmd="$cmd --no-index -- $(anchor_split_sq "$files_left") $(anchor_split_sq "$files_right")"
   else
@@ -86,7 +86,7 @@ diff_backend_command() {
 # whole change lets it read which it is.
 #
 # The out_file is ignored — a difftool reports through the tree, not stdout.
-diff_backend_comments() {
+diff_tool_comments() {
   local path body first=1
   printf '['
   for path in ${difftool_paths[@]+"${difftool_paths[@]}"}; do
@@ -108,7 +108,7 @@ diff_backend_comments() {
 # A difftool's answer is what it wrote. Edits mean there is something to act on,
 # so the flow goes back through the skill to read them; no edits and a clean exit
 # is the quit every difftool already uses to mean nothing to say.
-diff_backend_verdict() {
+diff_tool_verdict() {
   local rc="$1" comments="$2"
   if [[ "$rc" -ne 0 ]]; then printf 'no-verdict'; return; fi
   if [[ "$(jq 'length' <<<"$comments")" -gt 0 ]]; then
@@ -118,6 +118,6 @@ diff_backend_verdict() {
   fi
 }
 
-diff_backend_cleanup() {
+diff_tool_cleanup() {
   [[ -z "$difftool_snapshot" ]] || rm -rf "$difftool_snapshot"
 }

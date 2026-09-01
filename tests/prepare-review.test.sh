@@ -571,6 +571,18 @@ out=$(bash "$prepare_review_sh" --repo "$repo" --no-open)
   || fail "--no-open should queue no CR; got: $out"
 ok "--no-open reports no pending CR"
 
+# The Step 4 review takes a pair of paths, and a pending CR holds no description
+# to be the left-hand one. An empty string there is a usage error the review
+# never opens past, so the baseline is an empty file instead.
+repo="$(make_repo github.com gh-baseline)"
+: > "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo")
+baseline="$(key "$out" CURRENT_DESC_PATH)"
+[[ -n "$baseline" ]] || fail "CURRENT_DESC_PATH must name a path with no CR open; got: $out"
+[[ -f "$baseline" ]] || fail "CURRENT_DESC_PATH must exist: $baseline"
+[[ ! -s "$baseline" ]] || fail "the baseline should be empty with no CR: $baseline"
+ok "a pending CR still gets an empty baseline file, not an empty path"
+
 # --cr names one specific CR, so it resolves whatever its state — the reason the
 # check is scoped to the branch-inferred path rather than applied in both.
 repo="$(make_repo github.com gh-state-explicit)"

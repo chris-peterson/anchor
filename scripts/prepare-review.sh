@@ -87,7 +87,8 @@
 #   WORKTREE_CLEAN=<0|1>
 #   STATE=<match|dirty|head-mismatch|dirty+head-mismatch>   drift vs the CR head
 #   CURRENT_DESC_PATH=<path>     temp file holding the CR's current description
-#                                (baseline for the Step 4 review); empty when no CR
+#                                (baseline for the Step 4 review). Always a path;
+#                                the file is empty where no CR holds one yet
 #   DESC_DRAFT_PATH=<path>       temp file the skill writes the drafted description
 #                                to (the review's right-hand side)
 #   TEMPLATE_PATH=<path>         the CR template to compose into, empty when the
@@ -436,9 +437,13 @@ read_delete_branch_on_merge
 
 # --- Capture the current description (baseline for the Step 4 diff) ----------
 
-current_desc_path=""
+# Always a file, empty where there is no CR to read one from — which is the usual
+# case now that the CR is opened last. The review dispatcher takes a pair of
+# paths, so an empty string here is a usage error rather than an empty left-hand
+# side, and the review the skill is about to open never launches.
+current_desc_path="$(anchor_tmpfile cr-desc-current)"
+: > "$current_desc_path"
 if [[ -n "$cr_url" ]]; then
-  current_desc_path="$(anchor_tmpfile cr-desc-current)"
   printf '%s' "$cr_desc" > "$current_desc_path"
 fi
 

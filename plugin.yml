@@ -31,7 +31,7 @@ suite:
   dependencies:
     - name: revdiff
       required: false
-      reason: default review backend wherever the subject is a changeset
+      reason: default review tool wherever the subject is a changeset
       # revdiff documents itself off the hub, so its link can't be derived.
       url: https://revdiff.com
     - name: tack

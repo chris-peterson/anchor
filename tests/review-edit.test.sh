@@ -10,8 +10,8 @@
 # jq.
 set -euo pipefail
 
-# Hermetic: ignore the user's global/system git config so backend selection is
-# controlled per-case here, not by a global anchor.edit.backend.
+# Hermetic: ignore the user's global/system git config so tool selection is
+# controlled per-case here, not by a global anchor.edit.tool.
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -73,11 +73,11 @@ git -C "$repo" config commit.gpgsign false
 printf 'one\n' > "$repo/a.txt"; git -C "$repo" add -A; git -C "$repo" commit --quiet -m first
 printf 'one\ntwo\n' > "$repo/a.txt"; git -C "$repo" add -A; git -C "$repo" commit --quiet -m second
 
-# Hermetic in PATH as well as in git config. Backend resolution settles the
+# Hermetic in PATH as well as in git config. Tool resolution settles the
 # configured name against what is installed, so without a fixed PATH the
 # assertions would read the host's installed set rather than the key resolution
 # they are about. A stub revdiff ahead of everything makes the configured
-# backend present, which is the state the substitution rule leaves alone. It
+# tool present, which is the state the substitution rule leaves alone. It
 # sits in its own dir, not
 # $bin: the probe cases below run against $bin precisely to assert what happens
 # when no viewer is installed.
@@ -250,7 +250,7 @@ chmod +x "$bin/stub-split-runner.sh"
 export ANCHOR_SPLIT_RUNNER="$bin/stub-split-runner.sh"
 
 mode_of()    { jq -r .mode    <<<"$(json_of "$1")"; }
-backend_of() { jq -r .backend <<<"$(json_of "$1")"; }
+tool_of() { jq -r .tool <<<"$(json_of "$1")"; }
 
 # The mode has no key: the subject answers, whatever a user may have set and
 # whichever skill is asking. Only --mode moves it, which is how a probe hands its
@@ -266,43 +266,43 @@ git -C "$repo" config --unset anchor.reviewMode || true
 git -C "$repo" config --unset anchor.commit.reviewMode || true
 ok "mode: the subject decides it, and no config key overrides that"
 
-# The two axes are independent: the mode says edit/diff, the backend names the
+# The two axes are independent: the mode says edit/diff, the tool names the
 # tool. A diff-mode run reports the viewer, an edit-mode run reports the editor.
-[ "$(backend_of "$(run --skill commit --previous)")" = revdiff ] \
-  || fail "a diff-mode run should report the viewer as its backend"
+[ "$(tool_of "$(run --skill commit --previous)")" = revdiff ] \
+  || fail "a diff-mode run should report the viewer as its tool"
 export ANCHOR_EDITOR_LAUNCHER="$bin/stub-editor.sh"
-b=$(backend_of "$(GIT_EDITOR='my-editor --wait' run --skill commit --mode edit --local --message-file "$msg" 2>/dev/null)")
-[ "$b" = 'my-editor --wait' ] || fail "an edit-mode run should report the editor as its backend, got '$b'"
+b=$(tool_of "$(GIT_EDITOR='my-editor --wait' run --skill commit --mode edit --local --message-file "$msg" 2>/dev/null)")
+[ "$b" = 'my-editor --wait' ] || fail "an edit-mode run should report the editor as its tool, got '$b'"
 unset ANCHOR_EDITOR_LAUNCHER
-ok "mode: the backend names the tool that ran the mode, editor or viewer"
+ok "mode: the tool names the tool that ran the mode, editor or viewer"
 
-# anchor.edit.backend is the mirror of anchor.diff.backend — edit mode's tool
+# anchor.edit.tool is the mirror of anchor.diff.tool — edit mode's tool
 # half, above git's chain because it is the narrower statement.
 export ANCHOR_EDITOR_LAUNCHER="$bin/stub-editor.sh"
-git -C "$repo" config anchor.edit.backend 'anchor-editor --wait'
-b=$(backend_of "$(GIT_EDITOR='my-editor --wait' run --skill commit --mode edit --local --message-file "$msg" 2>/dev/null)")
-[ "$b" = 'anchor-editor --wait' ] || fail "anchor.edit.backend should outrank git's chain, got '$b'"
-git -C "$repo" config --unset anchor.edit.backend || true
+git -C "$repo" config anchor.edit.tool 'anchor-editor --wait'
+b=$(tool_of "$(GIT_EDITOR='my-editor --wait' run --skill commit --mode edit --local --message-file "$msg" 2>/dev/null)")
+[ "$b" = 'anchor-editor --wait' ] || fail "anchor.edit.tool should outrank git's chain, got '$b'"
+git -C "$repo" config --unset anchor.edit.tool || true
 unset ANCHOR_EDITOR_LAUNCHER
-ok "backend: anchor.edit.backend names edit mode's tool, over git's chain"
+ok "tool: anchor.edit.tool names edit mode's tool, over git's chain"
 
 # --- an unknown mode fails rather than picking one -------------------------
 if run --skill commit --mode bogus --previous 2>/dev/null; then fail "unknown mode should exit non-zero"; fi
 ok "mode: an unknown mode exits non-zero"
 
-# --- an unknown diff backend fails on its own axis, once there is nothing to
+# --- an unknown diff tool fails on its own axis, once there is nothing to
 # coalesce onto. With a viewer installed it never reaches the adapter check:
 # the within-mode substitution takes it to the installed one first.
-git -C "$repo" config anchor.diff.backend bogus-viewer
+git -C "$repo" config anchor.diff.tool bogus-viewer
 v=$( ( cd "$repo" && PATH="$bin:/usr/bin:/bin" bash "$dispatch" --skill commit --previous ) 2>/dev/null )
 [ "$(verdict_of "$v")" = no-verdict ] \
-  || fail "an unknown diff backend with nothing installed should report no-verdict"
-[ "$(jq -r .raw.exitCode <<<"$(json_of "$v")")" = unknown-backend ] \
-  || fail "the cause should name it as a backend anchor has no adapter for"
-[ "$(backend_of "$(run --skill commit --previous)")" = revdiff ] \
+  || fail "an unknown diff tool with nothing installed should report no-verdict"
+[ "$(jq -r .raw.exitCode <<<"$(json_of "$v")")" = unknown-tool ] \
+  || fail "the cause should name it as a tool anchor has no adapter for"
+[ "$(tool_of "$(run --skill commit --previous)")" = revdiff ] \
   || fail "with a viewer installed, an unknown one should coalesce onto it"
-git -C "$repo" config --unset anchor.diff.backend || true
-ok "backend: an unknown diff backend reports no-verdict, or coalesces where it can"
+git -C "$repo" config --unset anchor.diff.tool || true
+ok "tool: an unknown diff tool reports no-verdict, or coalesces where it can"
 
 # ====================== the probe ==========================================
 # The skills ask how a review resolves before deciding whether a visual review is
@@ -345,26 +345,26 @@ ok "probe: a reachable editor is reported on its own axis"
 # here comes from a config key and the editor from anchor's own ladder, so the
 # launch has a hint to print for one and not the other.
 [ "$(key_of REVIEW_MODE_SOURCE "$o")" = override ]   || fail "an asked-for mode should report source=override"
-[ "$(key_of REVIEW_BACKEND_SOURCE "$o")" = default ] || fail "an unconfigured editor should report source=default"
-[ -n "$(key_of REVIEW_BACKEND "$o")" ]               || fail "the probe should name the tool it would open"
+[ "$(key_of REVIEW_TOOL_SOURCE "$o")" = default ] || fail "an unconfigured editor should report source=default"
+[ -n "$(key_of REVIEW_TOOL "$o")" ]               || fail "the probe should name the tool it would open"
 ok "probe: the mode and the tool each report whether the user chose them"
 
 o=$( cd "$repo" && PATH="$bin:/usr/bin:/bin" ANCHOR_EDITOR_LAUNCHER="$bin/stub-editor.sh" \
      GIT_EDITOR='my-editor --wait' bash "$dispatch" --skill commit --probe --mode edit )
-[ "$(key_of REVIEW_BACKEND "$o")" = 'my-editor --wait' ] || fail "a configured editor should be named verbatim"
-[ "$(key_of REVIEW_BACKEND_SOURCE "$o")" = config ]      || fail "a configured editor should report source=config"
+[ "$(key_of REVIEW_TOOL "$o")" = 'my-editor --wait' ] || fail "a configured editor should be named verbatim"
+[ "$(key_of REVIEW_TOOL_SOURCE "$o")" = config ]      || fail "a configured editor should report source=config"
 ok "probe: a configured editor is named, and reported as the user's choice"
 
-# One backend axis, whichever mode is on: a diff-mode probe names the viewer
+# One tool axis, whichever mode is on: a diff-mode probe names the viewer
 # where an edit-mode one names the editor, so a consumer reads one key.
 o=$( cd "$repo" && PATH="$viewerbin:$bin:/usr/bin:/bin" bash "$dispatch" --skill commit --probe )
 [ "$(key_of REVIEW_MODE "$o")" = diff ]       || fail "the viewer mode should be what opens here"
-[ "$(key_of REVIEW_BACKEND "$o")" = revdiff ] || fail "a diff-mode probe should name the viewer"
-ok "probe: the backend key names the viewer in diff mode and the editor in edit"
+[ "$(key_of REVIEW_TOOL "$o")" = revdiff ] || fail "a diff-mode probe should name the viewer"
+ok "probe: the tool key names the viewer in diff mode and the editor in edit"
 
-git -C "$repo" config anchor.diff.backend definitely-not-installed
+git -C "$repo" config anchor.diff.tool definitely-not-installed
 o=$(probe --skill commit --probe)
-[ "$(key_of REVIEW_BACKEND "$o")" = definitely-not-installed ] || fail "probe should report the configured viewer"
+[ "$(key_of REVIEW_TOOL "$o")" = definitely-not-installed ] || fail "probe should report the configured viewer"
 [ "$(key_of REVIEW_AVAILABLE "$o")" = 0 ]                      || fail "an absent binary should report unavailable"
 ok "probe: with no diff viewer installed at all, the probe reports unavailable"
 
@@ -375,15 +375,15 @@ exit 0
 EOF
 chmod +x "$bin/revdiff"
 o=$(probe --skill commit --probe)
-[ "$(key_of REVIEW_BACKEND "$o")" = revdiff ]                               || fail "probe should coalesce onto the installed tool"
-[ "$(key_of REVIEW_AVAILABLE "$o")" = 1 ]                                   || fail "a coalesced backend is available"
-[ "$(key_of REVIEW_BACKEND_CONFIGURED "$o")" = definitely-not-installed ]   || fail "the substitution should name what config asked for"
+[ "$(key_of REVIEW_TOOL "$o")" = revdiff ]                               || fail "probe should coalesce onto the installed tool"
+[ "$(key_of REVIEW_AVAILABLE "$o")" = 1 ]                                   || fail "a coalesced tool is available"
+[ "$(key_of REVIEW_TOOL_CONFIGURED "$o")" = definitely-not-installed ]   || fail "the substitution should name what config asked for"
 ok "probe: coalesces onto an installed tool and names the configured one"
 
 # ...but never out of the mode: coalescing picks another viewer, never the
 # editor, which edits one artifact rather than showing a diff.
 rm -f "$bin/revdiff"
-git -C "$repo" config --unset anchor.diff.backend || true
+git -C "$repo" config --unset anchor.diff.tool || true
 o=$(probe --skill commit --probe)
 [ "$(key_of REVIEW_MODE "$o")" = diff ] || fail "an absent viewer should never flip the mode to edit"
 ok "probe: an absent diff viewer never coalesces into edit mode"
@@ -411,8 +411,8 @@ git -C "$repo" config anchor.reviewBackend editor
 o=$( cd "$repo" && PATH="$viewerbin:$bin:/usr/bin:/bin" \
      bash "$dispatch" --skill commit --probe 2>"$work/legacy.txt" )
 [ "$(key_of REVIEW_MODE "$o")" = diff ]            || fail "the superseded key must not move the mode"
-grep -q 'anchor.edit.backend' "$work/legacy.txt"   || fail "the keys that replaced it should be named on stderr"
-grep -q 'anchor.diff.backend' "$work/legacy.txt"   || fail "the keys that replaced it should be named on stderr"
+grep -q 'anchor.edit.tool' "$work/legacy.txt"   || fail "the keys that replaced it should be named on stderr"
+grep -q 'anchor.diff.tool' "$work/legacy.txt"   || fail "the keys that replaced it should be named on stderr"
 git -C "$repo" config --unset anchor.reviewBackend || true
 ok "mode: the superseded anchor.reviewBackend key does nothing, and says so"
 unset EDITOR_BUFFER_CAPTURE
@@ -511,7 +511,7 @@ r=$(resolve "$codebin")
 ok "resolve: with nowhere to host one, a blocking VS Code on PATH"
 
 # A dumb terminal is git's answer about the stdio git itself was handed. This
-# backend puts the editor in a terminal the host opens (DIFF-17), which is a
+# tool puts the editor in a terminal the host opens (DIFF-17), which is a
 # separate question, so the rung stands either way.
 for term in dumb xterm; do
   r=$(resolve "$work/empty-bin" "$term")

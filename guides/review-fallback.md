@@ -5,7 +5,7 @@ A review reaches this guide from two places, and they are the same case:
 - the probe said nothing usable is installed
   (`REVIEW_AVAILABLE=0`), or
 - the review ran and came back `no-verdict`, `incomplete`, or with no parseable
-  `REVIEW_VERDICT` at all — the backend closed early, died, or never launched.
+  `REVIEW_VERDICT` at all — the tool closed early, died, or never launched.
 
 Either way the change is **ungraded**, and nothing the review gates may
 publish. What follows is the ladder down: each rung is a way to get a real
@@ -21,7 +21,7 @@ converts a tooling failure into an approval, which is the one outcome the
 verdict contract exists to prevent. Ask about the **content**, never about the
 window.
 
-This is why a difftool is not a rung, and not a backend either (DIFF-18). It can
+This is why a difftool is not a rung, and not a tool either (DIFF-18). It can
 put a diff on screen, but it speaks no contract, so its review ends here
 regardless — one screen later, with the user primed to say yes.
 
@@ -47,7 +47,7 @@ where they started, so a `no-verdict` from the editor lands on rung 2 instead of
 being offered the same tool twice.
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill <skill> --backend editor …
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill <skill> --tool editor …
 ```
 
 `REVIEW_EDIT_AVAILABLE=0` means a launch would reach no editor — nothing
@@ -80,12 +80,12 @@ summary.
 
 ## Don't retry into the same wall
 
-A backend that failed to launch fails the same way on the next call. Say what
+A tool that failed to launch fails the same way on the next call. Say what
 happened once, in one line — what the output showed, that nothing was published
 — and go to the ladder. Re-running it reads as progress and produces the same
 `no-verdict`.
 
-The exception is a backend that was never tried: where the probe named a
+The exception is a tool that was never tried: where the probe named a
 substitute because the configured tool is absent, launching the substitute is a
 first attempt, not a retry.
 

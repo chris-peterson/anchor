@@ -17,10 +17,10 @@ jobs:
       # (that's how its out-vars like RESOLVED_VIA read as used) rather than as
       # a standalone entry point. scripts/review/*.sh is sourced-only too, but
       # review-diff.sh builds the adapter path from the resolved mode at run time,
-      # and diff.sh builds its backend's the same way, so external-sources can't
+      # and diff.sh builds its tool's path the same way, so external-sources can't
       # reach either — they are listed here
       # and lint standalone (they carry their own SC2154 disable for the
       # dispatcher-exported vars). Gates at the default severity (info and up) —
       # the scripts are a zero-finding baseline, so any new finding fails.
       - name: shellcheck
-        run: shellcheck hooks/*.sh scripts/*.sh scripts/review/*.sh scripts/review/backends/*.sh tests/*.sh
+        run: shellcheck hooks/*.sh scripts/*.sh scripts/review/*.sh scripts/review/tools/*.sh tests/*.sh

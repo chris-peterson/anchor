@@ -38,9 +38,9 @@ flowchart TD
         Why --> Recency["Anti-recency check"]
         Recency --> Draft["Draft Context + Review guide"]
         Draft --> Resolve["Resolve the placeholder links"]
-        Resolve --> Backend{Review mode?}
-        Backend -->|Yes| InTool["Review the description in the tool"]
-        Backend -->|No| Chat["Paste the body in chat, then ask"]
+        Resolve --> Tool{Review mode?}
+        Tool -->|Yes| InTool["Review the description in the tool"]
+        Tool -->|No| Chat["Paste the body in chat, then ask"]
         InTool --> Verdict{Verdict?}
         Verdict -->|approved| Open["Open the draft CR with the approved body"]
         Verdict -->|changes requested| Draft
@@ -61,7 +61,7 @@ Follow the execute-quietly discipline: `${CLAUDE_PLUGIN_ROOT}/guides/execute-qui
 3. the Step 2 questions;
 4. the review feedback echoed back, and the one-line result of the write.
 
-The drafted description itself is *shown in the review tool*, not pasted into chat — the exception is the no-backend fallback in Step 4, where chat is the only surface it has.
+The drafted description itself is *shown in the review tool*, not pasted into chat — the exception is the no-tool fallback in Step 4, where chat is the only surface it has.
 
 Everything else is internal: the per-step recon plumbing ("origin is GitLab, 1 ahead, no template, tree clean" — the script already ran it), the Step 3 anti-recency disposition (Centerpiece / Footnote / Cut scratch that *shapes* the draft, never output), and session-internal A → B history (which also gets cut from the description as a "Drift artifact" — see Step 3). Reserve prose for the steps that need *your* judgment or the *user's* input — the Step 2 prompts, drafting in Step 3, presenting options in Step 4.
 
@@ -92,7 +92,7 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 | `CR_DRAFT` | gates the post-rebase force-push (see below) |
 | `PRIOR_CR_IID` / `PRIOR_CR_STATE` | non-empty → the branch name already carries a CR that isn't open, which this run passed over; name it once (see "A reused branch name") |
 | `STATE` | `match` → proceed; anything else → surface and stop (see "Act on `STATE`") |
-| `CURRENT_DESC_PATH` | the review's left-hand side in Step 4 (empty on `skip-deep-links`) |
+| `CURRENT_DESC_PATH` | the review's left-hand side in Step 4 — an empty file until a CR holds a description |
 | `DESC_DRAFT_PATH` | where to write the drafted description in Step 4 — already `mktemp`'d, so don't make your own |
 | `TEMPLATE_PATH` | the CR template to compose into (Step 3); empty when the hierarchy holds none, or when the pick needs the author |
 | `TEMPLATE_SOURCE` | which level answered — `local` / `project-settings` / `inherited` / `configured` / `ambiguous` / `none` |
@@ -366,23 +366,23 @@ The description gets pasted into a markdown renderer, so rendering bugs are user
 
 ### Open the review
 
-The description review runs when a review backend is available. Ask the dispatcher which one — it resolves this skill's key over the umbrella one and then the default the *subject* picks, considering only tools it can actually open. **Give the probe the same `--files` pair the launch will get**: the default reads the left-hand side, so a bare probe answers for a review nobody is about to open.
+The description review runs when a review tool is available. Ask the dispatcher which one — it resolves this skill's key over the umbrella one and then the default the *subject* picks, considering only tools it can actually open. **Give the probe the same `--files` pair the launch will get**: the default reads the left-hand side, so a bare probe answers for a review nobody is about to open.
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --probe \
   --files <CURRENT_DESC_PATH> <DESC_DRAFT_PATH>
 ```
 
-- `REVIEW_MODE=edit` — what an empty `CURRENT_DESC_PATH` gets: the CR holds no description, so there is nothing to diff and the draft is all new. It opens in the user's editor and whatever they save *is* the description.
+- `REVIEW_MODE=edit` — what an empty `CURRENT_DESC_PATH` gets: no CR holds a description yet, so there is nothing to diff and the draft is all new. It opens in the user's editor and whatever they save *is* the description.
 - `REVIEW_MODE=diff` (or another viewer) — the CR already has a description, so the two sides make real hunks; or the user configured a viewer, or no editor was reachable and an installed one stood in. The user comments and you fold the comments in.
 - `REVIEW_AVAILABLE=0` — nothing usable; skip to the fallback ladder below.
 - `REVIEW_MODE_CONFIGURED` present — the run is opening a different shape than the preference named, because the one it named has nowhere to open. Say which one you're opening in one line, so it isn't discovered as a surprise window.
-- `REVIEW_MODE_SOURCE` / `REVIEW_BACKEND_SOURCE` — where each half of the choice came from. `subject` on the first, or `default` on the second, means anchor picked it and the user has no preference on file, which is the hint the manifest carries (`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`, "when anchor picked the tool"). `REVIEW_BACKEND` names the tool about to open, so the line can say what it would replace.
+- `REVIEW_MODE_SOURCE` / `REVIEW_TOOL_SOURCE` — where each half of the choice came from. `subject` on the first, or `default` on the second, means anchor picked it and the user has no preference on file, which is the hint the manifest carries (`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`, "when anchor picked the tool"). `REVIEW_TOOL` names the tool about to open, so the line can say what it would replace.
 - `REVIEW_EDIT_AVAILABLE=0|1` — whether the fallback ladder may offer the editor rung. Carry it forward; it costs nothing here and it's the difference between offering a route that works and one that dead-ends.
 
 Pass what it returned to the launch (`--mode <REVIEW_MODE>`) so the review opens in the tool the probe found rather than re-resolving the config.
 
-With a backend available, open the draft through the **dispatcher** — not the backend directly; the dispatcher builds the header and prints the normalized result on its stdout. The backend blocks until it's closed, so launch as a **background** Bash call (`run_in_background: true`); a foreground call holds the turn open until the Bash timeout:
+With a tool available, open the draft through the **dispatcher** — not the tool directly; the dispatcher builds the header and prints the normalized result on its stdout. The tool blocks until it's closed, so launch as a **background** Bash call (`run_in_background: true`); a foreground call holds the turn open until the Bash timeout:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --mode <REVIEW_MODE> --files \
@@ -391,9 +391,9 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --mod
   --detail branch=<BRANCH> --detail CR=<CR_URL>
 ```
 
-`CURRENT_DESC_PATH` is the left-hand side — what the forge holds now. It's context for the draft, not the subject: on a CR this run opened, the forge's `--fill` baseline is the commit body, so there's little of it to compare against.
+`CURRENT_DESC_PATH` is the left-hand side — what the forge holds now, and an empty file where no CR holds anything yet. It's context for the draft, not the subject.
 
-**Print the manifest as you launch.** The subject here is one drafted document, so the table names the CR (number and title), the repo and branch, the backend, and the sections the draft carries — an editor window opens behind the terminal, and a review the user cannot see is one they never grade. The shape is in `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "show what is going under review". Nothing else about the launch is output. After the table, the next thing you say is the verdict, the feedback echoed back, or the one-line write result.
+**Print the manifest as you launch.** The subject here is one drafted document, so the table names the CR (number and title), the repo and branch, the tool, and the sections the draft carries — an editor window opens behind the terminal, and a review the user cannot see is one they never grade. The shape is in `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "show what is going under review". Nothing else about the launch is output. After the table, the next thing you say is the verdict, the feedback echoed back, or the one-line write result.
 
 When the background command completes, read its stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trips the command-substitution gate. The last lines carry `REVIEW_VERDICT` (`approved` / `changes-requested` / `incomplete` / `no-verdict`) and `REVIEW_OUTPUT` (compact JSON — the DIFF contract in `SPEC.md`). **Don't read silence as success** — only `approved` is approval:
 
@@ -401,12 +401,12 @@ When the background command completes, read its stdout with the **BashOutput too
 - **`changes-requested`** — each entry in `REVIEW_OUTPUT.comments` is `{body, target, file?, startLine?, endLine?, side?}`, where `body` is the inline feedback. A comment whose `target` is `file` and whose body carries a diff is the reviewer's own edit rather than an annotation — they wrote into the review through a difftool; read it per `${CLAUDE_PLUGIN_ROOT}/guides/reviewer-edits.md`, keeping the fixes and taking their question lines back out.  Comments are ungraded, so fold in every one, then re-open the review on the revised draft. Echo the comments back first (the review-feedback table in `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`) so the user knows they landed.
   - **The re-open's left-hand side is the previous draft, not `CURRENT_DESC_PATH`.** Copy the draft aside before revising it — to a sibling path with `.prev` before the extension — and pass that as the left. What the second pass has to show is what the feedback changed; the description the forge holds is the comparison the first pass already answered.
 - **`incomplete`** — the reviewer closed with changes unreviewed: a partial pass, not approval. Ask what they want to change, then re-review.
-- **`no-verdict`** — the review **did not complete**. `capabilities.producesVerdict: false` means the backend graded nothing; otherwise it closed early or errored (see `raw.exitCode`). Either way the user *may* have seen it and definitely didn't grade it: report what happened, then take the fallback ladder below. Don't silently retry — the same failure recurs.
-- **No verdict line at all** — stdout empty, only stderr text, or no parseable `REVIEW_VERDICT`: the dispatcher exited before reporting (bad argument, missing `jq`, a backend that died). Treat it as `no-verdict` — say what the output did show, and take the fallback ladder below. Nothing is written to the CR on an unverified result.
+- **`no-verdict`** — the review **did not complete**. `capabilities.producesVerdict: false` means the tool graded nothing; otherwise it closed early or errored (see `raw.exitCode`). Either way the user *may* have seen it and definitely didn't grade it: report what happened, then take the fallback ladder below. Don't silently retry — the same failure recurs.
+- **No verdict line at all** — stdout empty, only stderr text, or no parseable `REVIEW_VERDICT`: the dispatcher exited before reporting (bad argument, missing `jq`, a tool that died). Treat it as `no-verdict` — say what the output did show, and take the fallback ladder below. Nothing is written to the CR on an unverified result.
 
 ### When the review didn't grade it (or there's no CR yet)
 
-Three cases land here: no backend is installed, a review that came back without a usable verdict, and the `skip-deep-links` path where `CURRENT_DESC_PATH` is empty because no CR exists.
+Three cases land here: no tool is installed, a review that came back without a usable verdict, and the `skip-deep-links` path where no CR will exist to write to.
 
 Walk the ladder in `${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md` with `DESC_DRAFT_PATH` as the artifact. This skill's artifact is a drafted document, so the changeset walk doesn't apply; the document rungs do.
 
@@ -418,7 +418,7 @@ Then ask how to proceed with the `AskUserQuestion` tool, header `Disposition`, o
 
 ### Open the CR and write it
 
-Reached on an `approved` review, or on **Yes (write)** from the no-backend fallback. Editing a description is reversible, which is why the review's sign-off is enough to write on. On 401/403 or similar auth failure, surface the error and ask the user to refresh credentials — do not silently fall back to copy-only. The draft is `DESC_DRAFT_PATH`.
+Reached on an `approved` review, or on **Yes (write)** from the no-tool fallback. Editing a description is reversible, which is why the review's sign-off is enough to write on. On 401/403 or similar auth failure, surface the error and ask the user to refresh credentials — do not silently fall back to copy-only. The draft is `DESC_DRAFT_PATH`.
 
 **1. Open the CR, if Step 1 said one is pending.** On `CR_PENDING=1`, this is where the CR first exists, and it exists carrying the text the author just approved:
 

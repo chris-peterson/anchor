@@ -19,7 +19,7 @@ just docs           # render the docs site and serve it locally
 
 just test           # every suite this platform runs, via tests/run-all.sh
 bash tests/<name>.test.sh                                  # one suite
-shellcheck hooks/*.sh scripts/*.sh scripts/review/*.sh scripts/review/backends/*.sh tests/*.sh
+shellcheck hooks/*.sh scripts/*.sh scripts/review/*.sh scripts/review/tools/*.sh tests/*.sh
 ```
 
 `tests/run-all.sh` discovers `tests/*.test.sh`, so a new suite needs no wiring in
@@ -39,7 +39,7 @@ rules/                    ambient rules injected into every session by hooks/emi
 scripts/                  the deterministic helpers the skills shell out to
 scripts/lib/              sourced-only helpers (context resolution, portable temp paths)
 scripts/review/           one adapter per mode (edit.sh, diff.sh)
-scripts/review/backends/  the tool-specific half of a diff mode review, one file per viewer
+scripts/review/tools/     the tool-specific half of a diff mode review, one file per viewer
 guides/                   reference the skills and rules read at runtime
 templates/                the output shapes the skills produce, read at runtime
 tests/                    bash suites, one per script under test
@@ -72,7 +72,7 @@ what picks the level.
   `mktemp` disagree about where an `XXXXXX` run may sit in a template.
 - **shellcheck is a zero-finding baseline** at the default severity, so any new
   finding fails CI. `scripts/lib/*.sh` is sourced-only and lints *through* its
-  callers; `scripts/review/*.sh` and `scripts/review/backends/*.sh` lint standalone
+  callers; `scripts/review/*.sh` and `scripts/review/tools/*.sh` lint standalone
   because those paths are built at run time and `external-sources` can't reach
   them.
 - **The script decides facts; the skill decides judgment.** Whether HEAD is out
@@ -105,11 +105,11 @@ what picks the level.
   handed the drafted artifact and what they save *is* the artifact, or `diff`,
   where they are shown a changeset and comment on it. The subject picks it —
   `edit` where there is nothing to diff against, `diff` everywhere else.
-- **Review backend** — the tool that runs a mode: the user's editor in `edit`
-  (`anchor.edit.backend`, else `core.editor` and its chain), a viewer in `diff`
-  (`anchor.diff.backend`, else git's own `diff.tool`, else `revdiff`). The mode
+- **Review tool** — the tool that runs a mode: the user's editor in `edit`
+  (`anchor.edit.tool`, else `core.editor` and its chain), a viewer in `diff`
+  (`anchor.diff.tool`, else git's own `diff.tool`, else `revdiff`). The mode
   has no key — the subject settles it — and the tool is the half that does, one
-  key per mode. A difftool has nowhere to leave an annotation, so its backend
+  key per mode. A difftool has nowhere to leave an annotation, so its adapter
   reads the reviewer's answer out of the working tree: the files they edited come
   back as the feedback.
 - **Review contract** — the tool-agnostic result `scripts/review-diff.sh`

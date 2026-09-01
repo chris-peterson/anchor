@@ -72,20 +72,20 @@ launches the review, and let the tool render the contents.
 > | `SPEC.md` | +18 −15 |
 
 Name the drafted artifact riding with the diff — the commit message, the CR
-description, the release notes — because the backend shows it in a pane or a
+description, the release notes — because the tool shows it in a pane or a
 header the user has no reason to look for.
 
 ### When anchor picked the tool, say which key would pick it instead
 
 The probe reports where each half of the choice came from —
-`REVIEW_MODE_SOURCE` for the shape and `REVIEW_BACKEND_SOURCE` for the tool
+`REVIEW_MODE_SOURCE` for the shape and `REVIEW_TOOL_SOURCE` for the tool
 running it. `subject` on the first and `default` on the second both mean anchor
 picked it rather than the user, and the tool itself is the last place that would
 ever mention it. Add one line under the table naming the key, and the value that
 would have produced what they're looking at:
 
-> Editor picked by anchor — `git config anchor.edit.backend <editor>` chooses it
-> (`anchor.diff.backend` for the viewer).
+> Editor picked by anchor — `git config anchor.edit.tool <editor>` chooses it
+> (`anchor.diff.tool` for the viewer).
 
 The mode has no key to name, so the hint is only ever about the tool: where the
 shape anchor picked isn't the one wanted, the fix is the subject, not a setting.
@@ -97,7 +97,7 @@ not advice to lead with.
 
 The manifest is the launch's half of the loop that "echo back feedback" closes:
 the user grades a scope you named, and you repeat back what they said about it.
-The rest of the launch stays silent — the command, its flags, the backend
+The rest of the launch stays silent — the command, its flags, the tool
 resolution, the wait.
 
 ## Exception: echo back feedback from a review tool
