@@ -243,7 +243,9 @@ check.
   placeholder whose token is a distinctive literal substring of the target line, and
   shall not read a line number off the diff, hash a file path, or assemble an anchor
   itself. A hand-read number still resolves — the forge scrolls to a line the bullet
-  is not describing — and nothing about the rendered link reveals it.
+  is not describing — and nothing about the rendered link reveals it. The token shall
+  be matched byte for byte as written, so a token carrying a backslash resolves like
+  any other rather than reporting as a line the changeset never touched.
 - **[PREPARE-10a]** If a placeholder's token matches several changed lines, or none,
   then the system shall report the candidate lines with their content and stop, rather
   than take the first match or reduce the link to the file. A token in the file but on

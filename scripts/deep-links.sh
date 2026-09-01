@@ -219,9 +219,14 @@ resolve() {
   if [[ -n "$touched" ]]; then
     # Two inputs, so the classic NR==FNR split — guarded above, because an empty
     # first file would make every line of the second one look like a line number.
-    hits=$(awk -v tok="$token" '
+    # The token reaches awk through the environment, not through -v: an
+    # assignment there is escape-processed, so a token carrying a backslash — a
+    # regex, an escaped character — arrives with it stripped and matches
+    # nothing. That failure reads as `unchanged`, which sends the author looking
+    # for a line that is right in front of them.
+    hits=$(ANCHOR_TOKEN="$token" awk '
       NR == FNR { want[$1 + 0] = 1; next }
-      (FNR in want) && index($0, tok) { printf "%d: %s\n", FNR, $0 }
+      (FNR in want) && index($0, ENVIRON["ANCHOR_TOKEN"]) { printf "%d: %s\n", FNR, $0 }
     ' <(printf '%s\n' "$touched") "$path")
   else
     hits=""

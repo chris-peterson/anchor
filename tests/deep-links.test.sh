@@ -45,8 +45,10 @@ printf 'two\n' > "$repo/docs.md"
 # Line 3 changed and line 4 blanked, so app.txt carries a changed non-blank line,
 # a changed blank line, and untouched lines — one file covering every verdict.
 # Lines 6-8 add a token on three changed lines (ambiguous), one on a single
-# changed line (unique), and a section heading with spaces and parentheses.
-printf 'a1\nsettled\nchanged\n\na5\nFILE_LINKS one\nFILE_LINKS two\n## Deep-link construction (Review guide)\nsolitary\n' \
+# changed line (unique), and a section heading with spaces and parentheses. The
+# last line carries a backslash, which is what an escape-processing assignment
+# eats on the way into awk.
+printf 'a1\nsettled\nchanged\n\na5\nFILE_LINKS one\nFILE_LINKS two\n## Deep-link construction (Review guide)\nsolitary\nesc [][\\.*^$]\n' \
   > "$repo/app.txt"
 git -C "$repo" add -A
 git -C "$repo" commit --quiet -m change
@@ -155,6 +157,17 @@ o=$(run --check "$draft" --base main) || fail "a skill mention should not fail -
 [ "$(val PLACEHOLDERS "$o")" = 1 ] || fail "expected 1 placeholder; got: $o"
 [ "$(val UNRESOLVED "$o")" = 0 ]   || fail "expected 0 unresolved; got: $o"
 ok "--check reads /anchor:<skill> as prose, not as a broken placeholder"
+
+# A token carrying a backslash — a regex, an escaped character — is what an
+# escape-processing awk assignment strips on the way in. The token then matches
+# nothing and reports as `unchanged`, which sends the author looking for a line
+# that is right in front of them.
+cat > "$draft" <<'EOF'
+- [`app.txt`](anchor:app.txt#[][\.*^$]) — the character class
+EOF
+o=$(run --check "$draft" --base main) || fail "a backslash token should resolve: $o"
+[ "$(val UNRESOLVED "$o")" = 0 ] || fail "a token with a backslash must resolve; got: $o"
+ok "--check matches a token carrying a backslash"
 
 # --- --expand: the finished URLs, written back in place -----------------------
 cat > "$draft" <<EOF
