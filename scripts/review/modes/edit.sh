@@ -145,7 +145,7 @@ emit_review() {
     artifact_file="$message_file"
     [[ -n "$artifact_target" ]] || artifact_target="commit-message"
   else
-    echo "review-diff.sh: edit mode edits a drafted artifact, and this review has none — it is a diff on its own. Put that skill in diff mode: git config anchor.${review_skill:-<skill>}.reviewMode diff" >&2
+    echo "review-diff.sh: --mode edit asks to edit a drafted artifact, and this review has none — it is a diff on its own. Nothing defaults here: a subject with no artifact resolves to diff, so this only follows an explicit --mode edit. Launch it with --mode diff, or drop --mode and let the subject settle it." >&2
     editor_emit no-verdict absent "no drafted artifact to edit"
     return
   fi
