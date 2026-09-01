@@ -2,7 +2,7 @@
 # Functional test for the difftool adapter (scripts/review/tools/difftool.sh)
 # and the `diff.tool` fall-through the dispatcher resolves for it.
 #
-# Drives the real dispatcher with ANCHOR_SPLIT_RUNNER pointed at a stub that
+# Drives the real dispatcher with ANCHOR_HOST_RUNNER pointed at a stub that
 # stands in for the terminal a difftool renders in: it runs the command it was
 # handed, so `git difftool` really launches, with a `difftool.<name>.cmd` that
 # stands in for the reviewer — reading the diff, or writing into the working tree
@@ -30,12 +30,12 @@ bin="$work/bin"; mkdir -p "$bin"
 
 # The terminal stand-in: run the command here rather than in a pane, and report
 # its status the way a real split would.
-cat > "$bin/stub-split-runner.sh" <<'EOF'
+cat > "$bin/stub-host-runner.sh" <<'EOF'
 #!/usr/bin/env bash
 sh -c "$1"
 EOF
-chmod +x "$bin/stub-split-runner.sh"
-export ANCHOR_SPLIT_RUNNER="$bin/stub-split-runner.sh"
+chmod +x "$bin/stub-host-runner.sh"
+export ANCHOR_HOST_RUNNER="$bin/stub-host-runner.sh"
 
 # The reviewer stand-in, run by git as the difftool. READ leaves both sides
 # alone; WRITE appends to the right-hand side, which --dir-diff has symlinked to

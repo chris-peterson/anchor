@@ -162,10 +162,10 @@ range="$(key "$out" DIFF_RANGE)"
 # Drive the dispatcher far enough to build the header, through a stub adapter
 # that prints what it was handed instead of launching anything. An adapter is
 # picked by mode, so the stub is a mode named `dump`.
-mkdir -p "$work/fake-scripts/review"
+mkdir -p "$work/fake-scripts/review/modes"
 cp "$review_diff_sh" "$work/fake-scripts/review-diff.sh"
 cp -R "$here/../scripts/lib" "$work/fake-scripts/lib"
-cat > "$work/fake-scripts/review/dump.sh" <<'EOF'
+cat > "$work/fake-scripts/review/modes/dump.sh" <<'EOF'
 emit_review() {
   echo "TITLE=$review_title"
   # Compacted so the assertion can read it off one KEY=value line; the computed

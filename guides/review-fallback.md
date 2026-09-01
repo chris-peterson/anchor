@@ -11,6 +11,24 @@ Either way the change is **ungraded**, and nothing the review gates may
 publish. What follows is the ladder down: each rung is a way to get a real
 answer, not a way to get past the missing one.
 
+## Say what happened, not where you are in this guide
+
+The words on this page — *ladder*, *rung*, *descend*, *fallback* — are structure
+for you, not vocabulary for the user. They locate a step against steps the user
+never saw, so a reply built on them describes this document instead of their
+change, and a user told they are on rung 2 has to ask what rung 1 was before
+they can answer. Two sentences are owed: what the tool did, and what happens
+next.
+
+> The editor closed without saving, so nothing was published. Here's the draft.
+
+not
+
+> Since the editor was already the rung, here's the draft in chat.
+
+Name the failure in the terms the user can see — the editor closed, the viewer
+isn't installed, the pane went away — and then do the step.
+
 ## The question that is never on the ladder
 
 > *You saw the diff — approve?*
@@ -21,9 +39,10 @@ converts a tooling failure into an approval, which is the one outcome the
 verdict contract exists to prevent. Ask about the **content**, never about the
 window.
 
-This is why a difftool is not a rung, and not a tool either (DIFF-18). It can
-put a diff on screen, but it speaks no contract, so its review ends here
-regardless — one screen later, with the user primed to say yes.
+It is also why a difftool earns its verdict from the working tree rather than
+from the screen (DIFF-18). Putting a diff in front of someone proves nothing; the
+edits they leave in the files do, which is why a difftool is a tool here and a
+mere viewer is not a rung.
 
 ## Rung 1 — hand over the artifact
 
@@ -89,11 +108,14 @@ The exception is a tool that was never tried: where the probe named a
 substitute because the configured tool is absent, launching the substitute is a
 first attempt, not a retry.
 
-**`raw.exitCode: "pane-closed"` is not this case, and not a rung.** The tool
-works; its terminal went away before it could answer — a `⌘W` on the pane
-instead of a quit from the editor's own menu. Say that, say the draft is
-intact, and offer to open it again. Descending the ladder here hands the user a
-chat walkthrough of something their editor would have shown them properly.
+**`raw.exitCode: "unsaved"` and `"pane-closed"` are neither this case nor a step
+here** — both are re-openable, and DIFF-14 treats them that way. The tool
+worked. On `unsaved` the reviewer left the editor without writing, so the draft
+went ungraded; saving is what approves it, unchanged included, and that is the
+sentence they need. On `pane-closed` the terminal went away before the tool could
+answer — a `⌘W` on the pane rather than a quit. Either way the draft is intact:
+say which happened and open it again. Walking it in chat instead replaces
+something their editor would have shown them properly.
 
 ## Naming the fix
 

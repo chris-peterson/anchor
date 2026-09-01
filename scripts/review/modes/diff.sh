@@ -14,9 +14,9 @@
 #   review_details_json  the header details, a JSON array of {label,value}
 #
 # A diff tool is a TUI, so it needs a terminal to render, and anchor launches
-# review from a background Bash call with no controlling TTY. The terminal is a
-# split of the calling iTerm2 session, opened by scripts/lib/split-run.sh — the
-# same runner `edit` mode uses.
+# review from a background Bash call with no controlling TTY. The terminal comes
+# from scripts/lib/review-host.sh, which ranks the hosts it can reach — the same
+# dispatcher `edit` mode uses, so the two modes reach equally far.
 #
 # ## The tool contract
 #
@@ -43,10 +43,10 @@
 # before the tool reported — never reach the tool: they are not verdicts the
 # tool returned, and each would otherwise be re-derived per tool.
 
-# shellcheck source=../lib/split-run.sh
-source "$(dirname "${BASH_SOURCE[0]}")/../lib/split-run.sh"
-# shellcheck source=../lib/review-difftool.sh
-source "$(dirname "${BASH_SOURCE[0]}")/../lib/review-difftool.sh"
+# shellcheck source=../../lib/review-host.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../../lib/review-host.sh"
+# shellcheck source=../../lib/review-difftool.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../../lib/review-difftool.sh"
 
 # Emit a `no-verdict` for a cause the host owns, naming it rather than numbering
 # it — the number would attribute to the tool a status it never returned.
@@ -67,7 +67,15 @@ emit_review() {
   # difftool goes to the adapter that drives them all, so the user's own
   # `diff.tool` needs no adapter of its own.
   local tool_dir tool_file
-  tool_dir="$(dirname "${BASH_SOURCE[0]}")/tools"
+  # Nothing named the viewer, and nothing stands in for it. Say which key names
+  # one and what anchor recommends putting there, rather than picking a tool the
+  # user never chose and reporting its verdict as theirs.
+  if [[ -z "${review_tool:-}" ]]; then
+    diff_tool_caps='{"producesVerdict":false,"perHunkReview":false,"editableCommitMessage":false,"editableDescription":false,"sideMarkers":false}'
+    diff_unavailable "no diff viewer configured. Set anchor.diff.tool (or git's own diff.tool) to the viewer you want — anchor recommends revdiff: brew install umputun/apps/revdiff" no-tool
+    return
+  fi
+  tool_dir="$(dirname "${BASH_SOURCE[0]}")/../tools"
   tool_file="${tool_dir}/${review_tool}.sh"
   if [[ ! -r "$tool_file" && -r "${tool_dir}/difftool.sh" ]] \
      && anchor_difftool_known "$review_tool"; then
@@ -98,8 +106,8 @@ emit_review() {
       return
     fi
   fi
-  if ! anchor_split_available; then
-    diff_unavailable "$review_tool needs a terminal to render, and this session has nowhere to open one — it opens in a split of the calling iTerm2 session" no-host
+  if ! anchor_host_available diff; then
+    diff_unavailable "$review_tool needs a terminal to render, and this session has nowhere to open one — a tmux popup inside tmux, or a split of the calling iTerm2 session" no-host
     return
   fi
 
@@ -119,7 +127,7 @@ emit_review() {
 
   local rc=0 cmd
   cmd=$(diff_tool_command "$bin" "$out_file" "$err_file" "$desc_file")
-  anchor_split_run "$cmd" || rc=$?
+  anchor_host_run "$cmd" diff || rc=$?
 
   # A tool's warnings reach stderr on a successful review too, so the capture is
   # replayed only where the run actually failed.
@@ -129,8 +137,8 @@ emit_review() {
 
   # The pane never reported, so there is nothing to parse and no status the tool
   # returned. Named the way an absent tool is.
-  if [[ "$rc" -eq "$anchor_split_rc_no_result" || "$rc" -eq "$anchor_split_rc_no_pane" ]]; then
-    if [[ "$rc" -eq "$anchor_split_rc_no_result" ]]; then
+  if [[ "$rc" -eq "$anchor_host_rc_no_result" || "$rc" -eq "$anchor_host_rc_no_pane" ]]; then
+    if [[ "$rc" -eq "$anchor_host_rc_no_result" ]]; then
       diff_unavailable "quit the review to finish it — closing its pane or tab takes $review_tool with it before it can report. Nothing was graded; re-run to review again." pane-closed
     else
       diff_unavailable "the review pane could not be opened" no-pane

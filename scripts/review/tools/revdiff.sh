@@ -41,15 +41,15 @@ diff_tool_command() {
     esac
   fi
 
-  cmd="REVDIFF_EXIT_CODE_ON_ANNOTATIONS=true $(anchor_split_sq "$bin")"
-  cmd="$cmd $(anchor_split_sq "--output=$out_file")"
+  cmd="REVDIFF_EXIT_CODE_ON_ANNOTATIONS=true $(anchor_host_sq "$bin")"
+  cmd="$cmd $(anchor_host_sq "--output=$out_file")"
   if [[ -n "${REVDIFF_CONFIG:-}" && -f "${REVDIFF_CONFIG}" ]]; then
-    cmd="$cmd $(anchor_split_sq "--config=$REVDIFF_CONFIG")"
+    cmd="$cmd $(anchor_host_sq "--config=$REVDIFF_CONFIG")"
   fi
-  for arg in "${args[@]}"; do cmd="$cmd $(anchor_split_sq "$arg")"; done
+  for arg in "${args[@]}"; do cmd="$cmd $(anchor_host_sq "$arg")"; done
   # The pane closes the moment a fast-failing revdiff exits, taking the error
   # text with it, so stderr is captured rather than drawn.
-  cmd="$cmd 2>$(anchor_split_sq "$err_file")"
+  cmd="$cmd 2>$(anchor_host_sq "$err_file")"
   printf '%s' "$cmd"
 }
 

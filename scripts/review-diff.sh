@@ -62,9 +62,16 @@ set -euo pipefail
 #            fits is a property of what is being reviewed rather than a taste.
 #   tool  the tool that runs that mode, and the half that *is* a taste:
 #            `anchor.edit.tool` names the editor (else git's chain),
-#            `anchor.diff.tool` the viewer (else git's own `diff.tool`, else
-#            revdiff). A mode can grow more tools without touching the mode
-#            question.
+#            `anchor.diff.tool` the viewer (else git's own `diff.tool`). No
+#            viewer is assumed past those: anchor recommends revdiff, and
+#            revdiff reaches a review by being named like any other tool. A
+#            mode can grow more tools without touching the mode question.
+#
+# A third thing decides where the review lands on screen — the host — and this
+# script does not resolve it, because it is neither a property of the review nor
+# a preference: the session settles it. That lives in scripts/lib/review-host.sh,
+# is asked of one ranked set for both modes, and is the other half of the
+# availability question below.
 #
 #   --skill <name>  tells an adapter which artifact is under review. It does not
 #     pick the mode — the subject does, always.
@@ -82,13 +89,16 @@ set -euo pipefail
 #       REVIEW_MODE_SOURCE=override|config|subject
 #       REVIEW_MODE_CONFIGURED=<mode>      only when the run uses another
 #       REVIEW_TOOL=<command>           the tool that will open — an editor
-#         in `edit` mode, a viewer in `diff`
-#       REVIEW_TOOL_SOURCE=override|config|default
-#       REVIEW_TOOL_CONFIGURED=<name>   only when a named viewer was replaced
-#       REVIEW_AVAILABLE=0|1               0 = this mode cannot open here
+#         in `edit` mode, a viewer in `diff`. Empty in `diff` where no key
+#         names one, which is what REVIEW_TOOL_SOURCE=unset says.
+#       REVIEW_TOOL_SOURCE=override|config|default|unset
+#       REVIEW_AVAILABLE=0|1               0 = this mode cannot open here.
+#         Both halves are asked: the program, and the host that would draw it
+#         (scripts/lib/review-host.sh) — an installed viewer with no terminal to
+#         render in is as unavailable as an editor with nowhere to go.
 #         The SOURCE pair says whether what is about to open is something the
-#         user chose, so a launch that coalesced onto a default can name the key
-#         that would make it a choice (UX-07).
+#         user chose, so a launch that fell through to git's own key can name the
+#         anchor key that would make it a choice (UX-07).
 #       REVIEW_EDIT_AVAILABLE=0|1          1 = --mode edit would reach an
 #         editor. Reported on its own axis because it answers a different
 #         question: not "which viewer shows the changeset" but "can the user be
@@ -98,6 +108,8 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 # shellcheck source=lib/review-editor.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/review-editor.sh"
+# shellcheck source=lib/review-host.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/review-host.sh"
 # shellcheck source=lib/review-difftool.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/review-difftool.sh"
 # shellcheck source=lib/stage-paths.sh
@@ -198,7 +210,8 @@ resolve_mode() {
 
 # Which tool runs the resolved mode — the half that is a preference, so each mode
 # has one key for it. `edit` falls through to git's own editor chain and anchor's
-# rungs past it (scripts/lib/review-editor.sh); `diff` falls through to revdiff.
+# rungs past it (scripts/lib/review-editor.sh); `diff` falls through to git's own
+# `diff.tool` and no further.
 resolve_tool() {
   local b="$tool_override"
   if [[ "$resolved_mode" == "edit" ]]; then
@@ -218,20 +231,27 @@ resolve_tool() {
     # own preference for an annotating viewer is not a reason to override them.
     [[ -n "$b" ]] || b=$(anchor_difftool_configured)
   fi
-  if [[ -z "$b" ]]; then src=default; b=revdiff; fi
+  # No viewer named, and none is assumed. anchor recommends revdiff, but it
+  # reaches a review the way any other viewer does — because the user named it —
+  # so an unset key resolves to nothing and the report says which key to set
+  # rather than opening a tool nobody chose.
+  [[ -n "$b" ]] || src="unset"
   resolved_tool="$b"
   resolved_tool_source="$src"
 }
 
-# Can this mode open here at all? `edit` needs an editor *and* somewhere to draw
-# it; `diff` needs its viewer on PATH.
+# Can this mode open here at all? Both need a program *and* somewhere to draw
+# it, and both are asked the same way — a viewer that is installed with no
+# terminal to render in opens no more than an editor with nowhere to go.
 mode_available() {
   case "$1" in
     edit) anchor_editor_available ;;
     # A viewer answers on PATH; a difftool answers to git, which can launch a
-    # name that is no binary of its own.
-    *)    command -v "$resolved_tool" >/dev/null 2>&1 \
-            || anchor_difftool_known "$resolved_tool" ;;
+    # name that is no binary of its own. An unnamed viewer answers neither.
+    *)    [[ -n "$resolved_tool" ]] \
+            && { command -v "$resolved_tool" >/dev/null 2>&1 \
+                   || anchor_difftool_known "$resolved_tool"; } \
+            && anchor_host_available diff ;;
   esac
 }
 
@@ -242,32 +262,40 @@ mode_available() {
 # not it can open, so its own report names the missing piece: that flag is how a
 # probe's answer reaches the launch, and quietly running a different shape than
 # the one just reported is the disagreement the probe exists to prevent.
+#
+# Giving way takes a `diff` review that can actually open — a viewer the user
+# named, and a host to draw it in. With no viewer configured there is nothing to
+# give way to, so the subject's `edit` is kept and its own report names the
+# editor problem instead of trading it for a viewer problem.
+#
+# The `diff` half is resolved and asked here rather than read off the settled
+# state, which still holds `edit`'s editor at this point — the two answers would
+# otherwise be crossed, and the mode would give way on whether an *editor* is
+# installed.
+diff_mode_openable() {
+  local keep_mode="$resolved_mode" keep_tool="$resolved_tool" keep_src="$resolved_tool_source"
+  local openable=1
+  resolved_mode="diff"; resolved_tool=""; resolved_tool_source=""
+  resolve_tool
+  mode_available diff || openable=0
+  resolved_mode="$keep_mode"; resolved_tool="$keep_tool"; resolved_tool_source="$keep_src"
+  [[ "$openable" -eq 1 ]]
+}
+
 usable_mode() {
   local preferred="$1"
   if [[ "$preferred" == "edit" && "$resolved_mode_source" == "subject" ]] \
-     && ! anchor_editor_available && command -v revdiff >/dev/null 2>&1; then
+     && ! anchor_editor_available \
+     && diff_mode_openable; then
     printf 'diff'; return
   fi
   printf '%s' "$preferred"
 }
 
-# The viewer to run, or an installed one standing in for it. This is the
-# within-mode question and it is asked of `diff` alone: a named viewer that is
-# not installed coalesces onto the default rather than dead-ending, and nothing
-# installed leaves the name as resolved so the probe's REVIEW_AVAILABLE=0 still
-# reports what was preferred.
-usable_tool() {
-  local preferred="$1"
-  [[ "$resolved_mode" == "diff" ]] || { printf '%s' "$preferred"; return; }
-  if command -v "$preferred" >/dev/null 2>&1 || anchor_difftool_known "$preferred"; then
-    printf '%s' "$preferred"; return
-  fi
-  if command -v revdiff >/dev/null 2>&1; then printf '%s' revdiff; return; fi
-  printf '%s' "$preferred"
-}
-
 # Both axes, resolved together and in order — the tool question is asked of a
-# settled mode, and a mode that gave way re-asks it.
+# settled mode, and a mode that gave way re-asks it. There is no within-mode
+# substitution: a viewer the user named and did not install stays named, so the
+# report says which tool is missing instead of opening a different one.
 resolve_review() {
   resolve_mode
   resolve_tool
@@ -279,11 +307,8 @@ resolve_review() {
     resolved_tool=""; resolved_tool_source=""
     resolve_tool
   fi
-  preferred_tool="$resolved_tool"
-  resolved_tool=$(usable_tool "$resolved_tool")
 }
 preferred_mode=""
-preferred_tool=""
 
 if [[ "$probe_only" == "1" ]]; then
   report_superseded_key
@@ -298,11 +323,9 @@ if [[ "$probe_only" == "1" ]]; then
   echo "REVIEW_MODE_SOURCE=$resolved_mode_source"
   echo "REVIEW_TOOL_SOURCE=$resolved_tool_source"
   # Reported only when the run would use something else — a mode the subject
-  # picked with nowhere to open, or a key that named an absent viewer. Either way
-  # the caller has a name to say out loud, so what opens isn't discovered as a
-  # surprise window.
+  # picked with nowhere to open. The caller has a name to say out loud, so what
+  # opens isn't discovered as a surprise window.
   [[ -z "$preferred_mode" ]] || echo "REVIEW_MODE_CONFIGURED=$preferred_mode"
-  [[ "$resolved_tool" == "$preferred_tool" ]] || echo "REVIEW_TOOL_CONFIGURED=$preferred_tool"
   if mode_available "$resolved_mode"; then
     echo "REVIEW_AVAILABLE=1"
   else
@@ -518,7 +541,7 @@ review_tool="$resolved_tool"
 # One adapter per mode. Within `diff`, the tool's own half lives in
 # review/tools/<tool>.sh, which that adapter sources — so a second viewer is a
 # file beside revdiff's rather than a branch here.
-adapter="$(dirname "${BASH_SOURCE[0]}")/review/${review_mode}.sh"
+adapter="$(dirname "${BASH_SOURCE[0]}")/review/modes/${review_mode}.sh"
 if [[ ! -r "$adapter" ]]; then
   echo "review-diff.sh: unknown review mode '$review_mode' (no adapter at $adapter)." >&2
   exit 64

@@ -23,4 +23,4 @@ jobs:
       # dispatcher-exported vars). Gates at the default severity (info and up) —
       # the scripts are a zero-finding baseline, so any new finding fails.
       - name: shellcheck
-        run: shellcheck hooks/*.sh scripts/*.sh scripts/review/*.sh scripts/review/tools/*.sh tests/*.sh
+        run: shellcheck hooks/*.sh scripts/*.sh scripts/review/modes/*.sh scripts/review/tools/*.sh scripts/review/hosts/*.sh tests/*.sh
