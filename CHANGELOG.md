@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.11.0
 
 > [!WARNING]
 > **One-time setup — name the review tool you want.** Which tool a review opens
