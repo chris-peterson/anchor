@@ -204,8 +204,12 @@ check.
   reported only in the block can be summarized into "that step was moot" and
   passed over — which drops the CR from the chain silently, with the steps after
   it (a merge, a release) still running.
-- **[PREPARE-03]** The system shall open a draft CR against the already-pushed branch
-  and shall not push.
+- **[PREPARE-03]** When the author approves the drafted description, the system shall
+  open a draft CR against the already-pushed branch carrying that approved text, and
+  shall not push. The description is complete before the CR exists — the Review
+  guide's links are placeholders that resolve against the diff (PREPARE-10) rather
+  than against a CR URL — so nothing reaches the forge under the author's name before
+  they have read it.
 - **[PREPARE-03a]** Where the CR is inferred from the branch rather than named
   explicitly, the system shall treat only an open CR as this run's target, and
   shall report a non-open CR it passed over. Neither forge CLI filters its branch
@@ -235,9 +239,19 @@ check.
 - **[PREPARE-09]** Before drafting Context, the system shall run an anti-recency
   check dispositioning recent iterations as centerpiece, footnote, or cut.
 - **[PREPARE-10]** The system shall deep-link Review-guide references to the specific
-  changed lines rather than to files alone, building each link from the per-file
-  prefix the recon block supplies (`FILE_LINKS`, from `deep-links.sh`) on both
-  forges, and shall not hash a file path or assemble an anchor itself.
+  changed lines rather than to files alone, writing each as an `anchor:<path>#<token>`
+  placeholder whose token is a distinctive literal substring of the target line, and
+  shall not read a line number off the diff, hash a file path, or assemble an anchor
+  itself. A hand-read number still resolves — the forge scrolls to a line the bullet
+  is not describing — and nothing about the rendered link reveals it.
+- **[PREPARE-10a]** If a placeholder's token matches several changed lines, or none,
+  then the system shall report the candidate lines with their content and stop, rather
+  than take the first match or reduce the link to the file. A token in the file but on
+  no changed line, and a token in no line at all, are different authoring mistakes and
+  shall be reported as such.
+- **[PREPARE-10b]** Once the CR exists, the system shall expand every placeholder into
+  the forge's own line anchor before the description lands, and shall leave the draft
+  unmodified where any placeholder is unresolved.
 - **[PREPARE-11]** If a claim about prior workflow or current state lacks a citable
   source, then the system shall omit it from the description.
 - **[PREPARE-12]** Where a predecessor CR was captured, the system shall record the
@@ -249,10 +263,17 @@ check.
 - **[PREPARE-14]** If no review tool is installed, or no CR exists to diff
   against, then the system shall present the description as text in its own reply
   and offer write / copy-only / edit, defaulting to write.
-- **[PREPARE-15]** Before opening the description review, the system shall verify
-  each deep link's line part against the working tree (`deep-links.sh --verify`)
-  and re-point every line reported out-of-range, blank, outside a changed hunk,
-  or anchored to a file the range doesn't touch.
+- **[PREPARE-15]** Before opening the description review, the system shall resolve
+  every placeholder against the changed hunks of the range (`deep-links.sh --check`)
+  and correct each one reported unresolved, so a placeholder cannot survive into the
+  expansion that runs against a CR already open.
+- **[PREPARE-15a]** Where the description carries a deep link that was not written as
+  a placeholder, the system shall check it against the working tree
+  (`deep-links.sh --verify`) and re-point every line reported out-of-range, blank,
+  outside a changed hunk, or anchored to a file the range doesn't touch. The check
+  shall also reject a line part in a shape the forge does not resolve, which the
+  line-number checks take as given: a second `#` fragment appended to an anchor drops
+  the reader at the top of the diff while reading as a link.
 - **[PREPARE-16]** Once the description has landed, the system shall report the
   branch's pipeline, which reports nothing where the CR's commit was already
   reported and reports the new pipeline where a rebase force-push created one.

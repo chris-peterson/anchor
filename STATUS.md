@@ -6,7 +6,7 @@ Maintained by `/sextant:spec-status`.
 **Last audit:** 2026-08-31
 **Spec version:** root SPEC.md (unversioned)
 **Plugin version:** 1.9.1
-**Coverage:** 232 Covered, 1 Partial, 0 Missing/Contradicts
+**Coverage:** 235 Covered, 1 Partial, 0 Missing/Contradicts
 
 The implementation is the plugin itself — the skill prompts under
 `skills/`, the ambient rules under `rules/`, and the helper scripts under
@@ -22,7 +22,7 @@ draft to review against the implementation, not an audited ledger.
 |--------|------:|--------|-------|
 | TARGET-01..11 | 11 | All Covered | Target resolution — `scripts/resolve-target.sh`, each `skills/*/SKILL.md` "Target repo"; every skill routes a name argument through `resolve-target.sh`. `--repo` is read at any argv position and an unrecognized argument is an error rather than a dropped token, so an appended retargeting flag cannot leave a helper on the cwd repo while the flow uses the target (TARGET-09) — `scripts/review-diff.sh` (context-flag pass, `expect_consumed`), `scripts/look-ahead.sh`, `tests/review-diff.test.sh`. A name resolves through the forge CLIs anchor already requires, over the repos reachable on each host `gh auth status` / `glab auth status --all` report as logged in, so no sibling plugin gates the capability (TARGET-01) — `scripts/resolve-target.sh` (`authed_hosts`, `load_hosts`). A bare name matches on the basename exactly and case-insensitively, which is what separates `cloud-toolbox` from the `pwsh-toolbox` GitLab's substring search returns alongside it (TARGET-10) — `scripts/resolve-target.sh` (`collect`, `lower`). `TARGET_LOCAL` holds the working directory's repo only when its `origin` is the repo that resolved, an unauthenticated host is skipped, and a lookup with no host to query says so rather than reporting no match (TARGET-11) — `scripts/resolve-target.sh` (`local_checkout`, `fall_back_to_cwd`) |
 | COMMIT-01..22 (+04a, 04b, 04c) | 25 | All Covered | Review-first commit-and-push flow (1.0), recon before tests, pipeline watch after the push (COMMIT-21), and the direct-to-default choice described as landing without a CR rather than as bypassing review (COMMIT-22) — `skills/commit/SKILL.md`, `scripts/{commit,commit-preflight,look-ahead,squash-check,pipeline-after-push}.sh`. Staging names its paths instead of adding the whole tree, stops on a path with no change at all, scopes the commit to the same set, and reports a staged path it did not stage rather than committing or unstaging it (COMMIT-04, 04a, 04b). Restaging the same list is safe for any mix of added, modified, deleted, and renamed paths, because a path already staged in full is skipped — so a staged deletion, or the old half of a rename, cannot make the `git add` fatal for the flows that stage their list twice (COMMIT-04c) — `scripts/lib/stage-paths.sh` (`anchor_stage_paths`, `anchor_other_staged_count`, `anchor_commit_pathspecs`), `scripts/commit-preflight.sh` (`OTHER_STAGED`), `scripts/commit.sh` (`--path`), `skills/commit/SKILL.md` Steps 1/5/6, `tests/{stage-paths,commit-preflight,commit}.test.sh` |
-| PREPARE-01..18 (+02a, 03a, 06a) | 21 | All Covered | `prepare-review`, pushed-branch only, opens the draft CR without pushing, reviews the description in the tool, verifies deep-link line parts, reports the branch's pipeline once the description lands (PREPARE-16), and names the source branch that won't be deleted on merge, offering the forge's remediation (PREPARE-17) — `skills/prepare-review/SKILL.md`, `scripts/{prepare-review,deep-links,pipeline-after-push}.sh`, `tests/prepare-review.test.sh`. The CR is labelled from the project's own set and given a milestone where one of its open ones fits, added to whatever it already carries (PREPARE-18) — `skills/prepare-review/SKILL.md` Step 4 ("Label it and set the milestone"), `guides/forge-cookbook.md` "Labels and milestones". The default branch with a clean tree and nothing ahead reports `NOTHING_TO_REVIEW=1` and exits 65, so a dead end is an event rather than a key a caller can summarize past (PREPARE-02a) — `scripts/prepare-review.sh`, `tests/prepare-review.test.sh`. A dirty-tree stop reports that changes are uncommitted and nothing more, rather than diagnosing how the tree got that way (PREPARE-06a) — `skills/prepare-review/SKILL.md` "Act on `STATE`". The branch-inferred lookup adopts only an open CR, so a reused branch name whose earlier CR merged or closed gets a fresh draft, and the one passed over is reported as `PRIOR_CR_IID`/`PRIOR_CR_STATE`; an explicit `--cr` still resolves whatever was named (PREPARE-03a) — `scripts/prepare-review.sh` (`resolve_cr`), `skills/prepare-review/SKILL.md` "A reused branch name", `tests/prepare-review.test.sh` |
+| PREPARE-01..18 (+02a, 03a, 06a, 10a, 10b, 15a) | 24 | All Covered | `prepare-review`, pushed-branch only, reviews the description in the tool, opens the draft CR with the approved body and never before it (PREPARE-03) — `scripts/prepare-review.sh` (`--open`), `skills/prepare-review/SKILL.md` Step 4, `tests/prepare-review.test.sh`. Review-guide links are authored as `anchor:<path>#<token>` placeholders resolved against the changed hunks, an ambiguous or absent token halts with its candidates rather than guessing, and expansion into forge anchors runs once the CR exists and is all-or-nothing (PREPARE-10, 10a, 10b, 15) — `scripts/deep-links.sh` (`--resolve`, `--check`, `--expand`), `guides/cr-formatting.md`, `templates/cr-description.md`, `tests/deep-links.test.sh`. `--verify` stays as the backstop for a hand-built anchor and rejects a malformed line part as well as a mis-numbered one (PREPARE-15a) — `scripts/deep-links.sh` (`part_re`). Reports the branch's pipeline once the description lands (PREPARE-16), and names the source branch that won't be deleted on merge, offering the forge's remediation (PREPARE-17) — `skills/prepare-review/SKILL.md`, `scripts/{prepare-review,deep-links,pipeline-after-push}.sh`, `tests/prepare-review.test.sh`. The CR is labelled from the project's own set and given a milestone where one of its open ones fits, added to whatever it already carries (PREPARE-18) — `skills/prepare-review/SKILL.md` Step 4 ("Label it and set the milestone"), `guides/forge-cookbook.md` "Labels and milestones". The default branch with a clean tree and nothing ahead reports `NOTHING_TO_REVIEW=1` and exits 65, so a dead end is an event rather than a key a caller can summarize past (PREPARE-02a) — `scripts/prepare-review.sh`, `tests/prepare-review.test.sh`. A dirty-tree stop reports that changes are uncommitted and nothing more, rather than diagnosing how the tree got that way (PREPARE-06a) — `skills/prepare-review/SKILL.md` "Act on `STATE`". The branch-inferred lookup adopts only an open CR, so a reused branch name whose earlier CR merged or closed gets a fresh draft, and the one passed over is reported as `PRIOR_CR_IID`/`PRIOR_CR_STATE`; an explicit `--cr` still resolves whatever was named (PREPARE-03a) — `scripts/prepare-review.sh` (`resolve_cr`), `skills/prepare-review/SKILL.md` "A reused branch name", `tests/prepare-review.test.sh` |
 | REVIEW-01..19 (+03a) | 20 | All Covered | Reviewing a CR — resolve it by number/URL/branch, read the description before the diff, show the whole range in the viewer, place each finding at the narrowest anchor that carries it with the summary as the fallback, gate the post on the exact text, and refuse a post whose head moved (REVIEW-11) — `skills/review/SKILL.md`, `scripts/{review-cr,review-post}.sh`, `guides/forge-cookbook.md`, `tests/review-cr.test.sh`, `tests/review-post.test.sh`. What a review looks for is a template the user edits, read before the diff is examined and weighed one agent per listed quality (REVIEW-15, 16) — `templates/review-qualities.md`, `skills/review/SKILL.md` Step 4. Authorship picks the mode: the user's own CR runs as a self-review whose findings are a working-tree fix list, re-reviewed in a loop and handed off by marking the CR ready and requesting reviewers, with a draft CR expected rather than confirmed (REVIEW-03a, 17, 18) — `skills/review/SKILL.md` Step 5, `guides/forge-cookbook.md` "Mark a CR ready, and request reviewers", `scripts/review-cr.sh` (`IS_OWN_CR`), `tests/review-cr.test.sh`. A self-review finding the author wants on the record still posts through the exact-text and pinned-head gates (REVIEW-19) — `skills/review/SKILL.md` Steps 5-7 |
 | FEEDBACK-01..09 | 9 | All Covered | Fetch, triage, act on threads, watch the fix commit's pipeline into the summary (FEEDBACK-09) — `skills/resolve-feedback/SKILL.md`, `scripts/pipeline-after-push.sh` |
 | MERGE-01..16 | 16 | All Covered | Gate checks (ready/mergeable/pipeline/approvals/threads), method choice, merge + cleanup — `skills/merge/SKILL.md`, `guides/forge-cookbook.md` |
@@ -42,6 +42,41 @@ draft to review against the implementation, not an audited ledger.
 - **DIFF-24 (Partial)** — the requirement holds in `skills/{prepare-review,issue,release}/SKILL.md`, which name the tool on a defaulted choice as well as a substituted one now that `REVIEW_BACKEND_SOURCE` says which it was. `skills/commit/SKILL.md` skips the probe entirely, so the tool it opens still goes unnamed. Extending the rule to it, or narrowing DIFF-24 to the skills that draft a standalone document, is a decision pending.
 
 ## Audit history
+
+### 2026-08-31 — The CR opens after the description is approved (PREPARE-03, 10a, 10b, 15a)
+
+STATUS.md updated: +3 IDs (PREPARE-10a, 10b, 15a, all Covered; PREPARE-03,
+10 and 15 rewritten), 233 → 236.
+
+`prepare-review` opened the draft CR during recon because the Review guide's
+deep links need the CR's URL, and the anchor cannot be computed before the CR
+exists. That ordering cost twice: the author watched a `--fill` description —
+the commit body — land under their name minutes before the real one replaced it,
+and any later sweep over the links needed them in the loop again.
+
+Placeholders break the dependency. A bullet's destination names a path and a
+distinctive token from the target line, and resolving that token to a line needs
+only `<base>...HEAD` — no URL. So the description is complete and checkable
+before the forge holds anything, the author reviews it, and only then does
+`--open` create the draft carrying their approved text. Expansion into anchors
+follows, against the URL that just came back, with no further approval to ask
+for: the text they signed off on is unchanged and the links were resolved before
+they read it.
+
+Removing the hand-read line number is the second half, and the one the issue was
+filed for (#40). The prefix was already derived and exact; the `R<n>` appended to
+it was read off the diff, and a wrong one still resolves — the forge scrolls to a
+line the bullet is not describing, which nothing about the rendered link reveals.
+Seven of thirteen links in one description had drifted. PREPARE-10a is the rule
+that keeps resolution from reintroducing the same failure quietly: several
+matching lines, or none, halts with the candidates rather than taking the first
+or reducing to a file-level link.
+
+PREPARE-15 becomes the placeholder check, which needs no CR and so runs before
+the review; PREPARE-15a keeps `--verify` as the backstop for descriptions that
+predate the convention, and closes the hole all four of its checks shared — each
+questioned an anchor's *number* and took its *shape* as given, so
+`…#<hash>#L743`, the shape a reflex `#L<n>` produces, returned zero suspects.
 
 ### 2026-08-31 — git's difftool becomes a backend, graded on what the reviewer wrote (DIFF-18, UX-08)
 

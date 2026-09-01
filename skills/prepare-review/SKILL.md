@@ -23,9 +23,8 @@ flowchart TD
         CR -->|No| Pushed{Pushed commits ahead?}
         CR -->|Yes| Behind
         Pushed -->|No| Commit["/anchor:commit commits and pushes, then re-gather"]
-        Pushed -->|Yes| MakeCR["Open draft CR"]
-        Commit --> MakeCR
-        MakeCR --> Behind{Behind main?}
+        Pushed -->|Yes| Behind
+        Commit --> Behind{Behind main?}
         Behind -->|Yes| DoRebase["Rebase + force-with-lease"]
         Behind -->|No| StateCheck
         DoRebase --> StateCheck["Sanity-check vs CR head"]
@@ -38,14 +37,16 @@ flowchart TD
     subgraph "Step 3-4: Draft, review, write"
         Why --> Recency["Anti-recency check"]
         Recency --> Draft["Draft Context + Review guide"]
-        Draft --> Backend{Review mode?}
+        Draft --> Resolve["Resolve the placeholder links"]
+        Resolve --> Backend{Review mode?}
         Backend -->|Yes| InTool["Review the description in the tool"]
         Backend -->|No| Chat["Paste the body in chat, then ask"]
         InTool --> Verdict{Verdict?}
-        Verdict -->|approved| Forge(["Write to CR"])
+        Verdict -->|approved| Open["Open the draft CR with the approved body"]
         Verdict -->|changes requested| Draft
-        Chat -->|write| Forge
+        Chat -->|write| Open
         Chat -->|copy only| CopyOnly(["Print for paste"])
+        Open --> Forge(["Expand the deep links, write to CR"])
     end
 ```
 
@@ -66,7 +67,7 @@ Everything else is internal: the per-step recon plumbing ("origin is GitLab, 1 a
 
 ## Step 1: Gather the changeset
 
-Run the gather script once. It performs Step 1's deterministic recon and the safe default-path setup — detect the forge, resolve or auto-open the draft CR, count the gap to the default branch, capture the current description as the Step 4 diff baseline, check local state against the CR head, read the project template and `anchor.*` config — then prints one `KEY=value` block on stdout:
+Run the gather script once. It performs Step 1's deterministic recon and the safe default-path setup — detect the forge, resolve the CR if one is already open, count the gap to the default branch, capture the current description as the Step 4 diff baseline, check local state against the CR head, read the project template and `anchor.*` config — then prints one `KEY=value` block on stdout:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh"
@@ -86,7 +87,8 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 | `NEEDS_COMMIT=1` | no reviewable commit yet — chain into `/anchor:commit` before continuing (see "Get to a reviewable, pushed commit") |
 | `NEEDS_PUSH=1` | commits are ahead, no CR yet, but the branch isn't pushed — chain into `/anchor:commit`, which commits and pushes, then re-gather (see "Get to a reviewable, pushed commit") |
 | `BEHIND=<n>` | `>0` → run the rebase dialog below |
-| `CR_URL` / `CR_IID` | the resolved or freshly-opened draft — deep-link target and write target (empty on `skip-deep-links`) |
+| `CR_URL` / `CR_IID` | an already-open CR — the write target. Empty on `CR_PENDING` and on `skip-deep-links` |
+| `CR_PENDING=1` | no CR is open and one can be. Draft, review, *then* open it in Step 4 — nothing is published under the author's name until they have approved the text |
 | `CR_DRAFT` | gates the post-rebase force-push (see below) |
 | `PRIOR_CR_IID` / `PRIOR_CR_STATE` | non-empty → the branch name already carries a CR that isn't open, which this run passed over; name it once (see "A reused branch name") |
 | `STATE` | `match` → proceed; anything else → surface and stop (see "Act on `STATE`") |
@@ -97,7 +99,6 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 | `TEMPLATE_CANDIDATES` | `ambiguous` only — `[{name, path}]` for the author to pick from (see "Honor an existing forge template") |
 | `DELETE_BRANCH_ON_MERGE` | `false` on a CR this run opened → name it and offer the remediation (see "Branch deletion on merge"); `unknown` → say nothing |
 | `ANCHOR_CONFIG` | `anchor.*` keys to apply (Step 3), as JSON |
-| `FILE_LINKS` | ready-to-use deep-link prefix per changed file, both forges (Step 3), as JSON — append the line part, never hash a path yourself |
 
 If the block carries a `CR_CREATE_ERROR=…` line, the draft-open hit an auth or push failure — surface it and ask the user to refresh credentials; do **not** fall back to the URL-free path (the fail-fast-on-auth rule).
 
@@ -140,17 +141,17 @@ After the branch/commit/push lands, **re-run the gather script** so it resolves 
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh"
 ```
 
-The second run is on a pushed feature branch with a commit ahead; it auto-opens the draft CR and returns a normal block (`NEEDS_BRANCH=0`, `NEEDS_COMMIT=0`, `NEEDS_PUSH=0`, a resolved `CR_URL`). Proceed from there into the rebase / drafting flow as usual. If it still reports `NEEDS_COMMIT=1` / `NEEDS_PUSH=1` — the user declined `/anchor:commit`, or it produced nothing ahead or pushed nothing — say so and stop; don't loop.
+The second run is on a pushed feature branch with a commit ahead, so it returns a normal block (`NEEDS_BRANCH=0`, `NEEDS_COMMIT=0`, `NEEDS_PUSH=0`, `CR_PENDING=1`). Proceed from there into the rebase / drafting flow as usual. If it still reports `NEEDS_COMMIT=1` / `NEEDS_PUSH=1` — the user declined `/anchor:commit`, or it produced nothing ahead or pushed nothing — say so and stop; don't loop.
 
-**Why auto-open is the default.** A draft CR is cheap and reversible: it requests no review, the push already triggered any branch-level CI, and self-assign notifies only you. The deep links are the load-bearing part of the description, and a placeholder-only draft is broken on arrival — opening the real CR first is what makes the description useful. The script opens the draft against the already-pushed branch (it never pushes) and does **not** sniff for a "merges direct to `main`, never opens CRs" convention, because there's no reliable signal for it. One case gives way to the `skip-deep-links` path:
+**Why the CR is opened last (`CR_PENDING=1`).** The Review guide's deep links are drafted as `anchor:` placeholders that resolve against the diff, not against a URL — so a complete, checkable description exists before the forge has anything on it. Opening the CR is therefore the *last* step, in Step 4, with the body the author approved. Nothing carrying their name lands until they have read it. The script does **not** sniff for a "merges direct to `main`, never opens CRs" convention, because there's no reliable signal for it. One case gives way to the `skip-deep-links` path:
 
 - **User asks not to open one** — the repo merges direct to `main` without CRs, or the CLI's default forge instance is wrong for this repo. Re-run with `--no-open` to proceed URL-free; or, if they'd rather open the draft themselves, pause until they confirm one is open, then re-run so the script resolves its URL.
 
-(When `ON_DEFAULT_BRANCH=1`, the script doesn't auto-open either — but that routes through branch creation, not skip-deep-links; see above.)
+(When `ON_DEFAULT_BRANCH=1`, nothing is pending either — but that routes through branch creation, not skip-deep-links; see above.)
 
 ### A reused branch name (`PRIOR_CR_IID` / `PRIOR_CR_STATE`)
 
-Only an open CR is this run's target. Neither CLI filters its branch lookup by state, so a short topical branch name that has been used before resolves to whatever CR used it last — the script passes over a merged, closed, or locked one and opens a fresh draft instead. When these keys are non-empty, say so in one line as part of reporting the new CR, so the author who expected the old one isn't left to work out why a new number appeared:
+Only an open CR is this run's target. Neither CLI filters its branch lookup by state, so a short topical branch name that has been used before resolves to whatever CR used it last — the script passes over a merged, closed, or locked one and reports `CR_PENDING=1` instead. When these keys are non-empty, say so in one line as part of reporting the CR Step 4 opens, so the author who expected the old one isn't left to work out why a new number appeared:
 
 > Opened `#82`. `#57` used this branch name before and is merged, so it isn't this run's target.
 
@@ -160,7 +161,7 @@ Both keys empty → say nothing; there was no prior CR to pass over. An explicit
 
 The two forges keep this in different places, so `anchor` can only set it on one of them. GitLab takes `remove_source_branch` per MR and the create call passes it. GitHub has **no per-PR field** — the only standing setting is repo-wide `deleteBranchOnMerge`, so a PR `anchor` opens carries no preference of its own. `/anchor:merge` passes `--delete-branch`, which covers the branch for merges that go through it; a merge from the web UI, a bare `gh pr merge`, or auto-merge leaves the branch behind.
 
-So when **this run opened the CR** (`CR_CREATED=1`) and `DELETE_BRANCH_ON_MERGE=false`, name the gap once and offer to close it. On a pre-existing CR (`CR_PREEXISTING=1`) or on `unknown`, say nothing — there's nothing this run decided.
+The key is answered by whichever call resolved a CR: recon on a pre-existing one, `--open` on the CR Step 4 creates. So when **this run opened the CR** (`CR_CREATED=1` in the `--open` block) and `DELETE_BRANCH_ON_MERGE=false`, name the gap once and offer to close it, alongside Step 4's write report. On a pre-existing CR (`CR_PREEXISTING=1`) or on `unknown`, say nothing — there's nothing this run decided.
 
 > The source branch won't be deleted when `#7` merges — GitHub carries no per-PR setting and this repo's *"Automatically delete head branches"* is off. `/anchor:merge` deletes it anyway; a merge from the web UI wouldn't. Turn the repo setting on? `[yes / no]`
 
@@ -186,6 +187,8 @@ Prefer the `glab api` form over `glab mr update --remove-source-branch`, whose h
 - `skip` — proceed with the current branch state. Note that deep links may render against lines that have shifted by merge time.
 
 A rebase rewrites history, so the push that follows is a force-push. Gate it on `CR_DRAFT` — the author's declared review state, which is reliable in a way that inferred engagement signals (note counts, reviewer lists) are not:
+
+**`CR_PENDING=1`** (no CR yet) — nothing is out for review, so nothing can be disturbed. Rebase and force-push with lease.
 
 **`CR_DRAFT=true`** — mutable history is the norm (`anchor` opens CRs as drafts for exactly this reason). Rebase and force-push with lease without further ceremony.
 
@@ -306,7 +309,9 @@ Draft the description following the section template in `${CLAUDE_PLUGIN_ROOT}/t
 
 **Ordering dependency (when Step 2 captured one).** Near the top of Context, add a bare, autolinking reference — `Depends on !<iid>` (GitLab) / `Depends on #<num>` (GitHub) — and a line that it must merge first. On GitHub, and on any GitLab fall-back (see Step 4), this prose is the *only* ordering signal, so say plainly that the forge won't enforce it.
 
-**Deep-link construction (Review guide).** Always deep-link to the actual line, not just the file — reviewers should be one click away from the change. `FILE_LINKS` from Step 1's block already carries the whole prefix per changed file (the right view path and the right path-hash for the forge); you append only the line part, whose grammar is in `${CLAUDE_PLUGIN_ROOT}/guides/cr-formatting.md`. **Two things not to do**, both of which put plumbing on the user's screen: don't hash a path yourself, and don't re-grep the diff for hunk headers — you read the full diff in Step 1, so take the line numbers from what you already read.
+**Deep-link construction (Review guide).** Always deep-link to the actual line, not just the file — reviewers should be one click away from the change. **Write a placeholder, not a URL:** `` [`<path>`](anchor:<path>#<token>) ``, where the token is a distinctive literal substring of the line you're pointing at (an identifier, a flag, a heading's text). Use the angle-bracket form — `` [`<path>`](<anchor:<path>#<token>>) `` — when the token carries spaces or parentheses, and drop the `#<token>` for a file-level link. Step 4 resolves each token to its line and writes the forge URL in.
+
+**Never write a line number, and never build an anchor.** A hand-read number still resolves — the forge scrolls to *a* line, just not the one your bullet describes — and nothing about the rendered link reveals it. The full form, and what to do when a token comes back ambiguous, is in `${CLAUDE_PLUGIN_ROOT}/guides/cr-formatting.md`.
 
 **Pipeline artifacts — fetch, reason, include.** When the CR or its commit's pipeline produces an artifact that bears on review, fetch it, reason about what it shows, and include the pertinent excerpt (collapsed if long; see `${CLAUDE_PLUGIN_ROOT}/guides/cr-formatting.md`). Don't describe a change whose effect the pipeline already rendered without showing it.
 
@@ -348,15 +353,16 @@ The description gets pasted into a markdown renderer, so rendering bugs are user
 
 - **Backtick coverage is generous — except for forge-autolink tokens.** Re-scan the description for grep-bait: env vars (`$FAMILY`, `$CI_PIPELINE_CREATED_AT`), config keywords (`extends:`, `needs:`, `on_success`, `manual`, `allow_failure`), job/product/feature suffixes that match identifiers in the diff, CLI flags, file paths. The "if a reader might paste it into a terminal" test is more permissive than "code identifier only" — err generous. **But** scan separately for CR/issue refs (`!148`, `#42`), commit SHAs, and user @mentions — these must be **bare text** to autolink; backticks render them as inert code spans.
 - **Inline single quotes around `'all'` / `'true'` style values** read fine in prose but lose their distinguishing weight in scan-mode. Convert literal dropdown/enum values to backticks.
-- **Every deep link is `FILE_LINKS[<path>]` plus a line part** — no hand-built anchors (Step 3).
-- **Verify the line parts against the tree.** The prefix is derived, so it's right by construction; the line part you read off the diff by hand is the half that drifts, and a drifted link still resolves — the forge just scrolls somewhere the bullet isn't describing, which nothing about the rendered link reveals. Run the checker over the draft and fix what it names:
+- **Every deep link is an `anchor:` placeholder** — no line numbers, no hand-built anchors (Step 3).
+- **Resolve the placeholders before the review opens.** Every token has to name exactly one changed line, and that is checkable without a CR:
 
   ```bash
-  bash "${CLAUDE_PLUGIN_ROOT}/scripts/deep-links.sh" --verify <DESC_DRAFT_PATH> \
-    --forge <FORGE> --cr-url <CR_URL> --base <DEFAULT_BRANCH>
+  bash "${CLAUDE_PLUGIN_ROOT}/scripts/deep-links.sh" --check <DESC_DRAFT_PATH> \
+    --base <DEFAULT_BRANCH>
   ```
 
-  It exits non-zero with one `SUSPECT <kind> <path>:<line> <why>` per problem: `out-of-range`, `blank-line`, `unchanged-line` (the line exists but isn't in a changed hunk), `unknown-file` (an anchor for a file the range doesn't touch). Re-point each at the line the bullet is actually about. A link that landed on the *wrong changed line* is the one case it can't see, so the check passing doesn't retire your own read. It needs the clean tree Step 1's `STATE=match` already established — it reads line content from the working tree and changed hunks from `<DEFAULT_BRANCH>...HEAD`, and emits `DEEP_LINK_TREE=dirty` when those have diverged. Skip it on the `skip-deep-links` path, where there are no links to check.
+  It exits non-zero with one `UNRESOLVED <kind> <path> <token>` per problem, and each kind is an authoring fix: `ambiguous` (several changed lines match — the candidates are listed with their content, so copy a longer substring off the one you meant), `unchanged` (in the file but not on a changed line), `absent` (a typo), `unknown-file` (a path the range doesn't touch), `malformed` (an `anchor:` that isn't a link destination). Fix and re-run until it's clean — a placeholder that survives into Step 4's expansion stalls the write on a CR that already exists. It needs the clean tree Step 1's `STATE=match` already established: line content comes from the working tree and changed hunks from `<DEFAULT_BRANCH>...HEAD`, and it emits `DEEP_LINK_TREE=dirty` when those have diverged. Skip it on the `skip-deep-links` path, where the description carries no links at all.
+- **A description that predates this convention needs the backstop instead.** Re-running against a CR whose description came from elsewhere means hand-built anchors with hand-read line numbers, which `--check` doesn't see. Run `--verify <DESC_DRAFT_PATH> --forge <FORGE> --cr-url <CR_URL> --base <DEFAULT_BRANCH>` over those, and re-point each `SUSPECT`: `out-of-range`, `blank-line`, `unchanged-line`, `unknown-file`, `malformed` (a line part in a shape the forge won't resolve). A link that landed on the *wrong changed line* is the one case it can't see — which is what replacing it with a placeholder fixes.
 
 ### Open the review
 
@@ -410,9 +416,29 @@ Then ask how to proceed with the `AskUserQuestion` tool, header `Disposition`, o
 - **No (copy only)** — leave it for the user to paste into the web UI themselves.
 - **Edit** — say what to change in chat; revise and re-present.
 
-### Write it
+### Open the CR and write it
 
-Reached on an `approved` review, or on **Yes (write)** from the no-backend fallback. Editing a description is reversible, which is why the review's sign-off is enough to write on. On 401/403 or similar auth failure, surface the error and ask the user to refresh credentials — do not silently fall back to copy-only. The draft is `DESC_DRAFT_PATH`:
+Reached on an `approved` review, or on **Yes (write)** from the no-backend fallback. Editing a description is reversible, which is why the review's sign-off is enough to write on. On 401/403 or similar auth failure, surface the error and ask the user to refresh credentials — do not silently fall back to copy-only. The draft is `DESC_DRAFT_PATH`.
+
+**1. Open the CR, if Step 1 said one is pending.** On `CR_PENDING=1`, this is where the CR first exists, and it exists carrying the text the author just approved:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh" --open \
+  --title "<the Step 3 title>" --body-file <DESC_DRAFT_PATH>
+```
+
+It emits `CR_URL`, `CR_IID`, `CR_DRAFT`, `CR_CREATED=1`, and `DELETE_BRANCH_ON_MERGE` — act on that last one per "Branch deletion on merge". A `CR_CREATE_ERROR=` line is an auth or forge failure: surface it and stop, with the approved draft still in hand. On `CR_PREEXISTING=1` there is nothing to open; carry that CR's URL forward.
+
+**2. Expand the deep links against the URL.** The placeholders can only become URLs once the CR has one:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/deep-links.sh" --expand <DESC_DRAFT_PATH> \
+  --forge <FORGE> --cr-url <CR_URL> --base <DEFAULT_BRANCH>
+```
+
+It rewrites the draft in place and reports `EXPANDED=<n>`. All-or-nothing: an unresolved placeholder leaves the file untouched and exits non-zero, which means the `--check` in the output checklist was skipped or the tree moved since. Fix what it names and re-run — the CR is already open and carrying the approved prose, so nothing is lost. Skip this on `skip-deep-links`, where the draft carries no placeholders.
+
+**3. Write the expanded body to the CR.** The `--open` above already landed the approved text, so this is the same write in both cases: it replaces that body with the expanded one, or updates a pre-existing CR.
 
 **Screenshots referenced by local path (GitLab) upload first.** `glab api --method POST projects/<id>/uploads --form "file=@local.png"` returns a `markdown` field pointing at a hosted URL — swap each local reference for its upload result in `DESC_DRAFT_PATH` before the write below, so the description lands with working images on the first try. See the forge cookbook's binary-upload recipe; the `-F`/`--form` distinction there is the part that bites.
 
