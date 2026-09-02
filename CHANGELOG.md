@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **Quitting a review records the verdict you gave.** About one review in fifteen came back `pane-closed` — "nothing was graded, re-run to review again" — with the verdict and every annotation sitting unread on disk. Quitting the viewer is what closes its pane, so an ordinary `q` writes the result and takes the pane down in the same breath; the wait polls the pane once every fifteen seconds, and a quit landing in that second was read as a review abandoned. The result is read once more before the wait gives up on it.
+
 ## 1.11.0
 
 > [!WARNING]

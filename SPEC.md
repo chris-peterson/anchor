@@ -904,7 +904,11 @@ editor's whole answer is the revised artifact, which is why the column below
   into at human pace, so an elapsed-time cap generous enough not to interrupt is
   too long to be a useful guard, and what it reliably does instead is discard a
   draft mid-edit. Where the evidence is unavailable rather than negative, the
-  system shall keep waiting.
+  system shall keep waiting. A closed pane counts as that evidence only once the
+  result is confirmed still absent: quitting the tool is what closes the pane, so
+  the ordinary end of a review is a status written and a pane gone in the same
+  breath, and a liveness check landing in that moment answers for a moment
+  already past.
 - **[DIFF-29]** The system shall carry the calling session's tab label onto the
   split it opens, marked to say a review is waiting there, and shall open the
   review anyway where the label cannot be set. The terminal draws the tab from

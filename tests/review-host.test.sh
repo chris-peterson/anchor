@@ -94,4 +94,34 @@ rc=0
 [ ! -f "$work/never" ]                   || fail "the command ran with no host to run it in"
 ok "with nowhere to open, the dispatcher runs nothing and says so"
 
+# --- a result written as the host goes down is read, not discarded. Quitting the
+# tool is what closes the pane, so every ordinary review ends with the status
+# landing and the pane dying in the same breath; a liveness probe that happens to
+# fall in that second answers for a moment already past. Before the sentinel was
+# re-read, roughly one review in fifteen came back `pane-closed` with its verdict
+# sitting unread on disk.
+sentinel="$work/rc-quit"
+: > "$sentinel"
+( sleep 1.5
+  printf %s 10 > "$sentinel.tmp" && mv -f "$sentinel.tmp" "$sentinel"
+  touch "$sentinel.dead" ) &
+probe_alive() { [ ! -e "$sentinel.dead" ]; }
+rc=0
+seen=$(anchor_host_probe_seconds=1 anchor_host_await "$sentinel" probe_alive x) || rc=$?
+wait
+[ "$rc" -eq 0 ]   || fail "a written status should be returned, not $rc"
+[ "$seen" = 10 ]  || fail "the wait returned '$seen', want the 10 on disk"
+ok "a status written as the pane closes is read rather than discarded"
+
+# --- and a pane that closes having written nothing is still the abandoned review
+# it always was.
+sentinel="$work/rc-abandoned"
+: > "$sentinel"
+( sleep 1.5; touch "$sentinel.dead" ) &
+rc=0
+anchor_host_probe_seconds=1 anchor_host_await "$sentinel" probe_alive x >/dev/null 2>&1 || rc=$?
+wait
+[ "$rc" -eq "$anchor_host_rc_no_result" ] || fail "an empty sentinel should report no-result, got $rc"
+ok "a pane closed without writing reports no-result"
+
 echo "PASS: review-host"

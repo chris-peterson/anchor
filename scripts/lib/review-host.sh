@@ -84,6 +84,11 @@ anchor_host_available() {
   [[ -n "$(anchor_review_host "${1:-diff}" "${2:-}")" ]]
 }
 
+# How often the host itself is asked whether it is still on screen, in seconds.
+# The sentinel is read every second; the host costs a round trip, so it is asked
+# every fifteenth. The tests drive the cadence down to keep a wait short.
+anchor_host_probe_seconds=15
+
 # Block until the command reports its status, then return it. For a host that
 # does not block on the command itself and can be asked whether it is still on
 # screen: $2 is a predicate taking $3.
@@ -92,16 +97,28 @@ anchor_host_available() {
 # cap generous enough never to interrupt them is also too long to be a useful
 # guard — what it reliably does instead is discard a draft mid-edit. The signal
 # that actually means "no result is coming" is the host going away without
-# writing, which is what ends the wait early. Checking that costs a round trip,
-# so the sentinel is read every second and the host every fifteenth.
+# writing, which is what ends the wait early.
+#
+# A host gone is not yet a result missing. Quitting the tool is what takes the
+# host down, so the ordinary end of a review trips the probe: the command exits,
+# the launch script writes the status, the script exits, and only then does the
+# host tear the pane down. The status is therefore already on disk — written
+# whole, through the `.tmp` swap — by the time the probe can observe the pane
+# gone. Reading the sentinel once more after that is what separates a finished
+# review from an abandoned one; without it, a review quit during the second the
+# probe happens to land on comes back as `pane-closed` with its verdict sitting
+# unread in the file.
 anchor_host_await() {
   local sentinel="$1" alive="$2" arg="$3" ticks=0
   while [[ ! -s "$sentinel" ]]; do
     sleep 1
     ticks=$((ticks + 1))
-    if [[ $((ticks % 15)) -eq 0 ]] && ! "$alive" "$arg"; then
-      echo "review-diff.sh: the review closed without reporting a result" >&2
-      return "$anchor_host_rc_no_result"
+    if [[ $((ticks % anchor_host_probe_seconds)) -eq 0 ]] && ! "$alive" "$arg"; then
+      if [[ ! -s "$sentinel" ]]; then
+        echo "review-diff.sh: the review closed without reporting a result" >&2
+        return "$anchor_host_rc_no_result"
+      fi
+      break
     fi
   done
   cat "$sentinel"
