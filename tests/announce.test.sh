@@ -99,10 +99,14 @@ ok "an event with no fields still carries a body"
 ok "plugin segment is anchor"
 
 # What the JSON body bought: a value may now hold anything at all.
-run cr.created 'title=spaces "quotes" and \backslashes\'
-printf '%s' "$out" | jq -e '.title' >/dev/null 2>&1 <<<"${out#* }" \
-  || fail "body did not parse: $out"
-[[ "$(printf '%s' "${out#* }" | jq -r '.title')" == 'spaces "quotes" and \backslashes\' ]] \
+#
+# Each round-trip is asserted *inside* jq, against a JSON string literal in the
+# program itself. Comparing jq's decoded output to a shell `printf` instead made
+# the newline case a test of the host's line endings: Git Bash's jq writes CRLF,
+# so the two sides differed on Windows over a value announce.sh had encoded
+# correctly.
+run cr.created 'title=spaces "quotes" and back\slashes'
+printf '%s' "${out#* }" | jq -e '.title == "spaces \"quotes\" and back\\slashes"' >/dev/null \
   || fail "value did not round-trip: $out"
 ok "a value carrying spaces, quotes and backslashes round-trips"
 
@@ -111,7 +115,7 @@ run cr.created "$(printf 'title=line one\nline two')"
 [[ "$(printf '%s' "$out" | wc -l | tr -d ' ')" == "0" ]] \
   || fail "a newline in a value broke the line: $out"
 [[ "$out" == *'line one\nline two'* ]] || fail "newline not escaped: $out"
-[[ "$(printf '%s' "${out#* }" | jq -r '.title')" == "$(printf 'line one\nline two')" ]] \
+printf '%s' "${out#* }" | jq -e '.title == "line one\nline two"' >/dev/null \
   || fail "newline did not round-trip: $out"
 ok "a newline in a value is escaped, so the announcement stays one line"
 
