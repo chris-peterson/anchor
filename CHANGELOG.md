@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **The rest of the lifecycle announces itself.** Filing an issue, pushing a commit, marking a change request ready, merging it, and publishing a release each print one machine-readable line naming what happened and where — alongside the CR lines that already did. A sibling plugin can now follow a change from filed to shipped without `anchor` knowing it exists, and a machine where nothing is listening pays nothing for it. What each key carries is on the [events page](https://chris-peterson.github.io/anchor/#/events).
+- A pushed commit's line carries a link to the commit on the forge, so what a sibling records is something a person can open. Built from your `origin` whatever shape it has — HTTPS, SSH, `ssh://` with a port, a GitLab subgroup — and a token embedded in that remote is dropped rather than announced.
+
+### Changed
+
+- **The draft flag comes off the same way wherever you clear it.** `/anchor:review`'s self-review handoff and `/anchor:merge`'s draft gate both read the flag before touching it, so a change request a teammate marked ready in the meantime is reported as already ready instead of as something this run did.
+
+### Removed
+
+- **`anchor` no longer calls `tack`.** Merging ran `tack done` and `tack deliverable`, and releasing ran `tack link add` — steps that named one consumer inside `anchor`'s own flow and did nothing on a machine without it. Those two facts are `cr.merged` and `release.created` now, so a work tracker picks them up by listening rather than by being called. Nothing to configure, and `anchor` declares no dependency on tack.
+
 ## 1.12.0
 
 ### Added

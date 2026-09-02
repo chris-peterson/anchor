@@ -56,20 +56,75 @@ events:
             so a change request the forge reports without one arrives with the
             field present and empty.
           optional: true
+    - key: cr.ready
+      when: >-
+        the draft flag came off, on the author's say-so. Emitted by the script
+        that clears it, which is the one path that does, so the two callers
+        announce identically: review's self-review handoff, where the author is
+        done and wants eyes on the change, and merge's draft gate, where they
+        choose to land one that never left draft. From that gate the same run
+        goes on to announce cr.merged unless a later gate stops it; from the
+        handoff it stands alone.
+      emitted_by: scripts/mark-ready.sh
+      fields:
+        uri: the change request's web address
+    - key: cr.merged
+      when: >-
+        merge landed the change request. In-session merges only: what the forge
+        completes on its own afterwards, an auto-merge or a merge-on-green,
+        happens with nothing of anchor's running, so a subscriber that has to
+        account for those reconciles against the forge rather than waiting on
+        this.
+      emitted_by: skills/merge, via scripts/announce.sh
+      fields:
+        uri: the change request's web address
+        title: its title, as the forge reports it
+        merged_at: >-
+          when the forge recorded the merge, in its own ISO-8601 form. The
+          forge's time rather than the moment the announcement was made, so a
+          subscriber recording completion records when it happened.
+        sha: the merge commit
+    - key: commit.pushed
+      when: >-
+        commit pushed the branch. Emitted by the script that pushes, so it fires
+        whether or not the skill runs to completion, and only once the push has
+        landed: a commit sitting on a local branch is not yet something another
+        tool can reach. An amend that force-pushes announces again, carrying the
+        new sha.
+      emitted_by: scripts/commit.sh
+      fields:
+        uri:
+          describe: >-
+            the commit's web address on the forge, which names the project as
+            well as the sha. Present and empty where `origin` is neither GitHub
+            nor GitLab, since there is no address to build.
+          optional: true
+        sha: the commit, abbreviated
+        branch: the branch that was pushed
+    - key: issue.created
+      when: >-
+        issue filed a new issue. A run that adds to an issue that already
+        existed announces nothing: there is no new artifact for a subscriber to
+        record, and the skill's own report says what it added.
+      emitted_by: skills/issue, via scripts/announce.sh
+      fields:
+        uri: the issue's web address
+        title: its title, as anchor filed it
+    - key: release.created
+      when: >-
+        release published a release, once the forge reports it exists. A repo
+        whose version bump is a commit rather than a release announces nothing
+        here; the bookkeeping commit's own commit.pushed is the artifact on that
+        path.
+      emitted_by: skills/release, via scripts/announce.sh
+      fields:
+        uri: the release's web address, which names the project as well as the tag
+        tag: the ref it shipped as
 
 # → marketplace SPA; keys mirror the SPA's PLUGINS object.
 suite:
   cli: false
   group: waypoints
-  dependencies:
-    - name: revdiff
-      required: false
-      reason: default review tool wherever the subject is a changeset
-      # revdiff documents itself off the hub, so its link can't be derived.
-      url: https://revdiff.com
-    - name: tack
-      required: false
-      reason: records CRs and releases against a route
   # Activated by user-invoked skills (commit, prepare-review) and by ambient
   # rules injected at session start.
   activations: [user, session]

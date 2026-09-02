@@ -78,20 +78,22 @@ path of least resistance.
 ## Optional integrations
 
 The skills run with nothing else installed: with no diff viewer on the machine,
-the review is walked with you in chat. Each of these adds something when present
-and is skipped when absent.
+the review is walked with you in chat.
 
 - **[revdiff](https://revdiff.com)** — the tool the skills reach for when
   it's installed and you haven't said otherwise: a terminal-native diff reviewer
   (git, hg, and jj) that returns a normalized verdict and marks which diff side
   each annotation sits on. It carries no commit-message round-trip, so the skill
-  confirms the message itself. Because revdiff is a TUI, `anchor` opens it
-  through the revdiff plugin's terminal-overlay launcher, so that plugin has to
-  be installed too.
-- **[tack](https://github.com/chris-peterson/tack)** — the work tracker. Naming a
-  repo you aren't sitting in (`/anchor:commit payments-api`) resolves through
-  tack's repo database, and when a tack route is bound to the session, `merge`
-  records the CR against it and `release` attaches the release URL.
+  confirms the message itself. It renders in a terminal, so `anchor` opens it in
+  one it hosts itself: a tmux popup, or an iTerm2 split of the session you are
+  in.
+
+Integration runs the other way too, and needs nothing configured. `anchor`
+[announces](/events) each lifecycle fact it causes — an issue filed, a commit
+pushed, a change request opened, marked ready, or merged, a release published —
+as one line on its own stdout. A plugin that tracks work can follow a change from
+filed to shipped by reading those, and a session where nothing is listening pays
+nothing for it.
 
 ## Reference
 

@@ -102,6 +102,11 @@ what picks the level.
   The neutral term exists so a skill can be written once.
 - **Ambient rule** — standing guidance a `SessionStart` hook injects into every
   session, whether or not a skill is invoked.
+- **Announcement** — one line a script or skill prints when the plugin causes a
+  lifecycle fact (`codes.bridgeai.anchor/cr.merged {…}`), for a sibling plugin
+  reading tool output to react to. Keys are declared in `plugin.yml`'s
+  `events.publishes`, and `tests/announce.test.sh` holds each declaration and
+  the source that emits it to each other. The requirements are SPEC's EVENTS.
 - **Review mode** — the shape a review takes: `edit`, where the reviewer is
   handed the drafted artifact and what they save *is* the artifact, or `diff`,
   where they are shown a changeset and comment on it. The subject picks it —

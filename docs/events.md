@@ -14,6 +14,11 @@ The events, each linkable on its own:
 
 - [`cr.created`](#cr-created)
 - [`cr.updated`](#cr-updated)
+- [`cr.ready`](#cr-ready)
+- [`cr.merged`](#cr-merged)
+- [`commit.pushed`](#commit-pushed)
+- [`issue.created`](#issue-created)
+- [`release.created`](#release-created)
 
 ## `cr.created` :id=cr-created
 
@@ -44,6 +49,83 @@ prepare-review changed a change request that already existed. One announcement c
 | `title` | may be empty | its title, as the forge reports it. Read back rather than set here, so a change request the forge reports without one arrives with the field present and empty. |
 
 Emitted by skills/prepare-review, via scripts/announce.sh.
+
+## `cr.ready` :id=cr-ready
+
+```text
+codes.bridgeai.anchor/cr.ready
+```
+
+the draft flag came off, on the author's say-so. Emitted by the script that clears it, which is the one path that does, so the two callers announce identically: review's self-review handoff, where the author is done and wants eyes on the change, and merge's draft gate, where they choose to land one that never left draft. From that gate the same run goes on to announce cr.merged unless a later gate stops it; from the handoff it stands alone.
+
+| Field | Value | Meaning |
+|---|---|---|
+| `uri` | always set | the change request's web address |
+
+Emitted by `scripts/mark-ready.sh`.
+
+## `cr.merged` :id=cr-merged
+
+```text
+codes.bridgeai.anchor/cr.merged
+```
+
+merge landed the change request. In-session merges only: what the forge completes on its own afterwards, an auto-merge or a merge-on-green, happens with nothing of anchor's running, so a subscriber that has to account for those reconciles against the forge rather than waiting on this.
+
+| Field | Value | Meaning |
+|---|---|---|
+| `uri` | always set | the change request's web address |
+| `title` | always set | its title, as the forge reports it |
+| `merged_at` | always set | when the forge recorded the merge, in its own ISO-8601 form. The forge's time rather than the moment the announcement was made, so a subscriber recording completion records when it happened. |
+| `sha` | always set | the merge commit |
+
+Emitted by skills/merge, via scripts/announce.sh.
+
+## `commit.pushed` :id=commit-pushed
+
+```text
+codes.bridgeai.anchor/commit.pushed
+```
+
+commit pushed the branch. Emitted by the script that pushes, so it fires whether or not the skill runs to completion, and only once the push has landed: a commit sitting on a local branch is not yet something another tool can reach. An amend that force-pushes announces again, carrying the new sha.
+
+| Field | Value | Meaning |
+|---|---|---|
+| `uri` | may be empty | the commit's web address on the forge, which names the project as well as the sha. Present and empty where `origin` is neither GitHub nor GitLab, since there is no address to build. |
+| `sha` | always set | the commit, abbreviated |
+| `branch` | always set | the branch that was pushed |
+
+Emitted by `scripts/commit.sh`.
+
+## `issue.created` :id=issue-created
+
+```text
+codes.bridgeai.anchor/issue.created
+```
+
+issue filed a new issue. A run that adds to an issue that already existed announces nothing: there is no new artifact for a subscriber to record, and the skill's own report says what it added.
+
+| Field | Value | Meaning |
+|---|---|---|
+| `uri` | always set | the issue's web address |
+| `title` | always set | its title, as anchor filed it |
+
+Emitted by skills/issue, via scripts/announce.sh.
+
+## `release.created` :id=release-created
+
+```text
+codes.bridgeai.anchor/release.created
+```
+
+release published a release, once the forge reports it exists. A repo whose version bump is a commit rather than a release announces nothing here; the bookkeeping commit's own commit.pushed is the artifact on that path.
+
+| Field | Value | Meaning |
+|---|---|---|
+| `uri` | always set | the release's web address, which names the project as well as the tag |
+| `tag` | always set | the ref it shipped as |
+
+Emitted by skills/release, via scripts/announce.sh.
 
 ## Reacting to one
 

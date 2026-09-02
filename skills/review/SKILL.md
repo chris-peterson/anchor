@@ -359,8 +359,19 @@ reviewer in it, so the findings are a fix list instead. Steps 6 and 7 don't run.
    Neither marking ready nor requesting a reviewer happens without the user
    picking it here. `/anchor:merge` also offers to mark a CR ready, but it asks
    as a gate on the merge — the author is already landing the change by then, so
-   the question arrives long after the moment they wanted to hand it over. The
-   invocations for both forges are in
+   the question arrives long after the moment they wanted to hand it over.
+
+   Clearing the flag goes through the helper, which reads it fresh, covers both
+   forges, and announces `cr.ready` so a sibling tracking deliverables sees the
+   CR leave draft:
+
+   ```bash
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/mark-ready.sh" --forge <FORGE> --cr <CR_IID>
+   ```
+
+   `ALREADY_READY=1` means someone got there first; say that rather than
+   reporting a change you didn't make. Requesting reviewers is a separate call,
+   and its invocation for both forges is in
    `${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`.
 
 Then report as Step 8 describes.
