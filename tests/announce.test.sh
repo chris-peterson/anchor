@@ -66,6 +66,20 @@ while IFS= read -r key; do
 done <<<"$emitted"
 ok "every emitted event is declared in plugin.yml"
 
+# docs/events.md is hand-written prose, so the manifest is what keeps it honest.
+# The key is checked fully-qualified, because that page is read by whoever is
+# about to subscribe and the prefix is what they have to match on. The heading is
+# checked for its explicit `:id=`, since a dotted heading does not slugify to
+# anything a reader would guess, and each event has to be linkable on its own.
+while IFS= read -r key; do
+  [[ -n "$key" ]] || continue
+  grep -qF "codes.bridgeai.anchor/$key" "$root/docs/events.md" \
+    || fail "plugin.yml declares '$key' but docs/events.md does not document it"
+  grep -qF "## \`$key\` :id=" "$root/docs/events.md" \
+    || fail "docs/events.md has no anchored heading for '$key'"
+done <<<"$declared"
+ok "every declared event has an anchored section on the docs site"
+
 # --- the publisher ------------------------------------------------------------
 
 if ! command -v jq >/dev/null 2>&1; then

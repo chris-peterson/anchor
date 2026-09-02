@@ -4,6 +4,7 @@ docs/*
 !docs/README.md
 !docs/_sidebar.md
 !docs/ambient-rules.md
+!docs/events.md
 !docs/whats-new.md
 !docs/favicon.svg
 __pycache__

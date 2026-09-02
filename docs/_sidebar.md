@@ -13,6 +13,7 @@
   - [backlog](/skills/backlog)
 - [Ambient rules](/ambient-rules)
 - [Hooks](/hooks)
+- [Events](/events)
 - Templates
   - [Commit message](/templates/commit-message)
   - [CR description](/templates/cr-description)
