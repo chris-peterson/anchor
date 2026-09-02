@@ -50,7 +50,12 @@ events:
       emitted_by: skills/prepare-review, via scripts/announce.sh
       fields:
         uri: the change request's web address
-        title: its title, as the forge reports it
+        title:
+          describe: >-
+            its title, as the forge reports it. Read back rather than set here,
+            so a change request the forge reports without one arrives with the
+            field present and empty.
+          optional: true
 
 # → marketplace SPA; keys mirror the SPA's PLUGINS object.
 suite:
