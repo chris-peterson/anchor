@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- **Change requests announce themselves to the rest of the suite.** Opening a CR through `/anchor:prepare-review`, or changing one that already existed, now prints a single machine-readable line naming what happened and where. A sibling plugin can react to it without anchor knowing that plugin exists, and a machine where nothing is listening pays nothing for it. The format and the rules are the [plugin interop contract](https://github.com/chris-peterson/claude-marketplace/blob/main/authoring/plugin-contract.md).
+
 ### Fixed
 
 - **Quitting a review records the verdict you gave.** About one review in fifteen came back `pane-closed` — "nothing was graded, re-run to review again" — with the verdict and every annotation sitting unread on disk. Quitting the viewer is what closes its pane, so an ordinary `q` writes the result and takes the pane down in the same breath; the wait polls the pane once every fifteen seconds, and a quit landing in that second was read as a review abandoned. The result is read once more before the wait gives up on it.
