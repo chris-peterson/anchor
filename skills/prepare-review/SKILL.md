@@ -447,15 +447,6 @@ It rewrites the draft in place and reports `EXPANDED=<n>`. All-or-nothing: an un
 
 When operating against a non-cwd repo these are the write path, so retarget them per "Operating against a non-cwd repo": add `-R <owner/name>` to `gh pr edit`, and substitute the URL-encoded project for `:fullpath` in the `glab api` PUT (plus `--hostname` for self-hosted).
 
-**4. Announce the write.** A landed description is the moment the session first has a reviewable thing, and siblings in the suite key off it. The write above is a forge CLI you ran, so no anchor process saw it happen — say so on anchor's behalf:
-
-```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/announce.sh" cr.described \
-  "CR_IID=<CR_IID>" "CR_URL=<CR_URL>"
-```
-
-Only after a write that succeeded. Skip it on copy-only and wherever no description landed. It prints one line, exits 0 whatever happens, and nothing here reads its output — a plugin that cares is listening, and one that isn't installed costs nothing. The contract it satisfies is in the marketplace repo at `authoring/plugin-contract.md`.
-
 Report the write as one line once **Label it and set the milestone** below has run — the CR URL, that the description landed, and what the metadata came out as. **No CR to write to** (`skip-deep-links`, or the user picked copy-only): print the body for them to paste into the web UI themselves.
 
 ### Label it and set the milestone
@@ -504,3 +495,21 @@ If this CR must land after a predecessor CR, record the ordering on the forge on
 No predecessor captured (a single CR, or an independent one) → skip this entirely.
 
 > **On GitHub, one web-UI step remains:** `gh` exposes no equivalent upload endpoint, so screenshots embedded in the description must be dragged into the forge editor. After **Yes (write)** lands the body, open the CR in the browser, drop each PNG, and re-save — GitHub rewrites the local paths to hosted URLs. **On GitLab this step doesn't exist** — the "Write it" step above already uploaded each screenshot through `glab api --form` and wrote the description with hosted URLs, so there's nothing left to drag in.
+
+### Announce what this run did
+
+The last step of the phase, once every mutation above has landed. Siblings in the suite react to what anchor says it did; nothing here reads the output, and a machine where nobody is listening pays nothing for it.
+
+**Exactly one announcement per run**, chosen by `CR_CREATED` from Step 1's block:
+
+- **`CR_CREATED=1`** — announce nothing. `prepare-review.sh` already announced `cr.created` when it opened the CR, and setting up a CR this run just opened is not an update to it.
+- **`CR_CREATED=0`** — the CR existed before this run and this run changed it:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/announce.sh" cr.updated \
+  "uri=<CR_URL>" "title=<CR_TITLE>"
+```
+
+One announcement for the whole phase rather than one per mutation: a run that wrote a description, set labels, and attached a milestone changed one thing as far as a subscriber is concerned, and emitting per-mutation would make every consumer debounce. Skip it entirely where nothing was written — copy-only, or `skip-deep-links` with no CR to write to.
+
+The publisher exits 0 on every path, so this can never turn a CR that landed into a tool call that failed. The contract it satisfies is in the marketplace repo at [`authoring/plugin-contract.md`](https://github.com/chris-peterson/claude-marketplace/blob/main/authoring/plugin-contract.md).

@@ -24,6 +24,34 @@ marketplace:
   category: development
   homepage: https://chris-peterson.github.io/anchor/#/
 
+# → the suite's event catalog. The contract these hold up:
+# https://github.com/chris-peterson/claude-marketplace/blob/main/authoring/plugin-contract.md
+#
+# Keys are bare: `name:` above supplies the `codes.bridgeai.anchor/` prefix, so a
+# producer cannot typo its own. `tests/announce.test.sh` asserts every key here
+# appears in the source that emits it.
+events:
+  publishes:
+    - key: cr.created
+      when: >-
+        prepare-review opened a change request. Emitted by the script that
+        creates it, so it fires whether or not the skill runs to completion. A
+        run announces this or cr.updated, never both.
+      emitted_by: scripts/prepare-review.sh
+      fields:
+        uri: the change request's web address
+        title: its title, as anchor set it on creation
+    - key: cr.updated
+      when: >-
+        prepare-review changed a change request that already existed. One
+        announcement covers the whole phase — description, labels, milestone,
+        ordering dependency — rather than one per mutation, and a re-run on the
+        same CR fires it again.
+      emitted_by: skills/prepare-review, via scripts/announce.sh
+      fields:
+        uri: the change request's web address
+        title: its title, as the forge reports it
+
 # → marketplace SPA; keys mirror the SPA's PLUGINS object.
 suite:
   cli: false

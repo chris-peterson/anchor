@@ -228,7 +228,7 @@ fi
 
 # --- Resolve (or open) the CR ------------------------------------------------
 
-cr_url=""; cr_iid=""; cr_draft=""; cr_head=""; cr_desc=""; cr_delete_branch=""
+cr_url=""; cr_iid=""; cr_draft=""; cr_head=""; cr_desc=""; cr_delete_branch=""; cr_title=""
 cr_preexisting=0; cr_created=0; cr_pending=0
 prior_cr_iid=""; prior_cr_state=""
 
@@ -265,6 +265,7 @@ resolve_cr() {
       cr_draft=$(jq -r '.draft // empty' <<<"$json")
       cr_head=$(jq -r '.sha // empty' <<<"$json")
       cr_desc=$(jq -r '.description // ""' <<<"$json")
+      cr_title=$(jq -r '.title // ""' <<<"$json")
       # Per-MR on GitLab: the create call's --remove-source-branch, or the
       # project forcing it for every MR.
       cr_delete_branch=$(jq -r '
@@ -273,7 +274,7 @@ resolve_cr() {
         then "true" else "false" end' <<<"$json")
       ;;
     github)
-      local json args=(--json "url,number,isDraft,headRefOid,body,state")
+      local json args=(--json "url,number,isDraft,headRefOid,body,state,title")
       [[ -n "$cr_ref" ]] && args=("$cr_ref" "${args[@]}")
       json=$(gh pr view "${args[@]}" 2>/dev/null) || return 1
       [[ -z "$json" ]] && return 1
@@ -290,6 +291,7 @@ resolve_cr() {
       cr_draft=$(jq -r '.isDraft // empty' <<<"$json")
       cr_head=$(jq -r '.headRefOid // empty' <<<"$json")
       cr_desc=$(jq -r '.body // ""' <<<"$json")
+      cr_title=$(jq -r '.title // ""' <<<"$json")
       ;;
     *) return 1 ;;
   esac
@@ -374,13 +376,19 @@ if [[ "$do_open" -eq 1 ]]; then
   echo "CR_IID=$cr_iid"
   echo "CR_DRAFT=$cr_draft"
   echo "DEFAULT_BRANCH=$default_branch"
+  echo "CR_TITLE=$open_title"
+  echo "DEFAULT_BRANCH=$default_branch"
   echo "DELETE_BRANCH_ON_MERGE=$delete_branch_on_merge"
   # Announce the CR to whoever in the suite is listening. This is the only path
-  # that opens one, so it is the only path that has the fact to announce. The
-  # line repeats the fields above because a subscriber reads a whole tool output
-  # and cannot tell which run a loose `CR_IID=` belonged to.
-  "$(dirname "${BASH_SOURCE[0]}")/announce.sh" cr.opened \
-    "CR_IID=$cr_iid" "CR_URL=$cr_url" "CR_DRAFT=$cr_draft"
+  # that opens one, so it is the only path holding that fact. The announcement
+  # repeats what the block above says because a subscriber reads a whole tool
+  # output and cannot tell which run a loose `CR_URL=` belonged to.
+  #
+  # A run announces `cr.created` or `cr.updated`, never both: setting up a CR
+  # this run just opened is not an update to it. That is why the skill's
+  # `cr.updated` step reads `CR_CREATED` before firing.
+  "$(dirname "${BASH_SOURCE[0]}")/announce.sh" cr.created \
+    "uri=$cr_url" "title=$open_title"
   exit 0
 fi
 
@@ -717,6 +725,7 @@ echo "PRIOR_CR_STATE=$prior_cr_state"
 echo "CR_URL=$cr_url"
 echo "CR_IID=$cr_iid"
 echo "CR_DRAFT=$cr_draft"
+echo "CR_TITLE=$cr_title"
 echo "CR_HEAD_SHA=$cr_head"
 echo "LOCAL_HEAD_SHA=$local_head"
 echo "WORKTREE_CLEAN=$worktree_clean"
