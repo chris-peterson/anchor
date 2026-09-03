@@ -217,7 +217,19 @@ glab api -X PUT projects/:fullpath/issues/<iid> -F "description=@<draft-path>"
 glab issue update <iid> --label "<a,b>" --milestone "<milestone title>"
 ```
 
-After the issue lands, print its URL.
+After the issue lands, print its URL, and announce it so a sibling that resolves
+its own work from tracker URLs can see the new issue without scraping one out of
+your prose:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/announce.sh" issue.created \
+  "uri=<issue url>" "title=<title>"
+```
+
+On a create only. Adding to an issue that already existed announces nothing: the
+artifact a subscriber records already exists, and what this run changed is in your
+report. The publisher exits 0 on every path, so this can never turn an issue that
+landed into a tool call that failed.
 
 ### Edit
 

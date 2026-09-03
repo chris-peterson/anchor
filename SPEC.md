@@ -46,8 +46,13 @@ behavior, not an independent authority — review them against the source.
   triggered by a published release or a tag push, a bump commit in the repo
   itself, or nobody (no version artifact). Resolved by `release-recon.sh` and
   decisive for the whole release path. Defined under RELEASE.
-- **tack** / **revdiff** — sibling plugins `anchor` integrates with when present
-  (route bookkeeping; terminal-native visual diff review). Each is optional, and
+- **Announcement** — one line the plugin prints when it causes a lifecycle fact
+  (`codes.bridgeai.anchor/cr.merged {…}`), for a sibling plugin reading tool
+  output to react to. Every key the plugin publishes is declared in `plugin.yml`.
+  Defined under EVENTS.
+- **revdiff** — a terminal-native visual diff reviewer, and the `diff` mode tool
+  `anchor` reaches for when the user has named none. A binary on the machine,
+  driven directly and rendered in a terminal `anchor` hosts itself. Optional, and
   the flow that uses it falls back when absent.
 
 ## Requirements
@@ -442,8 +447,6 @@ step after `prepare-review` opens the CR and `resolve-feedback` clears its threa
   surface it and ask the user to refresh credentials rather than retry or fall back.
 - **[MERGE-15]** After a successful merge, the system shall return the local checkout
   to the default branch, pull the merged result, and delete the merged local branch.
-- **[MERGE-16]** Where a tack route is bound to the session, the system shall mark the
-  tack done and record the CR as its deliverable after merging.
 
 ### RELEASE — Release
 
@@ -523,8 +526,6 @@ established before anything is proposed or written.
   shall retitle it to the new version rather than insert a new section above it.
 - **[RELEASE-19]** The system shall not cascade from a merge into a release;
   `/anchor:merge` shall name `release` as the next step without invoking it.
-- **[RELEASE-20]** Where a tack route is bound to the session, the system shall attach
-  the release URL to the route's tack as a link.
 
 ### ISSUES — Issues
 
@@ -1050,6 +1051,53 @@ editor's whole answer is the revised artifact, which is why the column below
   default shape only when no level supplies a template.
 - **[FORGE-09]** Where `anchor.crTemplateRepo` names a repo, the system shall read
   a CR template from it only after every forge-supplied level has declined.
+
+### EVENTS — Announcements to sibling plugins
+
+- **[EVENTS-01]** The system shall publish each lifecycle fact it causes as one
+  line on stdout, keyed `codes.bridgeai.anchor/<entity>.<event>` and carrying a
+  compact JSON body, so a sibling plugin reading tool output can react to it.
+- **[EVENTS-02]** The system shall announce only facts it caused, never one it
+  observed a sibling cause.
+- **[EVENTS-03]** The publisher shall exit 0 on every path, malformed calls
+  included, so an announcement cannot turn an operation that succeeded into a
+  tool call that failed.
+- **[EVENTS-04]** The system shall build the body such that a field value
+  carrying a space, a quote, a backslash, or a newline reaches the subscriber
+  intact and leaves the announcement on one line.
+- **[EVENTS-05]** The system shall declare every key it publishes in its
+  manifest, with the condition that fires it, the source that emits it, and each
+  field it carries.
+- **[EVENTS-06]** The system shall announce a fact only after the operation it
+  describes has landed.
+- **[EVENTS-07]** Where a fact is caused by a script rather than by the model's
+  judgment, the system shall announce it from that script, so a run whose skill
+  does not reach the end still announces what it did.
+- **[EVENTS-08]** A `/anchor:prepare-review` run shall announce `cr.created` or
+  `cr.updated` and never both.
+- **[EVENTS-09]** The system shall announce `commit.pushed` after the push
+  rather than after the commit, and shall carry a commit web address naming the
+  project as well as the sha, left empty where `origin` is not a forge it can
+  address.
+- **[EVENTS-10]** The system shall drop credentials embedded in the `origin`
+  remote rather than carrying them into an announced address.
+- **[EVENTS-11]** The system shall read a change request's draft flag at the
+  moment it clears it, and shall announce `cr.ready` only where the flag moved.
+- **[EVENTS-12]** The system shall route every path that clears a draft flag
+  through one helper, so `cr.ready` has a single emission point and one shape
+  whichever skill reached it.
+- **[EVENTS-13]** The system shall carry the forge's own merge timestamp and
+  landed commit in `cr.merged`, read back from the forge rather than assembled
+  from what the run knows.
+- **[EVENTS-14]** `cr.merged` shall cover merges the system performed; where the
+  forge completes one on its own afterwards, the system shall not announce it.
+- **[EVENTS-15]** The system shall announce `release.created` only once the forge
+  reports the release exists, reading its address and tag back from the forge
+  rather than from the version the run recommended.
+- **[EVENTS-16]** Where the repo's release model publishes no forge release, the
+  system shall announce nothing for the release.
+- **[EVENTS-17]** The system shall announce `issue.created` on a create only,
+  not on an update to an issue that already existed.
 
 ### RULE — Ambient rules
 

@@ -49,6 +49,9 @@ set -e
 [[ $rc -eq 65 ]] || fail "expected exit 65 on default-branch guard, got $rc"
 # nothing should have been committed
 [[ "$(git -C "$repo" rev-list --count main)" -eq 1 ]] || fail "guard let a commit through"
+if echo "$out" | grep -q 'commit\.pushed'; then
+  fail "announced a push that never happened: $out"
+fi
 ok "default-branch guard blocks a bare commit on main (exit 65)"
 
 # --- Default-branch guard: allowed with --allow-default-branch -------------
@@ -72,6 +75,25 @@ echo "$out" | grep -q '^PUSHED=ok$'           || fail "feat push not ok: $out"
 git -C "$remote" rev-parse --verify --quiet feat >/dev/null || fail "feat not pushed to remote"
 sha_after_new=$(git -C "$repo" rev-parse HEAD)
 ok "new commit on a feature branch sets upstream"
+
+# --- The push announces itself ---------------------------------------------
+# The announcement follows the push rather than the commit, so what a subscriber
+# hears is always something it can reach. This repo's origin is a local path, so
+# the URI is empty; the remote shapes that do build one are in
+# tests/forge-url.test.sh. Guarded on jq for the same reason announce.test.sh is:
+# without it the publisher says so on stderr and emits nothing.
+if command -v jq >/dev/null 2>&1; then
+  ann=$(echo "$out" | grep '^codes\.bridgeai\.anchor/commit\.pushed ') \
+    || fail "no commit.pushed announcement: $out"
+  echo "$ann" | grep -q "\"sha\":\"$(git -C "$repo" rev-parse --short HEAD)\"" \
+    || fail "announcement carries the wrong sha: $ann"
+  echo "$ann" | grep -q '"branch":"feat"' || fail "wrong branch announced: $ann"
+  echo "$ann" | grep -q '"uri":""' \
+    || fail "built a URI for a remote that is not a forge: $ann"
+  ok "the push announces commit.pushed with the sha and branch"
+else
+  echo "# jq is not on PATH; skipping the announcement check"
+fi
 
 # --- Amend + force-with-lease ---------------------------------------------
 printf 'more feature\n' >> "$repo/b.txt"

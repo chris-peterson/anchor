@@ -341,6 +341,13 @@ Both name the target state rather than toggling it — the inverse is its own fl
 is already ready doesn't send it back to draft, unlike `--remove-source-branch`
 (see MR create above).
 
+`anchor`'s own path to the ready half is
+`${CLAUDE_PLUGIN_ROOT}/scripts/mark-ready.sh --forge <forge> --cr <num>`, which
+covers both forges, reads the flag before touching it, and announces `cr.ready`.
+Use it rather than the bare call, so a CR someone already marked ready comes back
+as `ALREADY_READY=1` instead of as a transition this run reported making. The
+reviewer half has no helper and stays on the calls above.
+
 Two `glab` details worth knowing before reaching for the API form:
 
 - **`--reviewer` replaces** the existing reviewer list by default. Prefix a
@@ -440,6 +447,29 @@ per-MR checkbox decides — read the MR's `squash` field to see which way it's s
 glab mr view <iid> --output json | jq '{squash}'
 ```
 
+## Read back what a merge landed
+
+A merge produces two facts the run that performed it doesn't hold: when the forge
+recorded it, and which commit it landed as. `/anchor:merge` announces both, so
+they come from the forge rather than from the local clock and the pre-merge head.
+
+```bash
+# GitHub
+gh pr view <num> --json url,title,mergedAt,mergeCommit \
+  | jq -r '[.url, .title, .mergedAt, (.mergeCommit.oid // "")] | @tsv'
+
+# GitLab
+glab mr view <iid> --output json \
+  | jq -r '[.web_url, .title, .merged_at,
+            (.merge_commit_sha // .squash_commit_sha // .sha)] | @tsv'
+```
+
+The landed commit sits under a different field per method, which is why both
+reads take the first one the forge filled in. On GitLab a squashed MR can carry
+`merge_commit_sha` and `squash_commit_sha` at once, and `sha` is the head to fall
+back on; on GitHub the resulting commit is `mergeCommit.oid`, absent where the
+forge reports none.
+
 ## Dispatch a release workflow
 
 The publish step for the `dispatch-triggered` model (see
@@ -521,6 +551,28 @@ tags alone — a tag can exist with no release attached:
 gh release view --json tagName,publishedAt,isDraft
 glab release list --per-page 5
 ```
+
+## Read back a published release
+
+Where CI owns the version bump, the workflow derives the version and creates the
+release, so the tag this run recommended is not necessarily what published.
+`/anchor:release` announces what the forge holds instead.
+
+```bash
+# The project's latest release, which is what a workflow just published.
+gh release view --json url,tagName                              # GitHub
+glab release view -F json | jq '{url: ._links.self, tag_name}'  # GitLab
+
+# A named tag, where the caller set it.
+gh release view v1.2.0 --json url,tagName
+glab release view v1.2.0 -F json | jq '{url: ._links.self, tag_name}'
+```
+
+Both take the latest release with the tag omitted. Two gaps between them past
+that: `glab` spells the JSON switch `-F json` (`--output`), where `gh` takes
+`--json <fields>`; and **GitLab's release object has no `url` field** — the web
+address is `_links.self`, so asking for `.url` returns null, which is the shape
+most likely to be announced as an empty string without anyone noticing.
 
 ## Issue list
 

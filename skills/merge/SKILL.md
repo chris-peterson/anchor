@@ -54,7 +54,7 @@ flowchart TD
 
     subgraph "Step 3-4: Land + clean up"
         Ask --> Do["Merge via gh/glab"]
-        Do --> Post["Checkout default + pull, delete branch, record tack"]
+        Do --> Post["Checkout default + pull, delete branch"]
     end
 
     Post --> Report([One-line result])
@@ -126,8 +126,17 @@ ask whether to mark it ready and proceed — don't mark it ready silently:
 > This CR is still a draft. Marking it ready requests review; merging now lands it
 > without that review. Mark ready and merge anyway? `[yes / no]`
 
-On `yes`, mark it ready (`gh pr ready <num>` / `glab mr update <iid> --ready`), then
-continue. On `no`, stop.
+On `yes`, clear the flag through the helper rather than the CLI directly. It reads
+the flag fresh, and announces `cr.ready` so a sibling tracking deliverables sees
+the CR leave draft:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/mark-ready.sh" --forge <FORGE> --cr <CR_IID>
+```
+
+`CR_READY=ok` and continue. `ALREADY_READY=1` means the CR stopped being a draft
+between Step 0's read and now, which satisfies this gate too, so continue without
+reporting a change you didn't make. On `no`, stop.
 
 ### 1b. Mergeable (no conflicts)
 
@@ -272,6 +281,37 @@ preference; on GitLab it repeats what the create call set. This is a forge write
   commit, a fresh unresolved thread, protection rules), re-read the specific gate it
   names and surface that — don't force past it.
 
+### Announce the merge
+
+Once the forge confirms it, read back what the forge recorded and announce it, so
+a sibling tracking deliverables learns the CR landed and when:
+
+```bash
+# GitHub
+gh pr view <num> --json url,title,mergedAt,mergeCommit \
+  | jq -r '[.url, .title, .mergedAt, (.mergeCommit.oid // "")] | @tsv'
+
+# GitLab
+glab mr view <iid> --output json \
+  | jq -r '[.web_url, .title, .merged_at,
+            (.merge_commit_sha // .squash_commit_sha // .sha)] | @tsv'
+```
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/announce.sh" cr.merged \
+  "uri=<url>" "title=<title>" "merged_at=<merged at>" "sha=<landed sha>"
+```
+
+Both halves are read back rather than assembled from what this run knows.
+`merged_at` is the forge's own timestamp, so a subscriber records when the merge
+happened instead of when it heard; and the landed commit sits under a different
+field per method, which is why the queries above take the first one the forge
+filled in.
+
+The publisher exits 0 on every path, so this can never turn a merge that landed
+into a tool call that failed. The contract it satisfies is in the marketplace repo
+at [`authoring/plugin-contract.md`](https://github.com/chris-peterson/claude-marketplace/blob/main/authoring/plugin-contract.md).
+
 ## Step 4: Clean up
 
 Once the forge confirms the merge, leave the local checkout on a clean footing:
@@ -294,17 +334,6 @@ Once the forge confirms the merge, leave the local checkout on a clean footing:
    (e.g. a squash produced a new SHA). After a squash, the branch's commits are in
    the target under a new SHA, so `-d` will refuse; confirm the merge landed, then
    delete with `-D`.
-
-3. **Record the tack deliverable** when a tack route is bound to this session. Mark
-   the CR's tack done and attach the CR as its deliverable so `/wip` and `/recap`
-   reflect the landed work:
-
-   ```bash
-   tack done <route> <tackId>
-   tack deliverable <route> <tackId> "<cr-url>"
-   ```
-
-   No tack route bound → skip this; don't create one just to close it.
 
 ## Step 5: Report
 

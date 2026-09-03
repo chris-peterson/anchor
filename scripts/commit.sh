@@ -63,6 +63,8 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 # shellcheck source=lib/stage-paths.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/stage-paths.sh"
+# shellcheck source=lib/forge-url.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/forge-url.sh"
 
 CTX_REPO=""
 mode=""
@@ -166,3 +168,14 @@ case "$push_mode" in
 esac
 
 echo "PUSHED=ok"
+
+# --- Announce -----------------------------------------------------------------
+# The push is what makes the commit reachable, so the announcement sits after it
+# rather than in the skill: a run the skill doesn't finish still pushed.
+#
+# The URI carries the project as well as the sha, which is why no separate repo
+# field is needed; it is empty where `origin` is not a forge anchor can address.
+"$(dirname "${BASH_SOURCE[0]}")/announce.sh" commit.pushed \
+  "uri=$(anchor_commit_web_url "$commit_sha")" \
+  "sha=$commit_sha" \
+  "branch=$branch"
