@@ -178,9 +178,24 @@ When updating an existing issue, diff the draft against the baseline captured in
 git --no-pager diff --no-index <current-path> <draft-path>
 ```
 
-When creating a new issue, display the full title and body in a fenced code block.
+When creating a new issue, display the full body in a fenced code block.
 
-Either way, lead the block with the Step 5 metadata on one line — `Labels: bug, docs · Milestone: 1.7.0`, or `none` on either side — so it rides the one disposition question with the body instead of becoming a second gate.
+Either way, head the presentation with a line naming the write and linking where it lands, then the title, then the Step 5 metadata on one line. Emit them as markdown outside the fence, so the link is clickable. The first line takes the create form or the update form:
+
+```markdown
+New [`<project>` issue](<issue list url>)
+Update [`<project>` #<number>](<issue url>)
+
+Title: <drafted title>
+Labels: <labels> · Milestone: <milestone title>
+```
+
+Say `none` on either half of the metadata line where Step 5 settled on none; it rides the one disposition question with the body rather than becoming a second gate.
+
+Where the link points:
+
+- **Create** — the target project's issue list: `TARGET_URL` where a target resolved, else the web URL of the cwd repo's `origin`, plus `/issues` on GitHub or `/-/issues` on GitLab.
+- **Update** — the issue's own URL, which the forge reports as `url` (GitHub) / `web_url` (GitLab).
 
 Then ask the user how to proceed with the `AskUserQuestion` tool. Use header `Disposition` and these options (default first):
 

@@ -562,6 +562,9 @@ Working the backlog it lands in is the `backlog` skill's half, in BACKLOG below.
   it.
 - **[ISSUES-11]** The system shall present the labels and milestone with the drafted
   body for one approval rather than gating them separately.
+- **[ISSUES-12]** The system shall head that presentation with a link to where the
+  write lands — the target project's issue list on a create, the issue itself on an
+  update — above the title and the labels and milestone.
 
 ### BACKLOG — Backlog
 

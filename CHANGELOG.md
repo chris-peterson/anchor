@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **A drafted issue now says where it is about to land.** `/anchor:issue` heads the approval with a link to the destination — the project's issue list when filing, the issue itself when updating — followed by the title and then the labels and milestone. Filing against a repo other than the one you're standing in is visible before you approve it, rather than after the URL comes back.
+
 ## 1.13.0
 
 ### Added
