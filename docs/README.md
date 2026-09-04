@@ -75,6 +75,25 @@ path of least resistance.
   with the *why*, and deep-links the critical path so a skim lands on what
   matters.
 
+## Tenets
+
+- **Nothing publishes under your name until you have read the exact words.**
+  Commit messages, CR descriptions, issue bodies, review replies, release notes —
+  each reaches you verbatim before it lands, in the review tool or in the reply,
+  never as a paraphrase and never as the output of a command you would have to
+  expand. Approving a plan, a shape, or a disposition is not approving the prose
+  that later fills it. Decline and nothing is written.
+- **A review that did not happen is not an approval.** A viewer that opened and
+  reported no verdict, an editor closed without saving, a diff tool that is not
+  installed — each ends the step, and `anchor` walks a
+  [fallback](/guides/review-fallback) instead of asking *"you saw the diff —
+  approve?"*. That question converts a tooling failure into your sign-off.
+- **No AI attribution.** No `Co-Authored-By` trailer, no *Generated with* footer.
+  The commit author and CR author fields already record who ran it.
+
+Written down as requirements in [SPEC](/spec): CONFIRM-01..06 for the first,
+DIFF-12 and DIFF-20 for the second, RULE-02 for the third.
+
 ## Optional integrations
 
 The skills run with nothing else installed: with no diff viewer on the machine,
