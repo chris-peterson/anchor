@@ -139,7 +139,7 @@ If no test suite is found, skip this step silently.
 
 Write the message following the format in `${CLAUDE_PLUGIN_ROOT}/templates/commit-message.md` — it owns the *shape* (the [cbea.ms](https://cbea.ms/git-commit/) rules and the trailer). Spend your effort on the *why*; the code already shows the *how*. If the change is trivial (typo fix, one-liner), a subject-only message is fine.
 
-Keep the body free of loaded framing — temporal blame, size-minimizers, self-congratulatory adverbs, defensive softeners. The tone discipline lives in `${CLAUDE_PLUGIN_ROOT}/guides/loaded-framing.md` (shared with `prepare-review` and `issue`); consult it while drafting.
+Keep the body free of loaded framing — temporal blame, size-minimizers, self-congratulatory adverbs, defensive softeners. The tone discipline lives in `${CLAUDE_PLUGIN_ROOT}/guides/loaded-framing.md` (shared with `cr` and `issue`); consult it while drafting.
 
 ### Honor `anchor.*` config
 
@@ -171,7 +171,7 @@ The commit **pushes** (Step 6), so landing directly on the default branch publis
   2. **Commit to `<default>`** — the deliberate, explicit direct-to-default case (a release commit, a docs typo on `main`); the flow proceeds and pushes to the default branch, so the change lands without a CR. Never the default path.
   3. **Edit name** — take a name from the user, then `git checkout -b <that>`.
 
-Create the branch (when chosen) **before** the commit, so the commit lands — and pushes — on the feature branch. Once `/commit` pushes that branch, `prepare-review` opens the CR against it (it operates on an already-pushed branch and never pushes itself).
+Create the branch (when chosen) **before** the commit, so the commit lands — and pushes — on the feature branch. Once `/commit` pushes that branch, `cr` opens the CR against it (it operates on an already-pushed branch and never pushes itself).
 
 Committing directly to the default branch is never a squash target — the gate below returns `SQUASH=blocked`, so even the "commit to `<default>`" path lands as a new commit rather than amending the published tip.
 
@@ -277,7 +277,7 @@ Carry the **same `--path` list** through from Steps 1 and 5, so the commit holds
 
 Read the helper's stdout — `COMMIT_SHA`, `BRANCH`, `PUSH_MODE`, and `PUSHED=ok` on success. Report the outcome and nothing more — `Committed <COMMIT_SHA>, pushed to <BRANCH>` — followed by any comments an `approved` review left unaddressed. If the push is rejected (non-fast-forward, protected branch, auth), `commit.sh` leaves git's error on stderr and exits non-zero; surface that and stop rather than retrying or force-pushing without the lease.
 
-**The forge's own "create a pull request" link is not the handoff.** Pushing a new branch makes GitHub print a `Create a pull request for '<branch>'` URL, and GitLab prints its `merge_requests/new` equivalent; both are in the push output you just read. Don't relay either one. That URL opens the forge's web form, which lands the CR non-draft, with the project template's checklist intact and no Review guide — the shape `/anchor:prepare-review` exists to replace (`${CLAUDE_PLUGIN_ROOT}/rules/use-forge-clis.md`). Where the next step comes up, name the skill: **`/anchor:prepare-review` opens the CR against the branch this just pushed.**
+**The forge's own "create a pull request" link is not the handoff.** Pushing a new branch makes GitHub print a `Create a pull request for '<branch>'` URL, and GitLab prints its `merge_requests/new` equivalent; both are in the push output you just read. Don't relay either one. That URL opens the forge's web form, which lands the CR non-draft, with the project template's checklist intact and no Review guide — the shape `/anchor:cr` exists to replace (`${CLAUDE_PLUGIN_ROOT}/rules/use-forge-clis.md`). Where the next step comes up, name the skill: **`/anchor:cr` opens the CR against the branch this just pushed.**
 
 ## Step 7: Report the pipeline the push triggered
 

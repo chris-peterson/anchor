@@ -1,9 +1,9 @@
 ---
-name: review
+name: review-cr
 description: Review an open change request — read every change in the diff viewer, examine it against the qualities you've set, then post the findings as inline threads once the exact text is approved. On your own CR it runs as a self-review instead — the fixes land in the tree, nothing posts, and it ends by offering to mark the CR ready. Use when reviewing a PR/MR, when a teammate sends a CR number or URL, or when reviewing your own change before handing it over.
 ---
 
-# Review
+# Review a Change Request
 
 Take a change request and drive it to feedback: resolve the CR, read the
 description that says why it exists, look at every change, examine the diff
@@ -20,7 +20,7 @@ mode** (Step 5):
 | the user's own (`IS_OWN_CR=1`) | **self-review** | a fix list worked in the tree; nothing posts, and the mode ends by offering to mark the CR ready |
 
 Self-review is the cold pass an author makes before handing a change to anyone
-else. `/anchor:prepare-review` opens the CR as a draft precisely so that
+else. `/anchor:cr` opens the CR as a draft precisely so that
 decision stays theirs, and this is where they make it.
 
 This is also the other side of `/anchor:resolve-feedback`. That skill brings a
@@ -43,7 +43,7 @@ findings, and what landed where.
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
 flowchart TD
-    Start(["/anchor:review"]) --> Resolve["Resolve + fetch the CR"]
+    Start(["/anchor:review-cr"]) --> Resolve["Resolve + fetch the CR"]
 
     subgraph "Step 1-2: Orient"
         Resolve --> Open{Open CR?}
@@ -161,7 +161,7 @@ over the umbrella one, falls back to what the subject picks, and considers only
 tools that can actually open:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill review --probe
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill review-cr --probe
 ```
 
 Two answers mean **don't launch** — this skill's subject is a changeset, and
@@ -183,7 +183,7 @@ Otherwise launch it as a **background** Bash call (`run_in_background: true`) �
 the viewer blocks until closed:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill review \
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill review-cr \
   --mode <REVIEW_MODE> [--repo <path>] <DIFF_RANGE> \
   --title '<CR_TITLE>' \
   --detail CR=<CR_URL> --detail author=<CR_AUTHOR> --detail files=<CHANGED_FILES>
@@ -438,7 +438,7 @@ Nothing about a verdict — on your own CR there is none to record.
 
 ## Related
 
-`/anchor:prepare-review` writes the description this skill reads first;
+`/anchor:cr` writes the description this skill reads first;
 `/anchor:resolve-feedback` is what the author runs when these findings reach
 them. The canonical forge invocations behind Step 7 — line-anchored threads on
 both forges, the batched review, the position payload GitLab silently drops when

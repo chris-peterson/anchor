@@ -26,14 +26,14 @@ The events, each linkable on its own:
 codes.bridgeai.anchor/cr.created
 ```
 
-prepare-review opened a change request. Emitted by the script that creates it, so it fires whether or not the skill runs to completion. A run announces this or cr.updated, never both.
+cr opened a change request. Emitted by the script that creates it, so it fires whether or not the skill runs to completion. A run announces this or cr.updated, never both.
 
 | Field | Value | Meaning |
 |---|---|---|
 | `uri` | always set | the change request's web address |
 | `title` | always set | its title, as anchor set it on creation |
 
-Emitted by `scripts/prepare-review.sh`.
+Emitted by `scripts/cr.sh`.
 
 ## `cr.updated` :id=cr-updated
 
@@ -41,14 +41,14 @@ Emitted by `scripts/prepare-review.sh`.
 codes.bridgeai.anchor/cr.updated
 ```
 
-prepare-review changed a change request that already existed. One announcement covers the whole phase — description, labels, milestone, ordering dependency — rather than one per mutation, and a re-run on the same CR fires it again.
+cr changed a change request that already existed. One announcement covers the whole phase — description, labels, milestone, ordering dependency — rather than one per mutation, and a re-run on the same CR fires it again.
 
 | Field | Value | Meaning |
 |---|---|---|
 | `uri` | always set | the change request's web address |
 | `title` | may be empty | its title, as the forge reports it. Read back rather than set here, so a change request the forge reports without one arrives with the field present and empty. |
 
-Emitted by skills/prepare-review, via scripts/announce.sh.
+Emitted by skills/cr, via scripts/announce.sh.
 
 ## `cr.ready` :id=cr-ready
 

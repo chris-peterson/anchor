@@ -6,7 +6,7 @@ framing (blame, hyperbole, self-judgement, defensive softeners) adds noise that
 prompts the reader to evaluate the *tone* instead of the *change*. The factual
 claim usually survives the trim just fine, and reads cleaner for it. `anchor`'s
 prose skills consult this guide for the tone discipline — `commit`,
-`prepare-review`, and `issue` all defer here.
+`cr`, and `issue` all defer here.
 
 ## Patterns to cut
 
@@ -30,7 +30,7 @@ prose skills consult this guide for the tone discipline — `commit`,
   - Bad: *"The fix is one short block in `CreateTestCaseElement`."*
   - Better: *"This change adds a block in `CreateTestCaseElement`."*
   - Bad: *"No script plumbing needed, so the whole change is prose."*
-  - Better: *"`prepare-review.sh` already collects every `anchor.*` key, so the
+  - Better: *"`cr.sh` already collects every `anchor.*` key, so the
     changeset is prose across the template, the skill, and the guides."*
 
 - **Self-congratulatory adverbs.** Adverbs that judge your own code's

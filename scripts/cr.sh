@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Gather everything /prepare-review's Step 1 needs and perform the safe
+# Gather everything /anchor:cr's Step 1 needs and perform the safe
 # default-path actions, then print one KEY=value block on stdout so the skill
 # acts on a single command's output — no per-step orchestration to narrate.
 #
@@ -134,11 +134,11 @@
 #   1   an operational failure (e.g. CR_CREATE_ERROR)
 #
 # Usage:
-#   prepare-review.sh                     # recon: resolve the CR, or report CR_PENDING
-#   prepare-review.sh --no-open           # no CR will be opened -> skip-deep-links path
-#   prepare-review.sh --repo <path>       # operate on a checkout other than the cwd repo
-#   prepare-review.sh --cr <iid|url>      # resolve a specific CR, not the current branch's
-#   prepare-review.sh --open --title <t> --body-file <path>
+#   cr.sh                     # recon: resolve the CR, or report CR_PENDING
+#   cr.sh --no-open           # no CR will be opened -> skip-deep-links path
+#   cr.sh --repo <path>       # operate on a checkout other than the cwd repo
+#   cr.sh --cr <iid|url>      # resolve a specific CR, not the current branch's
+#   cr.sh --open --title <t> --body-file <path>
 #                                         # open the draft CR with the approved
 #                                         # description; emits the CR keys only
 #
@@ -169,13 +169,13 @@ while [[ $# -gt 0 ]]; do
     --body-file) open_body="${2:?--body-file needs a path}"; shift 2 ;;
     --repo)      CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
     --cr)        cr_ref="${2:?--cr needs an iid or URL}"; shift 2 ;;
-    *) echo "prepare-review.sh: unknown argument: $1" >&2; exit 64 ;;
+    *) echo "cr.sh: unknown argument: $1" >&2; exit 64 ;;
   esac
 done
 
 if [[ "$do_open" -eq 1 ]]; then
-  [[ -n "$open_title" ]] || { echo "prepare-review.sh: --open needs --title" >&2; exit 64; }
-  [[ -r "$open_body" ]] || { echo "prepare-review.sh: --open needs a readable --body-file" >&2; exit 64; }
+  [[ -n "$open_title" ]] || { echo "cr.sh: --open needs --title" >&2; exit 64; }
+  [[ -r "$open_body" ]] || { echo "cr.sh: --open needs a readable --body-file" >&2; exit 64; }
 fi
 
 # Retarget onto an explicit --repo checkout when given; otherwise stay in cwd
@@ -365,7 +365,7 @@ if [[ "$do_open" -eq 1 ]]; then
   # (forge create→read lag), surface it rather than going quiet — the skill has
   # an approved description in hand and nowhere recorded to expand it against.
   if ! resolve_cr; then
-    echo "CR_CREATE_ERROR=opened the draft CR but could not resolve it back (forge lag?) — re-run prepare-review"
+    echo "CR_CREATE_ERROR=opened the draft CR but could not resolve it back (forge lag?) — re-run /anchor:cr"
     exit 1
   fi
   read_delete_branch_on_merge
@@ -741,6 +741,6 @@ echo "ANCHOR_CONFIG=$anchor_cfg"
 # Exit last, so the block above is complete: the caller reports the dead end from
 # the same keys it reads on every other path, and only the status differs.
 if [[ "$nothing_to_review" -eq 1 ]]; then
-  echo "prepare-review.sh: nothing to review — $branch is the default branch, the tree is clean, and nothing is ahead of it. There is no branch to open a change request from." >&2
+  echo "cr.sh: nothing to review — $branch is the default branch, the tree is clean, and nothing is ahead of it. There is no branch to open a change request from." >&2
   exit 65
 fi

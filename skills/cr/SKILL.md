@@ -1,9 +1,9 @@
 ---
-name: prepare-review
-description: Open the PR/MR on an already-pushed branch, rebase on the default branch if behind, and draft a description that tells reviewers WHY the change exists. Use when opening a PR/MR or creating a review.
+name: cr
+description: Open the PR/MR on an already-pushed branch (or refresh the one already open), rebase on the default branch if behind, and draft a description that tells reviewers WHY the change exists. Use when opening, describing, or updating a PR/MR.
 ---
 
-# Prepare Review
+# Change Request
 
 Draft a description whose job is to convey *why* the change exists and *how* it addresses the current problem. The proposed code stands on its own — the diff shows *what* changed; the description supplies the *reason*. The rest routes reviewer attention in order of criticality so they get maximum value from whatever time they can spend.
 
@@ -17,7 +17,7 @@ forge tool by the `origin` remote.
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
 flowchart TD
-    Start(["/prepare-review"]) --> CR{Open CR?}
+    Start(["/cr"]) --> CR{Open CR?}
 
     subgraph "Step 1: Gather the changeset"
         CR -->|No| Pushed{Pushed commits ahead?}
@@ -70,7 +70,7 @@ Everything else is internal: the per-step recon plumbing ("origin is GitLab, 1 a
 Run the gather script once. It performs Step 1's deterministic recon and the safe default-path setup — detect the forge, resolve the CR if one is already open, count the gap to the default branch, capture the current description as the Step 4 diff baseline, check local state against the CR head, read the project template and `anchor.*` config — then prints one `KEY=value` block on stdout:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/cr.sh"
 ```
 
 Read the block and act only on what it surfaces; don't re-run the individual probes. The keys:
@@ -81,7 +81,7 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 | `FORGE` | `github` / `gitlab` picks the CLI for the rest of the skill; `none` → the URL-free `skip-deep-links` path |
 | `DEFAULT_BRANCH` | substitute for `main` in the diff/log commands below |
 | `ON_DEFAULT_BRANCH=1` | HEAD is the default branch — there's no branch to open a CR *from*. With work to review, `NEEDS_BRANCH=1` routes through branch creation first; clean with nothing ahead → `NOTHING_TO_REVIEW=1` and the script exits 65 |
-| `NOTHING_TO_REVIEW=1` | **The script exited 65.** There is no branch to open a CR from and nothing to put in one, so this flow does not apply here — report that and stop. Say it plainly: a chain that named `/anchor:prepare-review` has lost its CR step, and the user needs to know *before* anything downstream (a merge, a release) runs. Never paraphrase it into "this step was moot" and continue |
+| `NOTHING_TO_REVIEW=1` | **The script exited 65.** There is no branch to open a CR from and nothing to put in one, so this flow does not apply here — report that and stop. Say it plainly: a chain that named `/anchor:cr` has lost its CR step, and the user needs to know *before* anything downstream (a merge, a release) runs. Never paraphrase it into "this step was moot" and continue |
 | `AHEAD=0` | nothing ahead of the default branch — `NEEDS_COMMIT=1` chains to `/anchor:commit` (see below); otherwise say so and stop |
 | `NEEDS_BRANCH=1` | on the default branch with work to review — a feature branch must exist before a CR can be opened (see "Get to a reviewable, pushed commit") |
 | `NEEDS_COMMIT=1` | no reviewable commit yet — chain into `/anchor:commit` before continuing (see "Get to a reviewable, pushed commit") |
@@ -112,7 +112,7 @@ When the CR lives in a repo other than the session's cwd (you're in repo A, the 
 
 **With B given as a path**, that path is the checkout; there's nothing to resolve.
 
-Either way, thread the checkout through every later command — the harness resets cwd between Bash calls, so each one needs it again: `prepare-review.sh --repo <path>`, `git -C <path>`, `-R <owner/name>` on `gh`/`glab` subcommands, and the URL-encoded project for `:fullpath` (plus `--hostname <host>`) on `glab api`, which has no `-R`. The full threading rules are in `${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`.
+Either way, thread the checkout through every later command — the harness resets cwd between Bash calls, so each one needs it again: `cr.sh --repo <path>`, `git -C <path>`, `-R <owner/name>` on `gh`/`glab` subcommands, and the URL-encoded project for `:fullpath` (plus `--hostname <host>`) on `glab api`, which has no `-R`. The full threading rules are in `${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`.
 
 `--cr <iid|url>` resolves a CR that isn't the checkout's branch — updating an MR while the checkout sits on a WIP branch. The deep-link and diff steps still read the checkout's branch, so point `--repo` at a checkout on the CR's branch when you need those.
 
@@ -120,7 +120,7 @@ When the target is just the session cwd (no non-cwd repo in play), skip all of t
 
 ### Get to a reviewable, pushed commit (`NEEDS_BRANCH` / `NEEDS_COMMIT` / `NEEDS_PUSH`)
 
-**prepare-review is meant to run from any state.** A CR needs a commit on a feature branch that is **ahead of the default branch and pushed** — opening the draft is a pure forge operation on the pushed branch, since `/anchor:commit` now does the push. When that state doesn't exist yet, the script says so (instead of letting `glab mr create` / `gh pr create` dead-end on a raw *"Could not find any commits between origin/`<default>` and `<branch>`"*) and the skill chains into `/anchor:commit` to get there. The cases, keyed off the block:
+**`cr` is meant to run from any state.** A CR needs a commit on a feature branch that is **ahead of the default branch and pushed** — opening the draft is a pure forge operation on the pushed branch, since `/anchor:commit` now does the push. When that state doesn't exist yet, the script says so (instead of letting `glab mr create` / `gh pr create` dead-end on a raw *"Could not find any commits between origin/`<default>` and `<branch>`"*) and the skill chains into `/anchor:commit` to get there. The cases, keyed off the block:
 
 - **`NEEDS_COMMIT=1`, `NEEDS_BRANCH=0`** — on a feature branch, work uncommitted. Chain into `/anchor:commit`: it runs its flow (tests, staging, message, the visual review) and, on a clean review, commits **and pushes**. Then re-gather.
 - **`NEEDS_BRANCH=1`, `NEEDS_COMMIT=1`** — on the *default* branch, work uncommitted. Still chain into `/anchor:commit` — it detects the default branch, creates the feature branch (named from the subject it drafts), commits onto it, and pushes it. Then re-gather.
@@ -138,7 +138,7 @@ When the target is just the session cwd (no non-cwd repo in play), skip all of t
 After the branch/commit/push lands, **re-run the gather script** so it resolves the now-creatable CR:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/cr.sh"
 ```
 
 The second run is on a pushed feature branch with a commit ahead, so it returns a normal block (`NEEDS_BRANCH=0`, `NEEDS_COMMIT=0`, `NEEDS_PUSH=0`, `CR_PENDING=1`). Proceed from there into the rebase / drafting flow as usual. If it still reports `NEEDS_COMMIT=1` / `NEEDS_PUSH=1` — the user declined `/anchor:commit`, or it produced nothing ahead or pushed nothing — say so and stop; don't loop.
@@ -369,7 +369,7 @@ The description gets pasted into a markdown renderer, so rendering bugs are user
 The description review runs when a review tool is available. Ask the dispatcher which one — it resolves this skill's key over the umbrella one and then the default the *subject* picks, considering only tools it can actually open. **Give the probe the same `--files` pair the launch will get**: the default reads the left-hand side, so a bare probe answers for a review nobody is about to open.
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --probe \
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill cr --probe \
   --files <CURRENT_DESC_PATH> <DESC_DRAFT_PATH>
 ```
 
@@ -385,7 +385,7 @@ Pass what it returned to the launch (`--mode <REVIEW_MODE>`) so the review opens
 With a tool available, open the draft through the **dispatcher** — not the tool directly; the dispatcher builds the header and prints the normalized result on its stdout. The tool blocks until it's closed, so launch as a **background** Bash call (`run_in_background: true`); a foreground call holds the turn open until the Bash timeout:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --mode <REVIEW_MODE> --files \
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill cr --mode <REVIEW_MODE> --files \
   <CURRENT_DESC_PATH> <DESC_DRAFT_PATH> \
   --title 'CR description' \
   --detail branch=<BRANCH> --detail CR=<CR_URL>
@@ -423,7 +423,7 @@ Reached on an `approved` review, or on **Yes (write)** from the no-tool fallback
 **1. Open the CR, if Step 1 said one is pending.** On `CR_PENDING=1`, this is where the CR first exists, and it exists carrying the text the author just approved:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh" --open \
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/cr.sh" --open \
   --title "<the Step 3 title>" --body-file <DESC_DRAFT_PATH>
 ```
 
@@ -478,7 +478,7 @@ Retarget the listing and these calls per "Operating against a non-cwd repo" the 
 Run this once the description has landed, as a **background** Bash call (`run_in_background: true`), retargeted the same way as the write path:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill prepare-review
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill cr
 ```
 
 Call it whether or not this flow pushed. It gates on the runs already reported, so a CR opened on the commit `/anchor:commit` just pushed and reported comes back `PIPELINE_WATCH=skipped`, `already-reported`, and nobody is told twice about one pipeline. Two cases still report: a force-pushed rebase is a *new* commit, and where CI is gated on the CR (`on: pull_request`), the pipeline that opening it starts is one nobody has seen — the push-time watch found nothing to report.
@@ -502,7 +502,7 @@ The last step of the phase, once every mutation above has landed. Siblings in th
 
 **Exactly one announcement per run**, chosen by `CR_CREATED` from Step 1's block:
 
-- **`CR_CREATED=1`** — announce nothing. `prepare-review.sh` already announced `cr.created` when it opened the CR, and setting up a CR this run just opened is not an update to it.
+- **`CR_CREATED=1`** — announce nothing. `cr.sh` already announced `cr.created` when it opened the CR, and setting up a CR this run just opened is not an update to it.
 - **`CR_CREATED=0`** — the CR existed before this run and this run changed it:
 
 ```bash

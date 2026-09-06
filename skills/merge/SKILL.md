@@ -5,7 +5,7 @@ description: Merge an approved change request once its gates are green — waiti
 
 # Merge
 
-Land an open change request into the default branch. `/anchor:prepare-review`
+Land an open change request into the default branch. `/anchor:cr`
 opens the CR and `/anchor:resolve-feedback` drives its threads to done;
 `/anchor:merge` checks that the CR is actually ready to land, merges it, and
 cleans up the branch behind it. The job is a **safe merge**: never land a CR that
@@ -142,7 +142,7 @@ reporting a change you didn't make. On `no`, stop.
 
 Read the forge's mergeable state (cookbook: "Check a CR's mergeable state"). If the
 CR conflicts with the target branch or is behind it in a way the forge won't
-auto-resolve, stop and route to a rebase — `/anchor:prepare-review` owns the
+auto-resolve, stop and route to a rebase — `/anchor:cr` owns the
 rebase-on-default flow. Don't attempt the merge; the forge would reject it anyway.
 
 ### 1c. Pipeline green — wait if it's still running

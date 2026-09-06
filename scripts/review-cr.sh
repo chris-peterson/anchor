@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Gather everything /anchor:review needs about someone else's change request and
+# Gather everything /anchor:review-cr needs about someone else's change request and
 # print one KEY=value block on stdout, so the skill acts on a single command's
 # output rather than orchestrating six forge calls it would narrate between.
 #

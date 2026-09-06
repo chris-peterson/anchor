@@ -17,7 +17,7 @@ behavior, not an independent authority — review them against the source.
 ## Concepts
 
 - **Skill** — a user-invocable command the plugin exposes: `/anchor:commit`,
-  `/anchor:prepare-review`, `/anchor:review`, `/anchor:resolve-feedback`,
+  `/anchor:cr`, `/anchor:review-cr`, `/anchor:resolve-feedback`,
   `/anchor:merge`, `/anchor:release`, `/anchor:issue`, `/anchor:backlog`,
   `/anchor:pipeline`.
 - **Forge** — GitHub or GitLab, selected by the `origin` remote; drives the CLI
@@ -187,20 +187,20 @@ behavior, not an independent authority — review them against the source.
   on both branch choices, so "review" without a qualifier reads to the user as the
   look at the diff they are about to get either way.
 
-### PREPARE — Prepare review
+### CR — Change request
 
-The `prepare-review` skill: open (or refresh) a draft CR on an already-pushed
+The `cr` skill: open (or refresh) a draft CR on an already-pushed
 branch and draft its description. Push happens in
 `/anchor:commit`, so this flow never pushes and imposes no review gate — its
 changeset analysis serves the description and Review guide, not a clean-verdict
 check.
 
-- **[PREPARE-01]** When `/anchor:prepare-review` runs, the system shall require
+- **[CR-01]** When `/anchor:cr` runs, the system shall require
   an already-pushed branch and gather the changeset via a single recon script,
   acting only on the keys it surfaces.
-- **[PREPARE-02]** If the branch is not yet pushed, then the system shall direct the
+- **[CR-02]** If the branch is not yet pushed, then the system shall direct the
   user to `/anchor:commit` (which commits and pushes) rather than pushing itself.
-- **[PREPARE-02a]** If HEAD is the default branch with a clean tree and nothing
+- **[CR-02a]** If HEAD is the default branch with a clean tree and nothing
   ahead of it, then the recon script shall report `NOTHING_TO_REVIEW=1` and exit
   non-zero, and the system shall report that the flow does not apply and stop.
   There is no branch to open a CR from and nothing to put in one, so the run has
@@ -209,41 +209,41 @@ check.
   reported only in the block can be summarized into "that step was moot" and
   passed over — which drops the CR from the chain silently, with the steps after
   it (a merge, a release) still running.
-- **[PREPARE-03]** When the author approves the drafted description, the system shall
+- **[CR-03]** When the author approves the drafted description, the system shall
   open a draft CR against the already-pushed branch carrying that approved text, and
   shall not push. The description is complete before the CR exists — the Review
-  guide's links are placeholders that resolve against the diff (PREPARE-10) rather
+  guide's links are placeholders that resolve against the diff (CR-10) rather
   than against a CR URL — so nothing reaches the forge under the author's name before
   they have read it.
-- **[PREPARE-03a]** Where the CR is inferred from the branch rather than named
+- **[CR-03a]** Where the CR is inferred from the branch rather than named
   explicitly, the system shall treat only an open CR as this run's target, and
   shall report a non-open CR it passed over. Neither forge CLI filters its branch
   lookup by state, so a branch name that has been used before resolves to
   whatever CR used it last; a merged or closed CR adopted as the target skips the
   draft-open, and the description then has no open CR to land on. A CR named
   explicitly resolves whatever its state, because the author asked for that one.
-- **[PREPARE-04]** While the branch is behind the default branch, the system shall
+- **[CR-04]** While the branch is behind the default branch, the system shall
   offer to rebase and, since the branch is already pushed, follow the rebase with
   `git push --force-with-lease` per the draft/ready gate.
-- **[PREPARE-05]** While a CR is a draft, the system shall force-push with lease
+- **[CR-05]** While a CR is a draft, the system shall force-push with lease
   freely; while it is marked ready, the system shall ask before force-pushing.
-- **[PREPARE-06]** If local state does not match the CR head, then the system shall
+- **[CR-06]** If local state does not match the CR head, then the system shall
   surface the mismatch and stop rather than draft.
-- **[PREPARE-06a]** Where the mismatch is an uncommitted working tree, the system
+- **[CR-06a]** Where the mismatch is an uncommitted working tree, the system
   shall report that changes are uncommitted and must be committed first, and
   nothing else. The author knows what they changed and why it is not committed
   yet, so a diagnosis of how the tree got dirty, and an argument for why a
   description cannot be drafted against it, is prose to read past to reach the one
   action available.
-- **[PREPARE-07]** Before drafting, the system shall resolve open questions (why,
+- **[CR-07]** Before drafting, the system shall resolve open questions (why,
   audience, scope, ordering, verification gaps) with the user rather than park
   them in the description.
-- **[PREPARE-08]** The system shall draft the description leading with why, for a
+- **[CR-08]** The system shall draft the description leading with why, for a
   reader unfamiliar with the system, using the canonical section headings
   verbatim.
-- **[PREPARE-09]** Before drafting Context, the system shall run an anti-recency
+- **[CR-09]** Before drafting Context, the system shall run an anti-recency
   check dispositioning recent iterations as centerpiece, footnote, or cut.
-- **[PREPARE-10]** The system shall deep-link Review-guide references to the specific
+- **[CR-10]** The system shall deep-link Review-guide references to the specific
   changed lines rather than to files alone, writing each as an `anchor:<path>#<token>`
   placeholder whose token is a distinctive literal substring of the target line, and
   shall not read a line number off the diff, hash a file path, or assemble an anchor
@@ -251,67 +251,67 @@ check.
   is not describing — and nothing about the rendered link reveals it. The token shall
   be matched byte for byte as written, so a token carrying a backslash resolves like
   any other rather than reporting as a line the changeset never touched.
-- **[PREPARE-10a]** If a placeholder's token matches several changed lines, or none,
+- **[CR-10a]** If a placeholder's token matches several changed lines, or none,
   then the system shall report the candidate lines with their content and stop, rather
   than take the first match or reduce the link to the file. A token in the file but on
   no changed line, and a token in no line at all, are different authoring mistakes and
   shall be reported as such.
-- **[PREPARE-10a1]** The system shall read an `anchor:` written outside a link
+- **[CR-10a1]** The system shall read an `anchor:` written outside a link
   destination as an unresolved placeholder, except where it is a skill invocation
   (`/anchor:<skill>`). A description that names the skill that drafted it is prose the
   author wrote on purpose, and reporting it as broken markup is a fault in the check
   rather than in the draft.
-- **[PREPARE-10b]** Once the CR exists, the system shall expand every placeholder into
+- **[CR-10b]** Once the CR exists, the system shall expand every placeholder into
   the forge's own line anchor before the description lands, and shall leave the draft
   unmodified where any placeholder is unresolved.
-- **[PREPARE-11]** If a claim about prior workflow or current state lacks a citable
+- **[CR-11]** If a claim about prior workflow or current state lacks a citable
   source, then the system shall omit it from the description.
-- **[PREPARE-12]** Where a predecessor CR was captured, the system shall record the
+- **[CR-12]** Where a predecessor CR was captured, the system shall record the
   ordering dependency in the description and, on GitLab, on the forge.
-- **[PREPARE-13]** When a drafted description is ready, the system shall present it
+- **[CR-13]** When a drafted description is ready, the system shall present it
   to the user in a visual review (the current description vs. the draft, via the
   review wrapper) before any write prompt, and shall write it to the CR on a clean
   verdict without a further chat confirmation.
-- **[PREPARE-13a]** The recon block shall supply the review's baseline as a readable
+- **[CR-13a]** The recon block shall supply the review's baseline as a readable
   path in every case, holding an empty file where no CR holds a description yet. The
   review wrapper takes a pair of paths, so a baseline reported as an empty value is a
   usage error rather than an empty left-hand side, and the review never opens.
-- **[PREPARE-14]** If no review tool is installed, or no CR exists to diff
+- **[CR-14]** If no review tool is installed, or no CR exists to diff
   against, then the system shall present the description as text in its own reply
   and offer write / copy-only / edit, defaulting to write.
-- **[PREPARE-15]** Before opening the description review, the system shall resolve
+- **[CR-15]** Before opening the description review, the system shall resolve
   every placeholder against the changed hunks of the range (`deep-links.sh --check`)
   and correct each one reported unresolved, so a placeholder cannot survive into the
   expansion that runs against a CR already open.
-- **[PREPARE-15a]** Where the description carries a deep link that was not written as
+- **[CR-15a]** Where the description carries a deep link that was not written as
   a placeholder, the system shall check it against the working tree
   (`deep-links.sh --verify`) and re-point every line reported out-of-range, blank,
   outside a changed hunk, or anchored to a file the range doesn't touch. The check
   shall also reject a line part in a shape the forge does not resolve, which the
   line-number checks take as given: a second `#` fragment appended to an anchor drops
   the reader at the top of the diff while reading as a link.
-- **[PREPARE-16]** Once the description has landed, the system shall report the
+- **[CR-16]** Once the description has landed, the system shall report the
   branch's pipeline, which reports nothing where the CR's commit was already
   reported and reports the new pipeline where a rebase force-push created one.
-- **[PREPARE-17]** When the system opens a CR whose source branch will not be deleted
+- **[CR-17]** When the system opens a CR whose source branch will not be deleted
   on merge, the system shall name the condition and offer the forge's remediation,
   applying it only on the user's approval. An unreadable setting shall report as
   unknown rather than as either state.
-- **[PREPARE-18]** Once the description has landed, the system shall apply the
+- **[CR-18]** Once the description has landed, the system shall apply the
   project's own labels and, where exactly one plausibly fits, one of its open
   milestones to the change request, adding to rather than replacing what the CR
   already carries, and asking the author where the choice is not clear.
 
 ### REVIEW — Review a change request
 
-The `review` skill: the reviewer's side of the seam `prepare-review` and
+The `review-cr` skill: the reviewer's side of the seam `cr` and
 `resolve-feedback` sit on either end of. It examines a CR's diff against the
 qualities the user has set and produces findings anchored to files and lines.
 Authorship then picks where those findings go — threads on someone else's CR once
 the user approves the wording, or a working-tree fix list on the user's own,
 ending in the handoff that marks the CR ready.
 
-- **[REVIEW-01]** When `/anchor:review` runs, the system shall resolve the target
+- **[REVIEW-01]** When `/anchor:review-cr` runs, the system shall resolve the target
   repo as the other skills do and gather the CR via a single recon script,
   acting only on the keys it surfaces.
 - **[REVIEW-02]** The system shall resolve the change request from a number, a
@@ -406,7 +406,7 @@ ending in the handoff that marks the CR ready.
 ### MERGE — Merge
 
 Landing an approved CR into the default branch (the `merge` skill) — the terminal
-step after `prepare-review` opens the CR and `resolve-feedback` clears its threads.
+step after `cr` opens the CR and `resolve-feedback` clears its threads.
 
 - **[MERGE-01]** When `/anchor:merge` runs, the system shall resolve the target repo
   and the open CR for the branch, and shall stop if there is no open CR or it is
@@ -419,7 +419,7 @@ step after `prepare-review` opens the CR and `resolve-feedback` clears its threa
 - **[MERGE-04]** If the CR is a draft, then the system shall not merge it silently and
   shall ask whether to mark it ready and proceed.
 - **[MERGE-05]** If the CR conflicts with or is behind its target branch, then the
-  system shall stop and route to a rebase via `/anchor:prepare-review` rather than
+  system shall stop and route to a rebase via `/anchor:cr` rather than
   attempt the merge.
 - **[MERGE-06]** While the pipeline is still running, the system shall watch it to a
   terminal state rather than return control for the user to re-ask.
@@ -1076,7 +1076,7 @@ editor's whole answer is the revised artifact, which is why the column below
 - **[EVENTS-07]** Where a fact is caused by a script rather than by the model's
   judgment, the system shall announce it from that script, so a run whose skill
   does not reach the end still announces what it did.
-- **[EVENTS-08]** A `/anchor:prepare-review` run shall announce `cr.created` or
+- **[EVENTS-08]** A `/anchor:cr` run shall announce `cr.created` or
   `cr.updated` and never both.
 - **[EVENTS-09]** The system shall announce `commit.pushed` after the push
   rather than after the commit, and shall carry a commit web address naming the
@@ -1115,11 +1115,11 @@ editor's whole answer is the revised artifact, which is why the column below
   hoc.
 - **[RULE-04]** The system shall use `gh`/`glab` for mechanical and query forge
   operations, and route artifact *authoring* through the `anchor` skill — a CR
-  description through `/anchor:prepare-review`, an issue through `/anchor:issue`,
+  description through `/anchor:cr`, an issue through `/anchor:issue`,
   release notes through `/anchor:release` — rather than a bare `create` /
   `--body` / `--generate-notes`.
 - **[RULE-04a]** The system shall not offer the CR-creation URL a push prints as
-  the way to open a change request, and shall name `/anchor:prepare-review`
+  the way to open a change request, and shall name `/anchor:cr`
   instead. GitHub prints a `Create a pull request` link on a new branch's push
   and GitLab a `merge_requests/new` one, in output the system has just read; the
   form behind it lands the same CR a bare `create` would — non-draft, template

@@ -74,7 +74,7 @@ setting asks, and stop. A high setting never gets past the asides; one near the
 floor works through the whole list.
 
 Verbosity steers length, never register. A low setting buys fewer words, not
-louder ones — the no-hyperbole discipline in the `prepare-review` skill's "What
+louder ones — the no-hyperbole discipline in the `cr` skill's "What
 to avoid" governs at every setting, and `1` is no more license for a punchy
 tagline than `100` is.
 
@@ -124,22 +124,22 @@ independent passes — the dial itself never moves it.
 
 #### Context
 
-`prepare-review` drafts CR descriptions, and how much it writes is steered by `git config anchor.*` keys. Until now the only key that touched length was `anchor.reviewBudgetMins` — the minutes of focused review you expect a CR to get. But the budget decides *what a description covers*: turn it down to get fewer words and you also lose topics. Descriptions were running too long, and a team that wanted the same coverage written shorter had nothing to set. This adds `anchor.crVerbosity`, an integer from 1 to 100 for where a description sits between brevity and thoroughness, as a second axis that resolves independently of the budget. Closes #47.
+`cr` drafts CR descriptions, and how much it writes is steered by `git config anchor.*` keys. Until now the only key that touched length was `anchor.reviewBudgetMins` — the minutes of focused review you expect a CR to get. But the budget decides *what a description covers*: turn it down to get fewer words and you also lose topics. Descriptions were running too long, and a team that wanted the same coverage written shorter had nothing to set. This adds `anchor.crVerbosity`, an integer from 1 to 100 for where a description sits between brevity and thoroughness, as a second axis that resolves independently of the budget. Closes #47.
 
-It ships at `50`, so descriptions come out markedly briefer than 1.2.0 for everyone who configures nothing, and `git config anchor.crVerbosity 100` restores the old shape. `anchor.mrVerbosity` / `anchor.prVerbosity` override it per forge exactly as the `*Rules` keys already do. `prepare-review.sh` already collects every `anchor.*` key into `ANCHOR_CONFIG`, so the changeset is prose across the template, the skill, and the guides, plus a new calibration page for picking a number.
+It ships at `50`, so descriptions come out markedly briefer than 1.2.0 for everyone who configures nothing, and `git config anchor.crVerbosity 100` restores the old shape. `anchor.mrVerbosity` / `anchor.prVerbosity` override it per forge exactly as the `*Rules` keys already do. `cr.sh` already collects every `anchor.*` key into `ANCHOR_CONFIG`, so the changeset is prose across the template, the skill, and the guides, plus a new calibration page for picking a number.
 
 #### Review guide
 
 **Critical path — the invariant, stated four times**
 
 - `templates/cr-description.md:31` — the gate: the `(rare)` / `(conditional)` markers decide which sections a description *has*, and they're the only thing that does. Verbosity abbreviates a section, never removes one. Everything else in the changeset restates this, so if the wording is wrong here it's wrong in four places.
-- `skills/prepare-review/SKILL.md:230` — the behavior itself: the order the dial works down (asides → explanation → Review-guide clauses, then tiers → Context's second paragraph) and the floor each section stops at. No thresholds anywhere, by design — this ordering is the whole mechanism.
-- `skills/prepare-review/SKILL.md:226` — the key as the drafting model sees it: the `50` default, forge-key resolution mirroring `crRules` but independent of it, and the clamp for an out-of-range or non-integer value.
+- `skills/cr/SKILL.md:230` — the behavior itself: the order the dial works down (asides → explanation → Review-guide clauses, then tiers → Context's second paragraph) and the floor each section stops at. No thresholds anywhere, by design — this ordering is the whole mechanism.
+- `skills/cr/SKILL.md:226` — the key as the drafting model sees it: the `50` default, forge-key resolution mirroring `crRules` but independent of it, and the clamp for an out-of-range or non-integer value.
 - `guides/cr-verbosity.md:24` — the same invariant argued for a human reader, including *why* a dial that dropped sections would just be a second `reviewBudgetMins`.
 
 **The per-section floors** — one `At lower verbosity` note per section, and they're what the skill defers to for "how short is too short"
 
-- `templates/cr-description.md:71` — Context folds to the *why* sentence. Paired with `skills/prepare-review/SKILL.md:12`, which reframes the existing two-paragraph Context cap as the shape at `100` rather than the shape always.
+- `templates/cr-description.md:71` — Context folds to the *why* sentence. Paired with `skills/cr/SKILL.md:12`, which reframes the existing two-paragraph Context cap as the shape at `100` rather than the shape always.
 - `templates/cr-description.md:121` — the Review guide keeps its deep links at every setting and sheds the words around them. This one is the protected floor; check it says so unambiguously.
 - `templates/cr-description.md:133`, `templates/cr-description.md:145`, `templates/cr-description.md:179` — Approach & trade-offs, Testing, Validation. Each keeps its load-bearing claim (for Validation, the evidence rows) and drops the reasoning around it.
 
@@ -148,7 +148,7 @@ It ships at `50`, so descriptions come out markedly briefer than 1.2.0 for every
 - `guides/configuring.md:58` — "Two length knobs", the section that has to leave a reader able to pick between them: budget for "covers things I don't care about", verbosity for "covers the right things at too much length".
 - `guides/configuring.md:155` — the `cr` / `mr` / `pr` prefix convention now governs both pairs and resolves them independently, so a `prVerbosity` with no `prRules` changes length on GitHub and leaves the rules alone.
 - `guides/configuring.md:31` — the `mrVerbosity` / `prVerbosity` row.
-- `skills/prepare-review/SKILL.md:268` — Tone, generalized from "a tight review budget is not license for marketing punch" to cover both knobs. The point that matters: at a low setting the few words left are all a reviewer gets, so brevity buys fewer words, not louder ones.
+- `skills/cr/SKILL.md:268` — Tone, generalized from "a tight review budget is not license for marketing punch" to cover both knobs. The point that matters: at a low setting the few words left are all a reviewer gets, so brevity buys fewer words, not louder ones.
 
 **Ancillary**
 
@@ -188,8 +188,8 @@ It ships at `50`, so descriptions come out shorter for everyone who sets nothing
 
 **Critical path**
 
-- `skills/prepare-review/SKILL.md:226` — the new config bullet: how the forge key resolves, the `50` default, the clamp on an out-of-range value
-- `skills/prepare-review/SKILL.md:230` — the order the dial works down and where each section bottoms out; there are no per-level thresholds anywhere
+- `skills/cr/SKILL.md:226` — the new config bullet: how the forge key resolves, the `50` default, the clamp on an out-of-range value
+- `skills/cr/SKILL.md:230` — the order the dial works down and where each section bottoms out; there are no per-level thresholds anywhere
 - `templates/cr-description.md:31` — the sections gate — the template decides presence, verbosity only decides length
 
 **Per-section floors** — the template change that makes the gate above enforceable
@@ -207,8 +207,8 @@ It ships at `50`, so descriptions come out shorter for everyone who sets nothing
 - `guides/configuring.md:30` — the key's table row, where most people will meet it — check the summary of what a low setting does against the template's rule
 - `guides/configuring.md:58` — "Two length knobs", the section that tells someone which one to reach for
 - `guides/configuring.md:149` — the `cr` / `mr` / `pr` convention now covers both pairs and resolves them independently
-- `skills/prepare-review/SKILL.md:12` — Context's two-paragraph ceiling reframed as the shape at `100`
-- `skills/prepare-review/SKILL.md:268` — the register guard: a low setting buys fewer words, not louder ones
+- `skills/cr/SKILL.md:12` — Context's two-paragraph ceiling reframed as the shape at `100`
+- `skills/cr/SKILL.md:268` — the register guard: a low setting buys fewer words, not louder ones
 
 **Ledger and nav** — skim only
 
@@ -226,7 +226,7 @@ It ships at `50`, so descriptions come out shorter for everyone who sets nothing
 
 #### Testing
 
-No script changed — `prepare-review.sh` already collects every `anchor.*` key into `ANCHOR_CONFIG`, so the key needed no plumbing and the `tests/` suite has nothing new to run. Nothing in CI asserts that a setting produces a given length, and nothing can: this behavior is prompt text a model reads at draft time, so reading the wording is the verification available here.
+No script changed — `cr.sh` already collects every `anchor.*` key into `ANCHOR_CONFIG`, so the key needed no plumbing and the `tests/` suite has nothing new to run. Nothing in CI asserts that a setting produces a given length, and nothing can: this behavior is prompt text a model reads at draft time, so reading the wording is the verification available here.
 
 </details>
 
@@ -243,7 +243,7 @@ No script changed — `prepare-review.sh` already collects every `anchor.*` key 
 
 **Critical path**
 - `templates/cr-description.md:31` — which sections a description has stays the template's call, not the dial's; everything else depends on this holding
-- `skills/prepare-review/SKILL.md:226` — how the drafting step resolves the key and applies it after the section list is settled; `ANCHOR_CONFIG` already carries every `anchor.*` key, so no script change
+- `skills/cr/SKILL.md:226` — how the drafting step resolves the key and applies it after the section list is settled; `ANCHOR_CONFIG` already carries every `anchor.*` key, so no script change
 - `templates/cr-description.md:71` — first of the per-section "At lower verbosity" notes; each section now names what it sheds and the floor it stops at
 
 **Integration points**
@@ -282,7 +282,7 @@ The behavior is prompt text, so the shell suite under `tests/` doesn't reach it 
 
 #### Review guide
 
-- `skills/prepare-review/SKILL.md:226` — where the dial is resolved and applied; the core change
+- `skills/cr/SKILL.md:226` — where the dial is resolved and applied; the core change
 - `templates/cr-description.md:31` — the template's conditions, not the dial, decide which sections appear
 - `templates/cr-description.md:71` — per-section "At lower verbosity" floors (also `:121`, `:133`, `:145`, `:179`)
 - `guides/cr-verbosity.md:24` — the abbreviation order the dial works down, and where each section stops
@@ -311,7 +311,7 @@ The only knob that touched CR-description length was `anchor.reviewBudgetMins`, 
 
 #### Review guide
 
-- `skills/prepare-review/SKILL.md:226` — how the dial is resolved and applied while drafting
+- `skills/cr/SKILL.md:226` — how the dial is resolved and applied while drafting
 - `templates/cr-description.md:31` — which sections a description has stays the template's call, not the dial's
 - `guides/cr-verbosity.md:24`
 - `guides/configuring.md:30`

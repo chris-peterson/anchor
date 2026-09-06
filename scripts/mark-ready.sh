@@ -2,7 +2,7 @@
 # Clear a change request's draft flag, and announce that it happened.
 #
 # Two skills reach this moment from different directions — the self-review
-# handoff in /anchor:review, where the author is done and wants eyes on it, and
+# handoff in /anchor:review-cr, where the author is done and wants eyes on it, and
 # /anchor:merge's draft gate, where they are landing one that never left draft —
 # and a subscriber cannot tell those apart, nor should it have to. Both call
 # here, so `cr.ready` has one emission point and one shape.

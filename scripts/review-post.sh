@@ -151,7 +151,7 @@ case "$forge" in
 esac
 
 [[ "$current" == "$pinned" ]] \
-  || fail "head-moved: the CR is now at ${current}, the review was taken at ${pinned} — re-run /anchor:review against the new head rather than anchoring to lines that have moved"
+  || fail "head-moved: the CR is now at ${current}, the review was taken at ${pinned} — re-run /anchor:review-cr against the new head rather than anchoring to lines that have moved"
 
 posted_inline=0
 posted_summary=0

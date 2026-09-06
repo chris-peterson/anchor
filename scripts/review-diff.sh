@@ -40,7 +40,7 @@
 #   A git-range review takes the same --title / --detail overrides as --files.
 #   The computed header describes the *local* HEAD, which is the wrong subject
 #   when the range is somebody else's change request fetched into this checkout
-#   — /anchor:review passes the CR's own title and facts instead.
+#   — /anchor:review-cr passes the CR's own title and facts instead.
 #
 # Files mode — review two arbitrary paths (no git range required), e.g. an old
 # vs. proposed CR description. Domain-agnostic: pass the header text yourself.

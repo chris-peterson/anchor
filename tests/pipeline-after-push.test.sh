@@ -94,7 +94,7 @@ grep -qxF 4001 "$ledger" || fail "the ledger should name the run just reported"
 ok "the reported run is recorded in the repo's ledger"
 
 # ===================== the same run is reported once =========================
-o=$(gate_run --skill prepare-review)
+o=$(gate_run --skill cr)
 [ "$(val PIPELINE_WATCH "$o")" = "skipped" ] \
   || fail "a run already reported must not be watched again: $o"
 [ "$(val PIPELINE_WATCH_REASON "$o")" = "already-reported" ] \
@@ -112,7 +112,7 @@ o=$(gate_run --skill commit)
 ok "a push that triggers no pipeline leaves the ledger empty"
 
 one_run 4002 "$sha"
-o=$(gate_run --skill prepare-review)
+o=$(gate_run --skill cr)
 [ "$(val PIPELINE_WATCH "$o")" = "ran" ] \
   || fail "the run that opening the CR started has never been reported: $o"
 [ "$(val PIPELINE_ID "$o")" = "4002" ] || fail "expected the CR-triggered run: $o"
@@ -121,7 +121,7 @@ ok "a CR-triggered pipeline is reported even though the push reported none"
 # A run the ledger hasn't seen re-arms the gate, even on the same commit — a
 # re-run, or a second workflow, is a pipeline nobody has looked at.
 one_run 4003 "$sha"
-o=$(gate_run --skill prepare-review)
+o=$(gate_run --skill cr)
 [ "$(val PIPELINE_WATCH "$o")" = "ran" ] || fail "an unseen run is reported: $o"
 ok "an unseen run on an already-reported commit is still reported"
 
@@ -143,12 +143,12 @@ o=$(gate_run --skill commit)
 ok "anchor.<skill>.watchPipelineAfterPush overrides the umbrella key"
 
 forget; unset_keys
-git -C "$repo" config anchor.prepare-review.watchPipelineAfterPush false
+git -C "$repo" config anchor.cr.watchPipelineAfterPush false
 o=$(gate_run --skill commit)
 [ "$(val PIPELINE_WATCH "$o")" = "ran" ] \
   || fail "another skill's key must not silence this one: $o"
 forget
-o=$(gate_run --skill prepare-review)
+o=$(gate_run --skill cr)
 [ "$(val PIPELINE_WATCH "$o")" = "skipped" ] \
   || fail "the named skill's key should turn that skill off: $o"
 ok "a per-skill key silences only the skill it names"

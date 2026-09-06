@@ -23,7 +23,7 @@
 # subscriber writes to disk.
 
 # Which forge, read from the whole remote URL with the same patterns
-# scripts/prepare-review.sh uses, so the two cannot disagree about a repo. A
+# scripts/cr.sh uses, so the two cannot disagree about a repo. A
 # self-hosted GitLab matches on its own name; a GitHub Enterprise host that
 # carries neither name reads as `none`, as it does everywhere else in anchor.
 anchor_forge_of_origin() {
