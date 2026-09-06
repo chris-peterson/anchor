@@ -1,6 +1,6 @@
 # Review qualities
 
-What a review looks for. The `review` skill owns the *technique* — resolving the
+What a review looks for. The `review-cr` skill owns the *technique* — resolving the
 CR, driving the diff viewer, placing each finding, gating the post — and this
 file owns the *qualities*, so it's the place to edit as your preferences evolve.
 

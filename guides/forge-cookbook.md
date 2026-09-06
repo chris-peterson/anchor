@@ -34,7 +34,7 @@ against the wrong project):
 Derive `OWNER/REPO` and the host once from `git -C <path> remote get-url origin`.
 
 **`anchor`'s helper scripts take `--repo <path>` instead.**
-`prepare-review.sh`, `squash-check.sh`, `look-ahead.sh`, `review-diff.sh`, and
+`cr.sh`, `squash-check.sh`, `look-ahead.sh`, `review-diff.sh`, and
 `pipeline-status.sh` `cd` into the given checkout for their (single-process) run,
 so every git/`gh`/`glab` call inside them targets it with no per-command flag —
 and `glab mr create` works because it runs *inside* the target checkout (passing
@@ -216,7 +216,7 @@ gh repo edit --delete-branch-on-merge       # turn it on — every PR in the rep
 ```
 
 With it off, the branch survives any merge that doesn't pass `--delete-branch`
-(the web UI, a bare `gh pr merge`, auto-merge). `/anchor:prepare-review` reports
+(the web UI, a bare `gh pr merge`, auto-merge). `/anchor:cr` reports
 the setting as `DELETE_BRANCH_ON_MERGE` and offers the repo edit; `/anchor:merge`
 passes `--delete-branch` regardless.
 
@@ -364,7 +364,7 @@ multiple users correctly, so there is no need for the `glab api` form here.
 
 Before merging, read whether the forge considers the CR landable — conflicts or a
 behind-base branch make the merge fail (or require a rebase first, which
-`/anchor:prepare-review` owns).
+`/anchor:cr` owns).
 
 ```bash
 # GitHub — mergeable is MERGEABLE / CONFLICTING / UNKNOWN;
@@ -648,7 +648,7 @@ glab api -X PUT projects/:fullpath/issues/<iid> \
 ## Labels and milestones
 
 Applied to an issue when it's filed or updated (the `issue` skill), and to a CR
-once its description lands (`prepare-review`). Read the sets first — both CLIs
+once its description lands (`cr`). Read the sets first — both CLIs
 take a **name**, so a value that isn't in the project's set is either an error or
 a brand-new label nobody asked for.
 
@@ -801,7 +801,7 @@ two are not equally specified: GitHub documents `subject_type: file` (with `line
 then not required), while GitLab lists `file` among `position_type`'s allowed
 values without saying what the rest of the position must hold. Using one and not
 the other would make the same review render differently depending on where the
-CR lives, so `/anchor:review` anchors to lines and routes everything else into
+CR lives, so `/anchor:review-cr` anchors to lines and routes everything else into
 the summary comment.
 
 ## List unresolved review threads

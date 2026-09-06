@@ -102,7 +102,7 @@ blank="$work/blank.md"; printf '\n\n' > "$blank"
 # --- saved unchanged -> approved, nothing edited ----------------------------
 export EDITOR_STUB_MODE=save
 export EDITOR_BUFFER_CAPTURE="$work/buffer.txt"
-o=$(run --skill prepare-review --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
+o=$(run --skill cr --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = approved ]                  || fail "unchanged -> $(verdict_of "$o"), want approved"
 [ "$(jq -r .mode <<<"$j")" = edit ]                  || fail "mode should be edit"
 [ "$(jq '.editedFields|length' <<<"$j")" = 0 ]       || fail "unchanged should edit nothing"
@@ -128,7 +128,7 @@ export EDITOR_STUB_MODE=replace
 export EDITOR_STUB_TEXT='# Rewritten by hand
 
 ## A heading the editor added'
-o=$(run --skill prepare-review --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
+o=$(run --skill cr --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = approved ] || fail "changed -> $(verdict_of "$o"), want approved"
 [ "$(jq -r '.editedFields[0].target' <<<"$j")" = description ] || fail "target should be description"
 [ "$(jq -r '.editedFields[0].edited' <<<"$j")" = "$EDITOR_STUB_TEXT" ] \
@@ -139,14 +139,14 @@ ok "edit: saved changed -> approved, edited text adopted verbatim (markdown inta
 
 # --- emptied -> abort -------------------------------------------------------
 export EDITOR_STUB_MODE=empty
-o=$(run --skill prepare-review --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
+o=$(run --skill cr --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = no-verdict ] || fail "emptied -> $(verdict_of "$o"), want no-verdict"
 [ "$(jq '.editedFields|length' <<<"$j")" = 0 ] || fail "an abort edits nothing"
 ok "edit: emptied buffer -> no-verdict (abort)"
 
 # --- quit without saving -> abort, and the save is what would have approved --
 export EDITOR_STUB_MODE=quit
-o=$(run --skill prepare-review --mode edit --files "$prior" "$draft" 2>"$work/err.txt"); j=$(json_of "$o")
+o=$(run --skill cr --mode edit --files "$prior" "$draft" 2>"$work/err.txt"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = no-verdict ]             || fail "quit unsaved -> $(verdict_of "$o"), want no-verdict"
 [ "$(jq -r .raw.exitCode <<<"$j")" = unsaved ]    || fail "raw.exitCode should be unsaved, got $(jq -c .raw <<<"$j")"
 [ "$(jq '.editedFields|length' <<<"$j")" = 0 ]    || fail "an abort edits nothing"
@@ -159,7 +159,7 @@ ok "edit: quit without saving -> no-verdict (abort), cause unsaved"
 # wording attributes a decision they were never offered (DIFF-14).
 git -C "$repo" config anchor.edit.tool code
 export EDITOR_STUB_MODE=quit
-o=$(run --skill prepare-review --mode edit --files "$prior" "$draft" 2>"$work/err.txt"); j=$(json_of "$o")
+o=$(run --skill cr --mode edit --files "$prior" "$draft" 2>"$work/err.txt"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = no-verdict ] || fail "no wait flag -> $(verdict_of "$o"), want no-verdict"
 grep -q -- '--wait' "$work/err.txt"   || fail "stderr should name the flag: $(cat "$work/err.txt")"
 [ "$(jq -r .raw.exitCode <<<"$j")" = unsaved ] || fail "still the unsaved class, nothing was written"
@@ -168,14 +168,14 @@ grep -q -- '--wait' "$work/err.txt"   || fail "stderr should name the flag: $(ca
 grep -q 'without saving' "$work/err.txt" && fail "the declining-to-save wording should not fire here"
 # Invoked with the flag, an unsaved buffer is the reviewer's own choice again.
 git -C "$repo" config anchor.edit.tool 'code --wait'
-o=$(run --skill prepare-review --mode edit --files "$prior" "$draft" 2>"$work/err.txt")
+o=$(run --skill cr --mode edit --files "$prior" "$draft" 2>"$work/err.txt")
 grep -q 'without saving' "$work/err.txt" || fail "with the flag set, the reviewer declined: $(cat "$work/err.txt")"
 git -C "$repo" config --unset anchor.edit.tool
 ok "edit: a GUI editor that returned without waiting names the flag it needs"
 
 # --- exited non-zero -> abort ----------------------------------------------
 export EDITOR_STUB_MODE=quit EDITOR_STUB_RC=3
-o=$(run --skill prepare-review --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
+o=$(run --skill cr --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = no-verdict ]    || fail "editor failure -> want no-verdict"
 [ "$(jq -r .raw.exitCode <<<"$j")" = 3 ] || fail "raw.exitCode should carry the editor's status"
 ok "edit: non-zero editor exit -> no-verdict, status in raw.exitCode"
@@ -187,7 +187,7 @@ unset EDITOR_STUB_RC
 # through the launcher seam by returning the split runner's own code, which is
 # also the one case a real editor could imitate by exiting 124 itself.
 export EDITOR_STUB_MODE=quit EDITOR_STUB_RC=124
-o=$(run --skill prepare-review --mode edit --files "$prior" "$draft" 2>"$work/err.txt"); j=$(json_of "$o")
+o=$(run --skill cr --mode edit --files "$prior" "$draft" 2>"$work/err.txt"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = no-verdict ]                || fail "a closed pane -> want no-verdict"
 [ "$(jq -r .raw.exitCode <<<"$j")" = pane-closed ]   || fail "raw.exitCode should name the cause, got $(jq -c .raw <<<"$j")"
 grep -q 'before anything was saved' "$work/err.txt"  || fail "the remedy should reach stderr"
@@ -198,7 +198,7 @@ ok "edit: a closed review pane -> no-verdict, cause named rather than numbered"
 # away with the terminal that was drawing it.
 export EDITOR_STUB_MODE=replace EDITOR_STUB_RC=124
 export EDITOR_STUB_TEXT='# Saved, then the pane went away'
-o=$(run --skill prepare-review --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
+o=$(run --skill cr --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = approved ] || fail "saved then pane closed -> $(verdict_of "$o"), want approved"
 [ "$(jq -r '.editedFields[0].edited' <<<"$j")" = "$EDITOR_STUB_TEXT" ] \
   || fail "the saved text should survive the pane, got $(jq -c '.editedFields[0].edited' <<<"$j")"
@@ -213,7 +213,7 @@ export EDITOR_STUB_MODE=save
 # for real and waits for someone to close it.
 o=$( cd "$repo" && PATH="$bin:/usr/bin:/bin" ANCHOR_EDITOR_LAUNCHER='' TMUX='' \
      ITERM_SESSION_ID='' ANCHOR_HOST_RUNNER='' GIT_EDITOR=true \
-     bash "$dispatch" --skill prepare-review --mode edit \
+     bash "$dispatch" --skill cr --mode edit \
      --files "$prior" "$draft" </dev/null 2>/dev/null ); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = no-verdict ]            || fail "nowhere to open -> want no-verdict"
 [ "$(jq -r .raw.exitCode <<<"$j")" = no-host ]   || fail "raw.exitCode should be no-host, got $(jq -c .raw <<<"$j")"
@@ -282,7 +282,7 @@ tool_of() { jq -r .tool <<<"$(json_of "$1")"; }
 # answer to the launch.
 git -C "$repo" config anchor.reviewMode edit
 git -C "$repo" config anchor.commit.reviewMode edit
-for skill in commit prepare-review issue release; do
+for skill in commit cr issue release; do
   [ "$(mode_of "$(run --skill "$skill" --previous 2>/dev/null)")" = diff ] \
     || fail "$skill: a git range is a diff subject, and no key may say otherwise"
 done
@@ -487,7 +487,7 @@ chmod +x "$bin/revdiff"
 # The default reads the subject, not the skill that asked — so the same skill
 # lands in either tool depending on what it is about to review, and every skill
 # lands in the same one for the same subject.
-for skill in prepare-review issue release commit review; do
+for skill in cr issue release commit review-cr; do
   for left in "$nothing" "$blank"; do
     o=$( cd "$repo" && PATH="$bin:/usr/bin:/bin" ANCHOR_EDITOR_LAUNCHER="$bin/stub-editor.sh" \
          bash "$dispatch" --skill "$skill" --probe --files "$left" "$draft" )
@@ -497,14 +497,14 @@ for skill in prepare-review issue release commit review; do
 done
 ok "default: one file with no prior version opens the editor, whichever skill asked"
 
-for skill in prepare-review issue release commit review; do
+for skill in cr issue release commit review-cr; do
   o=$(probe --skill "$skill" --probe --files "$prior" "$draft")
   [ "$(key_of REVIEW_MODE "$o")" = diff ] \
     || fail "$skill with a prior version to diff against should default to diff mode"
 done
 ok "default: a subject with a prior version opens the diff viewer, whichever skill asked"
 
-for skill in commit review; do
+for skill in commit review-cr; do
   o=$(probe --skill "$skill" --probe)
   [ "$(key_of REVIEW_MODE "$o")" = diff ] || fail "a git range names a base, so it should default to diff mode"
 done
@@ -515,7 +515,7 @@ ok "default: a git range opens the diff viewer with nothing configured"
 # is nothing to give way to, and the subject's `edit` is kept. Keeping it is the
 # more useful answer: its report names the editor problem, where a give-way would
 # trade it for a viewer problem the user is no closer to fixing.
-o=$(probe --skill prepare-review --probe --files "$nothing" "$draft")
+o=$(probe --skill cr --probe --files "$nothing" "$draft")
 [ "$(key_of REVIEW_MODE "$o")" = edit ]        || fail "with no host for either mode, the subject's edit should be kept"
 [ "$(key_of REVIEW_AVAILABLE "$o")" = 0 ]      || fail "kept, and reported unavailable"
 [ "$(key_of REVIEW_EDIT_AVAILABLE "$o")" = 0 ] || fail "the edit axis should say the editor rung is out too"
@@ -523,13 +523,13 @@ ok "default: with nowhere to open either mode, the subject's mode is kept"
 
 # Given a host, the subject's `edit` reaches an editor, so there is no occasion
 # to give way at all.
-o=$(probe_hosted --skill prepare-review --probe --files "$nothing" "$draft")
+o=$(probe_hosted --skill cr --probe --files "$nothing" "$draft")
 [ "$(key_of REVIEW_MODE "$o")" = edit ]   || fail "a reachable editor should keep the subject's edit mode"
 [ "$(key_of REVIEW_AVAILABLE "$o")" = 1 ] || fail "an editor with a host is available"
 ok "default: a single file with a host to open it in stays in edit mode"
 
 # A *configured* one is kept and reports the missing piece itself.
-o=$(probe --skill prepare-review --probe --mode edit --files "$prior" "$draft")
+o=$(probe --skill cr --probe --mode edit --files "$prior" "$draft")
 [ "$(key_of REVIEW_MODE "$o")" = edit ]   || fail "an asked-for edit mode should be kept, not swapped for a viewer"
 [ "$(key_of REVIEW_AVAILABLE "$o")" = 0 ] || fail "kept, and reported unavailable"
 ok "mode: a mode asked for with --mode is kept even with nowhere to open it"

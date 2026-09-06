@@ -3,8 +3,8 @@
 - [SPEC](/spec)
 - Skills
   - [commit](/skills/commit)
-  - [prepare-review](/skills/prepare-review)
-  - [review](/skills/review)
+  - [cr](/skills/cr)
+  - [review-cr](/skills/review-cr)
   - [resolve-feedback](/skills/resolve-feedback)
   - [merge](/skills/merge)
   - [release](/skills/release)

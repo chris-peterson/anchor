@@ -11,7 +11,7 @@ Which skill carries a change from one state to the next:
 flowchart TD
     Need["work to do"] -->|issue| Filed["issue on the forge"]
     Filed -->|commit| Pushed["reviewed and pushed"]
-    Pushed -->|prepare-review| Open["change request open"]
+    Pushed -->|cr| Open["change request open"]
     Open -->|review| Reviewed["findings on the CR"]
     Reviewed -->|resolve-feedback| Cleared["review threads cleared"]
     Cleared -->|merge| Landed["landed"]
@@ -33,7 +33,7 @@ The two skills you reach for most, in motion:
 ## Quickstart
 
 `anchor` drives the forge through its official CLI, so the skills that touch a
-change request, issue, pipeline, or release (`prepare-review`, `review`,
+change request, issue, pipeline, or release (`cr`, `review-cr`,
 `resolve-feedback`, `merge`, `release`, `pipeline`, `issue`, `backlog`) need the
 one for your `origin` remote installed and authenticated with read+write scope.
 `commit` works without it. Install
@@ -57,7 +57,7 @@ glab auth login    # GitLab remotes
    change-request description and open the draft CR:
 
    ```text
-   /anchor:prepare-review
+   /anchor:cr
    ```
 
 ## Why these skills
@@ -71,7 +71,7 @@ path of least resistance.
 - **commit** reviews the pending changeset before it commits, and feeds rejected
   changes back as concrete edits rather than vague "looks off" notes — nothing is
   committed until the review is clean.
-- **prepare-review** writes for a reviewer who has never seen the system, leads
+- **cr** writes for a reviewer who has never seen the system, leads
   with the *why*, and deep-links the critical path so a skim lands on what
   matters.
 

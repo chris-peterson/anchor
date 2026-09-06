@@ -12,7 +12,7 @@ version now has a skill.
 %%{ init: { 'look': 'handDrawn' } }%%
 flowchart TD
     WIP["work in progress"] -->|commit| Pushed["reviewed and pushed"]
-    Pushed -->|prepare-review| Forge["change request open"]
+    Pushed -->|cr| Forge["change request open"]
     Forge -->|resolve-feedback| Cleared["review threads cleared"]
     Cleared -->|merge| Landed["landed"]
     Landed -->|release| Shipped["published version"]
@@ -21,21 +21,21 @@ flowchart TD
 | Step | Skill | Arrived in |
 |---|---|---|
 | Commit and push a reviewed change | [commit](/skills/commit) | at the start |
-| Open and describe the change request | [prepare-review](/skills/prepare-review) | at the start |
+| Open and describe the change request | [cr](/skills/cr) | at the start |
 | Drive review threads to done | [resolve-feedback](/skills/resolve-feedback) | 0.3.0 |
 | Land it once the gates are green | [merge](/skills/merge) | **1.0.0** |
 | Publish what landed | [release](/skills/release) | **1.1.0** |
-| Report whether the push went green, without being asked | [commit](/skills/commit), [resolve-feedback](/skills/resolve-feedback), [prepare-review](/skills/prepare-review) | **1.3.0** |
+| Report whether the push went green, without being asked | [commit](/skills/commit), [resolve-feedback](/skills/resolve-feedback), [cr](/skills/cr) | **1.3.0** |
 | Show every drafted reply before any of them post | [resolve-feedback](/skills/resolve-feedback) | **1.4.0** |
-| Compose the CR template your group or org supplies, not just one in the repo | [prepare-review](/skills/prepare-review) | **1.5.0** |
-| Say whether the source branch survives the merge, and offer to fix it | [prepare-review](/skills/prepare-review) | **1.5.0** |
+| Compose the CR template your group or org supplies, not just one in the repo | [cr](/skills/cr) | **1.5.0** |
+| Say whether the source branch survives the merge, and offer to fix it | [cr](/skills/cr) | **1.5.0** |
 
 ## Coming from 0.x? Three things moved
 
 > [!WARNING]
-> `/anchor:prepare-review` no longer pushes. It requires a branch that's already
+> `/anchor:cr` no longer pushes. It requires a branch that's already
 > pushed, because the push moved into `/anchor:commit`. If your habit was
-> `commit` then `prepare-review` to get the branch up, the new sequence is the
+> `commit` then `cr` to get the branch up, the new sequence is the
 > same two commands doing the same two jobs — just with the push at the front.
 
 > [!WARNING]

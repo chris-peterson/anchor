@@ -5,7 +5,7 @@ fits which data, the mermaid and screenshot recipes, and the prose conventions
 that make a description skim-readable.
 [cr-description](/templates/cr-description) owns the *shape* (which sections, in
 what order); this guide owns the *technique* for realizing it. The
-`prepare-review` skill points here from its Step 3 drafting flow.
+`cr` skill points here from its Step 3 drafting flow.
 
 For the render-time traps that bite any markdown a forge displays — character
 escaping, nested fences, mermaid-fence placement, the collapsible `<details>`

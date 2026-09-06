@@ -7,7 +7,7 @@ file owns the *shape*, so it's the place to edit as your preferences evolve.
 
 Every caller that reports a pipeline reads this file, so the report is the same
 whether the user asked for it (`/anchor:pipeline`) or a push produced it
-(`commit`, `resolve-feedback`, `prepare-review` — see the "after a push"
+(`commit`, `resolve-feedback`, `cr` — see the "after a push"
 section below).
 
 ## The headline

@@ -4,6 +4,7 @@
 
 ### Changed
 
+- **Two skills are renamed: `/anchor:prepare-review` is now `/anchor:cr`, and `/anchor:review` is now `/anchor:review-cr`.** `/review` reaches Claude Code's own `/code-review`, and both old names sat behind it in the picker. `cr` also covers what the skill does on a second run as well as a first — it opens a change request, or refreshes the one already open. The per-skill config key moves with the name: set `anchor.cr.watchPipelineAfterPush` where you had `anchor.prepare-review.watchPipelineAfterPush`.
 - **A drafted issue now says where it is about to land.** `/anchor:issue` heads the approval with a link to the destination — the project's issue list when filing, the issue itself when updating — followed by the title and then the labels and milestone. Filing against a repo other than the one you're standing in is visible before you approve it, rather than after the URL comes back.
 
 ## 1.13.0

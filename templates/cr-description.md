@@ -1,7 +1,7 @@
 # CR description template
 
 The shape of a change-request description: which sections, in what order, and
-what each is for. The `prepare-review` skill owns the *technique* for realizing
+what each is for. The `cr` skill owns the *technique* for realizing
 this shape — deep-link construction, before/after mermaid, screenshots, the
 output checklist. This file owns the *shape*, so it's the place to edit as your
 preferences evolve.
@@ -112,7 +112,7 @@ already shows them.
 The Review guide routes attention; it is not where author-homework lands. A
 "confirm the plan shows only the destroy of X, Y, Z" line is a check *you* run
 before requesting review — it belongs in a personal checklist, not the guide
-(see the `prepare-review` skill, Step 3 "What to avoid").
+(see the `cr` skill, Step 3 "What to avoid").
 
 Use whatever tier labels fit the changeset (e.g. *Core logic / Glue / Tests /
 Mechanical*, or *Security-sensitive / Refactor / Cleanup*). Headers describe the
@@ -193,7 +193,7 @@ The sections above are `anchor`'s default shape. When a project ships its own CR
 template, that template is the team's required scaffolding — `anchor` composes
 its prose **into** that shape rather than replacing it.
 
-`prepare-review` resolves one before drafting, most specific level first — the
+`cr` resolves one before drafting, most specific level first — the
 first level that answers wins, so a template the repo ships always beats an
 inherited one:
 

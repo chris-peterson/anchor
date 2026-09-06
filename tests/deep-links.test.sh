@@ -146,10 +146,10 @@ grep -q '^UNRESOLVED malformed' <<<"$o" \
 ok "--check reports an ambiguous placeholder and an anchor: outside a link"
 
 # A description that names the skill which drafted it carries the same prefix a
-# placeholder does. Reading `/anchor:prepare-review` as broken markup reports a
+# placeholder does. Reading `/anchor:cr` as broken markup reports a
 # fault in prose the author wrote on purpose.
 cat > "$draft" <<EOF
-Run \`/anchor:prepare-review\` again, then \`/anchor:commit\`.
+Run \`/anchor:cr\` again, then \`/anchor:commit\`.
 
 - [\`app.txt\`](anchor:app.txt#solitary) — the new bit
 EOF

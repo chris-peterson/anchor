@@ -13,10 +13,10 @@ tool for the mechanical half, never a substitute for the skill on the authoring
 half — even when the artifact is only a sub-step of a larger task (a rollback, a
 follow-up fix).
 
-- **Writing or revising a CR description → `/anchor:prepare-review`**, never a
+- **Writing or revising a CR description → `/anchor:cr`**, never a
   bare `gh pr create` / `glab mr create` or a `--body` on an edit. A raw
   `create` lands the CR non-draft, with the project template's checklist left
-  intact and no Review guide; `prepare-review` sets the draft flag, composes the
+  intact and no Review guide; `cr` sets the draft flag, composes the
   project template, drafts the canonical Review guide, and reports whether the
   source branch will be deleted on merge (`--remove-source-branch` on GitLab;
   GitHub has only the repo-wide setting, so it offers to turn that on).
@@ -25,7 +25,7 @@ follow-up fix).
   Pushing a new branch makes GitHub emit a `Create a pull request for '<branch>'`
   URL and GitLab a `merge_requests/new` one. Relaying that URL hands the user the
   web form, which lands exactly the CR a bare `create` would and puts the
-  drafting on them. Say `/anchor:prepare-review` instead.
+  drafting on them. Say `/anchor:cr` instead.
 - **Filing or updating an issue → `/anchor:issue`**, never a bare
   `gh issue create --body` / `glab issue create --description`. The skill leads
   the issue with *why* the work is needed, written for a reader who's never seen

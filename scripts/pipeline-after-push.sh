@@ -2,7 +2,7 @@
 # Watch the pipeline a push just triggered, once per commit, unless the caller's
 # skill has been configured out of it. This is the gate in front of
 # pipeline-status.sh --watch that the push-side skills (commit, resolve-feedback,
-# prepare-review) call — not a second implementation of the watch.
+# cr) call — not a second implementation of the watch.
 #
 # Why a gate at all: a push is what starts CI, so the skill that pushed is the
 # one holding the answer to "did it go green". Two things make an automatic
@@ -12,7 +12,7 @@
 #   1. Some pushes shouldn't be waited on — a long pipeline, or a skill whose
 #      report the user finds noisy. Hence the config keys.
 #   2. Consecutive skills often act on the *same* commit: commit pushes and
-#      watches, then prepare-review opens a CR on that very sha. Reporting the
+#      watches, then cr opens a CR on that very sha. Reporting the
 #      same pipeline twice is noise, so a run is reported once per repo.
 #
 # Config, most specific first (both booleans, default true):
@@ -28,7 +28,7 @@
 #
 # Usage:
 #   pipeline-after-push.sh --skill commit
-#   pipeline-after-push.sh --skill prepare-review --sha <sha> --timeout 600
+#   pipeline-after-push.sh --skill cr --sha <sha> --timeout 600
 #
 # --repo <path> retargets onto a checkout other than the cwd repo
 # (see scripts/lib/resolve-context.sh); --sha, --branch, --workflow, --interval

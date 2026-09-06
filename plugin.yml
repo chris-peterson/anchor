@@ -34,20 +34,20 @@ events:
   publishes:
     - key: cr.created
       when: >-
-        prepare-review opened a change request. Emitted by the script that
+        cr opened a change request. Emitted by the script that
         creates it, so it fires whether or not the skill runs to completion. A
         run announces this or cr.updated, never both.
-      emitted_by: scripts/prepare-review.sh
+      emitted_by: scripts/cr.sh
       fields:
         uri: the change request's web address
         title: its title, as anchor set it on creation
     - key: cr.updated
       when: >-
-        prepare-review changed a change request that already existed. One
+        cr changed a change request that already existed. One
         announcement covers the whole phase — description, labels, milestone,
         ordering dependency — rather than one per mutation, and a re-run on the
         same CR fires it again.
-      emitted_by: skills/prepare-review, via scripts/announce.sh
+      emitted_by: skills/cr, via scripts/announce.sh
       fields:
         uri: the change request's web address
         title:
@@ -125,7 +125,7 @@ events:
 suite:
   cli: false
   group: waypoints
-  # Activated by user-invoked skills (commit, prepare-review) and by ambient
+  # Activated by user-invoked skills (commit, cr) and by ambient
   # rules injected at session start.
   activations: [user, session]
   gloss: One skill per step of a code change, from issue to release.
@@ -133,8 +133,8 @@ suite:
   what: "Keeps your issues, commits, change requests, reviews, and releases consistent — the same quality, formatting, and content every time, not reinvented per change."
   cmds:
     - ["/anchor:commit", "Review the changeset, then commit with a why-first message and push"]
-    - ["/anchor:prepare-review", "Rebase on the default branch and open a draft change request"]
-    - ["/anchor:review", "Read every change in a CR, weigh it against your qualities, post findings inline"]
+    - ["/anchor:cr", "Rebase on the default branch and open a draft change request"]
+    - ["/anchor:review-cr", "Read every change in a CR, weigh it against your qualities, post findings inline"]
     - ["/anchor:resolve-feedback", "Work a CR's review threads to done, one by one"]
     - ["/anchor:merge", "Check the merge gates, wait on the pipeline, then land the CR and clean up"]
     - ["/anchor:release", "Work out what's shipping, recommend a version, draft the notes, publish"]
@@ -147,13 +147,13 @@ suite:
     skills:
       backlog: List and rank the forge issues assigned to you so you can pick what to work on next — ranked by soonest due date, then most recently updated.
       commit: Stage changes, run tests, review the diff and drafted commit message with the user, then commit and push once they approve.
+      cr: Open the PR/MR on an already-pushed branch (or refresh the one already open), rebase on the default branch if behind, and draft a description that tells reviewers WHY the change exists.
       issue: File a new forge issue (or update an existing one) that leads with WHY the work is needed.
       merge: Merge an approved change request once its gates are green — waiting on the pipeline if needed — then clean up the branch.
       pipeline: Report a commit's forge pipeline state, or watch until it settles.
-      prepare-review: Open the PR/MR on an already-pushed branch, rebase on the default branch if behind, and draft a description that tells reviewers WHY the change exists.
       release: Cut a release for what has landed — recommend a semver bump, draft the notes, and drive the repo's own publish path.
       resolve-feedback: Fetch an open CR's review feedback and drive each thread to resolution — fix, reply, resolve.
-      review: Review an open change request — read every change in the diff viewer, examine it against the qualities you've set, then post the findings as inline threads once the exact text is approved.
+      review-cr: Review an open change request — read every change in the diff viewer, examine it against the qualities you've set, then post the findings as inline threads once the exact text is approved.
     rules:
       omit-attribution-trailers: Omit AI attribution trailers
       rewrite-history-through-anchor: Route history rewrites through `anchor`
@@ -178,10 +178,10 @@ suite:
             - { ln: 26, text: "}" }
           comment: { ln: 24, body: "good fix — but DAILY_MAX is now defined here and in pricing.js; use the one source" }
         - { t: claude, text: "Addressed the rejection, re-reviewed clean, so committed 4a1f9c2 and pushed to fix-fare-cap. DAILY_MAX now imported from pricing.js, and I swept the two other call sites with the same duplication. Message leads with the overcharge, not the diff." }
-    - label: "/anchor:prepare-review"
+    - label: "/anchor:cr"
       ac: "--orient"
       frames:
-        - { t: you, text: "/anchor:prepare-review" }
+        - { t: you, text: "/anchor:cr" }
         - { t: claude, text: "Branch's already pushed, so I opened draft CR #128 against it. It's 8 behind main and still a draft — rebasing now is low-risk. Rebased clean, force-pushed with lease." }
         - { t: claude, text: "Before I draft — the WHY, in one line: riders on trips crossing midnight were billed the full daily max instead of elapsed minutes. Is that the whole story?" }
         - { t: you, text: "yeah — support flagged three overcharges this week" }

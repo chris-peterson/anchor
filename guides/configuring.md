@@ -13,7 +13,7 @@ two surfaces, neither of which commits an `anchor`-specific file to your repo:
   lives in `.git/config` (never tracked); add `--global` for all your repos.
 - **Team CR scaffolding** — your forge's native template
   (`.gitlab/merge_request_templates/*.md`, `.github/pull_request_template.md`).
-  `prepare-review` detects and composes into it — put the team review-prep
+  `cr` detects and composes into it — put the team review-prep
   checklist there.
 
 ## Defaults
@@ -62,7 +62,7 @@ git config anchor.workTrackerBaseUri https://app.clickup.com/t/
 ```
 
 The base URL of your work tracker. When you mention a ticket, `commit` adds a
-`Refs:` trailer and `prepare-review` links it in the CR. See
+`Refs:` trailer and `cr` links it in the CR. See
 [Work-tracker references](#work-tracker-references).
 
 ### `anchor.edit.tool` :id=key-edit-tool
@@ -109,7 +109,7 @@ git config anchor.reviewBudgetMins 10
 ```
 
 How many minutes of focused attention you expect this CR to get. It's an
-*input*, not a length cap: a tight budget (≈5) makes `prepare-review` lead with
+*input*, not a length cap: a tight budget (≈5) makes `cr` lead with
 the essentials and cut asides hard; a generous one (≈30) keeps more supporting
 context and depth.
 
@@ -235,7 +235,7 @@ git config anchor.crTemplateRepo my-group/ci-templates
 ```
 
 A repo holding the CR template to use when neither this repo nor the forge's own
-inheritance supplies one. `prepare-review` reads it last, so it never overrides a
+inheritance supplies one. `cr` reads it last, so it never overrides a
 template the team already ships.
 
 Give it as `group/project` on GitLab or `owner/repo` on GitHub; the template is
@@ -249,13 +249,13 @@ git config anchor.watchPipelineAfterPush false
 
 Whether a skill that pushes then watches the pipeline that push triggered and
 reports it. Applies to every push-side skill (`commit`, `resolve-feedback`,
-`prepare-review`). See
+`cr`). See
 [Watching the pipeline after a push](#watching-the-pipeline-after-a-push).
 
 ### `anchor.<skill>.watchPipelineAfterPush` :id=key-skill-watchpipelineafterpush
 
 ```bash
-git config anchor.prepare-review.watchPipelineAfterPush false
+git config anchor.cr.watchPipelineAfterPush false
 ```
 
 The same knob for one skill, overriding the umbrella key above.
@@ -320,7 +320,7 @@ at five settings, which is the way to pick a number.
 
 A push is what starts CI, so the skill that pushed is the one holding the answer
 to whether the commit went green. `commit`, `resolve-feedback`, and
-`prepare-review` each watch that pipeline to a terminal state and report it as a
+`cr` each watch that pipeline to a terminal state and report it as a
 table of runs and jobs.
 
 Two things bound it, both handled for you:
@@ -339,7 +339,7 @@ Turn it off per skill or across the board — most useful where one skill's repo
 is the noisy one:
 
 ```bash
-git config anchor.prepare-review.watchPipelineAfterPush false  # this skill only
+git config anchor.cr.watchPipelineAfterPush false  # this skill only
 git config anchor.watchPipelineAfterPush false                 # every push-side skill
 ```
 
@@ -535,7 +535,7 @@ The mode turns on one question: **has this review got a diff to show?**
 
 The subject decides, not the skill that asked. `/anchor:issue` opens an editor
 when it files a new body and a viewer when it updates one; the second pass of a
-`/anchor:prepare-review` description lands in the viewer, which is where "what
+`/anchor:cr` description lands in the viewer, which is where "what
 did the feedback change" is legible.
 
 What you name is the tool each shape opens:
@@ -586,7 +586,7 @@ change rather than passing a diff nobody saw.
 ### Forge-specific overrides (`cr` / `mr` / `pr`)
 
 CR keys follow a prefix convention: `cr` is the forge-agnostic default, and `mr`
-(GitLab) / `pr` (GitHub) override it when present. `prepare-review` picks the
+(GitLab) / `pr` (GitHub) override it when present. `cr` picks the
 forge by the `origin` remote, uses the matching `mr*` / `pr*` key if set, and
 falls back to the `cr*` one otherwise. It governs both pairs — `crRules` /
 `mrRules` / `prRules` and `crVerbosity` / `mrVerbosity` / `prVerbosity` — and

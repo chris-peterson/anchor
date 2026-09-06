@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Functional test for scripts/prepare-review.sh's CR resolution,
+# Functional test for scripts/cr.sh's CR resolution,
 # DELETE_BRANCH_ON_MERGE, and TEMPLATE_* keys.
 #
 # The resolution half covers which CR the branch-inferred lookup will adopt.
@@ -37,12 +37,12 @@ set -euo pipefail
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-prepare_review_sh="$here/../scripts/prepare-review.sh"
+cr_sh="$here/../scripts/cr.sh"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok()   { echo "ok - $*"; }
 
-work="$(mktemp -d "${TMPDIR:-/tmp}/anchor-prepare-review-test.XXXXXX")"
+work="$(mktemp -d "${TMPDIR:-/tmp}/anchor-cr-test.XXXXXX")"
 cleanup() { rm -rf "$work"; }
 trap cleanup EXIT
 
@@ -252,7 +252,7 @@ JSON
 # create case below drives that mode rather than plain recon.
 approved_body="$work/approved.md"
 printf '## Context\n\napproved prose\n' > "$approved_body"
-open_cr() { bash "$prepare_review_sh" --repo "$1" --open --title 'A change' --body-file "$approved_body"; }
+open_cr() { bash "$cr_sh" --repo "$1" --open --title 'A change' --body-file "$approved_body"; }
 
 # --- GitHub, repo setting off: the opened PR carries no preference -----------
 repo="$(make_repo github.com gh-off)"
@@ -300,7 +300,7 @@ repo="$(make_repo github.com gh-null)"
 gh_pr_json "$(git -C "$repo" rev-parse HEAD)"
 cp "$CR_AFTER_CREATE" "$CR_JSON"
 export DELETE_ON_MERGE=null
-out=$(bash "$prepare_review_sh" --repo "$repo")
+out=$(bash "$cr_sh" --repo "$repo")
 [[ "$(key "$out" DELETE_BRANCH_ON_MERGE)" == unknown ]] \
   || fail "expected unknown for a null setting; got: $(key "$out" DELETE_BRANCH_ON_MERGE)"
 [[ -n "$(key "$out" ANCHOR_CONFIG)" ]] || fail "block truncated after the null setting: $out"
@@ -328,7 +328,7 @@ ok "GitLab sets --remove-source-branch at create and reports true"
 repo="$(make_repo gitlab.com gl-unset)"
 glab_mr_json "$(git -C "$repo" rev-parse HEAD)" false false
 cp "$CR_AFTER_CREATE" "$CR_JSON"
-out=$(bash "$prepare_review_sh" --repo "$repo")
+out=$(bash "$cr_sh" --repo "$repo")
 [[ "$(key "$out" CR_PREEXISTING)" == 1 ]] || fail "expected the MR to resolve as pre-existing; got: $out"
 [[ "$(key "$out" DELETE_BRANCH_ON_MERGE)" == false ]] \
   || fail "expected false for an MR with the flag unset; got: $(key "$out" DELETE_BRANCH_ON_MERGE)"
@@ -338,14 +338,14 @@ ok "GitLab reports false for a pre-existing MR with the flag unset"
 repo="$(make_repo gitlab.com gl-forced)"
 glab_mr_json "$(git -C "$repo" rev-parse HEAD)" false true
 cp "$CR_AFTER_CREATE" "$CR_JSON"
-out=$(bash "$prepare_review_sh" --repo "$repo")
+out=$(bash "$cr_sh" --repo "$repo")
 [[ "$(key "$out" DELETE_BRANCH_ON_MERGE)" == true ]] \
   || fail "expected true when force_remove_source_branch is set; got: $(key "$out" DELETE_BRANCH_ON_MERGE)"
 ok "GitLab reports true when the project forces branch removal"
 
 # --- No forge: nothing to report -------------------------------------------
 repo="$(make_repo example.invalid no-forge)"
-out=$(bash "$prepare_review_sh" --repo "$repo")
+out=$(bash "$cr_sh" --repo "$repo")
 [[ "$(key "$out" FORGE)" == none ]] || fail "expected FORGE=none; got: $out"
 [[ "$(key "$out" DELETE_BRANCH_ON_MERGE)" == unknown ]] \
   || fail "expected unknown with no forge; got: $(key "$out" DELETE_BRANCH_ON_MERGE)"
@@ -360,7 +360,7 @@ tpl_reset() { rm -rf "$GL_TPL_DIR" "$GH_REMOTE"; GL_MR_TEMPLATE_SETTING=""; GL_T
 tpl_reset
 gl_templates :fullpath default
 repo="$(template_repo gitlab.com tpl-gl-local .gitlab/merge_request_templates/Merge_Request.md)"
-out=$(bash "$prepare_review_sh" --repo "$repo")
+out=$(bash "$cr_sh" --repo "$repo")
 [[ "$(key "$out" TEMPLATE_SOURCE)" == local ]] \
   || fail "expected the repo-local template to win; got: $(key "$out" TEMPLATE_SOURCE)"
 [[ "$(key "$out" TEMPLATE_PATH)" == /*/.gitlab/merge_request_templates/Merge_Request.md ]] \
@@ -371,7 +371,7 @@ ok "GitLab prefers a repo-local template over an inherited one"
 tpl_reset
 gl_templates :fullpath default
 repo="$(template_repo gitlab.com tpl-gl-inherited)"
-out=$(bash "$prepare_review_sh" --repo "$repo")
+out=$(bash "$cr_sh" --repo "$repo")
 [[ "$(key "$out" TEMPLATE_SOURCE)" == inherited ]] \
   || fail "expected the inherited template; got: $(key "$out" TEMPLATE_SOURCE)"
 grep -q 'body of default' "$(key "$out" TEMPLATE_PATH)" \
@@ -382,7 +382,7 @@ ok "GitLab resolves an inherited template when the repo ships none"
 tpl_reset
 GL_MR_TEMPLATE_SETTING="## From project settings"
 repo="$(template_repo gitlab.com tpl-gl-setting .gitlab/merge_request_templates/default.md)"
-out=$(bash "$prepare_review_sh" --repo "$repo")
+out=$(bash "$cr_sh" --repo "$repo")
 [[ "$(key "$out" TEMPLATE_SOURCE)" == project-settings ]] \
   || fail "expected the project setting to win; got: $(key "$out" TEMPLATE_SOURCE)"
 grep -q 'From project settings' "$(key "$out" TEMPLATE_PATH)" \
@@ -395,7 +395,7 @@ repo="$(template_repo gitlab.com tpl-gl-default \
   .gitlab/merge_request_templates/aaa.md \
   .gitlab/merge_request_templates/default.md \
   .gitlab/merge_request_templates/zzz.md)"
-out=$(bash "$prepare_review_sh" --repo "$repo")
+out=$(bash "$cr_sh" --repo "$repo")
 [[ "$(key "$out" TEMPLATE_PATH)" == /*/.gitlab/merge_request_templates/default.md ]] \
   || fail "expected default.md to win the level; got: $(key "$out" TEMPLATE_PATH)"
 ok "default.md wins a level holding several templates"
@@ -405,7 +405,7 @@ tpl_reset
 repo="$(template_repo gitlab.com tpl-gl-ambiguous \
   .gitlab/merge_request_templates/hotfix.md \
   .gitlab/merge_request_templates/refactor.md)"
-out=$(bash "$prepare_review_sh" --repo "$repo")
+out=$(bash "$cr_sh" --repo "$repo")
 [[ "$(key "$out" TEMPLATE_SOURCE)" == ambiguous ]] \
   || fail "expected ambiguous with no default.md; got: $(key "$out" TEMPLATE_SOURCE)"
 [[ -z "$(key "$out" TEMPLATE_PATH)" ]] \
@@ -419,7 +419,7 @@ tpl_reset
 GL_TPL_DUP=1
 gl_templates :fullpath default
 repo="$(template_repo gitlab.com tpl-gl-dup)"
-out=$(bash "$prepare_review_sh" --repo "$repo")
+out=$(bash "$cr_sh" --repo "$repo")
 [[ "$(key "$out" TEMPLATE_SOURCE)" == inherited ]] \
   || fail "expected the duplicate listing to resolve to one template; got: $(key "$out" TEMPLATE_SOURCE)"
 ok "a duplicated template listing resolves rather than reading as ambiguous"
@@ -428,7 +428,7 @@ ok "a duplicated template listing resolves rather than reading as ambiguous"
 tpl_reset
 GL_TPL_FAIL=1
 repo="$(template_repo gitlab.com tpl-gl-403)"
-out=$(bash "$prepare_review_sh" --repo "$repo")
+out=$(bash "$cr_sh" --repo "$repo")
 [[ "$(key "$out" TEMPLATE_SOURCE)" == none ]] \
   || fail "expected none when the lookup is gated; got: $(key "$out" TEMPLATE_SOURCE)"
 [[ -n "$(key "$out" ANCHOR_CONFIG)" ]] || fail "block truncated by the gated lookup: $out"
@@ -439,7 +439,7 @@ tpl_reset
 gl_templates 'grp%2Ftpl' default
 repo="$(template_repo gitlab.com tpl-gl-configured)"
 git -C "$repo" config anchor.crTemplateRepo 'grp/tpl'
-out=$(bash "$prepare_review_sh" --repo "$repo")
+out=$(bash "$cr_sh" --repo "$repo")
 [[ "$(key "$out" TEMPLATE_SOURCE)" == configured ]] \
   || fail "expected the configured template repo; got: $(key "$out" TEMPLATE_SOURCE)"
 ok "anchor.crTemplateRepo backstops an empty hierarchy"
@@ -448,7 +448,7 @@ ok "anchor.crTemplateRepo backstops an empty hierarchy"
 for loc in pull_request_template.md docs/pull_request_template.md; do
   tpl_reset
   repo="$(template_repo github.com "tpl-gh-${loc//\//-}" "$loc")"
-  out=$(bash "$prepare_review_sh" --repo "$repo")
+  out=$(bash "$cr_sh" --repo "$repo")
   [[ "$(key "$out" TEMPLATE_PATH)" == "/"*"/$loc" ]] \
     || fail "expected $loc to resolve absolutely; got: $(key "$out" TEMPLATE_PATH)"
   ok "GitHub resolves a template at $loc"
@@ -458,7 +458,7 @@ done
 tpl_reset
 gh_remote_file "example/.github/.github/pull_request_template.md"
 repo="$(template_repo github.com tpl-gh-inherited)"
-out=$(bash "$prepare_review_sh" --repo "$repo")
+out=$(bash "$cr_sh" --repo "$repo")
 [[ "$(key "$out" TEMPLATE_SOURCE)" == inherited ]] \
   || fail "expected the owner .github template; got: $(key "$out" TEMPLATE_SOURCE)"
 ok "GitHub falls back to the owner's .github repo"
@@ -467,7 +467,7 @@ ok "GitHub falls back to the owner's .github repo"
 tpl_reset
 gh_remote_file "example/.github/.github/pull_request_template.md"
 repo="$(template_repo github.com tpl-gh-local-wins .github/pull_request_template.md)"
-out=$(bash "$prepare_review_sh" --repo "$repo")
+out=$(bash "$cr_sh" --repo "$repo")
 [[ "$(key "$out" TEMPLATE_SOURCE)" == local ]] \
   || fail "expected the repo-local template to win; got: $(key "$out" TEMPLATE_SOURCE)"
 ok "GitHub prefers a repo-local template over the owner's default"
@@ -475,7 +475,7 @@ ok "GitHub prefers a repo-local template over the owner's default"
 # --- Nothing anywhere: unchanged behavior, no template ----------------------
 tpl_reset
 repo="$(template_repo github.com tpl-gh-none)"
-out=$(bash "$prepare_review_sh" --repo "$repo")
+out=$(bash "$cr_sh" --repo "$repo")
 [[ "$(key "$out" TEMPLATE_SOURCE)" == none ]] \
   || fail "expected none for an empty hierarchy; got: $(key "$out" TEMPLATE_SOURCE)"
 [[ -z "$(key "$out" TEMPLATE_PATH)" ]] \
@@ -498,7 +498,7 @@ for state in MERGED CLOSED; do
   gh_pr_json "$(git -C "$repo" rev-parse HEAD)" "$state"
   cp "$CR_AFTER_CREATE" "$CR_JSON"          # the branch lookup finds this one
   export DELETE_ON_MERGE=true
-  out=$(bash "$prepare_review_sh" --repo "$repo")
+  out=$(bash "$cr_sh" --repo "$repo")
   [[ "$(key "$out" CR_PREEXISTING)" == 0 ]] \
     || fail "a $state PR must not be adopted; got CR_PREEXISTING=$(key "$out" CR_PREEXISTING)"
   [[ "$(key "$out" CR_PENDING)" == 1 ]] \
@@ -514,7 +514,7 @@ for state in merged closed locked; do
   repo="$(make_repo gitlab.com "gl-state-${state}")"
   glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false "$state"
   cp "$CR_AFTER_CREATE" "$CR_JSON"
-  out=$(bash "$prepare_review_sh" --repo "$repo")
+  out=$(bash "$cr_sh" --repo "$repo")
   [[ "$(key "$out" CR_PREEXISTING)" == 0 ]] \
     || fail "a $state MR must not be adopted; got CR_PREEXISTING=$(key "$out" CR_PREEXISTING)"
   [[ "$(key "$out" CR_PENDING)" == 1 ]] \
@@ -529,7 +529,7 @@ repo="$(make_repo github.com gh-state-open)"
 gh_pr_json "$(git -C "$repo" rev-parse HEAD)"
 cp "$CR_AFTER_CREATE" "$CR_JSON"
 export DELETE_ON_MERGE=true
-out=$(bash "$prepare_review_sh" --repo "$repo")
+out=$(bash "$cr_sh" --repo "$repo")
 [[ "$(key "$out" CR_PREEXISTING)" == 1 ]] \
   || fail "an OPEN PR should still be adopted; got: $out"
 [[ "$(key "$out" CR_PENDING)" == 0 ]] || fail "an open PR needs no fresh draft; got: $out"
@@ -540,7 +540,7 @@ ok "an open PR on the branch resolves unchanged"
 repo="$(make_repo gitlab.com gl-state-open)"
 glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false
 cp "$CR_AFTER_CREATE" "$CR_JSON"
-out=$(bash "$prepare_review_sh" --repo "$repo")
+out=$(bash "$cr_sh" --repo "$repo")
 [[ "$(key "$out" CR_PREEXISTING)" == 1 ]] \
   || fail "an opened MR should still be adopted; got: $out"
 ok "an opened MR on the branch resolves unchanged"
@@ -555,7 +555,7 @@ gh_pr_json "$(git -C "$repo" rev-parse HEAD)"
 cp "$CR_AFTER_CREATE" "$CR_JSON"
 export DELETE_ON_MERGE=true
 set +e
-out=$(bash "$prepare_review_sh" --repo "$repo" --open --title T --body-file "$approved_body")
+out=$(bash "$cr_sh" --repo "$repo" --open --title T --body-file "$approved_body")
 status=$?
 set -e
 [[ "$status" -ne 0 ]] || fail "--open over an open CR should fail; got: $out"
@@ -566,7 +566,7 @@ ok "--open refuses when a CR is already open on the branch"
 # --no-open is the URL-free path: nothing is queued, so nothing is published.
 repo="$(make_repo github.com gh-no-open)"
 : > "$CR_JSON"
-out=$(bash "$prepare_review_sh" --repo "$repo" --no-open)
+out=$(bash "$cr_sh" --repo "$repo" --no-open)
 [[ "$(key "$out" CR_PENDING)" == 0 && -z "$(key "$out" CR_URL)" ]] \
   || fail "--no-open should queue no CR; got: $out"
 ok "--no-open reports no pending CR"
@@ -576,7 +576,7 @@ ok "--no-open reports no pending CR"
 # never opens past, so the baseline is an empty file instead.
 repo="$(make_repo github.com gh-baseline)"
 : > "$CR_JSON"
-out=$(bash "$prepare_review_sh" --repo "$repo")
+out=$(bash "$cr_sh" --repo "$repo")
 baseline="$(key "$out" CURRENT_DESC_PATH)"
 [[ -n "$baseline" ]] || fail "CURRENT_DESC_PATH must name a path with no CR open; got: $out"
 [[ -f "$baseline" ]] || fail "CURRENT_DESC_PATH must exist: $baseline"
@@ -589,7 +589,7 @@ repo="$(make_repo github.com gh-state-explicit)"
 gh_pr_json "$(git -C "$repo" rev-parse HEAD)" MERGED
 cp "$CR_AFTER_CREATE" "$CR_JSON"
 export DELETE_ON_MERGE=true
-out=$(bash "$prepare_review_sh" --repo "$repo" --cr 7)
+out=$(bash "$cr_sh" --repo "$repo" --cr 7)
 [[ "$(key "$out" CR_PREEXISTING)" == 1 ]] \
   || fail "--cr must resolve a merged PR; got CR_PREEXISTING=$(key "$out" CR_PREEXISTING)"
 [[ "$(key "$out" CR_IID)" == 7 ]] || fail "--cr should resolve PR 7; got $(key "$out" CR_IID)"
@@ -599,7 +599,7 @@ ok "--cr resolves a merged PR regardless of state"
 repo="$(make_repo gitlab.com gl-state-explicit)"
 glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false merged
 cp "$CR_AFTER_CREATE" "$CR_JSON"
-out=$(bash "$prepare_review_sh" --repo "$repo" --cr 7)
+out=$(bash "$cr_sh" --repo "$repo" --cr 7)
 [[ "$(key "$out" CR_PREEXISTING)" == 1 ]] \
   || fail "--cr must resolve a merged MR; got CR_PREEXISTING=$(key "$out" CR_PREEXISTING)"
 [[ "$(key "$out" CR_IID)" == 7 ]] || fail "--cr should resolve MR 7; got $(key "$out" CR_IID)"
@@ -616,7 +616,7 @@ repo="$(make_repo github.com dead-end)"
 : > "$CR_JSON"
 git -C "$repo" checkout --quiet main
 set +e
-out=$(bash "$prepare_review_sh" --repo "$repo" --no-open 2>"$work/dead-end.err")
+out=$(bash "$cr_sh" --repo "$repo" --no-open 2>"$work/dead-end.err")
 status=$?
 set -e
 [[ "$status" -eq 65 ]] || fail "expected exit 65 on the dead end; got $status"
@@ -636,7 +636,7 @@ repo="$(make_repo github.com default-dirty)"
 : > "$CR_JSON"
 git -C "$repo" checkout --quiet main
 printf 'work\n' > "$repo/wip.txt"
-out=$(bash "$prepare_review_sh" --repo "$repo" --no-open)
+out=$(bash "$cr_sh" --repo "$repo" --no-open)
 [[ "$(key "$out" NOTHING_TO_REVIEW)" == 0 ]] \
   || fail "expected NOTHING_TO_REVIEW=0 with work to review; got: $out"
 [[ "$(key "$out" NEEDS_BRANCH)" == 1 && "$(key "$out" NEEDS_COMMIT)" == 1 ]] \
@@ -646,9 +646,9 @@ ok "uncommitted work on the default branch still routes rather than exiting"
 repo="$(make_repo github.com feat-ahead)"
 : > "$CR_JSON"
 gh_pr_json "$(git -C "$repo" rev-parse HEAD)"
-out=$(bash "$prepare_review_sh" --repo "$repo")
+out=$(bash "$cr_sh" --repo "$repo")
 [[ "$(key "$out" NOTHING_TO_REVIEW)" == 0 ]] \
   || fail "expected NOTHING_TO_REVIEW=0 on a feature branch; got: $out"
 ok "a feature branch with a CR reports NOTHING_TO_REVIEW=0"
 
-echo "all prepare-review tests passed"
+echo "all cr tests passed"

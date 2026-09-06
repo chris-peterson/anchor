@@ -132,7 +132,7 @@ emit_review() {
   # two-path review is a description.
   case "${review_skill:-}" in
     commit)         artifact_target="commit-message" ;;
-    prepare-review) artifact_target="description" ;;
+    cr) artifact_target="description" ;;
     issue)          artifact_target="issue-body" ;;
     release)        artifact_target="release-notes" ;;
     *)              artifact_target="" ;;
