@@ -36,7 +36,7 @@ The four verbosity dials are listed in lifecycle order, and they descend:
 | [`anchor.crVerbosity`](#key-crverbosity) | `25` | CR descriptions stay near the brief end — a reviewer on a deadline wants pointing, not explaining. |
 | [`anchor.releaseVerbosity`](#key-releaseverbosity) | `10` | Release notes run to each change as its effect on someone using the project, and stop. |
 | [`anchor.mrVerbosity`](#key-mr-pr-verbosity) / [`anchor.prVerbosity`](#key-mr-pr-verbosity) | `anchor.crVerbosity` | No forge split — GitLab and GitHub get the same length until you set one. |
-| [`anchor.watchPipelineAfterPush`](#key-watchpipelineafterpush) | `true` | Every push-side skill watches the pipeline that push started and reports it. |
+| [`anchor.watchPipelineAfterPush`](#key-watchpipelineafterpush) | `true` | A skill that starts CI watches it to a verdict and reports it. |
 | [`anchor.<skill>.watchPipelineAfterPush`](#key-skill-watchpipelineafterpush) | the umbrella key | A skill follows the setting above until you give that skill its own. |
 | [`anchor.workTrackerBaseUri`](#key-worktrackerbaseuri) | none | Mentioning a bare ticket id gets you no link — mention a full URL, or set this. |
 | [`anchor.commitRules`](#key-commitrules) | none | The default commit-message rules apply, with nothing layered on. |
@@ -247,10 +247,10 @@ looked for in that repo's usual locations.
 git config anchor.watchPipelineAfterPush false
 ```
 
-Whether a skill that pushes then watches the pipeline that push triggered and
-reports it. Applies to every push-side skill (`commit`, `resolve-feedback`,
-`prepare-review`). See
-[Watching the pipeline after a push](#watching-the-pipeline-after-a-push).
+Whether a skill that starts CI then watches it and reports it — the push for
+`commit`, `resolve-feedback`, and `prepare-review`, the commit the forge writes
+to the default branch for `merge`. See
+[Watching the CI a skill starts](#watching-the-pipeline-after-a-push).
 
 ### `anchor.<skill>.watchPipelineAfterPush` :id=key-skill-watchpipelineafterpush
 
@@ -316,12 +316,17 @@ Neither knob cuts below the floor — one sentence of *why*, and the Review guid
 deep links. [The verbosity guide](/guides/cr-verbosity) renders one real changeset
 at five settings, which is the way to pick a number.
 
-### Watching the pipeline after a push
+### Watching the CI a skill starts :id=watching-the-pipeline-after-a-push
 
-A push is what starts CI, so the skill that pushed is the one holding the answer
-to whether the commit went green. `commit`, `resolve-feedback`, and
-`prepare-review` each watch that pipeline to a terminal state and report it as a
-table of runs and jobs.
+A skill that causes a run is the one holding the answer to whether it went
+green. `commit`, `resolve-feedback`, and `prepare-review` watch the pipeline
+their push triggered; `merge` watches the one the commit the forge wrote to the
+default branch triggered, which on most repos is what deploys or publishes. Each
+runs to a terminal state and reports as a table of runs and jobs.
+
+`/anchor:release` watches the run that publishes, through `/anchor:pipeline`.
+That watch is the release itself rather than a report alongside one, so this key
+doesn't reach it.
 
 Two things bound it, both handled for you:
 
@@ -339,8 +344,8 @@ Turn it off per skill or across the board — most useful where one skill's repo
 is the noisy one:
 
 ```bash
-git config anchor.prepare-review.watchPipelineAfterPush false  # this skill only
-git config anchor.watchPipelineAfterPush false                 # every push-side skill
+git config anchor.merge.watchPipelineAfterPush false  # this skill only
+git config anchor.watchPipelineAfterPush false       # every skill this key reaches
 ```
 
 A per-skill key wins over the umbrella one in both directions, so an umbrella

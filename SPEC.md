@@ -447,6 +447,16 @@ step after `prepare-review` opens the CR and `resolve-feedback` clears its threa
   surface it and ask the user to refresh credentials rather than retry or fall back.
 - **[MERGE-15]** After a successful merge, the system shall return the local checkout
   to the default branch, pull the merged result, and delete the merged local branch.
+- **[MERGE-16]** After a successful merge, the system shall watch the pipeline the
+  merge triggered on the target branch and report it without the user asking,
+  gated on the same keys as the push-side skills and scoped to the landed SHA the
+  forge reported. The branch pipeline the gates read proved the change in
+  isolation; the target branch's is the one that deploys, publishes, or releases
+  what landed.
+- **[MERGE-17]** The system shall report the merge gates as one table — every gate
+  once they are green, or the gates checked so far plus the one that blocked — and
+  shall surface the resolved merge method through the confirmation prompt alone,
+  rather than in prose ahead of it.
 
 ### RELEASE — Release
 
@@ -625,9 +635,9 @@ and writing nothing.
 - **[CI-12]** Where there is no pipeline to tabulate — no pipeline for the
   commit, an unrecognized forge, or a single tracked job — the system shall
   report in one line and draw no table.
-- **[CI-13]** When a skill has pushed a commit, the system shall watch the
-  pipeline that push triggered until it settles and report it, without the user
-  asking.
+- **[CI-13]** When a skill has pushed a commit, or landed one through a merge,
+  the system shall watch the pipeline that commit triggered until it settles and
+  report it, without the user asking.
 - **[CI-14]** Where every run for a commit has already been reported, the
   system shall not report them again, so that successive skills acting on one
   commit produce one report; a run no report has covered — including one that

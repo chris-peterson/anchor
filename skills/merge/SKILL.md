@@ -22,9 +22,19 @@ the forge tool by the `origin` remote.
 
 **Don't narrate your work.** Every step below is an operating instruction, not a
 script to read aloud — follow the execute-quietly discipline:
-`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. For this skill, the only
-things worth surfacing are the resolved repo and CR in one line, any gate that
-blocks, the merge-method decision, and the one-line result.
+`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. This skill's output is the
+list below, and the list is closed:
+
+1. The resolved repo and CR, one line.
+2. The gate table — every row once they're green, or the rows checked so far plus
+   the one that blocked.
+3. The merge confirmation prompt.
+4. The one-line result, with the release next step where the repo has one.
+5. The pipeline the merge triggered, once it settles.
+
+Each is something the user decides or would otherwise have to go ask for. What
+you read to reach one of them — a config value, a forge field, a state that
+turned out fine — is input to the next step, not a paragraph in front of it.
 
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
@@ -52,12 +62,13 @@ flowchart TD
         Method --> Ask["Preview + confirm (yes/no)"]
     end
 
-    subgraph "Step 3-4: Land + clean up"
+    subgraph "Step 3-5: Land, clean up, watch"
         Ask --> Do["Merge via gh/glab"]
         Do --> Post["Checkout default + pull, delete branch"]
+        Post --> WatchMain["Watch the target branch's pipeline"]
     end
 
-    Post --> Report([One-line result])
+    WatchMain --> Report([One-line result, then the pipeline])
 ```
 
 ## Task tracking when orchestrated
@@ -116,6 +127,23 @@ most-blocking first — and stop at the first that fails, so the user fixes one 
 at a time. Only the **pipeline** gate resolves itself with time; the skill waits on
 that one. The other three need a person (mark ready, get an approval, resolve a
 thread) or a rebase, so they stop and report rather than spin.
+
+**The gates report as one table, and that table is the whole step.** A green gate
+is worth showing — together they're the evidence the merge is safe — and worth
+exactly one row:
+
+| Gate | State |
+| --- | --- |
+| Draft | cleared |
+| Mergeable | `mergeable`, no conflicts |
+| Pipeline | `success` — 3/3 jobs on `<sha>` |
+| Approvals | 0 required, 0 left |
+| Threads | none unresolved |
+
+A gate that doesn't apply is a row too (`none for this commit`, `no approval
+rules`). A gate that blocks ends the flow, so it gets the rows checked above it
+plus what blocked and what clears it. Either way the commands, the raw forge
+fields, and the reasoning that read them stay out.
 
 ### 1a. Marked ready (not draft)
 
@@ -267,6 +295,13 @@ settings, not an inline menu — so to land it differently the user either adjus
 the project/CR settings (and you re-read them) or names the method to use. On
 `yes`, merge.
 
+**The prompt is this step's whole output.** `merge_method`, `squash_option`, the
+MR's squash flag, the allowed strategies: each is input to the prompt, never a
+paragraph ahead of it. A setting that left the default standing is nothing to
+report — say what the merge will do, not which settings declined to change it.
+Where a setting *did* move the method, the prompt above already names it, which
+is where it belongs.
+
 ## Step 3: Merge
 
 Run the merge for the chosen method (cookbook: "Merge a CR"). Delete the source
@@ -335,11 +370,50 @@ Once the forge confirms the merge, leave the local checkout on a clean footing:
    the target under a new SHA, so `-d` will refuse; confirm the merge landed, then
    delete with `-D`.
 
-## Step 5: Report
+## Step 5: Watch the pipeline the merge triggered
+
+The merge writes a commit to the default branch, and for most repos that commit
+is what deploys, publishes, or releases. The branch pipeline the gates read
+proved the change in isolation; the target branch's is the one that says it
+landed. Don't leave it unwatched and make the user think to ask.
+
+The watch blocks while it polls, so launch it as a **background** Bash call
+(`run_in_background: true`) once Step 4's cleanup is done, and read its stdout
+with the **BashOutput tool** when it completes:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill merge --sha <landed sha>
+```
+
+Pass the landed sha you read back in Step 3 rather than letting the helper take
+HEAD: a squash lands a commit the local branch never had, and a `--ff-only` pull
+that couldn't fast-forward leaves HEAD elsewhere. Retarget a non-cwd checkout
+with `--repo <checkout>`, same as the other helpers.
+
+Nothing about *whether* to watch is decided here — the helper owns it:
+
+- **`PIPELINE_WATCH=skipped`** → `PIPELINE_WATCH_REASON` says `config-off`
+  (`anchor.merge.watchPipelineAfterPush`, or the umbrella key) or
+  `already-reported`. Either way there's nothing to report; end the flow silently.
+- **`PIPELINE_WATCH=ran`** → the same `KEY=value` lines `/anchor:pipeline` reads
+  follow it. Report them following
+  `${CLAUDE_PLUGIN_ROOT}/templates/pipeline-report.md`, including its "After a
+  push" notes — the headline carries `<target>`, not the branch just deleted.
+
+Step 6's result goes out while this polls, so the flow is never held open; the
+pipeline report lands when the watch settles.
+
+## Step 6: Report
 
 One line: `Merged <CR ref> into <target> (<method>) — <merge-sha>`, with the CR URL.
 Note the branch cleanup only if it needed the user's attention (a `-d` that refused).
 Nothing more — the merge is the outcome, not a status report.
+
+**A noisy line in a forge CLI's output is not a finding.** `glab mr merge` prints
+`! No pipeline running on <branch>` when it looks for an in-flight pipeline to
+wait on and finds none, which reads alarming and means nothing. The user never
+saw it — the terminal collapsed that tool result — so explaining it invents a
+confusion to resolve. Surface such a line only where it changed the outcome.
 
 Where the repo has something to publish, close with `/anchor:release` as the next
 step — one clause, not a pitch, and don't run it. On a repo with no version

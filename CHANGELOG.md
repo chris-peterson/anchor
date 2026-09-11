@@ -2,8 +2,13 @@
 
 ## Unreleased
 
+### Added
+
+- **`/anchor:merge` now waits on the pipeline the merge starts.** The gates read the branch's pipeline, which proves the change in isolation; the commit the merge writes to the default branch is the one that deploys, publishes, or releases it. That run is watched to a terminal state and reported without you asking, on the SHA the forge said it landed — so a squash or a pull that couldn't fast-forward still reports the right run. Turn it off with `git config anchor.merge.watchPipelineAfterPush false`, the same key the pushing skills use.
+
 ### Changed
 
+- **`/anchor:merge` says less.** Its whole output is the repo and CR, the gate table, the merge confirmation, the result line, and the pipeline. The merge method reaches you as the confirmation prompt rather than a paragraph in front of it, a setting that left the default standing goes unmentioned, and an alarming-but-meaningless line from the forge CLI is no longer explained back to you.
 - **A drafted issue now says where it is about to land.** `/anchor:issue` heads the approval with a link to the destination — the project's issue list when filing, the issue itself when updating — followed by the title and then the labels and milestone. Filing against a repo other than the one you're standing in is visible before you approve it, rather than after the URL comes back.
 
 ## 1.13.0

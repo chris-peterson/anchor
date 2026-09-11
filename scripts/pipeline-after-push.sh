@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Watch the pipeline a push just triggered, once per commit, unless the caller's
-# skill has been configured out of it. This is the gate in front of
-# pipeline-status.sh --watch that the push-side skills (commit, resolve-feedback,
-# prepare-review) call — not a second implementation of the watch.
+# Watch the pipeline a landed commit just triggered, once per commit, unless the
+# caller's skill has been configured out of it. This is the gate in front of
+# pipeline-status.sh --watch that commit, resolve-feedback, prepare-review, and
+# merge call — not a second implementation of the watch.
 #
-# Why a gate at all: a push is what starts CI, so the skill that pushed is the
-# one holding the answer to "did it go green". Two things make an automatic
-# watch wrong to run unconditionally, and both are decisions rather than
-# judgment calls, which is why they live here rather than in skill prose:
+# Why a gate at all: the skill that started CI is the one holding the answer to
+# "did it go green" — the push for commit/resolve-feedback/prepare-review,
+# the commit the forge writes to the default branch for merge. Two things make an
+# automatic watch wrong to run unconditionally, and both are decisions rather
+# than judgment calls, which is why they live here rather than in skill prose:
 #
 #   1. Some pushes shouldn't be waited on — a long pipeline, or a skill whose
 #      report the user finds noisy. Hence the config keys.
@@ -17,7 +18,7 @@
 #
 # Config, most specific first (both booleans, default true):
 #   anchor.<skill>.watchPipelineAfterPush   this skill only
-#   anchor.watchPipelineAfterPush           every push-side skill
+#   anchor.watchPipelineAfterPush           every caller of this script
 #
 # Output lines (KEY=value, read from stdout):
 #   PIPELINE_WATCH=ran|skipped
@@ -29,6 +30,7 @@
 # Usage:
 #   pipeline-after-push.sh --skill commit
 #   pipeline-after-push.sh --skill prepare-review --sha <sha> --timeout 600
+#   pipeline-after-push.sh --skill merge --sha <landed sha>
 #
 # --repo <path> retargets onto a checkout other than the cwd repo
 # (see scripts/lib/resolve-context.sh); --sha, --branch, --workflow, --interval

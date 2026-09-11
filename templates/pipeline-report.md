@@ -6,9 +6,9 @@ resolving the commit, choosing one-shot vs. watch, tracking a single job. This
 file owns the *shape*, so it's the place to edit as your preferences evolve.
 
 Every caller that reports a pipeline reads this file, so the report is the same
-whether the user asked for it (`/anchor:pipeline`) or a push produced it
-(`commit`, `resolve-feedback`, `prepare-review` — see the "after a push"
-section below).
+whether the user asked for it (`/anchor:pipeline`) or a skill that started CI
+produced it (`commit`, `resolve-feedback`, `prepare-review`, `merge` — see the
+"after a push" section below).
 
 ## The headline
 
@@ -75,8 +75,9 @@ Report these in one line, with no table — there are no rows to draw:
 When the report follows a push rather than an explicit ask, the shape above is
 unchanged; only these hold in addition:
 
-- **The headline carries the branch** the push landed on, so a report arriving
-  after the fact is unambiguous about what it describes.
+- **The headline carries the branch** the commit landed on — the pushed branch,
+  or the merge target for a `merge` — so a report arriving after the fact is
+  unambiguous about what it describes.
 - **On `⏭️`/`⏸️`/`🔄`, say what the user's next move is** — a blocked pipeline
   won't progress on its own, and a timed-out watch can be resumed.
 - **One report per pipeline.** The skills gate on the runs they've reported, so
