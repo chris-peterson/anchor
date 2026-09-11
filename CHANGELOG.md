@@ -10,6 +10,7 @@
 
 - **`/anchor:merge` says less.** Its whole output is the repo and CR, the gate table, the merge confirmation, the result line, and the pipeline. The merge method reaches you as the confirmation prompt rather than a paragraph in front of it, a setting that left the default standing goes unmentioned, and an alarming-but-meaningless line from the forge CLI is no longer explained back to you.
 - **A drafted issue now says where it is about to land.** `/anchor:issue` heads the approval with a link to the destination — the project's issue list when filing, the issue itself when updating — followed by the title and then the labels and milestone. Filing against a repo other than the one you're standing in is visible before you approve it, rather than after the URL comes back.
+- **The docs site leads with what `anchor` will and won't do under your name.** The home page now states the three approval tenets up front — nothing publishes until you have read the exact words, a review that didn't happen is not an approval, and no AI attribution — each citing the requirement that holds it.
 
 ## 1.13.0
 
