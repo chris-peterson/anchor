@@ -94,8 +94,9 @@ git -C "$repo" add a.txt
 # --- anchor.* config surfaces as JSON -------------------------------------
 git -C "$repo" config anchor.reviewBudgetMins 5
 o=$(run)
+# git folds the section and the setting, so the JSON key is the lowercased form.
 [ "$(jq -r '."anchor.reviewbudgetmins"' <<<"$(val ANCHOR_CONFIG "$o")")" = 5 ] \
-  || fail "ANCHOR_CONFIG should carry anchor.reviewBudgetMins; got $(val ANCHOR_CONFIG "$o")"
+  || fail "ANCHOR_CONFIG should carry anchor.reviewbudgetmins; got $(val ANCHOR_CONFIG "$o")"
 ok "anchor.* keys surface in ANCHOR_CONFIG"
 git -C "$repo" config --unset anchor.reviewBudgetMins
 

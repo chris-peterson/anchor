@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Every `anchor.*` key now reads `anchor.<qualifier>.<setting>`.** The qualifier says what a setting applies to — an artifact type (`cr`, `commit`), a forge (`github`), a destination host (`github.com`), a skill, a review mode — the setting says what is set, and a bare `anchor.<setting>` is the base that applies where nothing narrower does. The qualifier used to be a camelCase prefix on some settings (`crVerbosity`) and a subsection on others (`anchor.edit.tool`), so which shape a key took was unpredictable and there was no room at all for a qualifier nobody had anticipated. `anchor.crVerbosity` is now `anchor.cr.verbosity`, `anchor.mrRules` / `anchor.prRules` are `anchor.gitlab.rules` / `anchor.github.rules`, and the rest are listed under [Renamed keys](https://chris-peterson.github.io/anchor/#/guides/configuring?id=key-migration). **This breaks existing configuration.** A key set under an old name no longer does anything; `anchor` reports it and names its replacement so you can move it. Nothing is carried over automatically — `mrRules` / `prRules` were overrides of the CR rules alone, where `anchor.gitlab.*` / `anchor.github.*` qualify every artifact going to that forge, so carrying them would apply a rule you wrote for CR descriptions to your commits and release notes too.
+- **Settings can now be qualified by forge.** `anchor.github.rules` applies to everything bound for GitHub, not just CR descriptions — which is what the old `prRules` covered. Most-specific wins — forge, then artifact type, then the base — and each setting resolves on its own, so a forge-qualified verbosity leaves the rules key alone.
+
+### Fixed
+
+- **A mis-cased qualifier is reported rather than silently inert.** `git config` folds a section and a key but holds a subsection exactly as written, so `anchor.CR.verbosity` sets a key no read of `anchor.cr.verbosity` ever finds — it looks set and does nothing. `anchor` now names the key and the spelling that would be read. The old two-level names were folded whole, so this trap is new with the shape and worth knowing about.
+
 ## 1.14.0
 
 ### Added

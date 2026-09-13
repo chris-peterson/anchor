@@ -24,6 +24,19 @@ behavior, not an independent authority — review them against the source.
   choice (`gh` for GitHub, `glab` for GitLab).
 - **CR (change request)** — a pull request on GitHub or a merge request on
   GitLab.
+- **Qualifier** — the segment of an `anchor.*` key naming what a setting applies
+  to: an artifact type (`cr`, `commit`), a forge (`github`, `gitlab`), a skill,
+  or a review mode. Distinct from git's own *scope*, the local / global / system
+  layer a value was read from. Defined under CONFIG.
+- **Destination** — the host an artifact publishes to: `origin`'s host for a
+  commit, the target repo's host for everything else. Resolved at run time and
+  never typed into a key — the forge qualifies a sanitization rule, where the
+  destination is what a finding is measured against: an internal hostname is
+  unremarkable in a commit that stays internal. Defined under SANITIZE.
+- **Finding** — one span of drafted prose or staged diff that should not reach
+  the destination: a denied term, a foreign hostname, a credential shape, a local
+  path. Detected by script, resolved by replacement or by an allow term, and
+  never published unresolved. Defined under SANITIZE.
 - **Default branch** — the repo's integration branch (`main`/`master`),
   resolved from `origin/HEAD`.
 - **Ambient rule** — standing guidance a `SessionStart` hook injects into every
@@ -939,8 +952,8 @@ editor's whole answer is the revised artifact, which is why the column below
 ### CONFIG — Configuration
 
 - **[CONFIG-01]** When drafting a commit, CR, or issue, the system shall read
-  project and global `anchor.*` git config keys, matching names
-  case-insensitively.
+  project and global `anchor.*` git config keys, matching the section and the
+  setting case-insensitively and the qualifier exactly (CONFIG-20).
 - **[CONFIG-02]** If an `anchor.*` key is absent, then the system shall keep its
   default and shall not invent a value.
 - **[CONFIG-03]** Where the user mentions a ticket and `anchor.workTrackerBaseUri`
@@ -949,17 +962,17 @@ editor's whole answer is the revised artifact, which is why the column below
 - **[CONFIG-04]** Where `anchor.reviewBudgetMins` is set, the system shall let it
   steer how aggressively the description is trimmed, without changing the
   register.
-- **[CONFIG-05]** Where `anchor.commitRules`/`crRules`/`mrRules`/`prRules`/
-  `issueRules` are set, the system shall layer them onto the relevant defaults,
+- **[CONFIG-05]** Where `anchor.commit.rules`/`cr.rules`/`gitlab.rules`/`github.rules`/
+  `issue.rules` are set, the system shall layer them onto the relevant defaults,
   preferring forge-specific overrides.
 - **[CONFIG-06]** Where `anchor.watchPipelineAfterPush` or
   `anchor.<skill>.watchPipelineAfterPush` is set, the system shall gate the
   after-push pipeline watch on it, preferring the per-skill key; with neither
   set, it shall watch.
-- **[CONFIG-07]** The system shall read `anchor.crVerbosity` as an integer from 1
+- **[CONFIG-07]** The system shall read `anchor.cr.verbosity` as an integer from 1
   to 100 setting where the CR description balances brevity against thoroughness
   — not a word budget, and never a truncation point — preferring
-  `anchor.mrVerbosity`/`anchor.prVerbosity` for the forge in use; with none set,
+  `anchor.gitlab.verbosity`/`anchor.github.verbosity` for the forge in use; with none set,
   it shall draft at `25`.
 - **[CONFIG-08]** When drafting at a verbosity below 100, the system shall shorten
   by abbreviating prose — asides, then explanation down to each section's
@@ -970,17 +983,17 @@ editor's whole answer is the revised artifact, which is why the column below
   and shall retain every such section at every verbosity, each abbreviated no
   further than its floor: one sentence of why for Context, the deep links for the
   Review guide.
-- **[CONFIG-10]** The system shall let `anchor.crVerbosity` steer length only,
+- **[CONFIG-10]** The system shall let `anchor.cr.verbosity` steer length only,
   keeping the register unchanged, and shall resolve it independently of
   `anchor.reviewBudgetMins`, which steers what the description covers.
-- **[CONFIG-11]** The system shall read `anchor.commitVerbosity` as an integer
+- **[CONFIG-11]** The system shall read `anchor.commit.verbosity` as an integer
   from 1 to 100 setting where the commit message body balances brevity against
   thoroughness; with none set, it shall draft at `50`. It shall shorten by
   abbreviating the body — asides, then the decision and alternatives prose, then
   the context paragraph — down to a floor of one sentence of why, and shall leave
   the subject line's format rules and the `Refs:` trailer untouched at every
   setting.
-- **[CONFIG-12]** The system shall read `anchor.issueVerbosity` as an integer
+- **[CONFIG-12]** The system shall read `anchor.issue.verbosity` as an integer
   from 1 to 100 setting where the issue body balances brevity against
   thoroughness; with none set, it shall draft at `75`. It shall shorten by
   abbreviating prose — callouts, then the approach's explanation down to its
@@ -988,7 +1001,7 @@ editor's whole answer is the revised artifact, which is why the column below
   one sentence of why per section, and shall never drop or condense an acceptance
   criterion, which states what done means and is the issue's contract rather than
   its prose.
-- **[CONFIG-13]** The system shall read `anchor.releaseVerbosity` as an integer
+- **[CONFIG-13]** The system shall read `anchor.release.verbosity` as an integer
   from 1 to 100 setting where the release notes balance brevity against
   thoroughness; with none set, it shall draft at `10`. It shall shorten by
   abbreviating prose — rationale, then the consequences a user can infer, then
@@ -1037,6 +1050,46 @@ editor's whole answer is the revised artifact, which is why the column below
   probe given no subject answers for a review nobody is about to open, which is the
   failure DIFF-24's same-`--skill` rule guards against one argument over.
 
+- **[CONFIG-16]** The system shall name every configuration key
+  `anchor.<qualifier>.<setting>`, the subsection stating what the setting is
+  qualified by and the key stating what is set, and shall read an unqualified
+  `anchor.<setting>` as the base that applies where no qualifier matches. One
+  rule across every key is what lets a user predict a key they have not read
+  about, and what leaves room for a qualifier the author did not anticipate — the
+  destination a setting applies at had nowhere to go while a qualifier was
+  spelled as a camelCase prefix on some settings and a subsection on others. The
+  term is *qualifier* rather than *scope* because `git config --show-scope`
+  already names the local / global / system layer a value was read from, and both
+  appear in the same guidance.
+- **[CONFIG-17]** Where several qualifiers match one setting, the system shall
+  prefer the most specific — forge, then artifact type, then the base — and shall
+  resolve each setting independently, so that a qualifier set for one setting does
+  not imply that qualifier for another.
+- **[CONFIG-18]** The system shall name the qualifier ahead of the setting and
+  shall not accept the reverse. `git config` reads the final dot-separated
+  segment as the key name, so the order is not interchangeable: a qualifier
+  carrying a dot survives only at the tail of the subsection —
+  `anchor.github.com.deny` resolves as written where `anchor.deny.github.com`
+  parses as subsection `deny.github` and key `com` — and fixing the order for
+  every key is what keeps a dotted qualifier addable later without moving the
+  keys that already exist.
+- **[CONFIG-19]** Where a key is set under a superseded name, the system shall
+  report that it no longer does anything and shall name the key that replaced it,
+  as CONFIG-15a requires, and shall not act on its value. It shall not carry the
+  value to the replacement: the superseded `mrRules` / `prRules` were forge
+  overrides of the CR rules alone, where `anchor.gitlab.*` / `anchor.github.*`
+  qualify every artifact published to that forge, so a mechanical carry would
+  apply a setting more widely than the user asked for. A rename that does not
+  preserve meaning is not one the system may perform on the user's behalf.
+- **[CONFIG-20]** The system shall spell every qualifier in lower case and shall
+  match it exactly, `git config` holding a subsection case-sensitively where it
+  folds the section and the key: with `anchor.CR.verbosity` set, a read of
+  `anchor.cr.verbosity` finds nothing, where `anchor.commitverbosity` still
+  answers for `anchor.commitVerbosity`. Where the system reads a key whose
+  qualifier differs from a known one only by case, it shall report the key and
+  the spelling that would be read, since the setting is otherwise inert and looks
+  set.
+
 ### FORGE — Forge integration & output
 
 - **[FORGE-01]** Where the project ships a CR or issue template, the system shall
@@ -1062,7 +1115,7 @@ editor's whole answer is the revised artifact, which is why the column below
 - **[FORGE-08]** If a CR-template lookup returns nothing or is permission-denied,
   then the system shall fall through to the next level, and shall use its own
   default shape only when no level supplies a template.
-- **[FORGE-09]** Where `anchor.crTemplateRepo` names a repo, the system shall read
+- **[FORGE-09]** Where `anchor.cr.templateRepo` names a repo, the system shall read
   a CR template from it only after every forge-supplied level has declined.
 
 ### EVENTS — Announcements to sibling plugins
@@ -1227,3 +1280,53 @@ govern what the user must have read before that happens.
   system shall publish none of it and leave the target unchanged.
 - **[CONFIRM-06]** Where the user revises the text at the gate, the system shall
   publish the revised text and shall re-present anything it changes afterward.
+
+### SANITIZE — Sanitizing what reaches a destination
+
+The system drafts prose from whatever the session holds, and a session working
+one repo routinely holds another's hostnames, paths, and credentials. What is
+unremarkable in the terminal is a disclosure once it publishes. These
+requirements govern what the system removes before the CONFIRM gate sees it.
+
+- **[SANITIZE-01]** When the system has drafted prose it will publish under the
+  user's identity, it shall scan that prose against the artifact's destination
+  before presenting it for the CONFIRM-01 approval, so that the text the user
+  approves is the text that publishes.
+- **[SANITIZE-02]** The system shall scan the staged diff alongside the drafted
+  prose, on the same terms.
+- **[SANITIZE-03]** The system shall determine what a scan finds
+  deterministically in a script, and shall decide what stands in a finding's
+  place in the skill: what is present is a fact, and what to say instead is
+  judgment.
+- **[SANITIZE-04]** The system shall find, with nothing configured: a hostname
+  that is neither the destination's own nor a well-known public one; a credential
+  shape — a token, a `user:pass@host` URL, a bearer string; an absolute local
+  path carrying a user account name; and a link to a tracker the destination's
+  readers cannot reach.
+- **[SANITIZE-05]** The system shall read `anchor.deny` as terms that shall not
+  appear at any destination and `anchor.<forge>.deny` as terms that shall not
+  appear at one published to that forge, both multivalued, both matched as bare
+  terms.
+- **[SANITIZE-06]** The system shall read `anchor.allow` and `anchor.<forge>.allow`
+  as terms a SANITIZE-04 finding shall not fire on. A rule that flags the public
+  references a description is supposed to carry teaches the user to approve past
+  the gate, which costs more than the findings it produces are worth.
+- **[SANITIZE-07]** Where the system stands something in a finding's place, the
+  replacement shall preserve the finding's shape — a hostname for a hostname, a
+  path for a path — and shall read as a placeholder the reader can substitute
+  their own value into. Prose naming what was removed leaves a technical sentence
+  carrying an English clause where a token belongs, and the reader loses the
+  shape they would have substituted into.
+- **[SANITIZE-08]** If a shape-preserving replacement for a finding is not clear,
+  then the system shall ask the user what to say rather than choosing one, and
+  shall offer no configuration key carrying replacement text.
+- **[SANITIZE-09]** The system shall present each substitution it made alongside
+  the text at the approval gate, naming what was found and what stands in its
+  place, so that the gate approves the substitutions and the prose together.
+- **[SANITIZE-10]** If a finding is left neither replaced nor allowed, then the
+  system shall publish none of the artifact, as CONFIRM-05 requires of one the
+  user has not approved.
+- **[SANITIZE-11]** The system shall carry a sanitization quality among the
+  review qualities (REVIEW-15) so that a review weighs the same content again,
+  and shall not let that quality stand in for the gate: a review runs once the
+  commit message and the CR description have already published.
