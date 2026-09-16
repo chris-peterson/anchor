@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **The guides have an index of their own.** [Guides](https://chris-peterson.github.io/anchor/#/guides) says what the standing judgment behind each artifact is and which skills read it, grouped so a section is linkable on its own — the [prose guides](https://chris-peterson.github.io/anchor/#/guides?id=prose) that set the voice of every commit message, CR description, issue body, and set of release notes are one link to hand someone. The sidebar carries the whole set, including the two review guides it had been leaving out.
+
 ## 1.14.0
 
 ### Added

@@ -45,7 +45,7 @@ guides/                   reference the skills and rules read at runtime
 templates/                the output shapes the skills produce, read at runtime
 tests/                    bash suites, one per script under test
 SPEC.md / STATUS.md       requirements and their coverage
-docs/                     docsify site; only README, _sidebar, ambient-rules, whats-new, favicon are source
+docs/                     docsify site; only README, _sidebar, ambient-rules, guides, whats-new, favicon are source
 ```
 
 `.claude-plugin/plugin.json`, `hooks/hooks.json`, `plugin.yml`'s `suite.describe`

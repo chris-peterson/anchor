@@ -122,14 +122,10 @@ nothing for it.
   when no skill is invoked, in the form the agent receives them
 - **Skills** — per-skill pages in the sidebar, sourced directly from each
   `SKILL.md`
-- [Configuring `anchor`](/guides/configuring) — extend the commit and CR output
-  with `git config anchor.*` keys and your forge's own PR/MR template
-- [CR verbosity, calibrated](/guides/cr-verbosity) — one changeset rendered at
-  five `anchor.crVerbosity` settings, for picking how long your descriptions run
-- [Forge cookbook](/guides/forge-cookbook) — the `gh` / `glab` invocations and
-  etiquette the skills follow
-- [Release models](/guides/release-models) — the four ways a repo publishes, and
-  which one owns the version bump
+- [Guides](/guides) — the standing judgment the skills apply while they work:
+  the prose guides that set the voice of every message, what a review does when
+  the tool returns no verdict, and the forge, release, and configuration
+  mechanics underneath
 - **Templates** — the output shapes the skills produce:
   [commit message](/templates/commit-message),
   [CR description](/templates/cr-description),
