@@ -6,6 +6,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   suites:
     # One job, discovered: tests/run-all.sh walks tests/*.test.sh and runs the
