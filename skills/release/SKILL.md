@@ -296,7 +296,10 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill release --files \
 
 Map `REVIEW_VERDICT` as the other skills do: only `approved` proceeds — and where
 it carries `editedFields` with `target: "release-notes"`, the saved buffer *is*
-the notes, so publish that text verbatim rather than re-drafting from it;
+the notes, so publish that text verbatim rather than re-drafting from it, and
+comments an approving review still left don't gate the publish — surface them
+after it, and carry out one that asks for the follow-up itself (*file an issue
+for this*);
 `changes-requested` means fold in every comment (they're ungraded — and one whose
 `target` is `file` with a diff in its body is the reviewer's own edit, read per
 `${CLAUDE_PLUGIN_ROOT}/guides/reviewer-edits.md`) and re-open

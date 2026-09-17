@@ -935,6 +935,11 @@ editor's whole answer is the revised artifact, which is why the column below
   split opened through the terminal's scripting interface is created without
   being selected, so the review draws in a pane the keyboard does not reach and
   the reviewer types into the session that is waiting on them instead.
+- **[DIFF-31]** Where the verdict is `approved`, the system shall report the
+  comments it carries without gating the operation on them, and shall carry out
+  a comment that asks for follow-up work to be filed rather than fixed now. A
+  reviewer who approves and still comments has chosen not to block; leaving the
+  request unactioned makes blocking the only way to be heard.
 
 ### CONFIG — Configuration
 
