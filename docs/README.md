@@ -1,6 +1,90 @@
 # <img src="favicon.svg" alt="anchor" width="64" height="64" style="vertical-align: middle"> anchor
 
-[](_home.md ':include')
+[](_tags.md ':include')
+
+<p class="ph-lede">One skill per step of a code change, so your attention goes to the work, not the mechanics.</p>
+
+An agent working for you is also speaking for you: issues, change requests,
+review comments, release notes. Every one of them reaches you in full before
+anyone else sees it.
+
+Keeps your issues, commits, change requests, reviews, and releases consistent:
+the same quality, structure, and formatting every time, not reinvented per
+change.
+
+## Install
+
+```bash
+claude plugin marketplace add chris-peterson/claude-marketplace
+claude plugin install anchor@chris-peterson
+```
+
+## Getting started
+
+First-time setup is two decisions, and neither needs a configuration file.
+
+**What `anchor` may reach on your forge.** It never asks you for a token and
+never stores one: it shells out to your forge's own CLI, which holds the
+credential in your OS keychain.
+
+```bash
+gh auth login      # GitHub remotes
+glab auth login    # GitLab remotes
+```
+
+Both default to a browser sign-in, so for most people there is no personal
+access token to create at all.
+
+**How much it may do without asking.** That dial is your Claude Code permission
+settings, not `anchor`. Read-only is a real place to start, and the skills still
+work: `commit` reviews the diff with you and drafts the message, then stops at
+the prompt for the commit itself. Widen it when you want to.
+
+[**Getting started →**](/getting-started) has the token scopes, everything
+`anchor` can reach with one, and how to pace both dials to your own comfort.
+
+Then edit some code and run:
+
+```text
+/anchor:commit          # review the changeset, write the why, commit and push
+/anchor:prepare-review  # rebase, draft the description, open a draft CR
+```
+
+## Tenets
+
+- **Nothing publishes under your name until you have read the exact words.**
+  Commit messages, CR descriptions, issue bodies, review replies, release notes —
+  each reaches you verbatim before it lands, in the review tool or in the reply,
+  never as a paraphrase and never as the output of a command you would have to
+  expand. Approving a plan, a shape, or a disposition is not approving the prose
+  that later fills it. Decline and nothing is written.
+- **A review that did not happen is not an approval.** A viewer that opened and
+  reported no verdict, an editor closed without saving, a diff tool that is not
+  installed — each ends the step, and `anchor` walks a
+  [fallback](/guides/review-fallback) instead of asking *"you saw the diff —
+  approve?"*. That question converts a tooling failure into your sign-off.
+- **No AI attribution.** No `Co-Authored-By` trailer, no *Generated with* footer.
+  The commit author and CR author fields already record who ran it.
+
+Written down as requirements in [SPEC](/spec): CONFIRM-01..06 for the first,
+DIFF-12 and DIFF-20 for the second, RULE-02 for the third.
+
+## Skills
+
+| Skill | What it does |
+|---|---|
+| [`/anchor:commit`](/skills/commit) | Review the changeset, then commit with a why-first message and push |
+| [`/anchor:prepare-review`](/skills/prepare-review) | Rebase on the default branch and open a draft change request |
+| [`/anchor:review`](/skills/review) | Read every change in a CR, weigh it against your qualities, post findings inline |
+| [`/anchor:resolve-feedback`](/skills/resolve-feedback) | Work a CR's review threads to done, one by one |
+| [`/anchor:merge`](/skills/merge) | Check the merge gates, wait on the pipeline, then land the CR and clean up |
+| [`/anchor:release`](/skills/release) | Work out what's shipping, recommend a version, draft the notes, publish |
+| [`/anchor:backlog`](/skills/backlog) | Rank the forge issues assigned to you so you can pick what to work on next |
+| [`/anchor:issue`](/skills/issue) | File a new forge issue that leads with why the work is needed |
+| [`/anchor:pipeline`](/skills/pipeline) | Report a commit's forge pipeline state, or watch until it settles |
+
+Standing guidance the plugin injects on its own, and the wiring behind it:
+[ambient rules](/ambient-rules), [hooks](/hooks), [events](/events).
 
 ## The lifecycle
 
@@ -30,36 +114,6 @@ The two skills you reach for most, in motion:
 
 <div class="cw-session" data-cw-session="examples"></div>
 
-## Quickstart
-
-`anchor` drives the forge through its official CLI, so the skills that touch a
-change request, issue, pipeline, or release (`prepare-review`, `review`,
-`resolve-feedback`, `merge`, `release`, `pipeline`, `issue`, `backlog`) need the
-one for your `origin` remote installed and authenticated with read+write scope.
-`commit` works without it. Install
-[`gh`](https://cli.github.com) for GitHub or
-[`glab`](https://gitlab.com/gitlab-org/cli#installation) for GitLab, then:
-
-```bash
-gh auth login      # GitHub remotes
-glab auth login    # GitLab remotes
-```
-
-1. **Make some changes**, then commit with a reviewed, *why*-first message.
-   `/anchor:commit` reviews the pending changeset, then commits and pushes once
-   the review is clean:
-
-   ```text
-   /anchor:commit
-   ```
-
-2. **Open it for review.** On the already-pushed branch, draft the
-   change-request description and open the draft CR:
-
-   ```text
-   /anchor:prepare-review
-   ```
-
 ## Why these skills
 
 The diff already shows *what* changed. The expensive, easily-skipped parts are
@@ -75,29 +129,9 @@ path of least resistance.
   with the *why*, and deep-links the critical path so a skim lands on what
   matters.
 
-## Tenets
-
-- **Nothing publishes under your name until you have read the exact words.**
-  Commit messages, CR descriptions, issue bodies, review replies, release notes —
-  each reaches you verbatim before it lands, in the review tool or in the reply,
-  never as a paraphrase and never as the output of a command you would have to
-  expand. Approving a plan, a shape, or a disposition is not approving the prose
-  that later fills it. Decline and nothing is written.
-- **A review that did not happen is not an approval.** A viewer that opened and
-  reported no verdict, an editor closed without saving, a diff tool that is not
-  installed — each ends the step, and `anchor` walks a
-  [fallback](/guides/review-fallback) instead of asking *"you saw the diff —
-  approve?"*. That question converts a tooling failure into your sign-off.
-- **No AI attribution.** No `Co-Authored-By` trailer, no *Generated with* footer.
-  The commit author and CR author fields already record who ran it.
-
-Written down as requirements in [SPEC](/spec): CONFIRM-01..06 for the first,
-DIFF-12 and DIFF-20 for the second, RULE-02 for the third.
-
 ## Optional integrations
 
-The skills run with nothing else installed: with no diff viewer on the machine,
-the review is walked with you in chat.
+The skills run with nothing else installed.
 
 - **[revdiff](https://revdiff.com)** — the tool the skills reach for when
   it's installed and you haven't said otherwise: a terminal-native diff reviewer
@@ -118,6 +152,7 @@ nothing for it.
 
 - [What's new in 1.x](/whats-new) — the steps added since 0.x, and the three
   things that moved
+- [Configuring `anchor`](/guides/configuring) — every knob, once you want one
 - [Ambient rules](/ambient-rules) — the invariants the SessionStart hook injects
   when no skill is invoked, in the form the agent receives them
 - **Skills** — per-skill pages in the sidebar, sourced directly from each

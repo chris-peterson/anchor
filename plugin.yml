@@ -128,9 +128,9 @@ suite:
   # Activated by user-invoked skills (commit, prepare-review) and by ambient
   # rules injected at session start.
   activations: [user, session]
-  gloss: One skill per step of a code change, from issue to release.
-  pitch: "Nervous about keeping code you didn't write? It walks you through the diff first, then commits with a why-first message and opens the change request."
-  what: "Keeps your issues, commits, change requests, reviews, and releases consistent — the same quality, formatting, and content every time, not reinvented per change."
+  gloss: One skill per step of a code change, so your attention goes to the work, not the mechanics.
+  pitch: "An agent working for you is also speaking for you: issues, change requests, review comments, release notes. Every one of them reaches you in full before anyone else sees it."
+  what: "Keeps your issues, commits, change requests, reviews, and releases consistent: the same quality, structure, and formatting every time, not reinvented per change."
   cmds:
     - ["/anchor:commit", "Review the changeset, then commit with a why-first message and push"]
     - ["/anchor:prepare-review", "Rebase on the default branch and open a draft change request"]

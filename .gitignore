@@ -2,6 +2,7 @@
 # hand-maintained sources negated below are tracked.
 docs/*
 !docs/README.md
+!docs/getting-started.md
 !docs/_sidebar.md
 !docs/ambient-rules.md
 !docs/guides.md
