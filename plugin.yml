@@ -5,7 +5,7 @@
 
 name: anchor
 version: 1.14.0
-description: "Focus on the code. Anchor the rest."
+description: "One skill per step of the code-change lifecycle: file an issue, review the diff and commit, open and describe a change request, resolve review feedback, merge, release, and watch the pipeline. Supports multiple source forges (GitHub, GitLab)."
 author: chris-peterson
 repository: https://github.com/chris-peterson/anchor
 license: MIT
@@ -128,7 +128,7 @@ suite:
   # Activated by user-invoked skills (commit, prepare-review) and by ambient
   # rules injected at session start.
   activations: [user, session]
-  gloss: One skill per step of a code change, from issue discovery through release monitoring.
+  gloss: One skill per step of the code-change lifecycle, from issue discovery through release monitoring.
   pitch: "An agent working for you is also speaking for you: issues, change requests, review comments, release notes. Every one of them reaches you in full before anyone else sees it."
   what: "Keeps your issues, commits, change requests, reviews, and releases consistent: the same quality, structure, and formatting every time, not reinvented per change."
   cmds:
