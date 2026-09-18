@@ -6,7 +6,7 @@
 
 ![GitHub Release](https://img.shields.io/github/v/release/chris-peterson/anchor?sort=semver&display_name=release&logo=github&label=latest)
 
-Consistency across the code-change lifecycle: issue, change request, review, release.
+Focus on the code. Anchor the rest.
 
 Read the [📖 docs](https://chris-peterson.github.io/anchor)
 

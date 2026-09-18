@@ -9,6 +9,10 @@
 #
 # The cost is a table that no longer follows skills/ on its own. This is what
 # makes it follow.
+#
+# The tagline has the same shape of problem from the other direction: plugin.yml
+# owns it, .claude-plugin/plugin.json is projected from there, and the root
+# README carries a hand-typed copy for a reader who never opens either.
 # ci-platforms: linux macos
 
 set -euo pipefail
@@ -63,5 +67,17 @@ if grep -q '_home.md' "$home"; then
   fail "Home includes _home.md again, which puts the listings back above Getting started"
 fi
 ok "Home composes its own top half rather than including _home.md"
+
+# --- the root README's tagline still matches plugin.yml's description --------
+readme="$root/README.md"
+manifest="$root/plugin.yml"
+[[ -f "$readme" && -f "$manifest" ]] || fail "README.md or plugin.yml is missing"
+
+tagline="$(sed -n 's/^description: "\(.*\)"$/\1/p' "$manifest" | head -1)"
+[[ -n "$tagline" ]] || fail "plugin.yml has no quoted top-level description to match against"
+
+grep -qF "$tagline" "$readme" \
+  || fail "README.md does not carry plugin.yml's description verbatim: $tagline"
+ok "the root README's tagline matches plugin.yml"
 
 echo "# all checks passed"

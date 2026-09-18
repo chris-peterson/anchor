@@ -1,7 +1,7 @@
 {
   "name": "anchor",
   "version": "1.14.0",
-  "description": "Consistency across the code-change lifecycle: issue, change request, review, release.",
+  "description": "Focus on the code. Anchor the rest.",
   "author": {
     "name": "chris-peterson"
   },

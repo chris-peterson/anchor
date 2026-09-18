@@ -2,7 +2,7 @@
 
 [](_tags.md ':include')
 
-<p class="ph-lede">One skill per step of a code change, so your attention goes to the work, not the mechanics.</p>
+<p class="ph-lede">One skill per step of a code change, from issue discovery through release monitoring.</p>
 
 An agent working for you is also speaking for you: issues, change requests,
 review comments, release notes. Every one of them reaches you in full before
