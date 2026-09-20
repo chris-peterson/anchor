@@ -1,6 +1,6 @@
 # anchor
 
-**Focus on the code. Anchor the rest.**
+**anchor** your development practices.
 
 ![Claude Code](https://img.shields.io/badge/Claude%20Code-%23D97757.svg?logo=claudecode&logoColor=white)
 ![GitHub top language](https://img.shields.io/github/languages/top/chris-peterson/anchor)
