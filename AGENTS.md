@@ -37,7 +37,6 @@ whether the host ships `sha1sum`.
 plugin.yml                canonical descriptor — manifest, marketplace entry, docs previews
 plugin.json               portable Agent Plugins manifest (versionless; plugin.yml owns version)
 skills/<name>/SKILL.md    one skill per lifecycle step; the prompt is the implementation
-skills/<name>/references/ required phase instructions, loaded when that phase runs
 rules/                    ambient rules injected into every session by hooks/emit-rules.sh
 scripts/                  the deterministic helpers the skills shell out to
 scripts/lib/              sourced-only helpers (context resolution, portable temp paths)
@@ -91,11 +90,6 @@ what picks the level.
   the user.** Skills execute quietly: run the step, read the result, move on. The
   discipline is in `guides/execute-quietly.md` and the skills link to it rather
   than restating it.
-- **Keep skill entry points small.** `SKILL.md` has a 6,000-byte budget including
-  frontmatter; linked phase files have an 8,000-byte budget. Keep routing and
-  essential gates in the entry point, and require full phase reads before
-  acting. `scripts/check-skill-context.sh` checks sizes and phase reachability.
-  Shared-guide reading boundaries live in `guides/reading-instructions.md`.
 - **Both forges, always.** A behavior added for `gh` needs its `glab` half in the
   same change, and the invocation gaps between them are recorded in
   `guides/forge-cookbook.md` — read it before re-deriving a command.

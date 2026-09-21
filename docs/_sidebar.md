@@ -30,7 +30,6 @@
   - [Reading a reviewer's edits](/guides/reviewer-edits)
   - [Staying in changeset scope](/guides/changeset-scope)
   - [Host runtime](/guides/host-runtime)
-  - [Reading instructions](/guides/reading-instructions)
   - [Configuring anchor](/guides/configuring)
   - [Forge cookbook](/guides/forge-cookbook)
   - [Release models](/guides/release-models)

@@ -29,9 +29,9 @@ ok()   { echo "ok - $*"; }
 # guides/, and CHANGELOG.md records what past versions shipped — both would
 # report a default that was true when written.
 scan_files=("$root/SPEC.md")
-while IFS= read -r f; do
+for f in "$root"/guides/*.md "$root"/templates/*.md "$root"/rules/*.md "$root"/skills/*/SKILL.md; do
   scan_files+=("$f")
-done < <(find "$root/guides" "$root/templates" "$root/rules" "$root/skills" -type f -name '*.md' | sort)
+done
 
 # --- the table: key -> default, for rows whose default is a bare integer ------
 declared="$(mktemp)"
