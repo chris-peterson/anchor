@@ -1,7 +1,7 @@
 # anchor — Specification
 
-`anchor` is a set of Claude Code skills and ambient rules covering the code-change
-lifecycle — filing issues, committing with why-first messages, opening and
+`anchor` is a set of agent skills and ambient rules for Claude Code and Codex,
+covering the code-change lifecycle — filing issues, committing with why-first messages, opening and
 describing change requests, resolving review feedback, reporting pipelines,
 merging, and releasing — consistently across GitHub and GitLab.
 
@@ -16,10 +16,11 @@ behavior, not an independent authority — review them against the source.
 
 ## Concepts
 
-- **Skill** — a user-invocable command the plugin exposes: `/anchor:commit`,
-  `/anchor:prepare-review`, `/anchor:review`, `/anchor:resolve-feedback`,
-  `/anchor:merge`, `/anchor:release`, `/anchor:issue`, `/anchor:backlog`,
-  `/anchor:pipeline`.
+- **Skill** — a user-invocable workflow the plugin exposes: `anchor:commit`,
+  `anchor:prepare-review`, `anchor:review`, `anchor:resolve-feedback`,
+  `anchor:merge`, `anchor:release`, `anchor:issue`, `anchor:backlog`,
+  `anchor:pipeline`. Claude Code invokes one as `/anchor:<name>` and Codex as
+  `$anchor:<name>` or through `/skills`; requirements use the neutral name.
 - **Forge** — GitHub or GitLab, selected by the `origin` remote; drives the CLI
   choice (`gh` for GitHub, `glab` for GitLab).
 - **CR (change request)** — a pull request on GitHub or a merge request on
@@ -98,7 +99,7 @@ behavior, not an independent authority — review them against the source.
 
 ### COMMIT — Commit
 
-- **[COMMIT-01]** When `/anchor:commit` runs, the system shall run the project's
+- **[COMMIT-01]** When `anchor:commit` runs, the system shall run the project's
   test suite after the pre-flight recon and before drafting a commit message,
   discovering the runner itself so it can report progress and act on a failure.
 - **[COMMIT-02]** If the test suite fails, then the system shall stop and not commit
@@ -191,15 +192,15 @@ behavior, not an independent authority — review them against the source.
 
 The `prepare-review` skill: open (or refresh) a draft CR on an already-pushed
 branch and draft its description. Push happens in
-`/anchor:commit`, so this flow never pushes and imposes no review gate — its
+`anchor:commit`, so this flow never pushes and imposes no review gate — its
 changeset analysis serves the description and Review guide, not a clean-verdict
 check.
 
-- **[PREPARE-01]** When `/anchor:prepare-review` runs, the system shall require
+- **[PREPARE-01]** When `anchor:prepare-review` runs, the system shall require
   an already-pushed branch and gather the changeset via a single recon script,
   acting only on the keys it surfaces.
 - **[PREPARE-02]** If the branch is not yet pushed, then the system shall direct the
-  user to `/anchor:commit` (which commits and pushes) rather than pushing itself.
+  user to `anchor:commit` (which commits and pushes) rather than pushing itself.
 - **[PREPARE-02a]** If HEAD is the default branch with a clean tree and nothing
   ahead of it, then the recon script shall report `NOTHING_TO_REVIEW=1` and exit
   non-zero, and the system shall report that the flow does not apply and stop.
@@ -257,10 +258,10 @@ check.
   no changed line, and a token in no line at all, are different authoring mistakes and
   shall be reported as such.
 - **[PREPARE-10a1]** The system shall read an `anchor:` written outside a link
-  destination as an unresolved placeholder, except where it is a skill invocation
-  (`/anchor:<skill>`). A description that names the skill that drafted it is prose the
-  author wrote on purpose, and reporting it as broken markup is a fault in the check
-  rather than in the draft.
+  destination as an unresolved placeholder, except where it is a host's skill
+  invocation (`/anchor:<skill>` or `$anchor:<skill>`). A description that names
+  the skill that drafted it is prose the author wrote on purpose, and reporting
+  it as broken markup is a fault in the check rather than in the draft.
 - **[PREPARE-10b]** Once the CR exists, the system shall expand every placeholder into
   the forge's own line anchor before the description lands, and shall leave the draft
   unmodified where any placeholder is unresolved.
@@ -311,7 +312,7 @@ Authorship then picks where those findings go — threads on someone else's CR o
 the user approves the wording, or a working-tree fix list on the user's own,
 ending in the handoff that marks the CR ready.
 
-- **[REVIEW-01]** When `/anchor:review` runs, the system shall resolve the target
+- **[REVIEW-01]** When `anchor:review` runs, the system shall resolve the target
   repo as the other skills do and gather the CR via a single recon script,
   acting only on the keys it surfaces.
 - **[REVIEW-02]** The system shall resolve the change request from a number, a
@@ -380,7 +381,7 @@ ending in the handoff that marks the CR ready.
 
 ### FEEDBACK — Resolve feedback
 
-- **[FEEDBACK-01]** When `/anchor:resolve-feedback` runs, the system shall fetch every
+- **[FEEDBACK-01]** When `anchor:resolve-feedback` runs, the system shall fetch every
   unresolved human-authored review thread on the open CR, including
   non-line-anchored change requests.
 - **[FEEDBACK-02]** If there is no open CR or no unresolved feedback, then the system
@@ -408,7 +409,7 @@ ending in the handoff that marks the CR ready.
 Landing an approved CR into the default branch (the `merge` skill) — the terminal
 step after `prepare-review` opens the CR and `resolve-feedback` clears its threads.
 
-- **[MERGE-01]** When `/anchor:merge` runs, the system shall resolve the target repo
+- **[MERGE-01]** When `anchor:merge` runs, the system shall resolve the target repo
   and the open CR for the branch, and shall stop if there is no open CR or it is
   already merged or closed.
 - **[MERGE-02]** If local state does not match the CR head, then the system shall
@@ -419,20 +420,20 @@ step after `prepare-review` opens the CR and `resolve-feedback` clears its threa
 - **[MERGE-04]** If the CR is a draft, then the system shall not merge it silently and
   shall ask whether to mark it ready and proceed.
 - **[MERGE-05]** If the CR conflicts with or is behind its target branch, then the
-  system shall stop and route to a rebase via `/anchor:prepare-review` rather than
+  system shall stop and route to a rebase via `anchor:prepare-review` rather than
   attempt the merge.
 - **[MERGE-06]** While the pipeline is still running, the system shall watch it to a
   terminal state rather than return control for the user to re-ask.
 - **[MERGE-07]** If the pipeline failed, was canceled, or is blocked awaiting a manual
   action, then the system shall stop and report the failed jobs rather than merge.
 - **[MERGE-08]** If required approvals are missing, then the system shall stop and
-  report what is outstanding, pointing at `/anchor:resolve-feedback` when changes
+  report what is outstanding, pointing at `anchor:resolve-feedback` when changes
   were requested.
 - **[MERGE-09]** Where a repo has no approval rules and where the commit has no
   pipeline, the system shall treat that gate as not applicable rather than a failure.
 - **[MERGE-10]** When unresolved human-authored review threads remain, the system shall
   surface them and confirm before merging, offering to hand off to
-  `/anchor:resolve-feedback`.
+  `anchor:resolve-feedback`.
 - **[MERGE-11]** The system shall merge with a commit-preserving merge commit
   (`--no-ff`) by default and shall change the method only where the project or CR is
   configured for a different one, rather than from a judgment about the commit
@@ -464,7 +465,7 @@ Publishing what has landed (the `release` skill) — the step after `merge`, alw
 invoked explicitly. The **release model** decides the whole path, so it is
 established before anything is proposed or written.
 
-- **[RELEASE-01]** When `/anchor:release` runs, the system shall resolve the target
+- **[RELEASE-01]** When `anchor:release` runs, the system shall resolve the target
   repo and gather the release state via a single recon script, acting only on the
   keys it surfaces.
 - **[RELEASE-02]** The system shall establish the repo's release model —
@@ -494,7 +495,7 @@ established before anything is proposed or written.
   manifest, regenerate it, or tag, because the workflow owns those.
 - **[RELEASE-04a]** Where the release model is `dispatch-triggered`, the system
   shall write the notes into the changelog's accruing section without retitling
-  it, land them through `/anchor:commit` before dispatching, and confirm the
+  it, land them through `anchor:commit` before dispatching, and confirm the
   dispatch with the author even though no separate notes review ran.
 - **[RELEASE-05]** Where the release model is `no-version-artifact`, the system shall
   report what the range contains and stop rather than manufacture a version or a
@@ -531,11 +532,11 @@ established before anything is proposed or written.
   the manifest.
 - **[RELEASE-17]** Where the release model is `bump-commit`, the system shall shape
   the bump commit to the repo's prior convention and land it through
-  `/anchor:commit` rather than running git commit and push itself.
+  `anchor:commit` rather than running git commit and push itself.
 - **[RELEASE-18]** Where a changelog holds an accruing Unreleased section, the system
   shall retitle it to the new version rather than insert a new section above it.
 - **[RELEASE-19]** The system shall not cascade from a merge into a release;
-  `/anchor:merge` shall name `release` as the next step without invoking it.
+  `anchor:merge` shall name `release` as the next step without invoking it.
 
 ### ISSUES — Issues
 
@@ -601,7 +602,7 @@ and writing nothing.
 
 ### CI — Pipeline
 
-- **[CI-01]** When `/anchor:pipeline` runs without a watch request, the system
+- **[CI-01]** When `anchor:pipeline` runs without a watch request, the system
   shall report the commit's current pipeline state once.
 - **[CI-02]** When the ask is to wait or be notified, the system shall watch the
   pipeline in the background until it settles, then report.
@@ -700,9 +701,9 @@ editor's whole answer is the revised artifact, which is why the column below
 
 - **[DIFF-01]** The system shall launch diff review through the dispatcher, never
   raw `git difftool`, so the result is normalized and the verdict is populated.
-- **[DIFF-02]** While a review runs, the system shall launch the dispatcher as a
-  background call and read its result with the BashOutput tool rather than `tail`
-  or command substitution.
+- **[DIFF-02]** While a review runs, the system shall launch the dispatcher with
+  the host's background/session mechanism, retain its handle, and read captured
+  stdout through that mechanism rather than `tail` or command substitution.
 - **[DIFF-03]** The system shall drive the mode CONFIG-15 selects through one
   adapter per mode, and shall report the mode and the tool that ran it as separate
   fields, so a consumer reads the shape of the review apart from what happened to
@@ -1091,7 +1092,7 @@ editor's whole answer is the revised artifact, which is why the column below
 - **[EVENTS-07]** Where a fact is caused by a script rather than by the model's
   judgment, the system shall announce it from that script, so a run whose skill
   does not reach the end still announces what it did.
-- **[EVENTS-08]** A `/anchor:prepare-review` run shall announce `cr.created` or
+- **[EVENTS-08]** A `anchor:prepare-review` run shall announce `cr.created` or
   `cr.updated` and never both.
 - **[EVENTS-09]** The system shall announce `commit.pushed` after the push
   rather than after the commit, and shall carry a commit web address naming the
@@ -1120,21 +1121,22 @@ editor's whole answer is the revised artifact, which is why the column below
 ### RULE — Ambient rules
 
 - **[RULE-01]** When a session starts, the system shall inject its ambient rules
-  into context via the `SessionStart` hook, expanding `${CLAUDE_PLUGIN_ROOT}`
-  placeholders to real paths.
+  into context via the `SessionStart` hook, name the installed plugin root, and
+  expand `<anchor-root>` placeholders to real paths. It shall accept the host's
+  portable `PLUGIN_ROOT` and Claude Code's compatibility variable.
 - **[RULE-02]** The system shall omit AI/tooling attribution trailers from
   commits and forge artifacts, adding only a Refs trailer when a ticket is
   mentioned.
 - **[RULE-03]** When about to rewrite git history, the system shall route the
-  decision through `/anchor:commit` rather than amend, rebase, or force-push ad
+  decision through `anchor:commit` rather than amend, rebase, or force-push ad
   hoc.
 - **[RULE-04]** The system shall use `gh`/`glab` for mechanical and query forge
   operations, and route artifact *authoring* through the `anchor` skill — a CR
-  description through `/anchor:prepare-review`, an issue through `/anchor:issue`,
-  release notes through `/anchor:release` — rather than a bare `create` /
+  description through `anchor:prepare-review`, an issue through `anchor:issue`,
+  release notes through `anchor:release` — rather than a bare `create` /
   `--body` / `--generate-notes`.
 - **[RULE-04a]** The system shall not offer the CR-creation URL a push prints as
-  the way to open a change request, and shall name `/anchor:prepare-review`
+  the way to open a change request, and shall name `anchor:prepare-review`
   instead. GitHub prints a `Create a pull request` link on a new branch's push
   and GitLab a `merge_requests/new` one, in output the system has just read; the
   form behind it lands the same CR a bare `create` would — non-draft, template
@@ -1145,8 +1147,10 @@ editor's whole answer is the revised artifact, which is why the column below
 
 ### UX — Interaction discipline
 
-- **[UX-01]** The system shall not narrate its plumbing; it shall speak only
-  when the user must act or decide.
+- **[UX-01]** The system shall not narrate its plumbing. It shall speak when the
+  user must act or decide and may emit concise progress updates required by the
+  host, but those updates shall not relay helper output, tool transitions, or
+  internal derivations.
 - **[UX-01a]** Where the system reports a step that did not complete, it shall
   name what happened and what follows in terms the user can see — the editor
   closed, the viewer is not installed, the pane went away — and not in the
@@ -1156,8 +1160,10 @@ editor's whole answer is the revised artifact, which is why the column below
 - **[UX-02]** When a skill starts while a task is already in progress, the
   system shall run silently inside the orchestrator's task list and not create
   its own.
-- **[UX-03]** The system shall present multi-way user decisions through
-  `AskUserQuestion` with the recommended option first.
+- **[UX-03]** The system shall present multi-way user decisions through the
+  host's structured question mechanism when one is available, and otherwise as
+  a direct question carrying the same options, with the recommended option
+  first in either form.
 - **[UX-04]** The system shall not treat the output of a presentation command as
   having shown the user anything, and shall not ask for approval of an artifact it
   has emitted only as tool output — a drafted artifact under decision reaches the
@@ -1169,7 +1175,7 @@ editor's whole answer is the revised artifact, which is why the column below
   caller can grant, shall name the allow rule that covers each prescribed path,
   and shall state the shells and platforms its prescribed commands assume. A
   path-scoped allow rule matches a literal prefix, so a `${TMPDIR:-/tmp}`
-  template resolves outside an `Edit(//tmp/**)` grant on any platform that sets
+  template resolves outside a write grant rooted at `/tmp` on any platform that sets
   `TMPDIR` — macOS always among them; and a compound shape (`;`, `&&`, `$(…)`
   around the consequential step) is gated on the shape alone and cannot be
   approved by any permission entry. The cost lands in the caller's session on
@@ -1210,6 +1216,49 @@ editor's whole answer is the revised artifact, which is why the column below
   reaches the default branch if it survives. The system shall verify the removal
   against the files the reviewer touched before re-reviewing, since a line left
   behind is invisible in a diff already read once.
+
+### HOST — Agent-host compatibility
+
+- **[HOST-01]** Every skill shall resolve bundled paths through the neutral
+  `<anchor-root>` token. It shall accept a plugin-root value supplied by the
+  host, including Claude Code's `CLAUDE_PLUGIN_ROOT`, and otherwise derive the
+  root from the absolute path of its loaded `skills/<name>/SKILL.md`; it shall
+  not assume a hook subprocess exported a variable into later shell calls.
+- **[HOST-02]** Skill instructions shall name capabilities — structured
+  questions, background command sessions, captured stdout, and file reads or
+  writes — rather than require one host's tool names or invocation parameters.
+- **[HOST-03]** Skill handoffs and ambient rules shall use neutral
+  `anchor:<name>` names. User-facing documentation shall show Claude Code's
+  `/anchor:<name>` and Codex's `$anchor:<name>` syntax, and the deep-link checker
+  shall read either form as prose rather than malformed placeholder markup.
+- **[HOST-04]** The package shall carry a root Agent Plugins `plugin.json` and
+  retain `.claude-plugin/plugin.json`, so adding portable discovery does not
+  remove Claude Code discovery. `plugin.yml` shall remain the single release
+  version source.
+- **[HOST-05]** The `SessionStart` hook shall run with portable `PLUGIN_ROOT` or
+  Claude Code's compatibility variable, emit the resolved root into context,
+  and continue to expand ambient-rule paths for either host. Codex installation
+  guidance shall state that bundled hooks require review and trust.
+- **[HOST-06]** Release reconnaissance shall prefer a schema-identified root
+  Agent Plugins manifest, then Codex and Claude compatibility manifests, before
+  an auxiliary language-package manifest. A versionless portable manifest may
+  read its release version from `plugin.yml`; a versioned portable manifest is
+  canonical itself.
+- **[HOST-07]** The platform guide shall state the actual shell boundary:
+  Anchor supports macOS and Linux POSIX shells plus Git Bash or WSL2 on Windows,
+  while native PowerShell remains unsupported until it has an implementation
+  and a CI lane.
+- **[HOST-08]** The repository shall provide a reversible local-development pin
+  for Claude Code and Codex. Pinning shall remove installed marketplace copies,
+  load this checkout through each host's supported local mechanism, and refuse
+  to replace a pre-existing developer-owned path. Unpinning shall remove only
+  the local installation it owns, refresh the canonical marketplace, and
+  install its latest Anchor release. Claude Code's persistent plugin data shall
+  survive either direction. Each host shall be optional: when only one host's
+  CLI is installed, either direction shall operate on that host without
+  creating, inspecting, or removing configuration paths belonging to the absent
+  host; with neither installed it shall be a successful no-op.
+
 ### CONFIRM — Approval before publishing
 
 Everything the system publishes goes out under the user's credentials and in

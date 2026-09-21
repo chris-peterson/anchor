@@ -1,7 +1,7 @@
 # Release models
 
 A repo's **release model** is the answer to one question: *who owns the version
-bump?* `/anchor:release` reads the model from
+bump?* `anchor:release` reads the model from
 `scripts/release-recon.sh` (`RELEASE_MODEL`) and takes the matching path below.
 Exactly one applies per repo.
 
@@ -135,7 +135,7 @@ dispatched workflow usually builds the release body from the changelog's
 dispatch** — so they are reviewed as part of that commit, the way `bump-commit`
 reviews them, and `RELEASE_NOTES_BASELINE` is empty because there is no separate
 notes review to run. Write the notes into `Unreleased` without retitling it (the
-workflow does that) and land them through `/anchor:commit`; only then dispatch.
+workflow does that) and land them through `anchor:commit`; only then dispatch.
 
 The traps:
 

@@ -104,7 +104,7 @@ flowchart TD
 
 ## In action
 
-Tests pass, and `/anchor:commit` does the rest — staging, a why-first message,
+Tests pass, and the `anchor:commit` skill does the rest — staging, a why-first message,
 and a code review where a rejected change comes back as a concrete
 edit, not a vague "looks off":
 
@@ -113,6 +113,52 @@ edit, not a vague "looks off":
 The two skills you reach for most, in motion:
 
 <div class="cw-session" data-cw-session="examples"></div>
+
+## Quickstart
+
+Anchor supports both Claude Code and Codex. Skill names are the same on both
+hosts; only the explicit invocation syntax differs:
+
+| Host | Commit | Prepare review |
+|---|---|---|
+| Claude Code | `/anchor:commit` | `/anchor:prepare-review` |
+| Codex | `$anchor:commit` | `$anchor:prepare-review` |
+
+Codex users must review and trust Anchor's bundled `SessionStart` hook through
+`/hooks` before its ambient forge and history-rewrite rules load. Full plugin
+support is available in Codex surfaces that load plugins. The Codex IDE
+extension does not currently load plugins; a repo- or user-scoped skills install
+there still exposes the workflows but cannot inject Anchor's ambient rules.
+
+`anchor` drives the forge through its official CLI, so the skills that touch a
+change request, issue, pipeline, or release (`prepare-review`, `review`,
+`resolve-feedback`, `merge`, `release`, `pipeline`, `issue`, `backlog`) need the
+one for your `origin` remote installed and authenticated with read+write scope.
+`commit` works without it. Install
+[`gh`](https://cli.github.com) for GitHub or
+[`glab`](https://gitlab.com/gitlab-org/cli#installation) for GitLab, then:
+
+```bash
+gh auth login      # GitHub remotes
+glab auth login    # GitLab remotes
+```
+
+1. **Make some changes**, then commit with a reviewed, *why*-first message.
+   `anchor:commit` reviews the pending changeset, then commits and pushes once
+   the review is clean:
+
+   ```text
+   Claude Code: /anchor:commit
+   Codex:       $anchor:commit
+   ```
+
+2. **Open it for review.** On the already-pushed branch, draft the
+   change-request description and open the draft CR:
+
+   ```text
+   Claude Code: /anchor:prepare-review
+   Codex:       $anchor:prepare-review
+   ```
 
 ## Why these skills
 

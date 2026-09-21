@@ -7,7 +7,7 @@ verdict, which `gh` or `glab` invocation is the right one.
 
 They ship inside the plugin and are read at runtime. A skill loads the guide for
 the decision in front of it, at the moment it reaches that decision, which is why
-the same voice comes out of `/anchor:commit` and `/anchor:issue` even though
+the same voice comes out of `anchor:commit` and `anchor:issue` even though
 neither skill restates it. The [templates](/templates/commit-message) own the
 *shape* of each artifact, which sections in what order; the guides own the
 judgment applied while filling it.
@@ -43,6 +43,7 @@ to say while doing it.
 
 | Guide | What it settles | Read by |
 |---|---|---|
+| [Host runtime](/guides/host-runtime) | How bundled paths, questions, background commands, and skill handoffs map across Claude Code and Codex | every skill |
 | [Configuring `anchor`](/guides/configuring) | Every `git config anchor.*` key, and how your forge's own CR template composes with `anchor`'s voice | `commit`, `prepare-review`, `issue` |
 | [Forge cookbook](/guides/forge-cookbook) | The canonical `gh` and `glab` invocations, and the places the two CLIs diverge | every skill that touches the forge |
 | [Release models](/guides/release-models) | Who owns the version bump, and the publish step each model takes | `release` |

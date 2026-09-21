@@ -49,7 +49,7 @@ against `payments-api`", "open the MR in `customer-svc`" — resolve the name ra
 than guessing from cwd or improvising a `-R` slug:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh" <name>
+bash "<anchor-root>/scripts/resolve-target.sh" <name>
 ```
 
 It takes a remote URL, a `owner/repo` (or `group/subgroup/repo`) slug, or a bare
@@ -153,7 +153,7 @@ For any body with tables, code blocks, or fenced content, write it to a temp
 file and reference the file — no command substitution, no escape gymnastics.
 
 Pick the path with `mktemp -u` — `-u` prints a unique name *without* creating
-the file, so a follow-up `Write` treats it as fresh, and a random name won't
+the file, so a follow-up file write treats it as fresh, and a random name won't
 clobber a parallel session that hardcodes the same path. Keep the `XXXXXX`
 **trailing** and append the suffix *outside* the template: BSD/macOS mktemp only
 replaces a trailing run, so it takes `cr-body.XXXXXX.md` as a literal filename
@@ -168,7 +168,7 @@ echo "$(mktemp -u /tmp/cr-body.XXXXXX).md"
 
 The `/tmp` is literal rather than `${TMPDIR:-/tmp}`: a caller grants paths by
 prefix, and on macOS `TMPDIR` is always set, so the template resolves to
-`/var/folders/…` and misses an `Edit(//tmp/**)` grant. See
+`/var/folders/…` and misses a write grant rooted at `/tmp`. See
 [temp-paths](/guides/temp-paths) for the platform table, the allow rules to pair
 with it, and why anchor's own scripts honor `$TMPDIR` where this guidance does
 not.
@@ -216,8 +216,8 @@ gh repo edit --delete-branch-on-merge       # turn it on — every PR in the rep
 ```
 
 With it off, the branch survives any merge that doesn't pass `--delete-branch`
-(the web UI, a bare `gh pr merge`, auto-merge). `/anchor:prepare-review` reports
-the setting as `DELETE_BRANCH_ON_MERGE` and offers the repo edit; `/anchor:merge`
+(the web UI, a bare `gh pr merge`, auto-merge). `anchor:prepare-review` reports
+the setting as `DELETE_BRANCH_ON_MERGE` and offers the repo edit; `anchor:merge`
 passes `--delete-branch` regardless.
 
 ## MR create (GitLab)
@@ -342,7 +342,7 @@ is already ready doesn't send it back to draft, unlike `--remove-source-branch`
 (see MR create above).
 
 `anchor`'s own path to the ready half is
-`${CLAUDE_PLUGIN_ROOT}/scripts/mark-ready.sh --forge <forge> --cr <num>`, which
+`<anchor-root>/scripts/mark-ready.sh --forge <forge> --cr <num>`, which
 covers both forges, reads the flag before touching it, and announces `cr.ready`.
 Use it rather than the bare call, so a CR someone already marked ready comes back
 as `ALREADY_READY=1` instead of as a transition this run reported making. The
@@ -364,7 +364,7 @@ multiple users correctly, so there is no need for the `glab api` form here.
 
 Before merging, read whether the forge considers the CR landable — conflicts or a
 behind-base branch make the merge fail (or require a rebase first, which
-`/anchor:prepare-review` owns).
+`anchor:prepare-review` owns).
 
 ```bash
 # GitHub — mergeable is MERGEABLE / CONFLICTING / UNKNOWN;
@@ -450,7 +450,7 @@ glab mr view <iid> --output json | jq '{squash}'
 ## Read back what a merge landed
 
 A merge produces two facts the run that performed it doesn't hold: when the forge
-recorded it, and which commit it landed as. `/anchor:merge` announces both, so
+recorded it, and which commit it landed as. `anchor:merge` announces both, so
 they come from the forge rather than from the local clock and the pre-merge head.
 
 ```bash
@@ -556,7 +556,7 @@ glab release list --per-page 5
 
 Where CI owns the version bump, the workflow derives the version and creates the
 release, so the tag this run recommended is not necessarily what published.
-`/anchor:release` announces what the forge holds instead.
+`anchor:release` announces what the forge holds instead.
 
 ```bash
 # The project's latest release, which is what a workflow just published.
@@ -801,7 +801,7 @@ two are not equally specified: GitHub documents `subject_type: file` (with `line
 then not required), while GitLab lists `file` among `position_type`'s allowed
 values without saying what the rest of the position must hold. Using one and not
 the other would make the same review render differently depending on where the
-CR lives, so `/anchor:review` anchors to lines and routes everything else into
+CR lives, so `anchor:review` anchors to lines and routes everything else into
 the summary comment.
 
 ## List unresolved review threads
@@ -859,8 +859,8 @@ gh api graphql -f query='mutation($id:ID!){
 A commit's CI run goes by different names per forge: GitHub calls it a
 **workflow run** (the *Actions* tab), GitLab a **pipeline**. `anchor` uses
 **pipeline** as the generic term for both — pick `gh run` on a GitHub origin,
-`glab` (the pipelines API) on a GitLab one. The `/anchor:pipeline` skill and its
-`${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh` helper wrap the invocations
+`glab` (the pipelines API) on a GitLab one. The `anchor:pipeline` skill and its
+`<anchor-root>/scripts/pipeline-status.sh` helper wrap the invocations
 below; reach for them directly when scripting a one-off.
 
 **Find the pipeline for a commit — ask by SHA, not by ref.** A run fired by a

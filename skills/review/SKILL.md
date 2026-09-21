@@ -5,10 +5,14 @@ description: Review an open change request — read every change in the diff vie
 
 # Review
 
+Before using a bundled path, resolve `<anchor-root>` to the installed plugin root
+from the host's value or this `SKILL.md` path, then follow the host-neutral tool
+conventions in `<anchor-root>/guides/host-runtime.md`.
+
 Take a change request and drive it to feedback: resolve the CR, read the
 description that says why it exists, look at every change, examine the diff
 against each quality in
-`${CLAUDE_PLUGIN_ROOT}/templates/review-qualities.md`, and collect findings that
+`<anchor-root>/templates/review-qualities.md`, and collect findings that
 name a file and a line.
 
 Where those findings go depends on who wrote the CR, and **authorship picks the
@@ -20,10 +24,10 @@ mode** (Step 5):
 | the user's own (`IS_OWN_CR=1`) | **self-review** | a fix list worked in the tree; nothing posts, and the mode ends by offering to mark the CR ready |
 
 Self-review is the cold pass an author makes before handing a change to anyone
-else. `/anchor:prepare-review` opens the CR as a draft precisely so that
+else. `anchor:prepare-review` opens the CR as a draft precisely so that
 decision stays theirs, and this is where they make it.
 
-This is also the other side of `/anchor:resolve-feedback`. That skill brings a
+This is also the other side of `anchor:resolve-feedback`. That skill brings a
 reviewer's findings back into your branch; this one produces them.
 
 **Recording a verdict is not this skill's act.** Approving a CR (`gh pr review
@@ -34,16 +38,16 @@ so; it never approves and never requests changes as a forge state.
 CR = change request: a pull request on GitHub, a merge request on GitLab. Pick
 the forge tool by the resolved CR, not by the working directory's `origin`.
 
-**Don't narrate your work.** Every step below is an operating instruction —
+**Keep plumbing quiet.** Every step below is an operating instruction —
 follow the execute-quietly discipline:
-`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. The only things worth
+`<anchor-root>/guides/execute-quietly.md`. The only things worth
 surfacing are the resolved CR in one line, the questions in Step 2, the drafted
 findings, and what landed where.
 
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
 flowchart TD
-    Start(["/anchor:review"]) --> Resolve["Resolve + fetch the CR"]
+    Start(["anchor:review"]) --> Resolve["Resolve + fetch the CR"]
 
     subgraph "Step 1-2: Orient"
         Resolve --> Open{Open CR?}
@@ -85,8 +89,9 @@ flowchart TD
 
 ## Task tracking when orchestrated
 
-At the very start, call `TaskList`. If any task is already `in_progress`, run
-silently inside the orchestrator's list. Otherwise enumerate:
+If the host exposes task tracking, inspect it first. If any task is already in
+progress, run inside the orchestrator's list. If the host has no task mechanism,
+follow an evident enclosing workflow without inventing one. Otherwise enumerate:
 
 - `Step 1: Fetch the change request`
 - `Step 3: Review every change`
@@ -98,7 +103,7 @@ silently inside the orchestrator's list. Otherwise enumerate:
 
 **Target repo.** Resolve it as the other `anchor` skills do. **With a name
 argument**, resolve it with
-`${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh <name>`: `TARGET_VIA=resolved` →
+`<anchor-root>/scripts/resolve-target.sh <name>`: `TARGET_VIA=resolved` →
 pass `TARGET_LOCAL` as `--repo`; empty `TARGET_LOCAL` → ask where the checkout
 lives; `ambiguous` → prompt with `TARGET_CANDIDATES`; `cwd` → the working
 directory's repo. **With a CR URL**, the URL names the project — if that project
@@ -108,7 +113,7 @@ skill reads a work tree, so it needs one.
 Then gather everything in one call:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-cr.sh" <number|url|branch> [--repo <path>]
+bash "<anchor-root>/scripts/review-cr.sh" <number|url|branch> [--repo <path>]
 ```
 
 With no argument it resolves the open CR for the current branch. Read the block
@@ -161,7 +166,7 @@ over the umbrella one, falls back to what the subject picks, and considers only
 tools that can actually open:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill review --probe
+bash "<anchor-root>/scripts/review-diff.sh" --skill review --probe
 ```
 
 Two answers mean **don't launch** — this skill's subject is a changeset, and
@@ -176,14 +181,14 @@ neither reaches one:
   about a different question and doesn't rescue it here.
 
 Either way, go to the changeset rung of
-`${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md` — file by file, in your reply —
+`<anchor-root>/guides/review-fallback.md` — file by file, in your reply —
 rather than launching into a refusal.
 
-Otherwise launch it as a **background** Bash call (`run_in_background: true`) —
-the viewer blocks until closed:
+Otherwise launch it with the host's background/session mechanism and retain its
+handle — the viewer blocks until closed:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill review \
+bash "<anchor-root>/scripts/review-diff.sh" --skill review \
   --mode <REVIEW_MODE> [--repo <path>] <DIFF_RANGE> \
   --title '<CR_TITLE>' \
   --detail CR=<CR_URL> --detail author=<CR_AUTHOR> --detail files=<CHANGED_FILES>
@@ -197,17 +202,17 @@ change labelled with your last commit.
 their `+`/`−` counts, plus the CR number, its author, and the tool. This is
 somebody else's change, so the set is what says whether you are about to review
 what they asked you to. The shape is in
-`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "show what is going
+`<anchor-root>/guides/execute-quietly.md` under "show what is going
 under review". Nothing else about the launch is output.
 
-Read the result with the **BashOutput tool**. This skill reads the verdict
-differently from its siblings, because here the reviewer's comments are the
-*product* rather than an obstacle:
+Read the captured result through the host's command-session mechanism. This
+skill reads the verdict differently from its siblings, because here the
+reviewer's comments are the *product* rather than an obstacle:
 
 - **`changes-requested`** — the expected outcome. `REVIEW_OUTPUT.comments` are
   findings the user typed; carry them into Step 4 verbatim. One whose `target` is
   `file` with a diff in its body is a finding they typed *into the code* through
-  a difftool — read it per `${CLAUDE_PLUGIN_ROOT}/guides/reviewer-edits.md` and carry
+  a difftool — read it per `<anchor-root>/guides/reviewer-edits.md` and carry
   what it says, not the patch, into the summary.
 - **`approved`** — every change was read and nothing was flagged. That is a real
   review with no inline findings; Step 4 still writes the summary.
@@ -219,7 +224,7 @@ differently from its siblings, because here the reviewer's comments are the
   selected anyway and refused
   the changeset (DIFF-15), which the probe above catches first; otherwise read
   `raw.exitCode`. Say what happened in one line, then walk the changeset rung of
-  `${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md` — file by file, in your reply.
+  `<anchor-root>/guides/review-fallback.md` — file by file, in your reply.
   Don't ask whether the user read the changes: this step's product *is* the
   reading, so an answer either way leaves you with no findings to carry forward.
 - **No verdict line at all** — treat as `no-verdict`; absent output is never a
@@ -231,7 +236,7 @@ control: hand the viewer the entire `DIFF_RANGE`, every time.
 
 ## Step 4: Examine the diff against each quality
 
-**Read `${CLAUDE_PLUGIN_ROOT}/templates/review-qualities.md` before the
+**Read `<anchor-root>/templates/review-qualities.md` before the
 examination, not after.** It lists the qualities a review weighs and the
 instruction their findings come back in. It is the user's file to edit, so the list as it stands is
 the review's scope: don't weigh a quality it doesn't list, and don't skip one it
@@ -289,7 +294,7 @@ type into the CR:
 - **Skip what the diff already shows.** The author can see which files changed.
 
 The register is `anchor`'s everywhere: plain words, no loaded framing
-(`${CLAUDE_PLUGIN_ROOT}/guides/loaded-framing.md`), no size-minimizers, no praise
+(`<anchor-root>/guides/loaded-framing.md`), no size-minimizers, no praise
 padding. Findings go out under the reviewer's name and read as the reviewer
 talking.
 
@@ -322,7 +327,7 @@ finding the fan-out produced.
 Render the findings and revise them with the user until they say what they mean:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-post.sh" --preview --findings <FINDINGS_PATH>
+bash "<anchor-root>/scripts/review-post.sh" --preview --findings <FINDINGS_PATH>
 ```
 
 Its output is the review — put it in your reply, since a Bash result reaches you
@@ -339,14 +344,15 @@ reviewer in it, so the findings are a fix list instead. Steps 6 and 7 don't run.
    reply as Step 4 says. Ask which findings they want acted on; a finding they
    disagree with is dropped, not argued.
 2. **Fix in the working tree**, one finding at a time, running the project's
-   tests as you go. Commits go through `/anchor:commit`, which decides
+   tests as you go. Commits go through `anchor:commit`, which decides
    amend-vs-new-commit from the push state and the draft flag — don't rewrite
    history here by hand.
 3. **Re-review the corrected diff.** Re-run Step 1 so `CR_HEAD_SHA` and
    `DIFF_RANGE` cover the fix commits, then Steps 3 and 4 against the new head.
    That is a loop inside this invocation, not a reason to start over: repeat
    until a pass comes back with nothing the user wants fixed.
-4. **Hand it off.** Ask with `AskUserQuestion` (header `Handoff`):
+4. **Hand it off.** Ask with structured choices when the host supports that
+   (header `Handoff`), or directly otherwise:
 
    - **Mark ready and request reviewers** — ask who, then do both.
    - **Mark ready** — ready with no reviewer named.
@@ -357,7 +363,7 @@ reviewer in it, so the findings are a fix list instead. Steps 6 and 7 don't run.
      the same gates as anyone else's CR.
 
    Neither marking ready nor requesting a reviewer happens without the user
-   picking it here. `/anchor:merge` also offers to mark a CR ready, but it asks
+   picking it here. `anchor:merge` also offers to mark a CR ready, but it asks
    as a gate on the merge — the author is already landing the change by then, so
    the question arrives long after the moment they wanted to hand it over.
 
@@ -366,13 +372,13 @@ reviewer in it, so the findings are a fix list instead. Steps 6 and 7 don't run.
    CR leave draft:
 
    ```bash
-   bash "${CLAUDE_PLUGIN_ROOT}/scripts/mark-ready.sh" --forge <FORGE> --cr <CR_IID>
+   bash "<anchor-root>/scripts/mark-ready.sh" --forge <FORGE> --cr <CR_IID>
    ```
 
    `ALREADY_READY=1` means someone got there first; say that rather than
    reporting a change you didn't make. Requesting reviewers is a separate call,
    and its invocation for both forges is in
-   `${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`.
+   `<anchor-root>/guides/forge-cookbook.md`.
 
 Then report as Step 8 describes.
 
@@ -382,7 +388,8 @@ Everything below posts under the user's name with nothing marking it as drafted
 by an agent, so the words are theirs to approve — not a summary of them, and not
 a plan describing them. The `--preview` output *is* the text; present that.
 
-Then ask with `AskUserQuestion` (header `Post`):
+Then ask with structured choices when the host supports that (header `Post`),
+or directly otherwise:
 
 - **Post all** *(default)* — every thread plus the summary.
 - **Post one at a time** — walk the numbered findings, confirming each; skip any
@@ -396,7 +403,7 @@ not approval of the next.
 ## Step 7: Post the approved findings
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-post.sh" --post \
+bash "<anchor-root>/scripts/review-post.sh" --post \
   --findings <FINDINGS_PATH> --forge <FORGE> --project <PROJECT> --cr <CR_IID> \
   [--host <HOST>] --base-sha <CR_BASE_SHA> --start-sha <CR_START_SHA> \
   [--index <n|summary>]
@@ -438,8 +445,8 @@ Nothing about a verdict — on your own CR there is none to record.
 
 ## Related
 
-`/anchor:prepare-review` writes the description this skill reads first;
-`/anchor:resolve-feedback` is what the author runs when these findings reach
+`anchor:prepare-review` writes the description this skill reads first;
+`anchor:resolve-feedback` is what the author runs when these findings reach
 them. The canonical forge invocations behind Step 7 — line-anchored threads on
 both forges, the batched review, the position payload GitLab silently drops when
-it's malformed — are in `${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`.
+it's malformed — are in `<anchor-root>/guides/forge-cookbook.md`.

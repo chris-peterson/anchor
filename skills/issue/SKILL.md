@@ -5,16 +5,20 @@ description: File a new forge issue (or update an existing one) that leads with 
 
 # Issue
 
+Before using a bundled path, resolve `<anchor-root>` to the installed plugin root
+from the host's value or this `SKILL.md` path, then follow the host-neutral tool
+conventions in `<anchor-root>/guides/host-runtime.md`.
+
 File a new issue whose job is to convey *why* the work is needed and *how* the author intends to approach it — written for a reader who has never seen this part of the system. This is the authoring counterpart to the `backlog` skill: `issue` *drafts and writes* one issue (a new one, or an update to a known one), while `backlog` *surveys what is already filed* to find the next thing to work on. An issue describes work **to be done**, so unlike `commit` and `prepare-review` there is no diff to read from: the raw material is the author's intent, gathered up front.
 
-**Don't narrate your work.** Every step below is an operating instruction, not a script to read aloud — follow the execute-quietly discipline: `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. For this skill, the only things worth surfacing are a question you need answered, the drafted issue with its options, and the final URL.
+**Keep plumbing quiet.** Every step below is an operating instruction, not a script to read aloud — follow the execute-quietly discipline: `<anchor-root>/guides/execute-quietly.md`. For this skill, the only things worth surfacing are a question you need answered, the drafted issue with its options, and the final URL.
 
 Issue = a GitHub issue or a GitLab issue. Pick the forge tool by the `origin` remote.
 
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
 flowchart TD
-    Start(["/issue"]) --> Mode{Issue ref given?}
+    Start(["issue"]) --> Mode{Issue ref given?}
 
     subgraph "Step 1: Resolve the issue"
         Mode -->|Yes| Update["Update: fetch current body as baseline"]
@@ -62,13 +66,15 @@ flowchart TD
 By default this operates on the repo backing the working directory — pick the forge from its `origin` remote (`gh` for GitHub, `glab` for GitLab). But an issue is often filed *against a different repo* than the one you're sitting in ("file this against `payments-api`", "open an issue in `customer-svc`"). Don't guess from cwd or improvise a `-R` from a half-remembered slug — resolve the name:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh" <name>
+bash "<anchor-root>/scripts/resolve-target.sh" <name>
 ```
 
 Act on `TARGET_VIA`:
 
 - **`cwd`** — no match (`TARGET_NOTE` separates "no repo by that name" from "no authenticated forge to ask"). Fall back to the cwd `origin`. If the user clearly meant a repo that *didn't* resolve, say so rather than silently filing against the cwd repo.
-- **`ambiguous`** — `TARGET_CANDIDATES` holds the matches as `[{key,url,local}]`. Present them with `AskUserQuestion` and let the user pick; proceed with the chosen entry.
+- **`ambiguous`** — `TARGET_CANDIDATES` holds the matches as `[{key,url,local}]`.
+  Present them as structured choices when the host supports that, otherwise ask
+  directly, and proceed with the chosen entry.
 - **`resolved`** — exactly one match. Use the emitted fields for every forge call below:
   - `TARGET_FORGE` picks the CLI (`gh` / `glab`).
   - **GitHub:** add `-R <TARGET_PROJECT>` to the `gh issue …` calls.
@@ -123,7 +129,7 @@ Before drafting, check whether the project ships an issue template. This reads t
 - **GitLab:** `.gitlab/issue_templates/*.md` (respect the configured default if more than one)
 - **GitHub:** `.github/ISSUE_TEMPLATE/*.md`, or the legacy `.github/ISSUE_TEMPLATE.md`. A `.yml` **issue form** is a structured format — don't compose prose into it; surface it and let the author fill it in the web UI.
 
-If a template exists, it's the team's required scaffolding — **compose into it, don't replace it.** Fill the sections it defines, preserve its checklists and headings verbatim, and **strip any "delete before publishing" instruction block** after following its guidance. On a structure conflict the team template wins. The composition rules live in the "Honoring a project's forge template" section of `${CLAUDE_PLUGIN_ROOT}/templates/issue-description.md`.
+If a template exists, it's the team's required scaffolding — **compose into it, don't replace it.** Fill the sections it defines, preserve its checklists and headings verbatim, and **strip any "delete before publishing" instruction block** after following its guidance. On a structure conflict the team template wins. The composition rules live in the "Honoring a project's forge template" section of `<anchor-root>/templates/issue-description.md`.
 
 ### Honor `anchor.*` config
 
@@ -141,26 +147,26 @@ git config --get-regexp '^anchor\.' 2>/dev/null
 
   **It abbreviates sections; it never removes one.** Which sections an issue has is the template's call — `anchor`'s own shape, or the team's when the project ships one — and a section that earns its place is present at every setting. Work down this order and stop where the draft balances where the setting asks: callouts and asides → the Proposed approach's explanation, down to its load-bearing decisions → Considerations, down to one sentence per concern → Context's second paragraph, then the first down to its *why* sentence. **Acceptance criteria are never abbreviated at any setting**: they state what done means, so they're the issue's floor the way deep links are a CR description's. A low setting buys fewer words, not louder ones.
 
-`anchor.reviewBudgetMins` does not apply to issues. See `${CLAUDE_PLUGIN_ROOT}/guides/configuring.md` for the full key set.
+`anchor.reviewBudgetMins` does not apply to issues. See `<anchor-root>/guides/configuring.md` for the full key set.
 
 ### Body structure
 
-Draft a concise imperative **title** (under 72 characters), then the body following the section template in `${CLAUDE_PLUGIN_ROOT}/templates/issue-description.md`: **Context**, **Proposed approach**, **Acceptance criteria**, and **Considerations** *(optional)*. The template owns the *shape*; the discipline below owns the *technique*.
+Draft a concise imperative **title** (under 72 characters), then the body following the section template in `<anchor-root>/templates/issue-description.md`: **Context**, **Proposed approach**, **Acceptance criteria**, and **Considerations** *(optional)*. The template owns the *shape*; the discipline below owns the *technique*.
 
 - **Lead with why, write for the unfamiliar reader** — the same ELI5 audience assumption `prepare-review` uses. Establish the system/business context in a sentence or two before the detail.
 - **Keep the approach about the plan, not the code** — what's being built and why the load-bearing decisions were made, not how every class is wired.
 - **Define unfamiliar terms with short callouts** (`> **Term?** …`), sparingly and only where a newcomer would be lost.
 - **Diagram only when it carries shape prose hides** — `anchor`'s mermaid conventions (hand-drawn look, no `\n`/`<br>` in labels).
-- **Same "what to avoid" discipline as a CR description** — no loaded framing (`${CLAUDE_PLUGIN_ROOT}/guides/loaded-framing.md`), no drift artifacts, no leaked deliberation, nothing the reader can already see.
-- **Watch the rendering gotchas** — the body is pasted into a markdown renderer; the bundled `${CLAUDE_PLUGIN_ROOT}/guides/markdown-gotchas.md` lists the traps (character escaping, nested fences, mermaid, `<details>`, tables in lists).
+- **Same "what to avoid" discipline as a CR description** — no loaded framing (`<anchor-root>/guides/loaded-framing.md`), no drift artifacts, no leaked deliberation, nothing the reader can already see.
+- **Watch the rendering gotchas** — the body is pasted into a markdown renderer; the bundled `<anchor-root>/guides/markdown-gotchas.md` lists the traps (character escaping, nested fences, mermaid, `<details>`, tables in lists).
 
 ## Step 5: Labels and milestone
 
-An issue lands in someone's triage queue, so its metadata is part of filing it. Read what the project actually defines rather than naming a label from memory — an invented name is how a repo ends up with `bugfix` sitting next to `bug`. The listing calls for both forges are in the bundled forge cookbook (`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`), section "Labels and milestones".
+An issue lands in someone's triage queue, so its metadata is part of filing it. Read what the project actually defines rather than naming a label from memory — an invented name is how a repo ends up with `bugfix` sitting next to `bug`. The listing calls for both forges are in the bundled forge cookbook (`<anchor-root>/guides/forge-cookbook.md`), section "Labels and milestones".
 
 Both listings are pure-remote, so a resolved target needs no checkout — retarget per **Target repo**: `-R <TARGET_PROJECT>` on `gh label list` and `TARGET_PROJECT` substituted for `{owner}/{repo}` in the `gh api` path; `-R <TARGET_URL>` on `glab label list`, `--project <TARGET_PROJECT>` on `glab milestone list`, `--hostname <TARGET_HOST>` on both.
 
-**Labels.** The descriptions the repo ships on its labels are the triage taxonomy — match the issue against them and apply every label that plainly fits. Two cases go to the user with `AskUserQuestion` rather than being decided for them: several labels are plausible and choosing between them is a judgment about the work (`bug` vs `enhancement` for behavior someone considers wrong), or nothing in the set fits an issue a reader would expect to be labelled. No label is a legitimate answer to either.
+**Labels.** The descriptions the repo ships on its labels are the triage taxonomy — match the issue against them and apply every label that plainly fits. Two cases go to the user as structured choices when the host supports that, or as a direct question otherwise, rather than being decided for them: several labels are plausible and choosing between them is a judgment about the work (`bug` vs `enhancement` for behavior someone considers wrong), or nothing in the set fits an issue a reader would expect to be labelled. No label is a legitimate answer to either.
 
 **Milestone.** Only the open ones (GitLab: `active`) are candidates. Attach one where exactly one plausibly fits — the release the work has to ship in, or the milestone whose theme this work is part of. Where two or more fit, ask; where the repo has no open milestone, or none relates to this work, attach none and don't raise it.
 
@@ -168,9 +174,12 @@ Both listings are pure-remote, so a resolved target needs no checkout — retarg
 
 ## Step 6: Output
 
-Write the drafted body to a temp file (`$(mktemp -u /tmp/issue-draft.XXXXXX).md`) — the literal `/tmp` is what a caller's `Edit(//tmp/**)` grant reaches (`${CLAUDE_PLUGIN_ROOT}/guides/temp-paths.md`).
+Write the drafted body to a temp file (`$(mktemp -u /tmp/issue-draft.XXXXXX).md`) — the literal `/tmp` is what a caller's path-scoped write grant reaches (`<anchor-root>/guides/temp-paths.md`).
 
-**Present the change — in your own message.** Running a command does *not* show the user anything: a Bash tool's output goes to you, and the terminal collapses it to a `+80 lines` stub they'd have to expand. Asking them to approve off the back of that is asking them to approve blind. So whatever you present, it goes in the reply as text.
+**Present the change — in your own message.** Running a command is not a portable
+way to show the user anything: hosts can hide or collapse tool output. Asking
+them to approve off the back of that is asking them to approve blind. So
+whatever you present goes in the reply as text.
 
 When updating an existing issue, diff the draft against the baseline captured in Step 1 and **paste that diff** into a fenced `diff` block in your message:
 
@@ -197,7 +206,9 @@ Where the link points:
 - **Create** — the target project's issue list: `TARGET_URL` where a target resolved, else the web URL of the cwd repo's `origin`, plus `/issues` on GitHub or `/-/issues` on GitLab.
 - **Update** — the issue's own URL, which the forge reports as `url` (GitHub) / `web_url` (GitLab).
 
-Then ask the user how to proceed with the `AskUserQuestion` tool. Use header `Disposition` and these options (default first):
+Then ask the user how to proceed, using structured choices when the host supports
+that (header `Disposition`) or a direct question otherwise. Use these options
+(default first):
 
 - **Yes (write)** — create the issue (or push the updated body). The body comes from `<draft-path>`. On a 401/403 or similar auth failure, surface it and ask the user to refresh credentials — don't silently fall back to copy-only (per the fail-fast-on-auth rule).
 - **No (copy only)** — print the title and body for the user to paste into the web UI themselves.
@@ -205,7 +216,7 @@ Then ask the user how to proceed with the `AskUserQuestion` tool. Use header `Di
 
 ### Yes (write)
 
-`anchor` assigns new issues to you, and applies the labels and milestone from Step 5 in the same write. The canonical invocations — including the `glab api`-then-`glab issue update` two-step GitLab needs for a file-sourced body, and the update-from-file forms — live in the bundled forge cookbook (`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`), sections "Issue create", "Issue description update from a file", and "Labels and milestones".
+`anchor` assigns new issues to you, and applies the labels and milestone from Step 5 in the same write. The canonical invocations — including the `glab api`-then-`glab issue update` two-step GitLab needs for a file-sourced body, and the update-from-file forms — live in the bundled forge cookbook (`<anchor-root>/guides/forge-cookbook.md`), sections "Issue create", "Issue description update from a file", and "Labels and milestones".
 
 When a target resolved (see **Target repo**), retarget these off the cwd repo: add `-R <TARGET_PROJECT>` to the `gh issue` calls; on GitLab substitute the URL-encoded `TARGET_PROJECT` for `:fullpath` and add `--hostname <TARGET_HOST>` on the `glab api` calls, and `-R <TARGET_URL>` on `glab issue update`.
 
@@ -237,7 +248,7 @@ its own work from tracker URLs can see the new issue without scraping one out of
 your prose:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/announce.sh" issue.created \
+bash "<anchor-root>/scripts/announce.sh" issue.created \
   "uri=<issue url>" "title=<title>"
 ```
 
@@ -248,10 +259,10 @@ landed into a tool call that failed.
 
 ### Edit
 
-The review is the preferred edit surface but **optional** — it runs when a review tool is available. Which one follows the subject: filing a new issue leaves `<current-path>` empty, so the body is all new and `edit` mode takes it — it opens in the user's editor and whatever they save *is* the body. Updating an existing issue has a current body to diff against, so [revdiff](https://revdiff.com) takes it and the user comments where you fold the comments in. A configured tool, or an editor with nowhere to open, overrides that. Open the current body vs. the draft (when updating) or the draft alone, via the dispatcher as a **background** Bash call so it doesn't hold the turn open:
+The review is the preferred edit surface but **optional** — it runs when a review tool is available. Which one follows the subject: filing a new issue leaves `<current-path>` empty, so the body is all new and `edit` mode takes it — it opens in the user's editor and whatever they save *is* the body. Updating an existing issue has a current body to diff against, so [revdiff](https://revdiff.com) takes it and the user comments where you fold the comments in. A configured tool, or an editor with nowhere to open, overrides that. Open the current body vs. the draft (when updating) or the draft alone via the dispatcher, using the host's background/session mechanism and retaining its handle so it doesn't hold the turn open:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill issue --files \
+bash "<anchor-root>/scripts/review-diff.sh" --skill issue --files \
   <current-path> <draft-path> \
   --title 'Issue body — proposed edits' \
   --detail repo=<repo>
@@ -260,7 +271,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill issue --files \
 `--skill issue` tells the adapter the artifact is an issue body; the mode itself follows the subject. Ask which one it will be before launching, under the **same `--files` pair the launch uses** — the probe resolves the mode the way the launch does, so a bare one answers for a different review and names a tool this one will never open:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill issue --probe \
+bash "<anchor-root>/scripts/review-diff.sh" --skill issue --probe \
   --files <current-path> <draft-path>
 ```
 
@@ -268,10 +279,11 @@ Then say in one line where the draft is about to appear:
 
 - **`REVIEW_MODE=edit`** — the editor renders wherever its host puts it, and on a GUI editor that is a window behind the terminal the user is watching. A review silently waiting in another window is indistinguishable from nothing having opened, so name it.
 - **`REVIEW_MODE_CONFIGURED` present** — the run is opening something other than what the preference named. Name that too.
-- **`REVIEW_MODE_SOURCE=subject` / `REVIEW_TOOL_SOURCE=default`** — anchor picked that half rather than the user. Add the configuration hint from `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "when anchor picked the tool"; `REVIEW_TOOL` names the tool about to open.
+- **`REVIEW_MODE_SOURCE=subject` / `REVIEW_TOOL_SOURCE=default`** — anchor picked that half rather than the user. Add the configuration hint from `<anchor-root>/guides/execute-quietly.md` under "when anchor picked the tool"; `REVIEW_TOOL` names the tool about to open.
 
-Say it as part of the manifest the launch carries — a table naming the repo, the issue (its number and title when updating one), the tool from that probe, and the sections the draft holds. The shape is in `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "show what is going under review". Nothing else about the launch is output; after the table, the next thing you say is the verdict.
+Say it as part of the manifest the launch carries — a table naming the repo, the issue (its number and title when updating one), the tool from that probe, and the sections the draft holds. The shape is in `<anchor-root>/guides/execute-quietly.md` under "show what is going under review". Nothing else about the launch is output; after the table, the next thing you say is the verdict.
 
-Read the verdict back with the **BashOutput tool** (not `tail` / `$(...)`). Only `REVIEW_VERDICT` `approved` is approval; an `approved` result carrying `editedFields` with `target: "issue-body"` — `edit` mode, where the saved buffer *is* the body — means file that text verbatim rather than re-drafting from it; an `approved` result can still carry comments, which don't gate the write — surface them after it, and carry out one that asks for the follow-up itself (*file an issue for this*); `changes-requested` carries comments in `REVIEW_OUTPUT.comments` to fold in before re-presenting — ungraded, so every one of them, and one whose `target` is `file` with a diff in its body is the reviewer's own edit rather than an annotation (`${CLAUDE_PLUGIN_ROOT}/guides/reviewer-edits.md`), and the re-open's left-hand side is the previous draft (copied aside to a sibling path with `.prev` before the extension) so the second pass shows what the feedback changed; `incomplete` / `no-verdict` mean the review didn't complete — surface what happened and take the fallback ladder rather than treating silence as approval. A result that carries **no parseable `REVIEW_VERDICT` at all** (empty stdout, stderr only — the dispatcher exited before reporting) is the same case: report what the output showed and verify with the user; nothing is filed on an unverified result. (The full verdict contract matches the `prepare-review` skill's Step 4.)
+Read the verdict back through the host's command-session mechanism (not `tail` /
+`$(...)`). Only `REVIEW_VERDICT` `approved` is approval; an `approved` result carrying `editedFields` with `target: "issue-body"` — `edit` mode, where the saved buffer *is* the body — means file that text verbatim rather than re-drafting from it; an `approved` result can still carry comments, which don't gate the write — surface them after it, and carry out one that asks for the follow-up itself (*file an issue for this*); `changes-requested` carries comments in `REVIEW_OUTPUT.comments` to fold in before re-presenting — ungraded, so every one of them, and one whose `target` is `file` with a diff in its body is the reviewer's own edit rather than an annotation (`<anchor-root>/guides/reviewer-edits.md`), and the re-open's left-hand side is the previous draft (copied aside to a sibling path with `.prev` before the extension) so the second pass shows what the feedback changed; `incomplete` / `no-verdict` mean the review didn't complete — surface what happened and take the fallback ladder rather than treating silence as approval. A result that carries **no parseable `REVIEW_VERDICT` at all** (empty stdout, stderr only — the dispatcher exited before reporting) is the same case: report what the output showed and verify with the user; nothing is filed on an unverified result. (The full verdict contract matches the `prepare-review` skill's Step 4.)
 
-Ungraded for any reason — nothing installed, or a review that came back without a verdict — walks the ladder in `${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md` with the drafted body as the artifact. It is a drafted document, so the document rungs apply and the changeset walk doesn't.
+Ungraded for any reason — nothing installed, or a review that came back without a verdict — walks the ladder in `<anchor-root>/guides/review-fallback.md` with the drafted body as the artifact. It is a drafted document, so the document rungs apply and the changeset walk doesn't.

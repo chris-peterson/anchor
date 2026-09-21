@@ -116,6 +116,53 @@ o=$(run "$repo")
 [ "$(val RELEASE_COMMITS "$o")" = "1" ] || fail "expected 1 commit since the tag: $o"
 ok "a version tag outranks manifest history as the anchor"
 
+# A portable Agent Plugins manifest outranks an auxiliary package manifest.
+repo=$(new_repo portable-plugin)
+cat > "$repo/plugin.json" <<'JSON'
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "portable",
+  "version": "0.7.0"
+}
+JSON
+printf '{\n  "name": "support-package",\n  "version": "9.9.9"\n}\n' > "$repo/package.json"
+git -C "$repo" add -A
+git -C "$repo" commit --quiet -m "add portable plugin"
+o=$(run "$repo")
+[ "$(val RELEASE_MANIFEST "$o")" = "plugin.json" ] || fail "portable manifest should win: $o"
+[ "$(val RELEASE_VERSION "$o")" = "0.7.0" ] || fail "portable version wrong: $o"
+[ -z "$(val RELEASE_MANIFEST_SOURCE "$o")" ] || fail "versioned portable manifest is canonical: $o"
+ok "portable plugin manifest outranks package.json"
+
+# A Codex compatibility manifest is also a plugin version artifact.
+repo=$(new_repo codex-plugin)
+mkdir -p "$repo/.codex-plugin"
+printf '{\n  "name": "codex",\n  "version": "0.8.0"\n}\n' > "$repo/.codex-plugin/plugin.json"
+printf '{\n  "name": "support-package",\n  "version": "9.9.9"\n}\n' > "$repo/package.json"
+git -C "$repo" add -A
+git -C "$repo" commit --quiet -m "add codex plugin"
+o=$(run "$repo")
+[ "$(val RELEASE_MANIFEST "$o")" = ".codex-plugin/plugin.json" ] || fail "Codex manifest should win: $o"
+[ "$(val RELEASE_VERSION "$o")" = "0.8.0" ] || fail "Codex version wrong: $o"
+ok "Codex compatibility manifest outranks package.json"
+
+# A portable manifest may omit its version while a descriptor owns releases.
+repo=$(new_repo portable-source)
+cat > "$repo/plugin.json" <<'JSON'
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "portable-source"
+}
+JSON
+printf 'name: portable-source\nversion: 1.2.0\n' > "$repo/plugin.yml"
+git -C "$repo" add -A
+git -C "$repo" commit --quiet -m "add version source"
+o=$(run "$repo")
+[ "$(val RELEASE_MANIFEST "$o")" = "plugin.json" ] || fail "portable manifest wrong: $o"
+[ "$(val RELEASE_MANIFEST_SOURCE "$o")" = "plugin.yml" ] || fail "descriptor source wrong: $o"
+[ "$(val RELEASE_VERSION "$o")" = "1.2.0" ] || fail "descriptor version wrong: $o"
+ok "versionless portable manifest reads its descriptor version source"
+
 # --- release-triggered: CI owns the bump, so never hand-edit the manifest -----
 # The workflow also has a *job* named `release`, at the same indent the trigger
 # would sit at. Distinguishing them is the reason this is a script.

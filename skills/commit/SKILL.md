@@ -5,16 +5,20 @@ description: Stage changes, run tests, review the diff and drafted commit messag
 
 # Commit and Push
 
+Before using a bundled path, resolve `<anchor-root>` to the installed plugin root
+from the host's value or this `SKILL.md` path, then follow the host-neutral tool
+conventions in `<anchor-root>/guides/host-runtime.md`.
+
 Stage all changes and read the repo's state, run tests, draft a commit message, review the pending changeset, then — once the review is clean — commit and push in one step.
 
-**Don't narrate your work.** Every step below is an operating instruction, not a script to read aloud — follow the execute-quietly discipline: `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. For `/commit`, the only things worth surfacing are the resolved repo in one line, a failing test, any branch/shape decision that needs the user, and the review verdict; where a step prescribes exact output (e.g. `Committed [short-sha], pushed`), emit that and nothing more. **The message is not presented in chat** — it's shown in the review tool (Step 5); don't print it or ask about it separately. No "checks pass, now staging…" transitions: run the step, read the result, move on.
+**Keep plumbing quiet.** Every step below is an operating instruction, not a script to read aloud — follow the execute-quietly discipline: `<anchor-root>/guides/execute-quietly.md`. For `commit`, the only things worth surfacing are the resolved repo in one line, a failing test, any branch/shape decision that needs the user, and the review verdict; where a step prescribes exact output (e.g. `Committed [short-sha], pushed`), emit that and nothing more. **The message is not presented in chat** — it's shown in the review tool (Step 5); don't print it or ask about it separately. No "checks pass, now staging…" transitions: run the step, read the result, move on.
 
 **The pre-flight is internal — present the decision, not the derivation.** Staging, the working-tree state, the squash-gate result, the ahead-count, and the commit-vs-squash routing rationale are all inputs that *drive* the next decision; they are not output. Surface the decision and its options — the proposed route, the drafted message — never the `KEY=value` a helper emits, the "one commit ahead, unpushed" bookkeeping, or the chain of internal facts that led to the route. A sentence that explains *why* before it shows *what*, walking the user through the state you just read, is the failure this catches.
 
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
 flowchart TD
-    Start(["/commit"]) --> Stage
+    Start(["commit"]) --> Stage
 
     subgraph "Step 1: Recon"
         Stage["commit-preflight.sh"] --> Staged{STAGED?}
@@ -58,13 +62,14 @@ flowchart TD
 
 ## Task tracking when orchestrated
 
-At the very start, call `TaskList`. **Only track tasks when orchestrated:** if a
-task is already `in_progress`, this skill is running inside an orchestrator (e.g.
-a release workflow) — run silently and do **not** create your own tasks; the
-orchestrator's list is the source of truth. If nothing is `in_progress`, `/commit`
-is a direct interactive invocation — **don't create a task list.** It's a short
-flow whose payoff is seeing the review quickly; a five-item task list is exactly
-the ceremony that buries the preview. Just run the steps.
+If the host exposes task tracking, inspect it first. **Only track tasks when
+orchestrated:** if a task is already in progress, this skill is running inside an
+orchestrator (for example, a release workflow) — run inside that list and do not
+create your own tasks; the orchestrator's list is the source of truth. If the
+host has no task mechanism, follow an evident enclosing workflow without
+inventing one. Otherwise `commit` is a direct interactive invocation — do not
+create a task list. It's a short flow whose payoff is seeing the review quickly;
+a five-item task list is exactly the ceremony that buries the preview.
 
 Review precedes the commit on purpose: the pending changeset (and the drafted
 message) are reviewed against `HEAD`, and only a clean verdict commits and pushes.
@@ -75,7 +80,7 @@ than amending a commit that already exists.
 
 Before anything else, resolve which repo this operates on — the working directory isn't a reliable proxy (edits may have landed in a sibling repo). Re-resolve on every invocation; don't assume the previous target carries forward.
 
-- **With an argument** (`/anchor:commit <name>`): resolve the name — `bash "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh" <name>` (see the cookbook's "Resolving a named target repo"). On `TARGET_VIA=resolved`, use `TARGET_LOCAL` as the checkout; committing needs a work tree, so if `TARGET_LOCAL` is empty (the repo exists on the forge but isn't the one you're standing in) say so and stop rather than committing to the wrong place. `ambiguous` → prompt with `TARGET_CANDIDATES`. `cwd` (no match) → fall back to a case-insensitive substring-match of `<name>` against the basename of every git repo the session has touched; one match → use it (confirm in one line), zero/multiple → ask.
+- **With an argument** (`anchor:commit <name>`): resolve the name — `bash "<anchor-root>/scripts/resolve-target.sh" <name>` (see the cookbook's "Resolving a named target repo"). On `TARGET_VIA=resolved`, use `TARGET_LOCAL` as the checkout; committing needs a work tree, so if `TARGET_LOCAL` is empty (the repo exists on the forge but isn't the one you're standing in) say so and stop rather than committing to the wrong place. `ambiguous` → prompt with `TARGET_CANDIDATES`. `cwd` (no match) → fall back to a case-insensitive substring-match of `<name>` against the basename of every git repo the session has touched; one match → use it (confirm in one line), zero/multiple → ask.
 - **No argument**: don't probe for it — the pre-flight in Step 1 defaults to the working directory and reports the checkout it resolved as `REPO_ROOT`. Read it from that block rather than spending a call on `git rev-parse --show-toplevel`. If the session touched more than one repo, or edits landed outside it, state that resolved path and ask which to target before going further.
 
 Run git with `-C <checkout>` when the working directory isn't the target, rather than `cd`. The test runner in Step 2 and every git command below operate on the resolved checkout. The helper scripts this skill launches — `commit-preflight.sh`, `review-diff.sh`, `commit.sh` — read their own `origin`/git state, so pass them the same target with `--repo <checkout>`. On its own each would otherwise fall back to the cwd repo.
@@ -85,7 +90,7 @@ Run git with `-C <checkout>` when the working directory isn't the target, rather
 **This is the first command the flow runs.** It's cheap, deterministic, and it decides whether the later steps have anything to do — so nothing precedes it, tests included. Run the pre-flight recon **once**; it stages the paths you name, then gathers the resolved checkout, staging state, stat, branch/default, ahead-count, squash gate, and `anchor.*` config into one `KEY=value` block, so the steps below read a single command's output instead of six separate probes:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/commit-preflight.sh" --path <p> [--path <p>...]
+bash "<anchor-root>/scripts/commit-preflight.sh" --path <p> [--path <p>...]
 ```
 
 **Name every path you changed, and nothing else.** One `--path` per file, relative to `REPO_ROOT`; an absolute path is refused. This is not `git add -A`: a checkout can be shared with another agent session, and staging the whole tree puts that session's in-flight files into your review and your commit, under a message that doesn't describe them. Take the list from the edits *you* made this session — the files you wrote, plus any you deleted or renamed. A path with nothing to stage is an error (exit 65), which is how a typo or a wrong-root path surfaces instead of quietly dropping a file from the commit.
@@ -129,7 +134,7 @@ Look for a test runner in the project (e.g., `just test`, `npm test`, `dotnet te
 
 **Run the suite as its own Bash call.** Don't chain it onto another command with `&&` or fold it into a `$(…)`: a compound hides the consequential step from the permission prompt, and a non-zero exit from either half becomes ambiguous.
 
-**A passing suite is silent.** Don't report it: it's an input to the next step, not a decision the user makes (`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`). Proceed to Step 3 without a word about tests.
+**A passing suite is silent.** Don't report it: it's an input to the next step, not a decision the user makes (`<anchor-root>/guides/execute-quietly.md`). Proceed to Step 3 without a word about tests.
 
 If tests fail, **stop and fix them**. Present the failures and help the user resolve them. Do NOT proceed to Step 3 until the test suite exits cleanly. No exceptions — "pre-existing" failures still block the commit.
 
@@ -137,9 +142,9 @@ If no test suite is found, skip this step silently.
 
 ## Step 3: Write the commit message
 
-Write the message following the format in `${CLAUDE_PLUGIN_ROOT}/templates/commit-message.md` — it owns the *shape* (the [cbea.ms](https://cbea.ms/git-commit/) rules and the trailer). Spend your effort on the *why*; the code already shows the *how*. If the change is trivial (typo fix, one-liner), a subject-only message is fine.
+Write the message following the format in `<anchor-root>/templates/commit-message.md` — it owns the *shape* (the [cbea.ms](https://cbea.ms/git-commit/) rules and the trailer). Spend your effort on the *why*; the code already shows the *how*. If the change is trivial (typo fix, one-liner), a subject-only message is fine.
 
-Keep the body free of loaded framing — temporal blame, size-minimizers, self-congratulatory adverbs, defensive softeners. The tone discipline lives in `${CLAUDE_PLUGIN_ROOT}/guides/loaded-framing.md` (shared with `prepare-review` and `issue`); consult it while drafting.
+Keep the body free of loaded framing — temporal blame, size-minimizers, self-congratulatory adverbs, defensive softeners. The tone discipline lives in `<anchor-root>/guides/loaded-framing.md` (shared with `prepare-review` and `issue`); consult it while drafting.
 
 ### Honor `anchor.*` config
 
@@ -151,9 +156,13 @@ Keep the body free of loaded framing — temporal blame, size-minimizers, self-c
 
   Apply it to the body alone. **The subject line is not on the dial** — its format rules (imperative, ≤50 chars, no trailing period) are the template's and hold at every setting, and so does the `Refs:` trailer. Work down this order and stop where the draft balances where the setting asks: asides and the clause qualifying a claim nobody disputes → the decisions-and-alternatives prose, down to the decision itself → the context paragraph, down to its *why* sentence. The floor is one sentence of why; a trivial change still earns the subject-only message the template allows, which is a judgment about the change, not a verbosity setting.
 
-See `${CLAUDE_PLUGIN_ROOT}/guides/configuring.md` for the full key set.
+See `<anchor-root>/guides/configuring.md` for the full key set.
 
-Write the drafted message to a temp file (`$(mktemp -u /tmp/commit-msg.XXXXXX).md`) with the Write tool — the literal `/tmp` is what a caller's `Edit(//tmp/**)` grant reaches (`${CLAUDE_PLUGIN_ROOT}/guides/temp-paths.md`). Step 5 passes it into the review so you review the message alongside the diff, and Step 6 commits it (or the reviewer's edited version).
+Write the drafted message to a temp file (`$(mktemp -u /tmp/commit-msg.XXXXXX).md`)
+with the host's file-writing mechanism — the literal `/tmp` is what a caller's
+path-scoped write grant reaches (`<anchor-root>/guides/temp-paths.md`). Step 5
+passes it into the review so you review the message alongside the diff, and
+Step 6 commits it (or the reviewer's edited version).
 
 ## Step 4: Settle the branch and shape
 
@@ -166,12 +175,14 @@ Nothing is committed in this step — it settles *where* and *how* the commit la
 The commit **pushes** (Step 6), so landing directly on the default branch publishes to it. Step 1's block already resolved this: `ON_DEFAULT_BRANCH=1` (HEAD is `DEFAULT_BRANCH`) is the case to guard. **When it's `1`, don't commit onto the default branch** — a commit meant for a CR belongs on a feature branch, and pushing to the default branch directly lands the work with no CR for anyone else to review. Step 5 reviews the diff and the message on both paths; what the default branch skips is the CR, not the user's own look at the change — so describe this choice as landing without a CR, never as skipping or bypassing review. Offer the branch, named from the subject you just drafted:
 
 - **Slug the subject** — lowercase, non-alphanumeric runs → single hyphens, trim leading/trailing hyphens, cap ~50 chars. `Add retry to checkout` → `add-retry-to-checkout`.
-- Ask with `AskUserQuestion` (header `Branch`), recommended option first so the default lands on branch creation:
+- Ask as structured choices when the host supports that (header `Branch`), or
+  directly with the same options otherwise. Put the recommendation first so the
+  default lands on branch creation:
   1. **Create branch `<slug>`** *(recommended)* — `git checkout -b <slug>`, then the rest of the flow commits and pushes onto it.
   2. **Commit to `<default>`** — the deliberate, explicit direct-to-default case (a release commit, a docs typo on `main`); the flow proceeds and pushes to the default branch, so the change lands without a CR. Never the default path.
   3. **Edit name** — take a name from the user, then `git checkout -b <that>`.
 
-Create the branch (when chosen) **before** the commit, so the commit lands — and pushes — on the feature branch. Once `/commit` pushes that branch, `prepare-review` opens the CR against it (it operates on an already-pushed branch and never pushes itself).
+Create the branch (when chosen) **before** the commit, so the commit lands — and pushes — on the feature branch. Once `commit` pushes that branch, `prepare-review` opens the CR against it (it operates on an already-pushed branch and never pushes itself).
 
 Committing directly to the default branch is never a squash target — the gate below returns `SQUASH=blocked`, so even the "commit to `<default>`" path lands as a new commit rather than amending the published tip.
 
@@ -186,7 +197,7 @@ Whether squashing the staged changes into HEAD (via `git commit --amend` in Step
 | `ALLOW_MESSAGE_AMEND` | `1` → squash is `blocked`, but a message-only amend is permitted (the ready-CR case); gates the exception below. `0` → no amend of any kind |
 | `PRIOR_SUBJECT` | HEAD's subject, for the squash option text |
 
-The gate folds the push-state probe (including the no-upstream `origin/<default>..HEAD` fallback), the author guard, and the CR-draft probe into that decision — don't re-run them. It deliberately does **not** emit *why* squash is blocked: the block reason, push count, CR state, and author identity stay inside the script, so there's nothing here to narrate or keep quiet by hand (`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`).
+The gate folds the push-state probe (including the no-upstream `origin/<default>..HEAD` fallback), the author guard, and the CR-draft probe into that decision — don't re-run them. It deliberately does **not** emit *why* squash is blocked: the block reason, push count, CR state, and author identity stay inside the script, so there's nothing here to narrate or keep quiet by hand (`<anchor-root>/guides/execute-quietly.md`).
 
 ### When `SQUASH=blocked` — the ordinary commit
 
@@ -221,18 +232,20 @@ Record the choice (new commit vs squash) and proceed to Step 5; the review runs 
 
 Some hooks pattern-match on bash command substrings — destructive-operation gates (`npm install -g`, `git push --force`), secret-scanning regexes (`secret`/`token`/`password`/`api.?key`), or other safety guards. These can false-positive when the same string appears inside a heredoc'd commit message body — the hook sees the literal text and blocks the commit before `git` ever parses the heredoc. The trigger is often natural-language wording in the body that overlaps with the hook's keyword set.
 
-If a commit attempt in Step 6 is rejected by a `PreToolUse` hook citing a substring that's actually inside the message body (not the executed command), stop and surface the conflict to the user. Do not reach for a temp-file workaround (`Write` to `/tmp/...` then `git commit -F`) — splitting the commit into a separate `Write` plus `Bash` doubles the permission prompts, hides the message body from the bash command preview, and introduces cross-session collision risk on predictable paths. The message wording is the right thing for the diff; the hook's matcher is the limitation. The user can approve the bypass for this commit or adjust the hook.
+If a commit attempt in Step 6 is rejected by a pre-tool hook citing a substring that's actually inside the message body (not the executed command), stop and surface the conflict to the user. Do not reach for a temp-file workaround (write `/tmp/...`, then run `git commit -F`) — splitting the commit into a separate file write and shell command doubles the permission prompts, hides the message body from the command preview, and introduces cross-session collision risk on predictable paths. The message wording is the right thing for the diff; the hook's matcher is the limitation. The user can approve the bypass for this commit or adjust the hook.
 
 ## Step 5: Review the pending changeset
 
 Before committing, open the pending changeset — the working tree vs `HEAD`, the exact changes Step 6 will commit — in a visual review, **with the drafted message shown alongside it**. Launch the **dispatcher** in `--local` mode with `--message-file` (the message file from Step 3) — **not** raw `git difftool`. It stages the paths you name so a new file is in the diff at all, diffs the tree against `HEAD`, seeds the drafted message (subject as the headline, body as prose) plus a repo/branch/summary header, runs the mode the subject calls for — a git range names a base to compare against, so that is `diff`, run by `anchor.diff.tool` (`revdiff` by default); see the configuring guide's Defaults table, and — once it closes — prints the normalized result on its own stdout. So you review the message and the diff *together*, with no separate chat gate. Raw `git difftool` bypasses the header and the verdict.
 
-**Launch as a background call** (`run_in_background: true`): the dispatcher blocks until the review closes, so a foreground call would hold the turn open until the Bash timeout.
+**Launch with the host's background/session mechanism and retain its handle**:
+the dispatcher blocks until the review closes, so a foreground call would hold
+the turn open until the command timeout.
 
-**Print the manifest as you launch.** The tool draws one file at a time and never shows the set, so the message that launches the review carries a table of the files under review with their `+`/`−` counts (Step 1's `STAT` covers the same paths), the repo and branch, the tool, and the drafted commit message riding with them. The shape is in `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "show what is going under review". Nothing else about the launch is output — not the command, not the flags, not the wait. After the table, the next thing you say is the verdict (or what the review asked for).
+**Print the manifest as you launch.** The tool draws one file at a time and never shows the set, so the message that launches the review carries a table of the files under review with their `+`/`−` counts (Step 1's `STAT` covers the same paths), the repo and branch, the tool, and the drafted commit message riding with them. The shape is in `<anchor-root>/guides/execute-quietly.md` under "show what is going under review". Nothing else about the launch is output — not the command, not the flags, not the wait. After the table, the next thing you say is the verdict (or what the review asked for).
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill commit --local --message-file <commit-msg-path> --path <p> [--path <p>...]
+bash "<anchor-root>/scripts/review-diff.sh" --skill commit --local --message-file <commit-msg-path> --path <p> [--path <p>...]
 ```
 
 `--skill commit` tells the adapter which artifact is under review; it doesn't pick the mode, which follows the subject. Pass it on every launch below.
@@ -241,17 +254,20 @@ Pass the **same `--path` list** you gave the Step 1 pre-flight. The review and t
 
 (On the **push-existing** path from Step 1 — nothing staged, unpushed commits to push — there's no drafted message; review those commits instead of the working tree: `review-diff.sh --skill commit --commit`. That path is a diff with no drafted artifact, so on `edit` mode it returns `no-verdict` naming the key to change — report that rather than pushing unreviewed.)
 
-When the background command completes, read its stdout with the **BashOutput tool** — not `tail` / `$(...)`, which trip the command-substitution gate. The last lines carry the verdict (no separate file read):
+When the background command completes, read its captured stdout through the
+host's command-session mechanism — not `tail` / `$(...)`, which trip the
+command-substitution gate. The last lines carry the verdict (no separate file
+read):
 
 - `REVIEW_VERDICT` — `approved` · `changes-requested` · `incomplete` · `no-verdict`.
 - `REVIEW_OUTPUT` — compact JSON carrying `verdict`, `mode`, `tool`, `comments[]`, `editedFields[]`, `capabilities`, and `raw` (the DIFF contract, defined normatively in the plugin `SPEC.md`). Each comment is `{body, target, file?, startLine?, endLine?, side?}`, where `target` is `line` / `file` / `changeset`. Comments are ungraded: every one is feedback to address, and the verdict — not a per-comment tier — says whether it blocks.
 
 Act on the verdict:
 
-- **`approved`** → the changeset is clean; proceed to Step 6 to commit and push. If `comments` is non-empty, the reviewer approved *and* left feedback: surface it — the verdict says it doesn't gate the commit, but the user may want to act on it (now, or as a follow-up). A comment that asks for the follow-up itself (*file an issue for this*) is an instruction rather than a remark: carry it out, through `/anchor:issue` where it asks for an issue.
-- **`changes-requested`** → **do not commit.** List every comment — they're ungraded, so all of them are the ask — then loop back to Step 2. **A comment whose `target` is `file` and whose body carries a diff is the reviewer's own edit**, not an annotation: they wrote into the changeset through a difftool. Read it per `${CLAUDE_PLUGIN_ROOT}/guides/reviewer-edits.md` — keep the fixes, answer the questions, and take their comment lines back out before committing. Otherwise: fix the commented lines in the working tree, re-run tests, and re-review. **If a comment's `body` is short** (e.g. "I don't get what this flag means") **and the cited line range contains more than one distinct change** (e.g. two flag additions in a usage block, two unrelated lines in the same range), ask the user which token the comment refers to before fixing — a one-second clarification beats several minutes of guessing wrong. Fix the commented lines themselves; don't expand into adjacent pre-existing code (`${CLAUDE_PLUGIN_ROOT}/guides/changeset-scope.md`).
+- **`approved`** → the changeset is clean; proceed to Step 6 to commit and push. If `comments` is non-empty, the reviewer approved *and* left feedback: surface it — the verdict says it doesn't gate the commit, but the user may want to act on it (now, or as a follow-up). A comment that asks for the follow-up itself (*file an issue for this*) is an instruction rather than a remark: carry it out, through `anchor:issue` where it asks for an issue.
+- **`changes-requested`** → **do not commit.** List every comment — they're ungraded, so all of them are the ask — then loop back to Step 2. **A comment whose `target` is `file` and whose body carries a diff is the reviewer's own edit**, not an annotation: they wrote into the changeset through a difftool. Read it per `<anchor-root>/guides/reviewer-edits.md` — keep the fixes, answer the questions, and take their comment lines back out before committing. Otherwise: fix the commented lines in the working tree, re-run tests, and re-review. **If a comment's `body` is short** (e.g. "I don't get what this flag means") **and the cited line range contains more than one distinct change** (e.g. two flag additions in a usage block, two unrelated lines in the same range), ask the user which token the comment refers to before fixing — a one-second clarification beats several minutes of guessing wrong. Fix the commented lines themselves; don't expand into adjacent pre-existing code (`<anchor-root>/guides/changeset-scope.md`).
 - **`incomplete`** → `Unreviewed changes — what do you want to change?` Nothing is committed until the review is clean.
-- **`no-verdict`** → nothing is committed; read the cause from the result, say what happened in one line, and walk the fallback ladder in `${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md`. `capabilities.producesVerdict: false` means the tool graded nothing, so the ladder applies to it exactly as it does to a tool that died (see `raw.exitCode`). **Never ask `Reviewed in your diff viewer — commit and push?`**: a launched window is not evidence anything was read, and treating it as approval is what the verdict exists to prevent. Here the ladder's changeset rung is the one to walk — go file by file over the pending changeset in your reply.
+- **`no-verdict`** → nothing is committed; read the cause from the result, say what happened in one line, and walk the fallback ladder in `<anchor-root>/guides/review-fallback.md`. `capabilities.producesVerdict: false` means the tool graded nothing, so the ladder applies to it exactly as it does to a tool that died (see `raw.exitCode`). **Never ask `Reviewed in your diff viewer — commit and push?`**: a launched window is not evidence anything was read, and treating it as approval is what the verdict exists to prevent. Here the ladder's changeset rung is the one to walk — go file by file over the pending changeset in your reply.
 - **No verdict line at all** — stdout is empty, holds only stderr text, or carries no parseable `REVIEW_VERDICT` → the dispatcher exited before it could report (a bad argument, an unreadable message file, a missing `jq`, a tool that died). **Treat this exactly as `no-verdict`: nothing is committed.** Report what the output did say, then take the same ladder. An absent result is the one case where proceeding is most tempting and least defensible: it looks like nothing went wrong precisely because nothing was reported.
 
 **The message is under review too.** If the result carries `editedFields` for the commit message — `edit` mode, where the saved buffer *is* the message — use that edited text as the message in Step 6, overwrite the Step 3 message file with it. Adopt it verbatim: it's the user's own wording, not a comment to draft from. A `changes-requested` comment with `target: "commit-message"` is feedback on the message itself — revise the message and re-review. In a mode that can't round-trip an edited message (`capabilities.editableCommitMessage: false`, which is every diff viewer), keep the drafted message unless a comment asks to change it.
@@ -268,7 +284,7 @@ The message file already exists — the one from Step 3, or the reviewer's edite
 - **Push-existing** (Step 1 found nothing staged but unpushed commits) → `--mode push-existing` (no message file — there's no commit to make).
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/commit.sh" --mode new --message-file <path> --path <p> [--path <p>...]
+bash "<anchor-root>/scripts/commit.sh" --mode new --message-file <path> --path <p> [--path <p>...]
 ```
 
 Carry the **same `--path` list** through from Steps 1 and 5, so the commit holds exactly what was reviewed. It scopes the commit as well as the staging: a path someone else staged stays staged rather than riding into your commit. The message-only amend is the one call that takes no `--path` — there is no tree change to scope, and `--amend` keeps every file the commit already carried.
@@ -277,21 +293,23 @@ Carry the **same `--path` list** through from Steps 1 and 5, so the commit holds
 
 Read the helper's stdout — `COMMIT_SHA`, `BRANCH`, `PUSH_MODE`, and `PUSHED=ok` on success. Report the outcome and nothing more — `Committed <COMMIT_SHA>, pushed to <BRANCH>` — followed by any comments an `approved` review left unaddressed. If the push is rejected (non-fast-forward, protected branch, auth), `commit.sh` leaves git's error on stderr and exits non-zero; surface that and stop rather than retrying or force-pushing without the lease.
 
-**The forge's own "create a pull request" link is not the handoff.** Pushing a new branch makes GitHub print a `Create a pull request for '<branch>'` URL, and GitLab prints its `merge_requests/new` equivalent; both are in the push output you just read. Don't relay either one. That URL opens the forge's web form, which lands the CR non-draft, with the project template's checklist intact and no Review guide — the shape `/anchor:prepare-review` exists to replace (`${CLAUDE_PLUGIN_ROOT}/rules/use-forge-clis.md`). Where the next step comes up, name the skill: **`/anchor:prepare-review` opens the CR against the branch this just pushed.**
+**The forge's own "create a pull request" link is not the handoff.** Pushing a new branch makes GitHub print a `Create a pull request for '<branch>'` URL, and GitLab prints its `merge_requests/new` equivalent; both are in the push output you just read. Don't relay either one. That URL opens the forge's web form, which lands the CR non-draft, with the project template's checklist intact and no Review guide — the shape `anchor:prepare-review` exists to replace (`<anchor-root>/rules/use-forge-clis.md`). Where the next step comes up, name the skill: **`anchor:prepare-review` opens the CR against the branch this just pushed.**
 
 ## Step 7: Report the pipeline the push triggered
 
 The push is what starts CI, so this flow is holding the answer to whether the commit went green — don't leave the branch pushed-but-unverified and make the user think to ask. Reached only on a successful push (`PUSHED=ok`); a rejected push has no pipeline to watch.
 
-The watch blocks while it polls, so launch it as a **background** Bash call (`run_in_background: true`) immediately after reporting the commit, and read its stdout with the **BashOutput tool** when it completes:
+The watch blocks while it polls, so launch it with the host's background/session
+mechanism immediately after reporting the commit, retain its handle, and read
+its captured stdout through that mechanism when it completes:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill commit
+bash "<anchor-root>/scripts/pipeline-after-push.sh" --skill commit
 ```
 
 Nothing about *whether* to watch is decided here — the helper owns it:
 
 - **`PIPELINE_WATCH=skipped`** → `PIPELINE_WATCH_REASON` says `config-off` (a config key turned it off) or `already-reported` (every run for this commit has been reported already). Either way there is nothing to report; end the flow silently.
-- **`PIPELINE_WATCH=ran`** → the same `KEY=value` lines `/anchor:pipeline` reads follow it. Report them following `${CLAUDE_PLUGIN_ROOT}/templates/pipeline-report.md`, including its "After a push" notes.
+- **`PIPELINE_WATCH=ran`** → the same `KEY=value` lines `anchor:pipeline` reads follow it. Report them following `<anchor-root>/templates/pipeline-report.md`, including its "After a push" notes.
 
 Retarget it the way you retargeted `commit.sh` (`--repo`). The commit is already reported, so this never holds the flow open — the pipeline report lands when the watch settles.

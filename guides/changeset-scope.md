@@ -1,8 +1,8 @@
 # Staying in changeset scope
 
 Once a change enters review — an open CR, a branch you're iterating on, a diff
-you're walking through in `/anchor:commit`'s review or resolving with
-`/anchor:resolve-feedback` — the goal is **minimal churn**: change as few lines
+you're walking through in `anchor:commit`'s review or resolving with
+`anchor:resolve-feedback` — the goal is **minimal churn**: change as few lines
 as you can. Be surgical. Keep edits within the changeset's existing scope and
 resist pulling in pre-existing code unrelated to the change's purpose, even when
 a piece of feedback sits right next to it. Perfect scope isn't always reachable,
@@ -12,7 +12,7 @@ this guide whenever feedback would touch code the diff doesn't already own.
 ## Feedback invites overreach two ways
 
 - **A review comment with a reason** — the tool's sidecar, fed back through
-  `/anchor:resolve-feedback`. Fix the lines the comment targets, not the adjacent
+  `anchor:resolve-feedback`. Fix the lines the comment targets, not the adjacent
   pre-existing code they happen to sit next to.
 - **A direct ask while iterating** — "while you're in there, also change X." If
   X is pre-existing code the diff doesn't otherwise touch, that's a scope

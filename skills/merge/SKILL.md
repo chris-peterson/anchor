@@ -5,14 +5,18 @@ description: Merge an approved change request once its gates are green — waiti
 
 # Merge
 
-Land an open change request into the default branch. `/anchor:prepare-review`
-opens the CR and `/anchor:resolve-feedback` drives its threads to done;
-`/anchor:merge` checks that the CR is actually ready to land, merges it, and
+Before using a bundled path, resolve `<anchor-root>` to the installed plugin root
+from the host's value or this `SKILL.md` path, then follow the host-neutral tool
+conventions in `<anchor-root>/guides/host-runtime.md`.
+
+Land an open change request into the default branch. `anchor:prepare-review`
+opens the CR and `anchor:resolve-feedback` drives its threads to done;
+`anchor:merge` checks that the CR is actually ready to land, merges it, and
 cleans up the branch behind it. The job is a **safe merge**: never land a CR that
 a gate says isn't ready, and never leave the local checkout stranded on a branch
 that no longer exists.
 
-Publishing what landed is `/anchor:release`, and this skill **names it without
+Publishing what landed is `anchor:release`, and this skill **names it without
 running it**. Releasing is a deliberate act on its own schedule — several merges
 commonly batch into one release — so the choice of when to cut one belongs to the
 author, not to whichever merge happened to be last.
@@ -20,9 +24,9 @@ author, not to whichever merge happened to be last.
 CR = change request: a pull request on GitHub, a merge request on GitLab. Pick
 the forge tool by the `origin` remote.
 
-**Don't narrate your work.** Every step below is an operating instruction, not a
+**Keep plumbing quiet.** Every step below is an operating instruction, not a
 script to read aloud — follow the execute-quietly discipline:
-`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. This skill's output is the
+`<anchor-root>/guides/execute-quietly.md`. This skill's output is the
 list below, and the list is closed:
 
 1. The resolved repo and CR, one line.
@@ -39,7 +43,7 @@ turned out fine — is input to the next step, not a paragraph in front of it.
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
 flowchart TD
-    Start(["/merge"]) --> Repo["Resolve repo + CR"]
+    Start(["merge"]) --> Repo["Resolve repo + CR"]
 
     subgraph "Step 1: Gates"
         Repo --> Ready{Marked ready?}
@@ -73,9 +77,11 @@ flowchart TD
 
 ## Task tracking when orchestrated
 
-At the very start, call `TaskList`. If any task is already `in_progress`, this
-skill is running inside an orchestrator (e.g. a release workflow) — run silently
-and do **not** create your own tasks. Otherwise enumerate:
+If the host exposes task tracking, inspect it first. If any task is already in
+progress, this skill is running inside an orchestrator (for example, a release
+workflow) — run inside that list and do not create your own tasks. If the host
+has no task mechanism, follow an evident enclosing workflow without inventing
+one. Otherwise enumerate:
 
 - `Step 1: Check the merge gates`
 - `Step 2: Choose the merge method`
@@ -84,7 +90,7 @@ and do **not** create your own tasks. Otherwise enumerate:
 ## Target repo and CR
 
 Resolve the repo as the other `anchor` skills do. **With a name argument**, resolve
-it with `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh <name>` (see the cookbook's
+it with `<anchor-root>/scripts/resolve-target.sh <name>` (see the cookbook's
 "Resolving a named target repo"): `TARGET_VIA=resolved` → use `TARGET_LOCAL` as the
 checkout — this skill runs `git` post-merge (checkout, pull, branch delete), so it
 needs one; if `TARGET_LOCAL` is empty, ask where the checkout lives rather than
@@ -99,7 +105,7 @@ default to the cwd repo — retarget each (`-R <owner/name>` for `gh`/`glab`
 subcommands; substitute the URL-encoded project for `:fullpath` and add
 `--hostname <host>` for `glab api`). Derive `owner/name` and the host once from
 `git -C <repo> remote get-url origin`, or from a CR URL argument. The full
-retargeting rules are in `${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`
+retargeting rules are in `<anchor-root>/guides/forge-cookbook.md`
 ("Targeting a repo that isn't the working directory").
 
 Resolve the open CR for the branch (when no URL was given):
@@ -159,7 +165,7 @@ the flag fresh, and announces `cr.ready` so a sibling tracking deliverables sees
 the CR leave draft:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/mark-ready.sh" --forge <FORGE> --cr <CR_IID>
+bash "<anchor-root>/scripts/mark-ready.sh" --forge <FORGE> --cr <CR_IID>
 ```
 
 `CR_READY=ok` and continue. `ALREADY_READY=1` means the CR stopped being a draft
@@ -170,21 +176,21 @@ reporting a change you didn't make. On `no`, stop.
 
 Read the forge's mergeable state (cookbook: "Check a CR's mergeable state"). If the
 CR conflicts with the target branch or is behind it in a way the forge won't
-auto-resolve, stop and route to a rebase — `/anchor:prepare-review` owns the
+auto-resolve, stop and route to a rebase — `anchor:prepare-review` owns the
 rebase-on-default flow. Don't attempt the merge; the forge would reject it anyway.
 
 ### 1c. Pipeline green — wait if it's still running
 
 Resolve the pipeline for the CR head and read its state with the pipeline helper
-(the same one `/anchor:pipeline` uses), so the poll loop, forge normalization, and
+(the same one `anchor:pipeline` uses), so the poll loop, forge normalization, and
 failed-job reporting are shared rather than re-derived:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --single-run
+bash "<anchor-root>/scripts/pipeline-status.sh" --single-run
 ```
 
 `--single-run` keeps this gate on one run — the commit's most recent. On GitHub a
-commit carries a run per workflow, and `/anchor:pipeline` folds them into one
+commit carries a run per workflow, and `anchor:pipeline` folds them into one
 verdict; that isn't this gate's question. Whether *every* required check passed is
 the forge's own merge check, read in step 1a, and duplicating it here would block
 a merge the forge is willing to take.
@@ -194,20 +200,20 @@ Map `PIPELINE_STATE`:
 - **`success`** — gate passes; continue.
 - **`running` / `pending`** — the pipeline hasn't settled. **Don't hand control
   back for the user to re-ask later** — watch it here. Re-launch the helper with
-  `--watch` as a **background** call (`run_in_background: true`; a foreground call
-  holds the turn open until the Bash timeout), then read the settled verdict with
-  the **BashOutput tool** (not `tail` / `$(...)`, which trip the
+  `--watch` with the host's background/session mechanism and retain its handle (a
+  foreground call holds the turn open until the command timeout), then read the
+  settled verdict through that mechanism (not `tail` / `$(...)`, which trip the
   command-substitution gate):
 
   ```bash
-  bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --single-run --watch
+  bash "<anchor-root>/scripts/pipeline-status.sh" --single-run --watch
   ```
 
   When it settles, re-map the terminal state below. If `PIPELINE_TIMEOUT=1` (the
   watch ceiling elapsed), report the last state and offer to keep watching with a
   longer `--timeout` rather than merging on an unsettled pipeline.
 - **`failed` / `canceled`** — stop. List each job from `PIPELINE_FAILED_JOBS` (name
-  linked to its url) and the `PIPELINE_URL`, exactly as `/anchor:pipeline` reports.
+  linked to its url) and the `PIPELINE_URL`, exactly as `anchor:pipeline` reports.
   A red pipeline is a blocked merge; offer to look at a failed job's log rather than
   fetching it unprompted.
 - **`manual`** — the pipeline is blocked awaiting a manual action; it won't progress
@@ -223,7 +229,7 @@ Read the CR's approval state (cookbook: "Check a CR's approvals"). If required
 approvals are missing — GitHub `reviewDecision` is `REVIEW_REQUIRED` or
 `CHANGES_REQUESTED`; GitLab `approvals_left > 0` — stop and report who still needs
 to approve. This gate needs a reviewer; the skill can't clear it. On
-`CHANGES_REQUESTED` specifically, point the user at `/anchor:resolve-feedback`.
+`CHANGES_REQUESTED` specifically, point the user at `anchor:resolve-feedback`.
 
 Where a repo has no approval rules configured, there's nothing to satisfy — don't
 invent a requirement; continue.
@@ -231,14 +237,14 @@ invent a requirement; continue.
 ### 1e. Review threads resolved
 
 Fetch unresolved, human-authored review threads (cookbook: "List unresolved review
-threads" — the same query `/anchor:resolve-feedback` uses). If any remain, surface
+threads" — the same query `anchor:resolve-feedback` uses). If any remain, surface
 them in one line each (`<file:line> — @reviewer — <ask>`) and confirm before
 landing:
 
 > `<n>` review threads are still unresolved. Merge anyway, or resolve them first?
 > `[merge / resolve first]`
 
-On `resolve first`, hand off to `/anchor:resolve-feedback` and stop. On `merge`,
+On `resolve first`, hand off to `anchor:resolve-feedback` and stop. On `merge`,
 continue — some threads are intentionally left open (answered questions the asker
 never marked resolved), and the author is the one who knows.
 
@@ -333,7 +339,7 @@ glab mr view <iid> --output json \
 ```
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/announce.sh" cr.merged \
+bash "<anchor-root>/scripts/announce.sh" cr.merged \
   "uri=<url>" "title=<title>" "merged_at=<merged at>" "sha=<landed sha>"
 ```
 
@@ -377,12 +383,12 @@ is what deploys, publishes, or releases. The branch pipeline the gates read
 proved the change in isolation; the target branch's is the one that says it
 landed. Don't leave it unwatched and make the user think to ask.
 
-The watch blocks while it polls, so launch it as a **background** Bash call
-(`run_in_background: true`) once Step 4's cleanup is done, and read its stdout
-with the **BashOutput tool** when it completes:
+The watch blocks while it polls, so launch it with the host's background/session
+mechanism once Step 4's cleanup is done, retain its handle, and read captured
+stdout through that mechanism when it completes:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill merge --sha <landed sha>
+bash "<anchor-root>/scripts/pipeline-after-push.sh" --skill merge --sha <landed sha>
 ```
 
 Pass the landed sha you read back in Step 3 rather than letting the helper take
@@ -395,9 +401,9 @@ Nothing about *whether* to watch is decided here — the helper owns it:
 - **`PIPELINE_WATCH=skipped`** → `PIPELINE_WATCH_REASON` says `config-off`
   (`anchor.merge.watchPipelineAfterPush`, or the umbrella key) or
   `already-reported`. Either way there's nothing to report; end the flow silently.
-- **`PIPELINE_WATCH=ran`** → the same `KEY=value` lines `/anchor:pipeline` reads
+- **`PIPELINE_WATCH=ran`** → the same `KEY=value` lines `anchor:pipeline` reads
   follow it. Report them following
-  `${CLAUDE_PLUGIN_ROOT}/templates/pipeline-report.md`, including its "After a
+  `<anchor-root>/templates/pipeline-report.md`, including its "After a
   push" notes — the headline carries `<target>`, not the branch just deleted.
 
 Step 6's result goes out while this polls, so the flow is never held open; the
@@ -415,7 +421,7 @@ wait on and finds none, which reads alarming and means nothing. The user never
 saw it — the terminal collapsed that tool result — so explaining it invents a
 confusion to resolve. Surface such a line only where it changed the outcome.
 
-Where the repo has something to publish, close with `/anchor:release` as the next
+Where the repo has something to publish, close with `anchor:release` as the next
 step — one clause, not a pitch, and don't run it. On a repo with no version
 artifact (`RELEASE_MODEL=no-version-artifact` — the merge *was* the release), leave
 it out entirely rather than pointing at a skill that would no-op.
