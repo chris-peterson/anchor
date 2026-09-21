@@ -13,7 +13,7 @@ tool for the mechanical half, never a substitute for the skill on the authoring
 half — even when the artifact is only a sub-step of a larger task (a rollback, a
 follow-up fix).
 
-- **Writing or revising a CR description → `/anchor:prepare-review`**, never a
+- **Writing or revising a CR description → `anchor:prepare-review`**, never a
   bare `gh pr create` / `glab mr create` or a `--body` on an edit. A raw
   `create` lands the CR non-draft, with the project template's checklist left
   intact and no Review guide; `prepare-review` sets the draft flag, composes the
@@ -25,12 +25,12 @@ follow-up fix).
   Pushing a new branch makes GitHub emit a `Create a pull request for '<branch>'`
   URL and GitLab a `merge_requests/new` one. Relaying that URL hands the user the
   web form, which lands exactly the CR a bare `create` would and puts the
-  drafting on them. Say `/anchor:prepare-review` instead.
-- **Filing or updating an issue → `/anchor:issue`**, never a bare
+  drafting on them. Say `anchor:prepare-review` instead.
+- **Filing or updating an issue → `anchor:issue`**, never a bare
   `gh issue create --body` / `glab issue create --description`. The skill leads
   the issue with *why* the work is needed, written for a reader who's never seen
   that part of the system — the shape a raw `create` drops.
-- **Publishing a release → `/anchor:release`**, never a bare
+- **Publishing a release → `anchor:release`**, never a bare
   `gh release create` / `glab release create`, and never `--generate-notes`. The
   skill establishes who owns the version bump before anything is written — a
   hand-bump on a repo whose CI workflow also bumps lands two conflicting commits —
@@ -48,15 +48,15 @@ For any multi-line body the skill produces (tables, code fences) — CR
 descriptions, issue bodies, comments — write it to a unique temp file
 (`$(mktemp -u /tmp/cr-body.XXXXXX).md`) and pass it by file (`--body-file`,
 `-F description=@<path>`); never inline escape-quoted strings. The literal `/tmp`
-is deliberate — `${TMPDIR:-/tmp}` resolves outside an `Edit(//tmp/**)` grant on
-any platform that sets `TMPDIR`, macOS always among them, and the caller pays a
-prompt every run. The paths, the allow rules that cover them, and the
+is deliberate — `${TMPDIR:-/tmp}` resolves outside a write grant rooted at
+`/tmp` on any platform that sets `TMPDIR`, macOS always among them, and the
+caller pays a prompt every run. The paths, the host-specific rules that cover them, and the
 PowerShell-only case are in
-`${CLAUDE_PLUGIN_ROOT}/guides/temp-paths.md`. (That's the skill
+`<anchor-root>/guides/temp-paths.md`. (That's the skill
 writing the body it composed — the mechanical half — not a consumer
 hand-authoring one.)
 
 For anything beyond these basics — creation defaults, line-anchored
 discussions, the known CLI gaps and their workarounds — read the bundled
 forge cookbook before re-deriving an invocation:
-`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`
+`<anchor-root>/guides/forge-cookbook.md`

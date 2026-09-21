@@ -8,15 +8,15 @@ where in its flow the report lands.
 
 ## Launch in the background
 
-Both helpers block while they poll, so launch them as a **background** Bash call
-(`run_in_background: true`). A foreground call holds the turn open until the
-Bash timeout, and the flow the watch belongs to has already reported its own
+Both helpers block while they poll, so launch them with the host's
+**background/session mechanism** and retain the handle. A foreground call holds
+the turn open until the command timeout, and the flow the watch belongs to has already reported its own
 result by then.
 
 | Helper | Used for |
 | --- | --- |
 | `pipeline-after-push.sh --skill <skill>` | The pipeline a push or a merge just started (CI-13). It decides whether to watch at all: a config key can turn it off, and runs already reported are skipped (CI-14) |
-| `pipeline-status.sh --watch` | Any other watch: `/anchor:pipeline`, a merge gate waiting on the CR's pipeline, a release run |
+| `pipeline-status.sh --watch` | Any other watch: `anchor:pipeline`, a merge gate waiting on the CR's pipeline, a release run |
 
 Pass `--sha` whenever the commit is not HEAD, such as a squash-merged commit or a
 dispatched run on a commit you already pushed. A short sha is fine; the helper
@@ -31,7 +31,7 @@ is the one that says where the work stands, and two reports on one line of work
 leave the user to work out which one counts.
 
 So when you launch a watch on a newer pipeline for the same work, **stop the
-older watch** (`TaskStop` on its background task) and report only the newer
+older watch** (stop its background task through the host's session mechanism) and report only the newer
 one. Say so in the launch line, so the missing report isn't read as a pass:
 
 > Stopped the watch on `a1b2c3d`; watching the pipeline for `e4f5a6b` instead.
@@ -41,8 +41,9 @@ it running.
 
 ## Read the result
 
-When the background call completes, read its stdout with the **BashOutput
-tool**, not `tail` or `$(...)`, which trip the command-substitution gate.
+When the background command completes, read its captured stdout through the
+host's command-session mechanism, not `tail` or `$(...)`, which trip the
+command-substitution gate.
 
 - **`PIPELINE_WATCH=skipped`** (`pipeline-after-push.sh` only):
   `PIPELINE_WATCH_REASON` is `config-off` or `already-reported`. There is

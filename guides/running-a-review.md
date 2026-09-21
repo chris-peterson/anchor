@@ -11,7 +11,7 @@ verdict leads to.
 Ask the dispatcher which mode and tool the review will open before launching:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill <skill> --probe <the launch's subject arguments>
+bash "<anchor-root>/scripts/review-diff.sh" --skill <skill> --probe <the launch's subject arguments>
 ```
 
 Give the probe the **same `--skill` and the same subject** the launch will get
@@ -32,8 +32,8 @@ this one never will. Pass what it returned to the launch as `--mode
 
 Open the review through the dispatcher, not the tool directly: the dispatcher
 builds the header and prints the normalized result. It blocks until the review
-closes, so launch it as a **background** Bash call (`run_in_background: true`).
-A foreground call holds the turn open until the Bash timeout.
+closes, so launch it with the host's **background/session mechanism** and retain
+its handle. A foreground call holds the turn open until the command timeout.
 
 The launch is quiet like every other step (`execute-quietly.md`), with the one
 exception that guide makes for a review: **print the manifest as you launch**,
@@ -75,8 +75,9 @@ would land is a different one.
 
 ## Read the result
 
-When the background call completes, read its stdout with the **BashOutput
-tool**, not `tail` or `$(...)`, which trip the command-substitution gate. The
+When the background command completes, read its captured stdout through the
+host's command-session mechanism, not `tail` or `$(...)`, which trip the
+command-substitution gate. The
 last lines carry:
 
 - `REVIEW_VERDICT`: `approved`, `changes-requested`, `incomplete`, or
@@ -92,7 +93,7 @@ address, and the verdict says whether it blocks.
 
 | Verdict | Act on it |
 | --- | --- |
-| `approved` | Proceed to the skill's next step. Where `editedFields` carries the artifact's target, `edit` mode's saved buffer *is* the artifact: use that text verbatim, without re-drafting from it or re-presenting it for approval. Comments an approving review still left don't gate the step; surface them after it, and carry out one that asks for the follow-up itself (*file an issue for this*), through `/anchor:issue` where it asks for an issue |
+| `approved` | Proceed to the skill's next step. Where `editedFields` carries the artifact's target, `edit` mode's saved buffer *is* the artifact: use that text verbatim, without re-drafting from it or re-presenting it for approval. Comments an approving review still left don't gate the step; surface them after it, and carry out one that asks for the follow-up itself (*file an issue for this*), through `anchor:issue` where it asks for an issue |
 | `changes-requested` | Nothing proceeds. Fold in every comment, echo them back in the review-feedback table from `execute-quietly.md`, and re-review. A comment whose `target` is `file` with a diff in its body is the reviewer's own edit rather than an annotation: read it per `reviewer-edits.md` |
 | `incomplete` | The reviewer closed with changes unreviewed, a partial pass. Ask what they want to change, then re-review |
 | `no-verdict` | The review did not complete. `capabilities.producesVerdict: false` means the tool graded nothing; otherwise it closed early or errored (see `raw.exitCode`). Say what happened in one line and take the fallback ladder. Don't silently retry: the same failure recurs |

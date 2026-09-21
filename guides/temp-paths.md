@@ -22,23 +22,29 @@ that file verbatim, then failing on it the next run with `mkstemp failed … Fil
 exists`. `$(mktemp -u …XXXXXX).md` behaves identically on GNU, BSD, and Git
 Bash's mktemp.
 
-## Pair the path with the rule that covers it
+## Pair the path with the host rule that covers it
 
 The path and the allow rule are one decision. Writing down only the path is what
 lets them drift apart.
 
+Claude Code expresses that grant in `settings.json`:
+
 ```jsonc
-// settings.json — the literal prefix, plus the path it resolves to on your
-// platform; see the resolution table below for what that is
+// The literal prefix, plus the path it resolves to on your platform; see the
+// resolution table below for what that is.
 "permissions": { "allow": ["Edit(//tmp/**)", "Edit(//private/tmp/**)"] }
 ```
+
+Codex expresses the same boundary through its permission profile and writable
+roots. The syntax differs; the requirement is the same: allow the literal
+`/tmp` path and, where the host resolves symlinks first, its real platform path.
 
 ## Why not `${TMPDIR:-/tmp}`
 
 It reads as the more careful, more portable form, which is what makes it a trap:
 the *fallback* is what a caller can grant and the *primary* is what prompts.
 
-| Platform | `$TMPDIR` | `${TMPDIR:-/tmp}` resolves to | `Edit(//tmp/**)` matches |
+| Platform | `$TMPDIR` | `${TMPDIR:-/tmp}` resolves to | a `/tmp` grant matches |
 | --- | --- | --- | --- |
 | macOS | always set, `/var/folders/<hash>/T/` | `/var/folders/…` | no |
 | Linux | usually unset | `/tmp` | yes |
@@ -54,7 +60,7 @@ Linux has nothing to resolve:
 | Platform | a literal `/tmp/x` really lives at | so also grant |
 | --- | --- | --- |
 | Linux | `/tmp/x` | nothing further |
-| macOS | `/private/tmp/x` — `/tmp` is a symlink to `private/tmp` | `Edit(//private/tmp/**)` |
+| macOS | `/private/tmp/x` — `/tmp` is a symlink to `private/tmp` | also grant `/private/tmp` |
 | Windows, Git Bash | `<user temp>/x` — `/tmp` is a mount over the user's own temp dir, `/c/Users/<name>/AppData/Local/Temp` on the CI runner | the caller's own temp path; there is no shared prefix |
 
 Granting only the literal prefix leaves the prompt in place whenever the check
@@ -66,10 +72,11 @@ anchor's prescribed commands assume a **POSIX shell** — bash or zsh on macOS a
 Linux, and Git Bash on Windows. Every script under `scripts/` is
 `#!/usr/bin/env bash`, and the prescribed one-liners use `mktemp` and `$(…)`.
 
-Claude Code runs Bash-tool commands through Git Bash when it is present and
-PowerShell when it is not, so a **PowerShell-only Windows install** has no
-`mktemp` and the prescribed form fails before any permission question arises.
-The equivalent there:
+Claude Code can run shell commands through Git Bash. Codex uses native
+PowerShell on Windows and a Linux shell in WSL2. Anchor currently supports
+Windows through **Git Bash or WSL2**; a native PowerShell-only session has no
+`mktemp`, cannot run Anchor's Bash helpers as prescribed, and is not a supported
+runtime yet. The equivalent temporary-path expression there is:
 
 ```powershell
 $p = Join-Path $env:TEMP ("cr-body-{0}.md" -f [guid]::NewGuid().ToString("N").Substring(0,6))
@@ -85,11 +92,11 @@ and PowerShell does not. `New-TemporaryFile` is the built-in alternative, but it
 name.
 
 > [!NOTE]
-> The PowerShell row is inference from the settings schema and from how Claude
-> Code selects a shell — not a tested claim. Nothing in anchor's CI exercises a
-> PowerShell-only Windows install; the `windows-latest` matrix job runs under Git
-> Bash, which is the row above it. Treat the exact allow-rule pattern for
-> `$env:TEMP` as unverified until someone runs it there.
+> Nothing in anchor's CI exercises a native PowerShell-only install; the
+> `windows-latest` matrix job runs under Git Bash. Codex users on Windows should
+> use WSL2 or Git Bash until Anchor carries a native PowerShell implementation.
+> Treat the exact allow-rule pattern for `$env:TEMP` as unverified until one is
+> added and tested.
 
 ## anchor's own scripts honor `$TMPDIR`, deliberately
 

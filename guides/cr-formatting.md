@@ -69,7 +69,7 @@ link. **The angle-bracket form is what carries a token with spaces or
 parentheses** — plain markdown, and the only form that survives a heading as a
 token.
 
-`${CLAUDE_PLUGIN_ROOT}/scripts/deep-links.sh` turns each placeholder into the
+`<anchor-root>/scripts/deep-links.sh` turns each placeholder into the
 finished URL — the view path the anchor scrolls on, the path-hash the forge
 renders (`sha1` on GitLab, `sha256` on GitHub), and the line part
 (`_<old>_<new>` on GitLab, `R<new>` on GitHub). `--check` resolves the tokens

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "anchor",
+  "description": "Consistency across the code-change lifecycle: issue, change request, review, release.",
+  "author": {
+    "name": "chris-peterson"
+  },
+  "homepage": "https://chris-peterson.github.io/anchor/#/",
+  "repository": "https://github.com/chris-peterson/anchor",
+  "license": "MIT",
+  "keywords": [
+    "commit",
+    "issue",
+    "pull-request",
+    "merge-request",
+    "review",
+    "git",
+    "forge",
+    "ai",
+    "claude-code",
+    "codex"
+  ],
+  "extensions": {
+    "com.openai": {
+      "hooks": "./hooks/hooks.json"
+    }
+  }
+}

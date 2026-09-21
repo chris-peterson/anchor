@@ -6,7 +6,7 @@ resolving the commit, choosing one-shot vs. watch, tracking a single job. This
 file owns the *shape*, so it's the place to edit as your preferences evolve.
 
 Every caller that reports a pipeline reads this file, so the report is the same
-whether the user asked for it (`/anchor:pipeline`) or a skill that started CI
+whether the user asked for it (`anchor:pipeline`) or a skill that started CI
 produced it (`commit`, `resolve-feedback`, `prepare-review`, `merge` — see the
 "after a push" section below).
 

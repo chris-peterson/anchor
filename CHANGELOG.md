@@ -52,6 +52,7 @@
 
 ### Added
 
+- **Anchor now ships as a portable Agent Plugin alongside its Claude Code package.** Codex gets the same lifecycle skills and `SessionStart` rules without the skills assuming Claude-only tool names or a shell environment variable that exists only while a hook runs. The docs show both invocation forms (`/anchor:commit` in Claude Code, `$anchor:commit` in Codex), and release detection recognizes portable, Codex, and Claude plugin manifests before an auxiliary package manifest.
 - **The guides have an index of their own.** [Guides](https://chris-peterson.github.io/anchor/#/guides) says what the standing judgment behind each artifact is and which skills read it, grouped so a section is linkable on its own — the [prose guides](https://chris-peterson.github.io/anchor/#/guides?id=prose) that set the voice of every commit message, CR description, issue body, and set of release notes are one link to hand someone. The sidebar carries the whole set, including the two review guides it had been leaving out.
 - **The docs site opens with [Getting started](https://chris-peterson.github.io/anchor/#/getting-started)**: how to sign each forge CLI in, the token scopes each one needs when a token is unavoidable, and the permission setting (`"defaultMode": "default"`) that makes every step wait for you.
 
@@ -65,6 +66,10 @@
 ### Fixed
 
 - **A mis-cased qualifier is reported rather than silently inert.** `git config` folds a section and a key but holds a subsection exactly as written, so `anchor.CR.verbosity` sets a key no read of `anchor.cr.verbosity` ever finds — it looks set and does nothing. `anchor` now names the key and the spelling that would be read. The old two-level names were folded whole, so this trap is new with the shape and worth knowing about.
+
+### Fixed
+
+- An unconfigured editor now reports as Anchor's default choice instead of as user configuration. `git var GIT_EDITOR` falls through to Git's compiled `vi`; reading that command at the `GIT_EDITOR` rung mislabeled the default and hid the configuration hint.
 
 ## 1.14.0
 

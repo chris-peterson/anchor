@@ -1,6 +1,7 @@
 # anchor
 
-A Claude Code plugin covering the code-change lifecycle — filing issues,
+An agent plugin for an AI coding harness such as Claude Code or Codex, covering the
+code-change lifecycle — filing issues,
 committing with why-first messages, opening and describing change requests,
 resolving review feedback, reporting pipelines, merging, releasing — the same
 way on GitHub and on GitLab. What each skill does for a *user* lives on the docs
@@ -34,6 +35,7 @@ whether the host ships `sha1sum`.
 
 ```text
 plugin.yml                canonical descriptor — manifest, marketplace entry, docs previews
+plugin.json               portable Agent Plugins manifest (versionless; plugin.yml owns version)
 skills/<name>/SKILL.md    one skill per lifecycle step; the prompt is the implementation
 rules/                    ambient rules injected into every session by hooks/emit-rules.sh
 scripts/                  the deterministic helpers the skills shell out to
@@ -52,6 +54,9 @@ docs/                     docsify site; only README, _sidebar, ambient-rules, gu
 block, and most of `docs/` are **generated** by
 [shipyard](https://github.com/chris-peterson/shipyard) from the sources above.
 Never hand-edit a generated file; edit its source and let the projection follow.
+The root `plugin.json` is the portable package source, not a projection. It omits
+`version` deliberately so `plugin.yml` remains the single release version source
+for both package shapes.
 
 The projection job in `.github/workflows/project.yml` is that writer: it runs
 `shipyard generate` on every push and commits the result to the branch, so a

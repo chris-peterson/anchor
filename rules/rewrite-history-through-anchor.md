@@ -1,14 +1,14 @@
 # Route history rewrites through `anchor`
 
 When you're about to rewrite git history — `commit --amend`, a squash, a
-rebase, any force-push — don't do it ad-hoc: use `/anchor:commit`, which
+rebase, any force-push — don't do it ad-hoc: use `anchor:commit`, which
 encodes when amending is safe and when the change must land as a new
 commit, and recommends accordingly.
 
 For rewrites the skill doesn't cover, gate on what's reliable at decision
 time — push state and the CR's draft flag (`gh pr view --json isDraft` /
 `glab mr view --output json | jq .draft`), **read fresh at the moment you
-rewrite, never from an earlier turn** — it flips live. Prefer `/anchor:commit`,
+rewrite, never from an earlier turn** — it flips live. Prefer `anchor:commit`,
 whose pre-flight re-resolves it; raw `git commit --amend` /
 `push --force-with-lease` has no such gate.
 

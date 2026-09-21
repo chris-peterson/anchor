@@ -49,7 +49,10 @@ anchor_editor_configured() {
   # anchor.diff.tool. Above git's chain because it is the narrower statement —
   # which editor to review in, not which to open for everything.
   ed=$(git config anchor.edit.tool 2>/dev/null || true)
-  anchor_editor_usable "$ed" || ed=$(git var GIT_EDITOR 2>/dev/null || true)
+  # Read this rung directly. `git var GIT_EDITOR` falls all the way through to
+  # git's compiled default, which would mislabel an unconfigured `vi` as a value
+  # the user chose and suppress the configuration hint.
+  anchor_editor_usable "$ed" || ed="${GIT_EDITOR:-}"
   anchor_editor_usable "$ed" || ed=$(git config --get core.editor 2>/dev/null || true)
   anchor_editor_usable "$ed" || ed="${VISUAL:-}"
   anchor_editor_usable "$ed" || ed="${EDITOR:-}"

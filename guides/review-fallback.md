@@ -66,7 +66,7 @@ where they started, so a `no-verdict` from the editor lands on rung 2 instead of
 being offered the same tool twice.
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill <skill> --tool editor …
+bash "<anchor-root>/scripts/review-diff.sh" --skill <skill> --tool editor …
 ```
 
 `REVIEW_EDIT_AVAILABLE=0` means a launch would reach no editor — nothing
@@ -82,9 +82,10 @@ The floor, and the only rung that needs nothing installed. What it looks like
 depends on what was under review.
 
 **A drafted document** — put the full body in a fenced block in your reply.
-Running a command that prints it shows the user nothing, for the reasons
-[execute-quietly](/guides/execute-quietly) sets out. Then ask with
-`AskUserQuestion`, header `Disposition`: write it · copy only · edit.
+Running a command that prints it does not portably show it to the user, for the
+reasons [execute-quietly](/guides/execute-quietly) sets out. Then ask with
+structured choices when the host supports that (header `Disposition`), or
+directly otherwise: write it · copy only · edit.
 
 **A changeset** — walk the hunks. Not one question over a diff the user never
 saw, and not a dump of `git diff` either: go file by file, and for each, say
