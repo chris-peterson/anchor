@@ -5,23 +5,27 @@ description: Fetch an open CR's review feedback and drive each thread to resolut
 
 # Resolve Review Feedback
 
+Before using a bundled path, resolve `<anchor-root>` to the installed plugin root
+from the host's value or this `SKILL.md` path, then follow the host-neutral tool
+conventions in `<anchor-root>/guides/host-runtime.md`.
+
 Fetch the unresolved review threads on an open change request, triage each
 one with the author, then act: change the code, reply on the thread, resolve
 it — in whatever combination each thread calls for. The goal is **resolution**:
 every thread ends fixed, answered, or resolved, not merely acknowledged. This
-closes the loop that `/anchor:prepare-review` opens: prepare-review routes
+closes the loop that `anchor:prepare-review` opens: prepare-review routes
 reviewer attention out; resolve-feedback brings their findings back into the
 branch and drives each one to done.
 
 CR = change request: a pull request on GitHub, a merge request on GitLab.
 Pick the forge tool by the `origin` remote.
 
-**Don't narrate your work.** Every step below is an operating instruction, not a script to read aloud — follow the execute-quietly discipline: `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. For this skill, the only things worth surfacing are the resolved repo and CR in one line, each thread's triage, the reply bodies awaiting the user's approval in 3c, and what changed on each thread.
+**Keep plumbing quiet.** Every step below is an operating instruction, not a script to read aloud — follow the execute-quietly discipline: `<anchor-root>/guides/execute-quietly.md`. For this skill, the only things worth surfacing are the resolved repo and CR in one line, each thread's triage, the reply bodies awaiting the user's approval in 3c, and what changed on each thread.
 
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
 flowchart TD
-    Start(["/resolve-feedback"]) --> Repo["Resolve repo + CR"]
+    Start(["resolve-feedback"]) --> Repo["Resolve repo + CR"]
 
     subgraph "Step 1: Fetch"
         Repo --> Fetch["Fetch unresolved threads"]
@@ -50,8 +54,9 @@ flowchart TD
 
 ## Task tracking when orchestrated
 
-At the very start, call `TaskList`. If any task is already `in_progress`, run
-silently inside the orchestrator's list. Otherwise enumerate:
+If the host exposes task tracking, inspect it first. If any task is already in
+progress, run inside the orchestrator's list. If the host has no task mechanism,
+follow an evident enclosing workflow without inventing one. Otherwise enumerate:
 
 - `Step 1: Fetch unresolved feedback`
 - `Step 2: Triage with the author`
@@ -62,7 +67,7 @@ If there's no unresolved feedback, mark remaining tasks `deleted`.
 ## Target repo and CR
 
 Resolve the repo as the other `anchor` skills do. **With a name argument**, resolve
-it with `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh <name>` (see the cookbook's
+it with `<anchor-root>/scripts/resolve-target.sh <name>` (see the cookbook's
 "Resolving a named target repo"): `TARGET_VIA=resolved` → use `TARGET_LOCAL` as the
 checkout — this skill writes commits, so it needs one; if `TARGET_LOCAL` is empty,
 ask where the checkout lives rather than proceeding. `ambiguous` → prompt with
@@ -107,7 +112,7 @@ the reviewer saw.
 ## Step 1: Fetch unresolved feedback
 
 Pull every unresolved, human-authored thread. Canonical invocations live in
-the bundled forge cookbook (`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`, section "List
+the bundled forge cookbook (`<anchor-root>/guides/forge-cookbook.md`, section "List
 unresolved review threads"); in short:
 
 - **GitLab** — `glab api "projects/:fullpath/merge_requests/<iid>/discussions?per_page=100"`,
@@ -152,11 +157,12 @@ Disposition vocabulary:
   where it lands (issue link, follow-up CR) — don't leave it unanswered.
 - **skip** — leave untouched this round.
 
-Then confirm with the author before acting (use `AskUserQuestion`, header
-`Triage`): **Proceed as proposed** / **Adjust** (they name the thread numbers
-and new dispositions) / **Abort**. This gate settles what happens to each
-thread; the wording of what gets said goes to the author separately in 3c,
-once there are actual sentences to read.
+Then confirm with the author before acting, using structured choices when the
+host supports that (header `Triage`) or asking directly otherwise: **Proceed as
+proposed** / **Adjust** (they name the thread numbers and new dispositions) /
+**Abort**. This gate settles what happens to each thread; the wording of what
+gets said goes to the author separately in 3c, once there are actual sentences
+to read.
 
 ## Step 3: Act
 
@@ -169,16 +175,16 @@ commit; unrelated concerns get separate commits so each reply can cite a
 focused SHA.
 
 Keep each fix within the changeset's existing scope — the bundled guide
-(`${CLAUDE_PLUGIN_ROOT}/guides/changeset-scope.md`) has the bar and the surface-and-confirm move.
+(`<anchor-root>/guides/changeset-scope.md`) has the bar and the surface-and-confirm move.
 
 If the author flags something in the CR description as worth keeping,
 fold it into the repo's docs as part of the fix commit — the bar and the
-adaptation rules are in the bundled guide (`${CLAUDE_PLUGIN_ROOT}/guides/description-vs-docs.md`).
+adaptation rules are in the bundled guide (`<anchor-root>/guides/description-vs-docs.md`).
 
 ### 3b. Test and commit
 
 Run the project's test suite (same detection, exit-code gate, and silence on a
-pass as `/anchor:commit` Step 0); a failing suite blocks the push, no exceptions. Then commit **as new commits —
+pass as `anchor:commit` Step 0); a failing suite blocks the push, no exceptions. Then commit **as new commits —
 never amend** what the reviewer has seen: a CR with feedback on it is being
 read, so the "changes since you last looked" diff is load-bearing regardless
 of draft state. Subject names the concern, body cites the thread:
@@ -194,12 +200,12 @@ Show the commit(s) for confirmation, then push (plain push — the branch only
 gains commits).
 
 That push starts a fresh pipeline on the fix, and telling the reviewer their
-feedback is addressed reads differently if it went red. Launch the watch as a
-**background** Bash call (`run_in_background: true`) so it polls while you carry
-on with 3c through 3e:
+feedback is addressed reads differently if it went red. Launch the watch with
+the host's background/session mechanism, retain its handle, and let it poll
+while you carry on with 3c through 3e:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill resolve-feedback
+bash "<anchor-root>/scripts/pipeline-after-push.sh" --skill resolve-feedback
 ```
 
 Its verdict belongs in Step 4's summary; read it there.
@@ -238,11 +244,12 @@ is being asked to approve:
 | 1 | `src/deploy.sh:42` | addressed in <url> |
 | 2 | `taskdef.yml:7` | Fargate would mean rebuilding the image on every deploy — the EC2 launch type keeps the layer cache warm. |
 
-Then ask with `AskUserQuestion` (header `Replies`): **Post as drafted** /
-**Edit** (they name the numbers and what to change; redraft and show the table
-again) / **Skip replying** (leave the threads for a later round). One gate for
-the whole set, not one per thread — the same approval asked N times reads as
-noise, and the user starts approving without reading.
+Then ask with structured choices when the host supports that (header `Replies`),
+or directly otherwise: **Post as drafted** / **Edit** (they name the numbers and
+what to change; redraft and show the table again) / **Skip replying** (leave the
+threads for a later round). One gate for the whole set, not one per thread — the
+same approval asked N times reads as noise, and the user starts approving
+without reading.
 
 This is not the Step 2 gate. Step 2 settles *what happens to each thread*
 while the words are still unwritten; approving a disposition is not approving
@@ -251,7 +258,7 @@ returns to triage — it stays here.
 
 ### 3d. Post the approved replies
 
-Write each approved body to a unique temp file (`$(mktemp -u /tmp/reply.XXXXXX).md`, whose literal `/tmp` a caller's `Edit(//tmp/**)` grant reaches — `${CLAUDE_PLUGIN_ROOT}/guides/temp-paths.md`)
+Write each approved body to a unique temp file (`$(mktemp -u /tmp/reply.XXXXXX).md`, whose literal `/tmp` a caller's path-scoped write grant reaches — `<anchor-root>/guides/temp-paths.md`)
 and post it into the *existing* thread — not as a new top-level comment (see
 the cookbook, "Reply to a review thread"). Post what was approved: an
 improvement you notice while posting goes back through 3c, because the point of
@@ -268,12 +275,12 @@ identical to a forgotten one.
 
 Report one line per thread: `#N <file:line> — <disposition> — <commit sha /
 reply posted / resolved>`, plus anything deferred and where it went. If any
-thread was skipped, say so — the next `/anchor:resolve-feedback` run picks it
+thread was skipped, say so — the next `anchor:resolve-feedback` run picks it
 up.
 
-Then close with the pipeline. Read the watch launched in 3b with the
-**BashOutput tool**: `PIPELINE_WATCH=skipped` means a config key turned it off
-or the commit's runs were already reported — say nothing more. `PIPELINE_WATCH=ran` is
-followed by the lines `/anchor:pipeline` reads; report them following
-`${CLAUDE_PLUGIN_ROOT}/templates/pipeline-report.md`. If it hasn't settled yet,
+Then close with the pipeline. Read the watch launched in 3b through the host's
+command-session mechanism: `PIPELINE_WATCH=skipped` means a config key turned it
+off or the commit's runs were already reported — say nothing more. `PIPELINE_WATCH=ran` is
+followed by the lines `anchor:pipeline` reads; report them following
+`<anchor-root>/templates/pipeline-report.md`. If it hasn't settled yet,
 say the watch is still running and link the pipeline rather than waiting on it.

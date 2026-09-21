@@ -324,7 +324,7 @@ their push triggered; `merge` watches the one the commit the forge wrote to the
 default branch triggered, which on most repos is what deploys or publishes. Each
 runs to a terminal state and reports as a table of runs and jobs.
 
-`/anchor:release` watches the run that publishes, through `/anchor:pipeline`.
+`anchor:release` watches the run that publishes, through `anchor:pipeline`.
 That watch is the release itself rather than a report alongside one, so this key
 doesn't reach it.
 
@@ -431,7 +431,7 @@ git config core.editor "code --wait"   # or set VISUAL / EDITOR
 |--:|---|---|
 | 1 | `GIT_EDITOR` | Ignored when it is a no-op (`true`, `:`) — the way an agent harness keeps git from opening editors. Honoring it would open nothing, change nothing, and read as approval. |
 | 2 | `git config core.editor` | The one to set if you want this decided per repo or globally. |
-| 3 | `VISUAL`, then `EDITOR` | Where git looks next. Claude Code exposes no editor setting of its own, and its transcript viewer documents these two, so one value can steer both it and `anchor`. |
+| 3 | `VISUAL`, then `EDITOR` | Where git looks next. Agent hosts expose no portable editor setting of their own, so one value can steer both the host and `anchor`. |
 | 4 | git's compiled default | Whatever a plain `git commit` opens here, usually `vi` — when there is a terminal to host it. |
 | 5 | A blocking VS Code on `PATH` | `code --wait`, then `code-insiders --wait`. `anchor`'s own preference, not git's, and where it lands with nowhere to put a terminal. |
 
@@ -468,9 +468,9 @@ family for the same reason the flags are read rather than guessed: an editor
 
 ##### Where a review opens :id=review-hosts
 
-A terminal editor needs a terminal, and so does a diff viewer. Claude Code gives
-a plugin none, so `anchor` puts one up — and both kinds of review reach the same
-set, in this order:
+A terminal editor needs a terminal, and so does a diff viewer. Agent plugin
+commands receive no controlling terminal, so `anchor` puts one up — and both
+kinds of review reach the same set, in this order:
 
 | Host | When it's used |
 |---|---|
@@ -538,9 +538,9 @@ The mode turns on one question: **has this review got a diff to show?**
 | One file with no prior version — a first issue body, a description on a CR that has none, release notes with an empty baseline | `edit` | There is nothing to diff. A viewer marks every line as added and asks you to comment your way to a rewrite of a document an editor could have handed you. |
 | Anything else — a changeset, or a draft revised against the version before it | `diff` | Real hunks, and per-hunk annotation is what a viewer is for. A git range names a base by construction, so it always lands here. |
 
-The subject decides, not the skill that asked. `/anchor:issue` opens an editor
+The subject decides, not the skill that asked. `anchor:issue` opens an editor
 when it files a new body and a viewer when it updates one; the second pass of a
-`/anchor:prepare-review` description lands in the viewer, which is where "what
+`anchor:prepare-review` description lands in the viewer, which is where "what
 did the feedback change" is legible.
 
 What you name is the tool each shape opens:
@@ -584,7 +584,7 @@ missing — handing you a diff viewer when you asked for the editor would answer
 question you didn't ask.
 
 An editor carries one artifact, so it has nothing to show for a review that is a
-diff on its own — `/anchor:commit`'s push-existing path, where there are
+diff on its own — `anchor:commit`'s push-existing path, where there are
 unpushed commits and no drafted message. That review halts and names the key to
 change rather than passing a diff nobody saw.
 

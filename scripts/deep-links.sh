@@ -297,14 +297,15 @@ placeholders() {
 # An `anchor:` that no placeholder pattern claimed — the author wrote the spec as
 # prose, or the link markup is broken. Silence there would ship the raw token.
 #
-# `/anchor:<skill>` is masked out first. A description that names the skill that
-# drafted it carries the same three-letter prefix, and reading those as broken
-# placeholders reports a fault in prose the author wrote on purpose. A real
-# placeholder is a link destination, so it is never preceded by a slash.
+# `/anchor:<skill>` and `$anchor:<skill>` are masked out first. A description
+# that names the skill that drafted it carries the same three-letter prefix, and
+# reading those as broken placeholders reports a fault in prose the author wrote
+# on purpose. A real placeholder is a link destination, so it is never preceded
+# by either invocation sigil.
 stray_anchors() {
   local claimed
   claimed=$(placeholders "$1")
-  sed 's|/anchor:|/skill-ref:|g' "$1" 2>/dev/null \
+  sed -e 's|/anchor:|/skill-ref:|g' -e 's|\$anchor:|\$skill-ref:|g' "$1" 2>/dev/null \
     | grep -o 'anchor:[^)>[:space:]]*' | sort -u | while IFS= read -r a; do
     [[ -z "$a" ]] && continue
     grep -qF -- "$a" <<<"$claimed" || echo "$a"

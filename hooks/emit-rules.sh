@@ -6,15 +6,14 @@
 
 set -euo pipefail
 
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-}"
+PLUGIN_ROOT="${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT:-}}"
 RULES_DIR="$PLUGIN_ROOT/rules"
 [ -d "$RULES_DIR" ] || exit 0
 
-# Rules reference bundled files as ${CLAUDE_PLUGIN_ROOT}/<path> placeholders;
-# expand them here so the injected text carries real, readable paths.
 printf '# Ambient rules from the anchor plugin\n\n'
+printf 'Anchor plugin root: `%s`\n\n' "$PLUGIN_ROOT"
 for f in "$RULES_DIR"/*.md; do
   [ -e "$f" ] || break
-  sed "s|\${CLAUDE_PLUGIN_ROOT}|$PLUGIN_ROOT|g" "$f"
+  sed "s|<anchor-root>|$PLUGIN_ROOT|g" "$f"
   printf '\n'
 done

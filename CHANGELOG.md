@@ -4,7 +4,12 @@
 
 ### Added
 
+- **Anchor now ships as a portable Agent Plugin alongside its Claude Code package.** Codex gets the same lifecycle skills and `SessionStart` rules without the skills assuming Claude-only tool names or a shell environment variable that exists only while a hook runs. The docs show both invocation forms (`/anchor:commit` in Claude Code, `$anchor:commit` in Codex), and release detection recognizes portable, Codex, and Claude plugin manifests before an auxiliary package manifest.
 - **The guides have an index of their own.** [Guides](https://chris-peterson.github.io/anchor/#/guides) says what the standing judgment behind each artifact is and which skills read it, grouped so a section is linkable on its own — the [prose guides](https://chris-peterson.github.io/anchor/#/guides?id=prose) that set the voice of every commit message, CR description, issue body, and set of release notes are one link to hand someone. The sidebar carries the whole set, including the two review guides it had been leaving out.
+
+### Fixed
+
+- An unconfigured editor now reports as Anchor's default choice instead of as user configuration. `git var GIT_EDITOR` falls through to Git's compiled `vi`; reading that command at the `GIT_EDITOR` rung mislabeled the default and hid the configuration hint.
 
 ## 1.14.0
 

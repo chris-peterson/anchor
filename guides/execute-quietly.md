@@ -1,8 +1,10 @@
 # Execute quietly
 
 The value of a skill is a fast, consistent workflow. Prose the user has to read
-works against that, so silence is the default: output is the exception, reserved
-for the points where the user must act or decide.
+works against that, so keep Anchor's plumbing quiet: output is reserved for the
+points where the user must act or decide. This does not override progress updates
+the host requires. Keep those concise and leave `KEY=value` blocks, tool
+transitions, and helper derivations out of them.
 
 ## Delegating to a script is silent by default
 
@@ -21,11 +23,11 @@ opposite. The commit message, the CR description, the drafted issue are what the
 user is there to decide on, and they have to actually reach the user — as text
 in your reply, or through a review tool that shows them properly.
 
-Running a command shows the user nothing. A Bash tool's output goes to *you*;
-the terminal collapses it to a `+80 lines (ctrl+o to expand)` stub. So a command
-whose whole purpose is to present something (`git diff --no-index` of a drafted
-description against the live one, a rendered table) satisfies nothing on its
-own.
+Running a command is not a portable way to show the user something. Hosts render
+or hide tool output differently, and may collapse it behind a disclosure. So a
+command whose whole purpose is to present something (`git diff --no-index` of a
+drafted description against the live one, a rendered table) satisfies nothing
+on its own.
 
 The failure this catches is a confirmation prompt about content the user never
 saw: the artifact "presented" as a collapsed tool result, then *Write this to the

@@ -5,11 +5,15 @@ description: Cut a release for what has landed — recommend a semver bump, draf
 
 # Release
 
+Before using a bundled path, resolve `<anchor-root>` to the installed plugin root
+from the host's value or this `SKILL.md` path, then follow the host-neutral tool
+conventions in `<anchor-root>/guides/host-runtime.md`.
+
 Turn what has landed since the last release into a released version: work out
 what is shipping, recommend a semver bump, draft notes a *user* of the project
 can read, and publish along the path the repo's own release model prescribes.
 
-This is the step after `/anchor:merge`. It is **always invoked explicitly** —
+This is the step after `anchor:merge`. It is **always invoked explicitly** —
 `merge` names it as the next step but never runs it, because publishing is a
 deliberate act and batching several merges into one release is the normal shape.
 So this skill assumes nothing about a preceding merge in the same session: it
@@ -22,16 +26,16 @@ rather than the inference. It is the first thing to establish and the one thing 
 certain about — hand-editing a manifest whose workflow also bumps it lands two
 commits that fight, and it surfaces only after the release is public.
 
-**Don't narrate your work.** Every step below is an operating instruction, not a
+**Keep plumbing quiet.** Every step below is an operating instruction, not a
 script to read aloud — follow the execute-quietly discipline:
-`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. For this skill, the only things
+`<anchor-root>/guides/execute-quietly.md`. For this skill, the only things
 worth surfacing are the resolved repo and model in one line, any fork that needs
 the author, the version recommendation, and the one-line result.
 
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
 flowchart TD
-    Start(["/release"]) --> Recon["Resolve repo + run release-recon.sh"]
+    Start(["release"]) --> Recon["Resolve repo + run release-recon.sh"]
 
     subgraph "Step 1: Model"
         Recon --> Model{RELEASE_MODEL}
@@ -57,7 +61,7 @@ flowchart TD
         Which -->|release/tag-triggered| ReviewNotes["Review notes, confirm, publish"]
         Which -->|dispatch-triggered| Stage["Notes into the changelog"]
         Which -->|bump-commit| Bump["Bump source, edit changelog"]
-        Bump --> Commit["Hand to /anchor:commit"]
+        Bump --> Commit["Hand to anchor:commit"]
         Stage --> Dispatch["Commit, then dispatch with the level"]
         Dispatch --> Follow
         ReviewNotes --> Follow["Watch workflow, fast-forward local"]
@@ -69,9 +73,10 @@ flowchart TD
 
 ## Task tracking when orchestrated
 
-At the very start, call `TaskList`. If any task is already `in_progress`, this
-skill is running inside an orchestrator — run silently and do **not** create your
-own tasks. Otherwise enumerate:
+If the host exposes task tracking, inspect it first. If any task is already in
+progress, this skill is running inside an orchestrator — run inside that list and
+do not create your own tasks. If the host has no task mechanism, follow an
+evident enclosing workflow without inventing one. Otherwise enumerate:
 
 - `Step 1: Establish the release model`
 - `Step 2: Decide the version and draft the notes`
@@ -80,7 +85,7 @@ own tasks. Otherwise enumerate:
 ## Target repo and release state
 
 Resolve the repo as the other `anchor` skills do. **With a name argument**, resolve
-it with `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh <name>`
+it with `<anchor-root>/scripts/resolve-target.sh <name>`
 (see the cookbook's "Resolving a named target repo"): `TARGET_VIA=resolved` → use
 `TARGET_LOCAL` as the checkout — this skill reads git history and may commit, so it
 needs one; if `TARGET_LOCAL` is empty, ask where the checkout lives rather than
@@ -93,7 +98,7 @@ When the target repo isn't the working directory, pass it through rather than
 `cd`-ing: `--repo <checkout>` on the helpers below, `-C <repo>` on git, and
 `-R <owner/name>` on `gh`/`glab` (the URL-encoded project for `:fullpath`, plus
 `--hostname <host>`, on `glab api`). The retargeting rules are in
-`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md` ("Targeting a repo that isn't the
+`<anchor-root>/guides/forge-cookbook.md` ("Targeting a repo that isn't the
 working directory").
 
 ## Step 1: Establish the release model
@@ -103,11 +108,11 @@ Read it, don't re-derive it — re-running these git and CI reads by hand is the
 waste this helper exists to remove:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/release-recon.sh"
+bash "<anchor-root>/scripts/release-recon.sh"
 ```
 
 `RELEASE_MODEL` decides the whole path. Read the matching section of
-`${CLAUDE_PLUGIN_ROOT}/guides/release-models.md` — it carries the per-model
+`<anchor-root>/guides/release-models.md` — it carries the per-model
 procedure and the traps each one hides:
 
 | `RELEASE_MODEL` | Who bumps | What Step 5 does |
@@ -145,14 +150,14 @@ Two states end the run here, and both are correct outcomes rather than failures:
 - **`no-version-artifact`** — no manifest, so there is no version to recommend and
   nothing to publish. The merge already was the release. Say so, summarize what
   `RELEASE_RANGE` contains, and stop. Where the merge triggers a deploy, add its
-  state via `/anchor:pipeline` rather than inventing a publish step.
+  state via `anchor:pipeline` rather than inventing a publish step.
 - **`RELEASE_COMMITS=0`** — nothing has landed since `RELEASE_LAST_REF`. Report
   that the last release is current and stop; don't manufacture a version.
 
 Two states need surfacing before going further:
 
 - **`RELEASE_DIRTY=1`** — uncommitted changes. A release describes committed work.
-  Surface the dirty tree and ask whether to commit it first (`/anchor:commit`) or
+  Surface the dirty tree and ask whether to commit it first (`anchor:commit`) or
   release what's committed.
 - **`RELEASE_UNPUSHED` > 0 with `RELEASE_ON_DEFAULT=1`** — local commits the remote
   hasn't seen. On every model where a workflow owns the bump it builds from the
@@ -190,8 +195,9 @@ this is the first release rather than describing the whole history as changes.
 Apply [semver](https://semver.org) to `RELEASE_VERSION`: any breaking change →
 major; otherwise a new feature → minor; otherwise → patch.
 
-Three cases are the author's decision, not the skill's. Put each through
-`AskUserQuestion` with the recommendation first:
+Three cases are the author's decision, not the skill's. Put each through the
+host's structured question mechanism when available, or ask directly otherwise,
+with the recommendation first:
 
 - **A major bump.** Breaking changes make it mechanical, but declaring one is a
   consumer-facing statement. Name what breaks and confirm.
@@ -228,15 +234,15 @@ Read the project + global keys once — `git config --get-regexp '^anchor\.' 2>/
   **It shortens entries; it never drops one.** Every change in scope has its bullet at `1` as it does at `100`, and a breaking change keeps its migration steps at every setting — a reader who never learns a change shipped is a reader the notes failed. Work down this order and stop where the draft balances where the setting asks: the rationale for a change → the consequences a reader can infer from the effect you already stated → each bullet down to its floor, the change as its effect on someone using the project. At the default that floor is most of what's left, which is the intent.
 
 Two conventions to honor: the loaded-framing discipline in
-`${CLAUDE_PLUGIN_ROOT}/guides/loaded-framing.md` (notes state what changed, not
+`<anchor-root>/guides/loaded-framing.md` (notes state what changed, not
 how hard it was or how little it touched), and the forge's markdown quirks in
-`${CLAUDE_PLUGIN_ROOT}/guides/markdown-gotchas.md` (a release body renders as
+`<anchor-root>/guides/markdown-gotchas.md` (a release body renders as
 forge markdown). Write the notes to `RELEASE_NOTES_PATH` from the recon block —
 every consumer below takes them by file, never as an inline escaped string.
 
 ## Step 5: Publish along the model's path
 
-Read the matching section of `${CLAUDE_PLUGIN_ROOT}/guides/release-models.md`
+Read the matching section of `<anchor-root>/guides/release-models.md`
 before writing anything. The two families differ in *what gets reviewed*, because
 they differ in where the notes end up.
 
@@ -260,14 +266,14 @@ does, so a bare one answers for a different review and names a tool this one
 will never open.
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill release --probe \
+bash "<anchor-root>/scripts/review-diff.sh" --skill release --probe \
   --files <RELEASE_NOTES_BASELINE> <RELEASE_NOTES_PATH>
 ```
 
 Then print the manifest the launch carries — a table naming the repo, the version
 being released, the range the notes cover, the tool from that probe, and the
 sections the draft holds. The shape is in
-`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "show what is going under
+`<anchor-root>/guides/execute-quietly.md` under "show what is going under
 review". Two facts from the probe belong in it:
 
 - **`REVIEW_MODE=edit`** — the editor renders wherever its host puts it, and
@@ -278,17 +284,17 @@ review". Two facts from the probe belong in it:
   than the preference named. Name that too.
 - **`REVIEW_MODE_SOURCE=subject` / `REVIEW_TOOL_SOURCE=default`** — anchor
   picked that half rather than the user. Add the configuration hint from
-  `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "when anchor picked the
+  `<anchor-root>/guides/execute-quietly.md` under "when anchor picked the
   tool"; `REVIEW_TOOL` names the tool about to open.
 
 Then open the notes against `RELEASE_NOTES_BASELINE` (the empty left-hand side
 the recon block created) through the **dispatcher** — not the tool directly.
-It blocks until closed, so launch it as a **background** Bash call and read its
-stdout with the **BashOutput tool**; `tail` / `$(...)` trips the
-command-substitution gate:
+It blocks until closed, so launch it with the host's background/session
+mechanism, retain its handle, and read captured stdout through that mechanism;
+`tail` / `$(...)` trips the command-substitution gate:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill release --files \
+bash "<anchor-root>/scripts/review-diff.sh" --skill release --files \
   <RELEASE_NOTES_BASELINE> <RELEASE_NOTES_PATH> \
   --title 'Release notes' \
   --detail version=<NEW_VERSION> --detail range=<RELEASE_RANGE>
@@ -302,7 +308,7 @@ after it, and carry out one that asks for the follow-up itself (*file an issue
 for this*);
 `changes-requested` means fold in every comment (they're ungraded — and one whose
 `target` is `file` with a diff in its body is the reviewer's own edit, read per
-`${CLAUDE_PLUGIN_ROOT}/guides/reviewer-edits.md`) and re-open
+`<anchor-root>/guides/reviewer-edits.md`) and re-open
 against the previous draft — copied aside to a sibling path with `.prev` before
 the extension — so the second pass shows what the feedback changed; `incomplete`
 and `no-verdict` mean the reviewer didn't grade it. A result with **no parseable `REVIEW_VERDICT`** (empty stdout,
@@ -310,7 +316,7 @@ stderr only — the dispatcher exited before reporting) reads the same way, and 
 does a probe reporting nothing installed.
 
 Every ungraded case takes the ladder in
-`${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md`: say what happened in one line,
+`<anchor-root>/guides/review-fallback.md`: say what happened in one line,
 then walk it with the drafted notes as the artifact. The notes are a drafted
 document, so the document rungs apply and the changeset walk doesn't.
 
@@ -346,7 +352,7 @@ easy to drop precisely because the publish already succeeded:
 
 1. **Watch the workflow to a terminal state** — it still has to bump, write the
    changelog, and commit, and a red run leaves a published release with no
-   changelog. Delegate to `/anchor:pipeline`, which watches in the background and
+   changelog. Delegate to `anchor:pipeline`, which watches in the background and
    runs silently under an orchestrator. Hand it the workflow by name
    (`--workflow <RELEASE_WORKFLOW>`) and watch *before* the pull below: this run
    belongs to the commit that was tagged, and it shares that commit with whatever
@@ -371,7 +377,7 @@ them in a commit — reviewed there, like `bump-commit`, which is why
    in the same release.
 2. **Do not bump the manifest or its source, and do not tag.** Those are the
    workflow's, and doing them here lands a commit that fights its own.
-3. **Land the notes through `/anchor:commit`**, which runs the tests, reviews the
+3. **Land the notes through `anchor:commit`**, which runs the tests, reviews the
    diff, writes the message, and pushes. The workflow builds from the remote, so
    the push has to land before the dispatch.
 4. **Confirm the dispatch explicitly**, the same second gate the published-body
@@ -402,7 +408,7 @@ them in a commit — reviewed there, like `bump-commit`, which is why
 6. **Then follow through, exactly as the published-body models do.** `gh workflow
    run` exits as soon as the run is queued, so nothing is released yet:
 
-   - **Watch the run to a terminal state** via `/anchor:pipeline`, naming the
+   - **Watch the run to a terminal state** via `anchor:pipeline`, naming the
      workflow (`--workflow <RELEASE_WORKFLOW>`). A red run leaves the release
      unmade, and the dispatch's own success says nothing about it.
    - **Fast-forward the local checkout** — `git pull --ff-only` — once it is
@@ -412,21 +418,22 @@ them in a commit — reviewed there, like `bump-commit`, which is why
 ### `bump-commit` — the bookkeeping is a commit
 
 Here the notes land *in the repo*, so they are reviewed as part of the commit
-rather than on their own — `/anchor:commit` opens the whole bookkeeping diff for
+rather than on their own — `anchor:commit` opens the whole bookkeeping diff for
 review before committing, and a separate notes review would ask the same question
 twice.
 
-1. **Bump the version.** Edit `RELEASE_MANIFEST_SOURCE` when it's set — the
-   manifest is generated from it — then run `RELEASE_MANIFEST_REGEN`. Otherwise
-   edit `RELEASE_MANIFEST`. Read the manifest with the **Read tool** before editing
-   so the Edit lands without a retry.
+1. **Bump the version.** Edit `RELEASE_MANIFEST_SOURCE` when it's set — it is the
+   version source behind the shipped manifest — then run
+   `RELEASE_MANIFEST_REGEN` when that value is non-empty. Otherwise edit
+   `RELEASE_MANIFEST`. Read the file with the host's file-reading mechanism
+   before editing so the change lands without a retry.
 2. **Write the notes into the changelog.** When `RELEASE_CHANGELOG_UNRELEASED=1`,
    retitle that section to the new version rather than inserting a section above
    it — a fresh one leaves a duplicate empty `Unreleased` heading. Reconcile its
    existing bullets against the range while there.
 3. **Shape the commit to `RELEASE_BUMP_CONVENTION`** (`standalone` / `fold` /
    `mixed` — the guide has the per-value call), then hand off to
-   `/anchor:commit`, which runs the tests, reviews the diff, writes the message,
+   `anchor:commit`, which runs the tests, reviews the diff, writes the message,
    and pushes. Don't hand-roll `git commit` / `git push` here.
 
 ## Step 6: Report
@@ -444,7 +451,7 @@ Where a release exists on the forge, announce it, so a sibling tracking
 deliverables learns what shipped:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/announce.sh" release.created \
+bash "<anchor-root>/scripts/announce.sh" release.created \
   "uri=<release url>" "tag=<tag>"
 ```
 
@@ -464,7 +471,7 @@ published release").
 
 On `bump-commit` and `no-version-artifact` there is no forge release to name, so
 announce nothing here; what landed is the bookkeeping commit, which
-`/anchor:commit` already announced as `commit.pushed`.
+`anchor:commit` already announced as `commit.pushed`.
 
 The publisher exits 0 on every path, so this can never turn a release that
 published into a tool call that failed.

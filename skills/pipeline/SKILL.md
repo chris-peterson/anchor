@@ -5,6 +5,10 @@ description: Report a commit's forge pipeline state, or watch until it settles. 
 
 # Pipeline
 
+Before using a bundled path, resolve `<anchor-root>` to the installed plugin root
+from the host's value or this `SKILL.md` path, then follow the host-neutral tool
+conventions in `<anchor-root>/guides/host-runtime.md`.
+
 Report a commit's forge pipeline state, or watch until it settles. This is the
 entry point for forge-pipeline operations, and today those are the two it
 covers:
@@ -18,16 +22,16 @@ covers:
 GitHub calls a pipeline a *workflow run* and GitLab calls it a *pipeline*; this
 skill uses **pipeline** for both, and `glab api` / `gh run` for the forge calls.
 
-**Don't narrate your work.** Every step below is an operating instruction, not a
+**Keep plumbing quiet.** Every step below is an operating instruction, not a
 script to read aloud — follow the execute-quietly discipline:
-`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. For this skill, the only
+`<anchor-root>/guides/execute-quietly.md`. For this skill, the only
 things worth surfacing are the resolved repo in one line if it's ambiguous, and
 the pipeline verdict.
 
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
 flowchart TD
-    Start(["/pipeline"]) --> Repo["Confirm target repo"]
+    Start(["pipeline"]) --> Repo["Confirm target repo"]
     Repo --> Mode{Watch requested?}
 
     subgraph once["One-shot (default)"]
@@ -44,19 +48,20 @@ flowchart TD
 
 ## Task tracking when orchestrated
 
-At the very start, call `TaskList`. If any task is already `in_progress`, this
-skill is running inside an orchestrator (e.g. a release workflow) — run silently
-and do **not** create your own tasks; the orchestrator's list is the source of
-truth. If nothing is `in_progress`, this is a single-step check — skip
-task-tracking.
+If the host exposes task tracking, inspect it first. If any task is already in
+progress, this skill is running inside an orchestrator (for example, a release
+workflow) — run inside that list and do not create your own tasks; the
+orchestrator's list is the source of truth. If the host has no task mechanism,
+follow an evident enclosing workflow without inventing one. Otherwise this is a
+single-step check, so skip task tracking.
 
 ## Target repo
 
 Resolve which repo this operates on — the working directory isn't a reliable
 proxy. Re-resolve on every invocation.
 
-- **With an argument** (`/anchor:pipeline <name>`): resolve the name —
-  `bash "${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh" <name>`
+- **With an argument** (`anchor:pipeline <name>`): resolve the name —
+  `bash "<anchor-root>/scripts/resolve-target.sh" <name>`
   (see the cookbook's "Resolving a named target repo"). `TARGET_VIA=resolved` → use
   `TARGET_LOCAL` as the checkout and pass it as `--repo` to the helper below; this
   skill reads the branch and HEAD from a work tree, so if `TARGET_LOCAL` is empty
@@ -87,7 +92,7 @@ Read the request:
   state once.
 
 When watching, it's worth a quick precondition check: a pipeline only exists
-once the commit is on the remote. `bash "${CLAUDE_PLUGIN_ROOT}/scripts/look-ahead.sh"`
+once the commit is on the remote. `bash "<anchor-root>/scripts/look-ahead.sh"`
 prints the unpushed-commit count — if it's `>= 1`, the pushed remote tip isn't
 HEAD, so tell the user and ask whether to push first or watch the current tip.
 A one-shot read needs no such check — it just reports `none` if there's no
@@ -105,17 +110,17 @@ cookbook's **CI / pipelines** section documents the same invocations.
 foreground and read the result:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh"
+bash "<anchor-root>/scripts/pipeline-status.sh"
 ```
 
-**Watch** — add `--watch`. It blocks while it polls, so launch it as a
-**background call** (`run_in_background: true`); a foreground call would hold the
-turn open until the Bash timeout. When it completes, read its stdout with the
-**BashOutput tool** (not `tail` / `$(...)`, which trip the command-substitution
-gate):
+**Watch** — add `--watch`. It blocks while it polls, so launch it with the host's
+background/session mechanism and retain its handle; a foreground call would hold
+the turn open until the command timeout. When it completes, read captured stdout
+through that mechanism (not `tail` / `$(...)`, which trip the
+command-substitution gate):
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --watch
+bash "<anchor-root>/scripts/pipeline-status.sh" --watch
 ```
 
 To target a commit other than the current HEAD (e.g. an orchestrator that pushed
@@ -137,7 +142,7 @@ a neighbor. On GitLab the flag has nothing to narrow — one pipeline per commit
 
 The fold is what *this* skill reports. `--single-run` opts out of it and reports
 the commit's most recent run — what a caller wants when the forge's own merge
-check already answers "is every check green" (`/anchor:merge`'s gate does exactly
+check already answers "is every check green" (`anchor:merge`'s gate does exactly
 that).
 
 **Track one named job** — when the ask is about a *specific* job rather than the
@@ -150,8 +155,8 @@ When you already have a pipeline id (e.g. from a URL the user pasted), pass
 `--pipeline <id>` to skip commit→pipeline resolution:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --job cand-usw2-plan --watch
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --pipeline 3435505 --job cand-usw2-plan
+bash "<anchor-root>/scripts/pipeline-status.sh" --job cand-usw2-plan --watch
+bash "<anchor-root>/scripts/pipeline-status.sh" --pipeline 3435505 --job cand-usw2-plan
 ```
 
 The output is `KEY=value` lines:
@@ -182,7 +187,7 @@ pipeline for context, and three more lines carry the tracked job:
 
 ## Report
 
-Follow the report shape in `${CLAUDE_PLUGIN_ROOT}/templates/pipeline-report.md`:
+Follow the report shape in `<anchor-root>/templates/pipeline-report.md`:
 the headline from `PIPELINE_STATE`, then a table of every job in `PIPELINE_RUNS`
 with a per-state emoji. The template owns the *shape* — which emoji means what,
 the column set, the cases that get no table. Report that and nothing more.
