@@ -32,10 +32,10 @@ prescribed=(
   rules/use-forge-clis.md
   guides/forge-cookbook.md
   guides/temp-paths.md
-  skills/commit/SKILL.md
-  skills/issue/SKILL.md
-  skills/resolve-feedback/SKILL.md
 )
+while IFS= read -r path; do
+  prescribed+=("${path#"$root"/}")
+done < <(find "$root/skills" -type f -name '*.md' | sort)
 
 # --- prescribed text carries no $TMPDIR template ---------------------------
 for rel in "${prescribed[@]}"; do
@@ -48,7 +48,9 @@ ok "no prescribed site templates a temp path on \$TMPDIR"
 
 # Every site that prescribes an mktemp prescribes the literal-/tmp form.
 for rel in "${prescribed[@]}"; do
-  grep -q 'mktemp' "$root/$rel" || continue
+  # A helper can report an already-created mktemp path without prescribing
+  # a command. Only check sites that actually spell an invocation with flags.
+  grep -Eq 'mktemp[[:space:]]+-' "$root/$rel" || continue
   grep -q 'mktemp -u /tmp/' "$root/$rel" \
     || fail "$rel prescribes mktemp without the literal /tmp form"
 done

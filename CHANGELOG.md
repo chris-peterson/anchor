@@ -9,6 +9,10 @@
 
 ### Fixed
 
+- Anchor's lifecycle skills now fit Codex's skill-prompt limit. Each entry point
+  loads the full instructions for the current phase, preserving approval gates,
+  both forge implementations, and the procedures and diagrams in the docs.
+  Byte-budget and reference checks prevent future truncation regressions.
 - An unconfigured editor now reports as Anchor's default choice instead of as user configuration. `git var GIT_EDITOR` falls through to Git's compiled `vi`; reading that command at the `GIT_EDITOR` rung mislabeled the default and hid the configuration hint.
 
 ## 1.14.0

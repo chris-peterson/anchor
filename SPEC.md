@@ -1259,6 +1259,30 @@ editor's whole answer is the revised artifact, which is why the column below
   creating, inspecting, or removing configuration paths belonging to the absent
   host; with neither installed it shall be a successful no-op.
 
+- **[HOST-09]** Each skill entry point (`skills/<name>/SKILL.md`, including
+  frontmatter) shall fit within 6,000 UTF-8 bytes, below Codex 0.155.1's
+  8,000-byte injected-prompt limit. Each bundled skill phase file shall fit
+  within 8,000 UTF-8 bytes for separate tool reads. The entry point shall carry
+  the complete workflow routing, essential approval/stop conditions, and links
+  to every required or conditional phase; it shall not depend on an injected
+  tail that the host can truncate.
+- **[HOST-10]** A skill shall require the agent to read the full instructions
+  for a phase before executing it, load conditional phases only when applicable,
+  and preserve target, helper results, review state, and return paths across
+  phases. Missing or truncated instructions shall stop the dependent action
+  until the read is complete. Resuming after compaction shall recover that
+  state and re-read the current phase. Moving instructions to references shall
+  preserve existing lifecycle requirements and both forge implementations.
+- **[HOST-11]** Shared guides shall be read at the section relevant to the
+  current decision, with all applicable prerequisites and subsections. Large
+  reads shall use bounded ranges and recover any truncated remainder; search
+  snippets shall not stand in for required instructions. Artifact templates
+  shall retain every applicable section regardless of verbosity.
+- **[HOST-12]** Automated checks shall enforce entry-point and phase byte
+  budgets, reject missing or unreachable phase files, and include nested skill
+  references in the existing prose checks. The generated docs shall retain
+  linked full procedures and diagrams from the same packaged sources.
+
 ### CONFIRM — Approval before publishing
 
 Everything the system publishes goes out under the user's credentials and in

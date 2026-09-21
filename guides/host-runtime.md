@@ -25,6 +25,12 @@ assuming a variable from an earlier command still exists.
 
 ## Ask, read, write, and wait through the host
 
+Before following a skill's phases, read
+`<anchor-root>/guides/reading-instructions.md`. It governs complete phase reads
+and targeted, bounded reads of the larger shared guides. A reference's location
+does not change the installed root: derive it from the entry point's
+`skills/<name>/SKILL.md`, not from a file inside `references/`.
+
 Where a skill says to ask with structured choices, use the host's structured
 question mechanism when one is available; otherwise ask the question directly
 with the same options and recommendation.
