@@ -1248,6 +1248,16 @@ editor's whole answer is the revised artifact, which is why the column below
   Anchor supports macOS and Linux POSIX shells plus Git Bash or WSL2 on Windows,
   while native PowerShell remains unsupported until it has an implementation
   and a CI lane.
+- **[HOST-08]** The repository shall provide a reversible local-development pin
+  for Claude Code and Codex. Pinning shall remove installed marketplace copies,
+  load this checkout through each host's supported local mechanism, and refuse
+  to replace a pre-existing developer-owned path. Unpinning shall remove only
+  the local installation it owns, refresh the canonical marketplace, and
+  install its latest Anchor release. Claude Code's persistent plugin data shall
+  survive either direction. Each host shall be optional: when only one host's
+  CLI is installed, either direction shall operate on that host without
+  creating, inspecting, or removing configuration paths belonging to the absent
+  host; with neither installed it shall be a successful no-op.
 
 ### CONFIRM — Approval before publishing
 

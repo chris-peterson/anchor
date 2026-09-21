@@ -16,7 +16,8 @@
     "git",
     "forge",
     "ai",
-    "claude-code"
+    "claude-code",
+    "codex"
   ],
   "homepage": "https://chris-peterson.github.io/anchor/#/"
 }
