@@ -1,8 +1,14 @@
-# <img src="favicon.svg" alt="anchor" width="64" height="64" style="vertical-align: middle"> anchor
+<div class="ph-hero" style="--accent: var(--color-cyan)">
+
+<h1 class="ph-lede"><span class="ph-name">anchor</span> your development practices.</h1>
+
+<div class="ph-badge"><img class="ph-mark" src="favicon.svg" alt="anchor" width="26" height="26">
 
 [](_tags.md ':include')
 
-<p class="ph-lede"><span style="color:light-dark(#0891b2,#8be9fd);font-weight:600">anchor</span> your development practices.</p>
+</div>
+
+</div>
 
 An agent working for you is also speaking for you: issues, change requests,
 review comments, release notes. Every one of them reaches you in full before
