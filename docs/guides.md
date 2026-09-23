@@ -20,7 +20,7 @@ notes under your name. These guides are what makes them read the way they do.
 | Guide | What it settles | Read by |
 |---|---|---|
 | [Loaded framing](/guides/loaded-framing) | The tone floor: temporal blame, hyperbole, self-congratulation, and defensive softeners come out; the factual claim stays | `commit`, `prepare-review`, `issue`, `release`, `review` |
-| [CR verbosity, calibrated](/guides/cr-verbosity) | Where a description sits between brevity and thoroughness, shown as one real changeset drafted across the `anchor.crVerbosity` range | `prepare-review` |
+| [CR verbosity, calibrated](/guides/cr-verbosity) | Where a description sits between brevity and thoroughness, shown as one real changeset drafted across the `anchor.cr.verbosity` range | `prepare-review` |
 | [CR formatting](/guides/cr-formatting) | Which visualization fits which data shape, plus the mermaid, screenshot, and skim-readability technique to render it | `prepare-review` |
 | [Markdown gotchas](/guides/markdown-gotchas) | The characters and constructs that render wrong once a forge has its way with them, and what neutralizes each | `prepare-review`, `issue`, `release` |
 | [Description vs. docs](/guides/description-vs-docs) | Whether explanatory content belongs to this review or to the repo's docs, and the bar for promoting it | `prepare-review`, `resolve-feedback` |

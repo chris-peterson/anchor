@@ -15,10 +15,10 @@ teams than commits or CRs do, so the shape below is deliberately basic — a
 fallback for when a project ships no template of its own. When a team template
 exists, `anchor` composes its prose into that shape instead (see [Honoring a
 project's forge template](#honoring-a-projects-forge-template) below). A standing
-rule can be layered onto every issue via `anchor.issueRules`. See the
+rule can be layered onto every issue via `anchor.issue.rules`. See the
 [configuring guide](/guides/configuring) for the full key set.
 
-**How much to write is configurable.** `anchor.issueVerbosity` (1–100, unset
+**How much to write is configurable.** `anchor.issue.verbosity` (1–100, unset
 behaves as `75`) decides how much prose the sections below get — a balance point,
 not a word budget. It runs highest of `anchor`'s four verbosity defaults, which
 descend as the audience widens (issue, commit, CR, release): an issue is written
