@@ -22,13 +22,13 @@ in this file are template organization only; emit the bare name (`## Context`,
 **How much to write is configurable, on two axes.** `anchor.reviewBudgetMins` is
 the minutes of focused review you expect this CR to get — it decides *what to
 include*, so a tight budget (≈5) leads with the essentials and cuts asides.
-`anchor.crVerbosity` (1–100, unset behaves as `25`) decides *how much prose* the
+`anchor.cr.verbosity` (1–100, unset behaves as `25`) decides *how much prose* the
 included material gets — a balance point, not a word budget. A standing rule can
-be added to every description via `anchor.crRules`; `mr`/`pr`-prefixed keys
-override both `crRules` and `crVerbosity` per forge. See the [configuring
+be added to every description via `anchor.cr.rules`; `mr`/`pr`-prefixed keys
+override both `cr.rules` and `cr.verbosity` per forge. See the [configuring
 guide](/guides/configuring) for the full key set.
 
-**This file decides which sections a description has; `crVerbosity` only decides
+**This file decides which sections a description has; `cr.verbosity` only decides
 how long each one runs.** The *(rare)* and *(conditional)* markers below are the
 gate, and they are the only gate — a section that meets its condition appears at
 every setting, including `1`, and one that doesn't appears at none. Verbosity
@@ -203,7 +203,7 @@ inherited one:
 - **GitHub:** `pull_request_template.md` under `.github/`, the repo root, or
   `docs/` (or a `PULL_REQUEST_TEMPLATE/` directory in any of the three), then the
   same locations in the owner's `.github` repo
-- **Either forge:** the repo named by `anchor.crTemplateRepo`, as a backstop when
+- **Either forge:** the repo named by `anchor.cr.templateRepo`, as a backstop when
   nothing above answers
 
 Where a level holds more than one template, `default.md` (case-insensitive) wins;

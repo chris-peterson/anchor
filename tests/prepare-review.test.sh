@@ -11,7 +11,7 @@
 # read come back empty while the assertions still passed.
 #
 # The template half covers the resolution order — project setting, repo-local
-# files, the forge's inherited templates, then anchor.crTemplateRepo — and the
+# files, the forge's inherited templates, then anchor.cr.templateRepo — and the
 # deterministic pick within a level. Both are places where "whatever came back
 # first" was the old behavior, and neither forge answers the same way: GitLab
 # resolves the whole hierarchy through one templates endpoint, while GitHub has
@@ -186,7 +186,7 @@ export GL_TPL_FAIL=0
 
 # The stubs key their template fixtures by the project token the script passes,
 # with every non-alphanumeric character folded to `_` — so the current project
-# (`:fullpath`) is `_fullpath`, and an `anchor.crTemplateRepo` of `grp/tpl`
+# (`:fullpath`) is `_fullpath`, and an `anchor.cr.templateRepo` of `grp/tpl`
 # arrives percent-encoded as `grp%2Ftpl` and lands in `grp_2Ftpl`.
 gl_templates() {
   local dir="$GL_TPL_DIR/${1//[^[:alnum:]]/_}" name
@@ -434,15 +434,15 @@ out=$(bash "$prepare_review_sh" --repo "$repo")
 [[ -n "$(key "$out" ANCHOR_CONFIG)" ]] || fail "block truncated by the gated lookup: $out"
 ok "a gated template lookup falls through without truncating the block"
 
-# --- anchor.crTemplateRepo is the backstop when nothing else answers ---------
+# --- anchor.cr.templateRepo is the backstop when nothing else answers ---------
 tpl_reset
 gl_templates 'grp%2Ftpl' default
 repo="$(template_repo gitlab.com tpl-gl-configured)"
-git -C "$repo" config anchor.crTemplateRepo 'grp/tpl'
+git -C "$repo" config anchor.cr.templateRepo 'grp/tpl'
 out=$(bash "$prepare_review_sh" --repo "$repo")
 [[ "$(key "$out" TEMPLATE_SOURCE)" == configured ]] \
   || fail "expected the configured template repo; got: $(key "$out" TEMPLATE_SOURCE)"
-ok "anchor.crTemplateRepo backstops an empty hierarchy"
+ok "anchor.cr.templateRepo backstops an empty hierarchy"
 
 # --- GitHub: the root and docs/ paths GitHub honors but anchor used to miss --
 for loc in pull_request_template.md docs/pull_request_template.md; do

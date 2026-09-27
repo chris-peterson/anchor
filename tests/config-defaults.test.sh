@@ -41,7 +41,7 @@ trap 'rm -f "$declared" "$stated" "$resolved"' EXIT
 
 awk '
   # A row is either a value ("`25`") or an alias to another key
-  # ("`anchor.crVerbosity`", how the forge overrides fall back).
+  # ("`anchor.cr.verbosity`", how the forge overrides fall back).
   /^## Defaults/       { in_table = 1; next }
   in_table && /^## /   { in_table = 0 }
   in_table && /^\|/ {

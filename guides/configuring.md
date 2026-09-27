@@ -9,8 +9,10 @@ template exists, `anchor` delivers its prose **into that format** — your
 structure, `anchor`'s voice, both intact. You extend it around that voice through
 two surfaces, neither of which commits an `anchor`-specific file to your repo:
 
-- **Per-project / personal knobs** — `git config anchor.<key>`. Project-local
-  lives in `.git/config` (never tracked); add `--global` for all your repos.
+- **Per-project / personal knobs** — `git config anchor.<qualifier>.<setting>`,
+  or `anchor.<setting>` for the base. Project-local lives in `.git/config` (never
+  tracked); add `--global` for all your repos. See [How a key is
+  named](#key-naming).
 - **Team CR scaffolding** — your forge's native template
   (`.gitlab/merge_request_templates/*.md`, `.github/pull_request_template.md`).
   `prepare-review` detects and composes into it — put the team review-prep
@@ -23,37 +25,70 @@ draft against out of the box, so this table is the one place to look before
 deciding a key is worth setting.
 
 The four verbosity dials are listed in lifecycle order, and they descend:
-`issueVerbosity` `75` → `commitVerbosity` `50` → `crVerbosity` `25` →
-`releaseVerbosity` `10`. See [Length knobs](#length-knobs) for why.
+`issue.verbosity` `75` → `commit.verbosity` `50` → `cr.verbosity` `25` →
+`release.verbosity` `10`. See [Length knobs](#length-knobs) for why.
 
 | Key | Default | What that gets you |
 |---|---|---|
 | [`anchor.edit.tool`](#key-edit-tool) | `core.editor`, then git's chain | Which editor an `edit` review opens. |
 | [`anchor.diff.tool`](#key-diff-tool) | git's own `diff.tool` | Which viewer a `diff` review opens. Set neither and a `diff` review says so instead of opening. |
 | [`anchor.reviewBudgetMins`](#key-reviewbudgetmins) | `10` | Descriptions are written for ten minutes of focused review — enough for the change and the topics around it. |
-| [`anchor.issueVerbosity`](#key-issueverbosity) | `75` | Issue bodies run long: the people who pick the work up need the context in the issue. |
-| [`anchor.commitVerbosity`](#key-commitverbosity) | `50` | Commit bodies run to the why plus the context the diff doesn't show. |
-| [`anchor.crVerbosity`](#key-crverbosity) | `25` | CR descriptions stay near the brief end — a reviewer on a deadline wants pointing, not explaining. |
-| [`anchor.releaseVerbosity`](#key-releaseverbosity) | `10` | Release notes run to each change as its effect on someone using the project, and stop. |
-| [`anchor.mrVerbosity`](#key-mr-pr-verbosity) / [`anchor.prVerbosity`](#key-mr-pr-verbosity) | `anchor.crVerbosity` | No forge split — GitLab and GitHub get the same length until you set one. |
+| [`anchor.issue.verbosity`](#key-issueverbosity) | `75` | Issue bodies run long: the people who pick the work up need the context in the issue. |
+| [`anchor.commit.verbosity`](#key-commitverbosity) | `50` | Commit bodies run to the why plus the context the diff doesn't show. |
+| [`anchor.cr.verbosity`](#key-crverbosity) | `25` | CR descriptions stay near the brief end — a reviewer on a deadline wants pointing, not explaining. |
+| [`anchor.release.verbosity`](#key-releaseverbosity) | `10` | Release notes run to each change as its effect on someone using the project, and stop. |
+| [`anchor.gitlab.verbosity`](#key-mr-pr-verbosity) / [`anchor.github.verbosity`](#key-mr-pr-verbosity) | `anchor.cr.verbosity` | No forge split — GitLab and GitHub get the same length until you set one. |
 | [`anchor.watchPipelineAfterPush`](#key-watchpipelineafterpush) | `true` | A skill that starts CI watches it to a verdict and reports it. |
 | [`anchor.<skill>.watchPipelineAfterPush`](#key-skill-watchpipelineafterpush) | the umbrella key | A skill follows the setting above until you give that skill its own. |
 | [`anchor.workTrackerBaseUri`](#key-worktrackerbaseuri) | none | Mentioning a bare ticket id gets you no link — mention a full URL, or set this. |
-| [`anchor.commitRules`](#key-commitrules) | none | The default commit-message rules apply, with nothing layered on. |
-| [`anchor.issueRules`](#key-issuerules) | none | The default issue rules apply, with nothing layered on. |
-| [`anchor.crRules`](#key-crrules) | none | The default CR-description rules apply, with nothing layered on. |
-| [`anchor.mrRules`](#key-mr-pr-rules) / [`anchor.prRules`](#key-mr-pr-rules) | none | No forge split — GitLab and GitHub get the same rules until you set one. |
-| [`anchor.crTemplateRepo`](#key-crtemplaterepo) | none | Template resolution stops at what the repo and the forge supply. |
+| [`anchor.commit.rules`](#key-commitrules) | none | The default commit-message rules apply, with nothing layered on. |
+| [`anchor.issue.rules`](#key-issuerules) | none | The default issue rules apply, with nothing layered on. |
+| [`anchor.cr.rules`](#key-crrules) | none | The default CR-description rules apply, with nothing layered on. |
+| [`anchor.gitlab.rules`](#key-mr-pr-rules) / [`anchor.github.rules`](#key-mr-pr-rules) | none | No forge split — GitLab and GitHub get the same rules until you set one. |
+| [`anchor.cr.templateRepo`](#key-crtemplaterepo) | none | Template resolution stops at what the repo and the forge supply. |
 
 Absent keys keep these; the skills never invent a value for a key you haven't
 set.
 
-## Keys
+## How a key is named :id=key-naming
 
-Keys use git's standard camelCase convention (like `init.defaultBranch` or
-`commit.gpgSign`). git stores and matches them case-insensitively, so the case is
-purely for readability. Defaults are in [the table above](#defaults) rather than
-repeated in each entry.
+Every key reads `anchor.<qualifier>.<setting>`: the **qualifier** says what the
+setting applies to, the **setting** says what is being set, and dropping the
+qualifier gives you the base that applies wherever nothing more specific does.
+
+```bash
+git config anchor.verbosity 25            # the base
+git config anchor.issue.verbosity 75      # issues
+git config anchor.github.verbosity 10     # anything published to GitHub
+```
+
+A qualifier is an artifact type (`cr`, `commit`, `issue`, `release`), a forge
+(`github`, `gitlab`), a skill (`prepare-review`), or a review mode (`edit`,
+`diff`). Where more than one matches, the most specific wins — forge, then
+artifact type, then the base — and each setting resolves on its own, so setting
+`anchor.github.verbosity` leaves `anchor.cr.rules` untouched.
+
+The qualifier always precedes the setting, and the reverse isn't accepted: `git
+config` reads the last dot-separated segment as the key name, so
+`anchor.deny.github.com` would parse as subsection `deny.github` and key `com`.
+Fixing the order everywhere is what keeps a dotted qualifier — a specific host,
+if one is ever needed — addable without moving the keys you already have.
+
+**Spell the qualifier in lower case.** git folds the section and the setting but
+holds the qualifier exactly as written, which is the one trap in this shape:
+
+```bash
+git config anchor.CR.verbosity 42    # sets a key nothing reads
+git config --get anchor.cr.verbosity # -> nothing, exit 1
+```
+
+The old two-level names were folded whole, so `anchor.crverbosity` answered for
+`anchor.crVerbosity`. A qualifier is not. `anchor` reports a key whose qualifier
+differs from a known one only by case rather than leaving it silently inert.
+
+Defaults are in [the table above](#defaults) rather than repeated in each entry.
+
+## Keys
 
 ### `anchor.workTrackerBaseUri` :id=key-worktrackerbaseuri
 
@@ -115,12 +150,12 @@ context and depth.
 
 It steers *what to include*, not the tone — a tight budget is no license for
 punchy or marketing framing. For *how long* the result runs, see
-[`anchor.crVerbosity`](#key-crverbosity) and [Length knobs](#length-knobs).
+[`anchor.cr.verbosity`](#key-crverbosity) and [Length knobs](#length-knobs).
 
-### `anchor.issueVerbosity` :id=key-issueverbosity
+### `anchor.issue.verbosity` :id=key-issueverbosity
 
 ```bash
-git config anchor.issueVerbosity 100
+git config anchor.issue.verbosity 100
 ```
 
 Where an issue body sits between brevity and thoroughness. It sits highest of
@@ -132,10 +167,10 @@ explanation down to its load-bearing decisions, then Context's second paragraph.
 **Acceptance criteria are never abbreviated**: they say what done means, so
 they're the issue's floor the way the deep links are the CR's.
 
-### `anchor.commitVerbosity` :id=key-commitverbosity
+### `anchor.commit.verbosity` :id=key-commitverbosity
 
 ```bash
-git config anchor.commitVerbosity 25
+git config anchor.commit.verbosity 25
 ```
 
 The same dial applied to the commit message body. Below `100` the body tightens
@@ -145,10 +180,10 @@ paragraph — down to a floor of one sentence of *why*.
 The subject line's format rules and the `Refs:` trailer stand at every setting,
 and a trivial change still earns a subject-only message.
 
-### `anchor.crVerbosity` :id=key-crverbosity
+### `anchor.cr.verbosity` :id=key-crverbosity
 
 ```bash
-git config anchor.crVerbosity 50
+git config anchor.cr.verbosity 50
 ```
 
 Where a CR description sits between brevity and thoroughness, as an integer from
@@ -165,21 +200,21 @@ setting, down to its floor. It never cuts the *why* sentence or the Review
 guide's deep links, and it steers length only, never register. See the
 [`mr` / `pr` overrides](#key-mr-pr-verbosity) below.
 
-### `anchor.mrVerbosity` / `anchor.prVerbosity` :id=key-mr-pr-verbosity
+### `anchor.gitlab.verbosity` / `anchor.github.verbosity` :id=key-mr-pr-verbosity
 
 ```bash
-git config anchor.prVerbosity 25
+git config anchor.github.verbosity 25
 ```
 
-Forge-specific overrides of [`anchor.crVerbosity`](#key-crverbosity):
-`mrVerbosity` applies on GitLab, `prVerbosity` on GitHub. When set, the
-forge-specific key replaces `crVerbosity` for that forge; otherwise `crVerbosity`
+Forge-specific overrides of [`anchor.cr.verbosity`](#key-crverbosity):
+`gitlab.verbosity` applies on GitLab, `github.verbosity` on GitHub. When set, the
+forge-specific key replaces `cr.verbosity` for that forge; otherwise `cr.verbosity`
 applies.
 
-### `anchor.releaseVerbosity` :id=key-releaseverbosity
+### `anchor.release.verbosity` :id=key-releaseverbosity
 
 ```bash
-git config anchor.releaseVerbosity 40
+git config anchor.release.verbosity 40
 ```
 
 The same dial applied to release notes. It sits lowest of the four: the audience
@@ -191,47 +226,47 @@ infer, down to a floor of each change stated as its effect on someone using the
 project. **Every entry survives at every setting**, as do a breaking change's
 migration steps — the dial shortens entries, it doesn't drop them.
 
-### `anchor.commitRules` :id=key-commitrules
+### `anchor.commit.rules` :id=key-commitrules
 
 ```bash
-git config anchor.commitRules "prefix the subject with the affected module"
+git config anchor.commit.rules "prefix the subject with the affected module"
 ```
 
 An extra rule layered onto `anchor`'s default commit-message rules, applied to
 every message it drafts.
 
-### `anchor.issueRules` :id=key-issuerules
+### `anchor.issue.rules` :id=key-issuerules
 
 ```bash
-git config anchor.issueRules "always include an acceptance-criteria checklist"
+git config anchor.issue.rules "always include an acceptance-criteria checklist"
 ```
 
 An extra rule layered onto `anchor`'s default issue rules, applied to every issue
 the `issue` skill drafts.
 
-### `anchor.crRules` :id=key-crrules
+### `anchor.cr.rules` :id=key-crrules
 
 ```bash
-git config anchor.crRules "@-mention the on-call lead"
+git config anchor.cr.rules "@-mention the on-call lead"
 ```
 
 An extra rule layered onto the default CR-description rules — the forge-agnostic
 default. See the [`mr` / `pr` overrides](#key-mr-pr-rules) below.
 
-### `anchor.mrRules` / `anchor.prRules` :id=key-mr-pr-rules
+### `anchor.gitlab.rules` / `anchor.github.rules` :id=key-mr-pr-rules
 
 ```bash
-git config anchor.prRules "fill in the Risk & rollback section"
+git config anchor.github.rules "fill in the Risk & rollback section"
 ```
 
-Forge-specific overrides of [`anchor.crRules`](#key-crrules): `mrRules` applies
-on GitLab, `prRules` on GitHub. When set, the forge-specific key replaces
-`crRules` for that forge; otherwise `crRules` applies.
+Forge-specific overrides of [`anchor.cr.rules`](#key-crrules): `gitlab.rules` applies
+on GitLab, `github.rules` on GitHub. When set, the forge-specific key replaces
+`cr.rules` for that forge; otherwise `cr.rules` applies.
 
-### `anchor.crTemplateRepo` :id=key-crtemplaterepo
+### `anchor.cr.templateRepo` :id=key-crtemplaterepo
 
 ```bash
-git config anchor.crTemplateRepo my-group/ci-templates
+git config anchor.cr.templateRepo my-group/ci-templates
 ```
 
 A repo holding the CR template to use when neither this repo nor the forge's own
@@ -285,10 +320,10 @@ lifecycle:
 
 | | Dial | Default | Written for |
 |---|---|---:|---|
-| Issue | `anchor.issueVerbosity` | `75` | the few people who'll do the work |
-| Commit | `anchor.commitVerbosity` | `50` | whoever lands here later, bisecting or reading `git log` |
-| CR | `anchor.crVerbosity` | `25` | reviewers, working through a queue |
-| Release | `anchor.releaseVerbosity` | `10` | everyone using the project |
+| Issue | `anchor.issue.verbosity` | `75` | the few people who'll do the work |
+| Commit | `anchor.commit.verbosity` | `50` | whoever lands here later, bisecting or reading `git log` |
+| CR | `anchor.cr.verbosity` | `25` | reviewers, working through a queue |
+| Release | `anchor.release.verbosity` | `10` | everyone using the project |
 
 Each step out from the work widens the audience and narrows what they came for,
 so brevity is warranted further out. The paragraph of background that saves the
@@ -296,19 +331,19 @@ implementer a conversation is the paragraph a release-notes reader skims past to
 find whether this affects them. Set one to reshape one artifact; the four resolve
 independently.
 
-On CRs a second knob crosses that one. `reviewBudgetMins` and `crVerbosity` both
+On CRs a second knob crosses that one. `reviewBudgetMins` and `cr.verbosity` both
 make a description shorter, and they do it on different axes — which is why
 turning one down is not a substitute for the other:
 
 - **`reviewBudgetMins` decides what to include.** How many of the changeset's
   topics survive into the description at all. Turn it down and you get fewer
   things covered.
-- **`crVerbosity` decides how much prose those topics get.** Turn it down and you
+- **`cr.verbosity` decides how much prose those topics get.** Turn it down and you
   get the same coverage, written shorter.
 
 Budget picks the content set; verbosity sets how much prose carries it.
-A tight budget at `crVerbosity 100` is a few topics explained in full; a generous
-budget at `crVerbosity 1` is broad coverage in telegraphic form. Reach for the
+A tight budget at `cr.verbosity 100` is a few topics explained in full; a generous
+budget at `cr.verbosity 1` is broad coverage in telegraphic form. Reach for the
 budget when descriptions cover things you don't care about, and for verbosity
 when they cover the right things at too much length.
 
@@ -588,16 +623,49 @@ diff on its own — `/anchor:commit`'s push-existing path, where there are
 unpushed commits and no drafted message. That review halts and names the key to
 change rather than passing a diff nobody saw.
 
-### Forge-specific overrides (`cr` / `mr` / `pr`)
+### Qualifying by forge and by destination
 
-CR keys follow a prefix convention: `cr` is the forge-agnostic default, and `mr`
-(GitLab) / `pr` (GitHub) override it when present. `prepare-review` picks the
-forge by the `origin` remote, uses the matching `mr*` / `pr*` key if set, and
-falls back to the `cr*` one otherwise. It governs both pairs — `crRules` /
-`mrRules` / `prRules` and `crVerbosity` / `mrVerbosity` / `prVerbosity` — and
-resolves them independently, so a `prVerbosity` with no `prRules` overrides the
-length on GitHub and leaves the rules on `crRules`. Set just the `cr` key for one
-setting everywhere; add `mr` / `pr` only where a forge needs something different.
+`cr` is the artifact-type qualifier CR settings land on, and a forge qualifier —
+`gitlab` or `github`, picked by the `origin` remote — overrides it where set.
+`prepare-review` resolves each setting independently, so `anchor.github.verbosity`
+with no `anchor.github.rules` changes the length on GitHub and leaves the rules
+on `anchor.cr.rules`. Set the `cr` key alone for one setting everywhere; add a
+forge qualifier only where a forge needs something different.
+
+```bash
+git config --global anchor.github.rules "never mention internal service names"
+```
+
+### Renamed keys :id=key-migration
+
+The qualifier used to be a camelCase prefix on some settings and a subsection on
+others. It is a subsection on all of them now:
+
+| Was | Now |
+|---|---|
+| `anchor.crVerbosity` | `anchor.cr.verbosity` |
+| `anchor.mrVerbosity` / `anchor.prVerbosity` | `anchor.gitlab.verbosity` / `anchor.github.verbosity` |
+| `anchor.commitVerbosity` | `anchor.commit.verbosity` |
+| `anchor.issueVerbosity` | `anchor.issue.verbosity` |
+| `anchor.releaseVerbosity` | `anchor.release.verbosity` |
+| `anchor.crRules` | `anchor.cr.rules` |
+| `anchor.mrRules` / `anchor.prRules` | `anchor.gitlab.rules` / `anchor.github.rules` |
+| `anchor.commitRules` | `anchor.commit.rules` |
+| `anchor.issueRules` | `anchor.issue.rules` |
+| `anchor.crTemplateRepo` | `anchor.cr.templateRepo` |
+
+`anchor.reviewBudgetMins`, `anchor.workTrackerBaseUri`,
+`anchor.watchPipelineAfterPush`, `anchor.<skill>.watchPipelineAfterPush`,
+`anchor.edit.tool`, and `anchor.diff.tool` are unchanged.
+
+**Old names are not carried over.** A key set under one no longer does anything;
+`anchor` reports it and names the key that replaced it, so you can move it
+yourself. The `mr` / `pr` pair is why: those were forge overrides of the *CR
+rules alone*, where `anchor.gitlab.*` and `anchor.github.*` qualify every
+artifact published to that forge. Carrying `prRules` to `anchor.github.rules`
+would quietly apply to your commits, issues, and release notes a rule you wrote
+for pull request descriptions. A rename that doesn't preserve meaning isn't one
+`anchor` should make for you.
 
 ## Examples
 
@@ -607,13 +675,18 @@ git config anchor.workTrackerBaseUri https://app.clickup.com/t/
 
 # This team reviews fast — cover fewer topics, and write them shorter
 git config anchor.reviewBudgetMins 5
-git config anchor.crVerbosity 25
+git config anchor.cr.verbosity 25
 
 # A standing rule on GitHub PRs only
-git config anchor.prRules "fill in the Risk & rollback section"
+git config anchor.github.rules "fill in the Risk & rollback section"
 ```
 
-## Scope
+## Scope — which layer a value is read from
+
+This is git's own sense of the word, the one `git config --show-scope` prints,
+and it is a different axis from the [qualifier](#key-naming) in the key name: the
+qualifier says *what a setting applies to*, the scope says *which file it was
+read from*.
 
 `git config` layers the same way it does everywhere else — project-local overrides
 global, global overrides system. Pick the layer by where the knob should apply:

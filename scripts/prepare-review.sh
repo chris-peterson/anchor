@@ -99,7 +99,7 @@
 #                                which level answered. inherited == a GitLab
 #                                parent group / the instance, or the owner's
 #                                GitHub .github repo; configured ==
-#                                anchor.crTemplateRepo; ambiguous == the level
+#                                anchor.cr.templateRepo; ambiguous == the level
 #                                holds several and TEMPLATE_CANDIDATES carries them
 #   TEMPLATE_CANDIDATES=<json>   [{name, path}] the author picks from when a level
 #                                holds several templates and none is default.md;
@@ -154,6 +154,8 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 # shellcheck source=lib/tmpfile.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/tmpfile.sh"
+# shellcheck source=lib/anchor-config.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/anchor-config.sh"
 
 will_open=1
 do_open=0
@@ -484,8 +486,8 @@ fi
 # Resolution walks from most specific to least, and the first level that yields
 # a template wins — so a repo-local file still beats anything inherited:
 #
-#   GitLab   project setting -> repo-local files -> templates API -> crTemplateRepo
-#   GitHub   repo-local files -> the owner's .github repo -> crTemplateRepo
+#   GitLab   project setting -> repo-local files -> templates API -> cr.templateRepo
+#   GitHub   repo-local files -> the owner's .github repo -> cr.templateRepo
 #
 # Neither forge needs its namespace walked. GitLab's
 # `projects/:fullpath/templates/merge_requests` already answers with what the
@@ -511,7 +513,7 @@ template_source=none
 template_candidates='[]'
 tpl_pick_path=""
 tpl_pick_candidates='[]'
-tpl_repo_cfg=$(git config --get anchor.crTemplateRepo 2>/dev/null || true)
+tpl_repo_cfg=$(git config --get anchor.cr.templateRepo 2>/dev/null || true)
 
 # Drop the directory and the .md suffix so `Default.md` and
 # `.github/PULL_REQUEST_TEMPLATE/default.md` both compare as `default`.
@@ -692,11 +694,8 @@ esac
 
 # --- anchor.* config ----------------------------------------------------------
 
-anchor_cfg='{}'
-while read -r name value; do
-  [[ -z "$name" ]] && continue
-  anchor_cfg=$(jq -c --arg n "$name" --arg v "$value" '. + {($n): $v}' <<<"$anchor_cfg")
-done < <(git config --get-regexp '^anchor\.' 2>/dev/null || true)
+anchor_cfg=$(anchor_config_json)
+anchor_config_warnings >&2
 
 # --- Draft path ---------------------------------------------------------------
 

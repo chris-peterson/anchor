@@ -45,6 +45,8 @@ set -euo pipefail
 here="$(dirname "${BASH_SOURCE[0]}")"
 # shellcheck source=lib/resolve-context.sh
 source "$here/lib/resolve-context.sh"
+# shellcheck source=lib/anchor-config.sh
+source "$here/lib/anchor-config.sh"
 CTX_REPO=""
 paths=()
 while [[ $# -gt 0 ]]; do
@@ -82,9 +84,8 @@ on_default=0
 
 ahead=$(bash "$here/look-ahead.sh" 2>/dev/null || true)
 
-config_json=$(git config --get-regexp '^anchor\.' 2>/dev/null \
-  | jq -cRn '[inputs | capture("^(?<k>[^ ]+) (?<v>.*)$")] | map({(.k): .v}) | add // {}' \
-  || echo '{}')
+config_json=$(anchor_config_json)
+anchor_config_warnings >&2
 
 echo "REPO_ROOT=$(git rev-parse --show-toplevel)"
 echo "STAGED=$staged"
