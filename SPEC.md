@@ -953,6 +953,14 @@ editor's whole answer is the revised artifact, which is why the column below
   a comment that asks for follow-up work to be filed rather than fixed now. A
   reviewer who approves and still comments has chosen not to block; leaving the
   request unactioned makes blocking the only way to be heard.
+- **[DIFF-32]** When the user gives feedback in chat while a review is open, the
+  system shall acknowledge the feedback, state that the review is still open, and
+  halt the flow, leaving the open review in place. When that review closes, the
+  system shall apply the chat feedback together with the review's result and open
+  a new review of the revised artifact, and shall proceed only on the new
+  review's verdict, whatever the first one returned. Closing the open review from
+  the chat side could discard what the reviewer has written in it, and a verdict
+  given before the chat feedback grades a version that will not land.
 
 ### CONFIG — Configuration
 

@@ -179,8 +179,9 @@ Either way, go to the changeset rung of
 `${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md` — file by file, in your reply —
 rather than launching into a refusal.
 
-Otherwise launch it as a **background** Bash call (`run_in_background: true`) —
-the viewer blocks until closed:
+Otherwise run it as the review loop in
+`${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md` describes — background launch,
+manifest, chat feedback while it's open, reading the result:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill review \
@@ -193,16 +194,12 @@ The `--title` / `--detail` overrides matter here: without them the header
 describes the local `HEAD`, which on a CR you didn't write is somebody else's
 change labelled with your last commit.
 
-**Print the manifest as you launch** — a table of the CR's changed files with
-their `+`/`−` counts, plus the CR number, its author, and the tool. This is
-somebody else's change, so the set is what says whether you are about to review
-what they asked you to. The shape is in
-`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "show what is going
-under review". Nothing else about the launch is output.
+**The manifest** is a table of the CR's changed files with their `+`/`−` counts,
+plus the CR number, its author, and the tool. This is somebody else's change, so
+the set is what says whether you are about to review what they asked you to.
 
-Read the result with the **BashOutput tool**. This skill reads the verdict
-differently from its siblings, because here the reviewer's comments are the
-*product* rather than an obstacle:
+This skill reads the verdict differently from its siblings, because here the
+reviewer's comments are the *product* rather than an obstacle:
 
 - **`changes-requested`** — the expected outcome. `REVIEW_OUTPUT.comments` are
   findings the user typed; carry them into Step 4 verbatim. One whose `target` is

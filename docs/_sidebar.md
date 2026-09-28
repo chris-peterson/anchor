@@ -26,6 +26,7 @@
   - [CR formatting](/guides/cr-formatting)
   - [Markdown gotchas](/guides/markdown-gotchas)
   - [Description vs. docs](/guides/description-vs-docs)
+  - [Running a review](/guides/running-a-review)
   - [When the review tool didn't grade it](/guides/review-fallback)
   - [Reading a reviewer's edits](/guides/reviewer-edits)
   - [Staying in changeset scope](/guides/changeset-scope)

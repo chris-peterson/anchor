@@ -254,65 +254,35 @@ Which mode takes the notes follows the subject. An empty
 `edit` mode takes them: they open in the user's editor and whatever they
 save *is* the notes. A baseline with sections already in it has real hunks, so
 `diff` takes it. A configured mode, or an editor with nowhere to open,
-overrides that. Ask which one it will be under the **same `--skill` and the same
-`--files` pair the launch uses**: the probe resolves the mode the way the launch
-does, so a bare one answers for a different review and names a tool this one
-will never open.
+overrides that.
+
+Run it as the review loop in `${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md`
+describes — probe, background launch, manifest, chat feedback while it's open,
+reading the verdict — opening the notes against `RELEASE_NOTES_BASELINE` (the
+empty left-hand side the recon block created):
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill release --probe \
   --files <RELEASE_NOTES_BASELINE> <RELEASE_NOTES_PATH>
 ```
 
-Then print the manifest the launch carries — a table naming the repo, the version
-being released, the range the notes cover, the tool from that probe, and the
-sections the draft holds. The shape is in
-`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "show what is going under
-review". Two facts from the probe belong in it:
-
-- **`REVIEW_MODE=edit`** — the editor renders wherever its host puts it, and
-  on a GUI editor that is a window behind the terminal the user is watching. A
-  review silently waiting in another window is indistinguishable from nothing
-  having opened, so name it.
-- **`REVIEW_MODE_CONFIGURED` present** — the run is opening a different shape
-  than the preference named. Name that too.
-- **`REVIEW_MODE_SOURCE=subject` / `REVIEW_TOOL_SOURCE=default`** — anchor
-  picked that half rather than the user. Add the configuration hint from
-  `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md` under "when anchor picked the
-  tool"; `REVIEW_TOOL` names the tool about to open.
-
-Then open the notes against `RELEASE_NOTES_BASELINE` (the empty left-hand side
-the recon block created) through the **dispatcher** — not the tool directly.
-It blocks until closed, so launch it as a **background** Bash call and read its
-stdout with the **BashOutput tool**; `tail` / `$(...)` trips the
-command-substitution gate:
-
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill release --files \
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill release --mode <REVIEW_MODE> --files \
   <RELEASE_NOTES_BASELINE> <RELEASE_NOTES_PATH> \
   --title 'Release notes' \
   --detail version=<NEW_VERSION> --detail range=<RELEASE_RANGE>
 ```
 
-Map `REVIEW_VERDICT` as the other skills do: only `approved` proceeds — and where
-it carries `editedFields` with `target: "release-notes"`, the saved buffer *is*
-the notes, so publish that text verbatim rather than re-drafting from it, and
-comments an approving review still left don't gate the publish — surface them
-after it, and carry out one that asks for the follow-up itself (*file an issue
-for this*);
-`changes-requested` means fold in every comment (they're ungraded — and one whose
-`target` is `file` with a diff in its body is the reviewer's own edit, read per
-`${CLAUDE_PLUGIN_ROOT}/guides/reviewer-edits.md`) and re-open
-against the previous draft — copied aside to a sibling path with `.prev` before
-the extension — so the second pass shows what the feedback changed; `incomplete`
-and `no-verdict` mean the reviewer didn't grade it. A result with **no parseable `REVIEW_VERDICT`** (empty stdout,
-stderr only — the dispatcher exited before reporting) reads the same way, and so
-does a probe reporting nothing installed.
+**The manifest** names the repo, the version being released, the range the
+notes cover, the tool from the probe, and the sections the draft holds.
 
-Every ungraded case takes the ladder in
-`${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md`: say what happened in one line,
-then walk it with the drafted notes as the artifact. The notes are a drafted
-document, so the document rungs apply and the changeset walk doesn't.
+What each verdict leads to here: `approved` moves on to the publish
+confirmation below, carrying the `editedFields` text with `target:
+"release-notes"` where `edit` mode returned one, the draft otherwise;
+`changes-requested` folds the comments in and re-opens; `incomplete`,
+`no-verdict`, a missing verdict line, and a probe reporting nothing installed
+take the ladder in `${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md` with the
+drafted notes as the artifact.
 
 **Then confirm the publish explicitly, even after an `approved` review.** This is
 the one place `anchor` keeps a second gate: a CR description is editable, but a
