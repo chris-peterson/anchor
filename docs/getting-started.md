@@ -54,15 +54,19 @@ Two dials control how much rope `anchor` has, and you set both.
 | Dial | Where it lives | Narrowest useful setting |
 |---|---|---|
 | What it can reach on your forge | your token's scopes | read-only scopes |
-| What runs without stopping to ask you | your Claude Code permission settings | nothing, so every step waits for an answer |
+| What runs without stopping to ask you | your Claude Code permission settings | `"defaultMode": "default"` and an empty allow list, so every step waits for an answer |
 
 Neither is a one-way door. Widen one when the prompts start to feel like
 ceremony. Narrow it again the day something surprises you.
 
+Every step waits for you only in `default` mode. A session with no permission
+mode configured starts in auto mode, where Claude Code's classifier can clear a
+step without asking you.
+
 **A read-only start is a real start.** `commit` still reads the diff, still
-reviews it with you, still drafts the message. It stops at the prompt for the
-commit itself and you answer that. What you give up is keystrokes, not
-capability.
+reviews it with you, still drafts the message. In `default` mode it stops at
+the prompt for the commit itself and you answer that. What you give up is
+keystrokes, not capability.
 
 What makes widening comfortable later is the same thing that makes a narrow
 setting bearable now: every skill puts the exact text in front of you before

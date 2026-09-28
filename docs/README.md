@@ -44,7 +44,8 @@ access token to create at all.
 **How much it may do without asking.** That dial is your Claude Code permission
 settings, not `anchor`. Read-only is a real place to start, and the skills still
 work: `commit` reviews the diff with you and drafts the message, then stops at
-the prompt for the commit itself. Widen it when you want to.
+the prompt for the commit itself. That prompt needs `"defaultMode": "default"`,
+since a session with no mode set starts in auto. Widen it when you want to.
 
 [**Getting started →**](/getting-started) has the token scopes, everything
 `anchor` can reach with one, and how to pace both dials to your own comfort.
