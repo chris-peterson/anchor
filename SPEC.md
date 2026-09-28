@@ -655,6 +655,17 @@ and writing nothing.
   system shall not report them again, so that successive skills acting on one
   commit produce one report; a run no report has covered — including one that
   only opening the change request started — shall still be reported.
+- **[CI-15]** When the system starts watching a pipeline that supersedes one an
+  earlier watch is still polling for the same work — a later commit on the same
+  branch, the commit a merge landed from it, or a run a release dispatched on it
+  — the system shall stop the earlier watch, report only the newer pipeline, and
+  say which watch it stopped. Two reports on one line of work leave the user to
+  work out which one counts, and the older one no longer says where it stands.
+- **[CI-16]** Where a commit is named by an abbreviated sha, the system shall
+  resolve it to the full commit before looking up its pipeline, and shall fail
+  naming the value where it names no commit. The forges match a run's commit on
+  the full sha only, so an abbreviated one finds no runs and reads as a commit
+  CI never touched.
 
 ### DIFF — Review integration
 

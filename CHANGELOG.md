@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **One pipeline report per line of work.** When a newer pipeline supersedes one `anchor` is still watching (a fix pushed to the same branch, a merge landing it, a release dispatched on it), `anchor` stops the older watch, says so, and reports only the newer pipeline.
+
+### Fixed
+
+- **A pipeline watch given a short sha finds its runs.** `--sha 5a5a0b3` used to report no pipeline for a commit whose runs had passed; the sha is now resolved to the full commit first, and one that names no commit fails with that value in the error.
+
 ## 1.15.0
 
 ### Added

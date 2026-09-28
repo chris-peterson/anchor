@@ -47,6 +47,7 @@ to say while doing it.
 | [Configuring `anchor`](/guides/configuring) | Every `git config anchor.*` key, and how your forge's own CR template composes with `anchor`'s voice | `commit`, `prepare-review`, `issue` |
 | [Forge cookbook](/guides/forge-cookbook) | The canonical `gh` and `glab` invocations, and the places the two CLIs diverge | every skill that touches the forge |
 | [Release models](/guides/release-models) | Who owns the version bump, and the publish step each model takes | `release` |
+| [Watching a pipeline](/guides/watching-a-pipeline) | How a skill watches CI in the background, which watch speaks when a newer pipeline supersedes an older one, and how to read the verdict | `commit`, `prepare-review`, `resolve-feedback`, `merge`, `release`, `pipeline` |
 | [Temp paths a caller can grant](/guides/temp-paths) | The temp-file form that stays inside a caller's permission grant on every platform | `commit`, `issue`, `resolve-feedback` |
 | [Execute quietly](/guides/execute-quietly) | What a skill puts on screen, and what it reads and acts on without saying | every skill |
 

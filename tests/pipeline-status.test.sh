@@ -154,6 +154,21 @@ o=$(run)
   || fail "the same run should resolve with no ref argument at all: $o"
 ok "release-event run resolves with no --branch argument"
 
+# ===================== an abbreviated --sha still finds the run ==============
+# GitHub's head_sha filter matches the full 40 characters only, so a short sha
+# passed through verbatim reads as a commit with no runs at all.
+o=$(run --sha "${sha:0:7}")
+[ "$(val PIPELINE_STATE "$o")" = "success" ] \
+  || fail "a short --sha should resolve to the commit's run: $o"
+[ "$(val PIPELINE_SHA "$o")" = "$sha" ] || fail "PIPELINE_SHA should be the full sha: $o"
+ok "an abbreviated --sha resolves to the full commit before the lookup"
+
+if o=$(run --sha deadbeefdeadbeef 2>&1); then
+  fail "a --sha naming no commit should fail rather than report none: $o"
+fi
+grep -q 'deadbeefdeadbeef' <<<"$o" || fail "the failure should name the sha it could not resolve: $o"
+ok "a --sha naming no commit fails and names it"
+
 # ===================== one run per workflow, so name the one you mean ========
 # A pushed commit on GitHub has a run per workflow, not one pipeline. Naming the
 # workflow is what makes the verdict about the release run and not a neighbor.

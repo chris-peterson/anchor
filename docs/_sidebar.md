@@ -33,5 +33,6 @@
   - [Configuring anchor](/guides/configuring)
   - [Forge cookbook](/guides/forge-cookbook)
   - [Release models](/guides/release-models)
+  - [Watching a pipeline](/guides/watching-a-pipeline)
   - [Temp paths a caller can grant](/guides/temp-paths)
   - [Execute quietly](/guides/execute-quietly)

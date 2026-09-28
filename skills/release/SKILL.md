@@ -374,7 +374,9 @@ them in a commit — reviewed there, like `bump-commit`, which is why
 
    - **Watch the run to a terminal state** via `/anchor:pipeline`, naming the
      workflow (`--workflow <RELEASE_WORKFLOW>`). A red run leaves the release
-     unmade, and the dispatch's own success says nothing about it.
+     unmade, and the dispatch's own success says nothing about it. This run
+     supersedes the watch `/anchor:commit` started on the notes push, so stop
+     that one (`${CLAUDE_PLUGIN_ROOT}/guides/watching-a-pipeline.md`).
    - **Fast-forward the local checkout** — `git pull --ff-only` — once it is
      green. The run pushed the bump commit and the tag; do the pull, don't offer
      it.

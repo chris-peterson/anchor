@@ -193,19 +193,16 @@ Map `PIPELINE_STATE`:
 
 - **`success`** — gate passes; continue.
 - **`running` / `pending`** — the pipeline hasn't settled. **Don't hand control
-  back for the user to re-ask later** — watch it here. Re-launch the helper with
-  `--watch` as a **background** call (`run_in_background: true`; a foreground call
-  holds the turn open until the Bash timeout), then read the settled verdict with
-  the **BashOutput tool** (not `tail` / `$(...)`, which trip the
-  command-substitution gate):
+  back for the user to re-ask later** — watch it here, re-launching the helper
+  with `--watch` as `${CLAUDE_PLUGIN_ROOT}/guides/watching-a-pipeline.md`
+  describes:
 
   ```bash
   bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --single-run --watch
   ```
 
-  When it settles, re-map the terminal state below. If `PIPELINE_TIMEOUT=1` (the
-  watch ceiling elapsed), report the last state and offer to keep watching with a
-  longer `--timeout` rather than merging on an unsettled pipeline.
+  When it settles, re-map the terminal state below. A watch that hit its
+  ceiling (`PIPELINE_TIMEOUT=1`) never merges on the unsettled pipeline.
 - **`failed` / `canceled`** — stop. List each job from `PIPELINE_FAILED_JOBS` (name
   linked to its url) and the `PIPELINE_URL`, exactly as `/anchor:pipeline` reports.
   A red pipeline is a blocked merge; offer to look at a failed job's log rather than
@@ -377,9 +374,10 @@ is what deploys, publishes, or releases. The branch pipeline the gates read
 proved the change in isolation; the target branch's is the one that says it
 landed. Don't leave it unwatched and make the user think to ask.
 
-The watch blocks while it polls, so launch it as a **background** Bash call
-(`run_in_background: true`) once Step 4's cleanup is done, and read its stdout
-with the **BashOutput tool** when it completes:
+Launch it once Step 4's cleanup is done, and run it as
+`${CLAUDE_PLUGIN_ROOT}/guides/watching-a-pipeline.md` describes. The landed
+commit supersedes the CR branch's pipeline, so a watch still running on that
+branch stops here:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill merge --sha <landed sha>
@@ -390,15 +388,7 @@ HEAD: a squash lands a commit the local branch never had, and a `--ff-only` pull
 that couldn't fast-forward leaves HEAD elsewhere. Retarget a non-cwd checkout
 with `--repo <checkout>`, same as the other helpers.
 
-Nothing about *whether* to watch is decided here — the helper owns it:
-
-- **`PIPELINE_WATCH=skipped`** → `PIPELINE_WATCH_REASON` says `config-off`
-  (`anchor.merge.watchPipelineAfterPush`, or the umbrella key) or
-  `already-reported`. Either way there's nothing to report; end the flow silently.
-- **`PIPELINE_WATCH=ran`** → the same `KEY=value` lines `/anchor:pipeline` reads
-  follow it. Report them following
-  `${CLAUDE_PLUGIN_ROOT}/templates/pipeline-report.md`, including its "After a
-  push" notes — the headline carries `<target>`, not the branch just deleted.
+The report's headline carries `<target>`, not the branch just deleted.
 
 Step 6's result goes out while this polls, so the flow is never held open; the
 pipeline report lands when the watch settles.

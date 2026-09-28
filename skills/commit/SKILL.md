@@ -273,15 +273,10 @@ Read the helper's stdout — `COMMIT_SHA`, `BRANCH`, `PUSH_MODE`, and `PUSHED=ok
 
 The push is what starts CI, so this flow is holding the answer to whether the commit went green — don't leave the branch pushed-but-unverified and make the user think to ask. Reached only on a successful push (`PUSHED=ok`); a rejected push has no pipeline to watch.
 
-The watch blocks while it polls, so launch it as a **background** Bash call (`run_in_background: true`) immediately after reporting the commit, and read its stdout with the **BashOutput tool** when it completes:
+Launch the watch immediately after reporting the commit, and run it as `${CLAUDE_PLUGIN_ROOT}/guides/watching-a-pipeline.md` describes — background launch, superseding an older watch, reading the verdict:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill commit
 ```
-
-Nothing about *whether* to watch is decided here — the helper owns it:
-
-- **`PIPELINE_WATCH=skipped`** → `PIPELINE_WATCH_REASON` says `config-off` (a config key turned it off) or `already-reported` (every run for this commit has been reported already). Either way there is nothing to report; end the flow silently.
-- **`PIPELINE_WATCH=ran`** → the same `KEY=value` lines `/anchor:pipeline` reads follow it. Report them following `${CLAUDE_PLUGIN_ROOT}/templates/pipeline-report.md`, including its "After a push" notes.
 
 Retarget it the way you retargeted `commit.sh` (`--repo`). The commit is already reported, so this never holds the flow open — the pipeline report lands when the watch settles.

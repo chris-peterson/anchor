@@ -107,6 +107,11 @@ ctx_resolve_repo
 # Peel to a commit so an annotated tag passed as --branch resolves to what it
 # points at rather than to the tag object.
 [[ -n "$sha" ]]    || sha=$(git rev-parse "${branch}^{commit}")
+# Both forges match a run's commit on the full sha only, so a short one would
+# find no runs and read as a commit CI never touched.
+full_sha=$(git rev-parse --verify --quiet "${sha}^{commit}") \
+  || { echo "pipeline-status.sh: $sha does not name a commit in this checkout" >&2; exit 64; }
+sha="$full_sha"
 
 # Each forge's state vocabulary → the normalized one, as a jq def. Runs and jobs
 # answer with the same vocabulary on both forges, so every probe below shares

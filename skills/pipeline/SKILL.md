@@ -108,11 +108,9 @@ foreground and read the result:
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh"
 ```
 
-**Watch** — add `--watch`. It blocks while it polls, so launch it as a
-**background call** (`run_in_background: true`); a foreground call would hold the
-turn open until the Bash timeout. When it completes, read its stdout with the
-**BashOutput tool** (not `tail` / `$(...)`, which trip the command-substitution
-gate):
+**Watch** — add `--watch`, and run it as
+`${CLAUDE_PLUGIN_ROOT}/guides/watching-a-pipeline.md` describes: background
+launch, stopping an older watch this one supersedes, reading the verdict:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --watch
@@ -194,13 +192,6 @@ The technique the shape doesn't cover:
   names the verdict run's failures; the table already carries the rest.
 - **`running` / `pending`** *(one-shot only — watch mode never returns here)* →
   offer to watch.
-- **`none` under `--workflow`** → that workflow has no run for this commit.
-  Check the name against the repo's workflow files before reporting a gap; a
-  typo'd workflow name and a workflow that genuinely didn't run look identical
-  from here.
-- **`PIPELINE_TIMEOUT=1`** → the watch ceiling elapsed before a terminal state;
-  report the last state and offer to keep watching (re-launch with a longer
-  `--timeout`).
 
 In `--job` mode, report `PIPELINE_JOB_STATE` for the named job with the same
 mapping (link `PIPELINE_JOB_URL`). A `none` here means no job by that name in the

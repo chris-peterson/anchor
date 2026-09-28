@@ -464,15 +464,13 @@ Retarget the listing and these calls per "Operating against a non-cwd repo" the 
 
 ### Report the branch's pipeline
 
-Run this once the description has landed, as a **background** Bash call (`run_in_background: true`), retargeted the same way as the write path:
+Run this once the description has landed, as `${CLAUDE_PLUGIN_ROOT}/guides/watching-a-pipeline.md` describes, retargeted the same way as the write path:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill prepare-review
 ```
 
 Call it whether or not this flow pushed. It gates on the runs already reported, so a CR opened on the commit `/anchor:commit` just pushed and reported comes back `PIPELINE_WATCH=skipped`, `already-reported`, and nobody is told twice about one pipeline. Two cases still report: a force-pushed rebase is a *new* commit, and where CI is gated on the CR (`on: pull_request`), the pipeline that opening it starts is one nobody has seen — the push-time watch found nothing to report.
-
-On `skipped`, say nothing. On `PIPELINE_WATCH=ran`, read the following lines with the **BashOutput tool** and report them following `${CLAUDE_PLUGIN_ROOT}/templates/pipeline-report.md`.
 
 ### Set the ordering dependency (when Step 2 captured one)
 
