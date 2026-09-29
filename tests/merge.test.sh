@@ -100,6 +100,10 @@ setup() {
   git -C "$repo" config user.email t@example.com
   git -C "$repo" config user.name T
   git -C "$repo" config commit.gpgsign false
+  # The stub's squash writes a commit in the bare repo, which reads no identity
+  # from the checkout; a runner with no fallback identity refuses it.
+  git --git-dir="$BARE" config user.email t@example.com
+  git --git-dir="$BARE" config user.name T
   git -C "$repo" remote add origin "$BARE"
   printf 'seed\n' > "$repo/README.md"
   git -C "$repo" add -A
