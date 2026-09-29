@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **`/anchor:merge` asks with a prompt you pick from.** Marking a draft ready, merging past open review threads, and the final merge confirmation are now choices you select, not a `yes` / `no` you type.
+- **`/anchor:merge` runs two commands instead of a dozen.** One reads the CR, your checkout, every gate, and the merge method; the other merges, cleans up the branch, and pulls the result. The gate table and the confirmation are what you see.
+
+### Fixed
+
+- **A merge only lands the head you reviewed.** The merge passes the CR's head SHA to the forge on GitHub and GitLab, so a commit pushed after the gates were read makes the merge fail instead of landing unreviewed. On GitLab it also turns off the auto-merge `glab` enables while a pipeline is running.
+
 ## 1.15.1
 
 ### Changed

@@ -17,8 +17,12 @@ running it**. Releasing is a deliberate act on its own schedule — several merg
 commonly batch into one release — so the choice of when to cut one belongs to the
 author, not to whichever merge happened to be last.
 
-CR = change request: a pull request on GitHub, a merge request on GitLab. Pick
-the forge tool by the `origin` remote.
+CR = change request: a pull request on GitHub, a merge request on GitLab.
+
+**The scripts decide the facts; this skill asks the questions.** Every gate, the
+merge method, the merge itself, and the cleanup are one helper call each. Don't
+reach past them with your own `gh` / `glab` / `git` / `jq` commands: a fact the
+block doesn't carry is a gap in the helper, not an invitation to re-derive it.
 
 **Don't narrate your work.** Every step below is an operating instruction, not a
 script to read aloud — follow the execute-quietly discipline:
@@ -28,44 +32,38 @@ list below, and the list is closed:
 1. The resolved repo and CR, one line.
 2. The gate table — every row once they're green, or the rows checked so far plus
    the one that blocked.
-3. The merge confirmation prompt.
+3. The merge confirmation, asked with `AskUserQuestion`.
 4. The one-line result, with the release next step where the repo has one.
 5. The pipeline the merge triggered, once it settles.
 
 Each is something the user decides or would otherwise have to go ask for. What
-you read to reach one of them — a config value, a forge field, a state that
-turned out fine — is input to the next step, not a paragraph in front of it.
+you read to reach one of them — a `KEY=value` line, a state that turned out fine
+— is input to the next step, not a paragraph in front of it.
 
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
 flowchart TD
-    Start(["/merge"]) --> Repo["Resolve repo + CR"]
+    Start(["/merge"]) --> Gates["merge-gates.sh"]
 
     subgraph "Step 1: Gates"
-        Repo --> Ready{Marked ready?}
-        Ready -->|Draft| StopDraft["Ask to mark ready"]
-        Ready -->|Ready| Mergeable{Mergeable?}
-        Mergeable -->|Conflicts| StopConflict["Stop: rebase first"]
-        Mergeable -->|Clean| Pipe{Pipeline green?}
-        Pipe -->|Running| Watch["Watch until settled"]
-        Watch --> Pipe
-        Pipe -->|Failed| StopPipe["Stop: report jobs"]
-        Pipe -->|Passed| Appr{Approvals met?}
-        Appr -->|Missing| StopAppr["Stop: needs approval"]
-        Appr -->|Met| Threads{Threads resolved?}
-        Threads -->|Open| ConfirmThreads["Surface + confirm"]
+        Gates --> Block{GATE_BLOCKING}
+        Block -->|state / local| Stop["Stop: report"]
+        Block -->|draft| AskDraft["Ask: mark ready?"]
+        AskDraft -->|Mark ready| Ready["mark-ready.sh"] --> Gates
+        Block -->|mergeable / approvals| StopGate["Stop: what clears it"]
+        Block -->|pipeline running| Watch["pipeline-status.sh --watch"] --> Gates
+        Block -->|pipeline failed| StopPipe["Stop: report jobs"]
+        Block -->|threads| AskThreads["Ask: merge or resolve first?"]
     end
 
-    subgraph "Step 2: Method"
-        Threads -->|Resolved| Method["Resolve method: no-ff default + settings"]
-        ConfirmThreads --> Method
-        Method --> Ask["Preview + confirm (yes/no)"]
+    subgraph "Step 2: Confirm"
+        Block -->|none| Confirm["Ask: merge via MERGE_METHOD_LABEL?"]
+        AskThreads -->|Merge anyway| Confirm
     end
 
-    subgraph "Step 3-5: Land, clean up, watch"
-        Ask --> Do["Merge via gh/glab"]
-        Do --> Post["Checkout default + pull, delete branch"]
-        Post --> WatchMain["Watch the target branch's pipeline"]
+    subgraph "Steps 3-4: Land, watch"
+        Confirm -->|Merge| Do["merge.sh: merge, announce, clean up"]
+        Do --> WatchMain["pipeline-after-push.sh on the landed sha"]
     end
 
     WatchMain --> Report([One-line result, then the pipeline])
@@ -78,332 +76,181 @@ skill is running inside an orchestrator (e.g. a release workflow) — run silent
 and do **not** create your own tasks. Otherwise enumerate:
 
 - `Step 1: Check the merge gates`
-- `Step 2: Choose the merge method`
+- `Step 2: Confirm the merge`
 - `Step 3: Merge and clean up`
 
 ## Target repo and CR
 
-Resolve the repo as the other `anchor` skills do. **With a name argument**, resolve
-it with `${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh <name>` (see the cookbook's
-"Resolving a named target repo"): `TARGET_VIA=resolved` → use `TARGET_LOCAL` as the
-checkout — this skill runs `git` post-merge (checkout, pull, branch delete), so it
-needs one; if `TARGET_LOCAL` is empty, ask where the checkout lives rather than
-proceeding. `ambiguous` → prompt with `TARGET_CANDIDATES`. `cwd` (no match) → fall
-back to a substring-match against repos the session has touched.
-**With no argument**, `git rev-parse --show-toplevel` from the working directory;
-ambiguous → ask. Run git with `-C <repo>` when the working directory isn't the
-target.
-
-When the target repo isn't the working directory, the forge commands below also
-default to the cwd repo — retarget each (`-R <owner/name>` for `gh`/`glab`
-subcommands; substitute the URL-encoded project for `:fullpath` and add
-`--hostname <host>` for `glab api`). Derive `owner/name` and the host once from
-`git -C <repo> remote get-url origin`, or from a CR URL argument. The full
-retargeting rules are in `${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`
-("Targeting a repo that isn't the working directory").
-
-Resolve the open CR for the branch (when no URL was given):
-
-```bash
-# GitLab
-glab mr view --output json 2>/dev/null | jq '{iid, web_url, draft, sha, source_branch, target_branch}'
-
-# GitHub
-gh pr view --json number,url,isDraft,headRefOid,headRefName,baseRefName 2>/dev/null
-```
-
-No open CR → say so and stop; there's nothing to merge. If the CR is already
-merged or closed, report that and stop.
-
-**Confirm local state matches the CR head** (same check as the other skills):
-`git status --porcelain` clean, and local HEAD equals the CR head SHA. If they
-disagree, surface the mismatch and stop — merging a CR whose head you haven't seen
-means landing code you didn't review here.
+**With no argument**, the helpers work on the repo backing the working directory
+and the CR for its current branch. **With a CR number or URL**, pass the number as
+`--cr <n>`. **With a repo name**, resolve it with
+`${CLAUDE_PLUGIN_ROOT}/scripts/resolve-target.sh <name>` (see the cookbook's
+"Resolving a named target repo"): `TARGET_VIA=resolved` → pass `TARGET_LOCAL` as
+`--repo <checkout>` to every helper below — the merge runs `git` afterwards
+(checkout, pull, branch delete), so it needs one; if `TARGET_LOCAL` is empty, ask
+where the checkout lives rather than proceeding. `ambiguous` → ask with
+`AskUserQuestion` over `TARGET_CANDIDATES`. `cwd` (no match) → fall back to a
+substring-match against repos the session has touched.
 
 ## Step 1: Check the merge gates
 
-Four gates must be green before the merge. Check them in this order — cheapest and
-most-blocking first — and stop at the first that fails, so the user fixes one thing
-at a time. Only the **pipeline** gate resolves itself with time; the skill waits on
-that one. The other three need a person (mark ready, get an approval, resolve a
-thread) or a rebase, so they stop and report rather than spin.
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/merge-gates.sh" [--cr <n>] [--repo <checkout>]
+```
 
-**The gates report as one table, and that table is the whole step.** A green gate
-is worth showing — together they're the evidence the merge is safe — and worth
-exactly one row:
+The block's header documents every key. It reads the CR, the checkout, then the
+gates in order — draft, mergeable, pipeline, approvals, threads — and stops at the
+first that isn't passing, naming it in `GATE_BLOCKING`. Only the **pipeline**
+resolves itself with time, so that's the one this skill waits on; the others need
+a person or a rebase, so they stop and report rather than spin.
+
+A non-zero exit carries `MERGE_GATES_ERROR`. With `MERGE_GATES_AUTH=1`, surface it
+and ask the user to refresh credentials — don't retry or fall back (the
+fail-fast-on-auth rule).
+
+**The gates report as one table, and that table is the whole step.** One row per
+gate the block reached, the `GATE_*_DETAIL` value as its state:
 
 | Gate | State |
 | --- | --- |
 | Draft | cleared |
-| Mergeable | `mergeable`, no conflicts |
+| Mergeable | mergeable, clean |
 | Pipeline | `success` — 3/3 jobs on `<sha>` |
-| Approvals | 0 required, 0 left |
+| Approvals | 1 required, 0 left; approved by @ana |
 | Threads | none unresolved |
 
-A gate that doesn't apply is a row too (`none for this commit`, `no approval
-rules`). A gate that blocks ends the flow, so it gets the rows checked above it
-plus what blocked and what clears it. Either way the commands, the raw forge
-fields, and the reasoning that read them stay out.
+Lead it with the one line naming the repo and the CR: `CR_REF` linked to `CR_URL`,
+and `CR_TITLE`. Then act on `GATE_BLOCKING`:
 
-### 1a. Marked ready (not draft)
+- **empty** — every gate passes; go to Step 2.
+- **`state`** — `CR_STATE` is `merged` or `closed`. Say so and stop; there's
+  nothing to merge.
+- **`local`** — `LOCAL_STATE=dirty` (uncommitted changes) or `head-mismatch`
+  (`LOCAL_HEAD_SHA` isn't `CR_HEAD_SHA`). Surface it and stop: merging a head you
+  haven't seen here lands code you didn't review here.
+- **`draft`** — the CR is still a draft, and merging it skips the review it's
+  waiting for. Ask with `AskUserQuestion` (header `Draft`):
+  1. **Mark ready and continue** — clears the flag, then re-reads the gates.
+  2. **Stop** — leave it a draft.
 
-A draft CR is the author's "not under review yet" flag; merging one skips the review
-it's waiting for. If the resolved CR is a draft (`isDraft` / `.draft` true), stop and
-ask whether to mark it ready and proceed — don't mark it ready silently:
-
-> This CR is still a draft. Marking it ready requests review; merging now lands it
-> without that review. Mark ready and merge anyway? `[yes / no]`
-
-On `yes`, clear the flag through the helper rather than the CLI directly. It reads
-the flag fresh, and announces `cr.ready` so a sibling tracking deliverables sees
-the CR leave draft:
-
-```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/mark-ready.sh" --forge <FORGE> --cr <CR_IID>
-```
-
-`CR_READY=ok` and continue. `ALREADY_READY=1` means the CR stopped being a draft
-between Step 0's read and now, which satisfies this gate too, so continue without
-reporting a change you didn't make. On `no`, stop.
-
-### 1b. Mergeable (no conflicts)
-
-Read the forge's mergeable state (cookbook: "Check a CR's mergeable state"). If the
-CR conflicts with the target branch or is behind it in a way the forge won't
-auto-resolve, stop and route to a rebase — `/anchor:prepare-review` owns the
-rebase-on-default flow. Don't attempt the merge; the forge would reject it anyway.
-
-### 1c. Pipeline green — wait if it's still running
-
-Resolve the pipeline for the CR head and read its state with the pipeline helper
-(the same one `/anchor:pipeline` uses), so the poll loop, forge normalization, and
-failed-job reporting are shared rather than re-derived:
-
-```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --single-run
-```
-
-`--single-run` keeps this gate on one run — the commit's most recent. On GitHub a
-commit carries a run per workflow, and `/anchor:pipeline` folds them into one
-verdict; that isn't this gate's question. Whether *every* required check passed is
-the forge's own merge check, read in step 1a, and duplicating it here would block
-a merge the forge is willing to take.
-
-Map `PIPELINE_STATE`:
-
-- **`success`** — gate passes; continue.
-- **`running` / `pending`** — the pipeline hasn't settled. **Don't hand control
-  back for the user to re-ask later** — watch it here, re-launching the helper
-  with `--watch` as `${CLAUDE_PLUGIN_ROOT}/guides/watching-a-pipeline.md`
-  describes:
+  On *Mark ready*, clear it through the helper, which reads the flag fresh and
+  announces `cr.ready`:
 
   ```bash
-  bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --single-run --watch
+  bash "${CLAUDE_PLUGIN_ROOT}/scripts/mark-ready.sh" --forge <MERGE_FORGE> --cr <CR_NUMBER> [--repo <checkout>]
   ```
 
-  When it settles, re-map the terminal state below. A watch that hit its
-  ceiling (`PIPELINE_TIMEOUT=1`) never merges on the unsettled pipeline.
-- **`failed` / `canceled`** — stop. List each job from `PIPELINE_FAILED_JOBS` (name
-  linked to its url) and the `PIPELINE_URL`, exactly as `/anchor:pipeline` reports.
-  A red pipeline is a blocked merge; offer to look at a failed job's log rather than
-  fetching it unprompted.
-- **`manual`** — the pipeline is blocked awaiting a manual action; it won't progress
-  on its own. Say so and stop.
-- **`none`** — no pipeline for this commit (path/branch filters, or the repo has no
-  CI for this ref). Treat as "no pipeline gate", not a failure — note it and
-  continue.
-- **`absent`** — origin isn't a recognized forge; there's no pipeline to gate on.
+  `CR_READY=ok` or `ALREADY_READY=1` both satisfy the gate; run `merge-gates.sh`
+  again.
+- **`mergeable`** — `GATE_MERGEABLE=conflicts` or `behind`: stop and route to
+  `/anchor:prepare-review`, which owns the rebase on the default branch.
+  `unknown`: the forge hadn't computed it after the helper's retries; say so and
+  stop. `blocked`: the forge's own merge check refuses for a reason
+  `GATE_MERGEABLE_DETAIL` names; report it and stop.
+- **`pipeline`** — map `GATE_PIPELINE`:
+  - **`running` / `pending`** — don't hand control back for the user to re-ask
+    later. Watch it as `${CLAUDE_PLUGIN_ROOT}/guides/watching-a-pipeline.md`
+    describes, then run `merge-gates.sh` again so every gate is read fresh:
 
-### 1d. Approvals satisfied
+    ```bash
+    bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --single-run --watch --sha <CR_HEAD_SHA> [--repo <checkout>]
+    ```
 
-Read the CR's approval state (cookbook: "Check a CR's approvals"). If required
-approvals are missing — GitHub `reviewDecision` is `REVIEW_REQUIRED` or
-`CHANGES_REQUESTED`; GitLab `approvals_left > 0` — stop and report who still needs
-to approve. This gate needs a reviewer; the skill can't clear it. On
-`CHANGES_REQUESTED` specifically, point the user at `/anchor:resolve-feedback`.
+    A watch that hit its ceiling (`PIPELINE_TIMEOUT=1`) never merges on the
+    unsettled pipeline.
+  - **`failed` / `canceled`** — stop. List each job from `PIPELINE_FAILED_JOBS`
+    (name linked to its url) and `PIPELINE_URL`, as `/anchor:pipeline` reports.
+    Offer to look at a failed job's log rather than fetching it unprompted.
+  - **`manual`** — the pipeline waits on a manual action and won't progress on
+    its own. Say so and stop.
+- **`approvals`** — `missing`: stop and report what `GATE_APPROVALS_DETAIL` says is
+  outstanding. `changes-requested`: stop and point at `/anchor:resolve-feedback`.
+- **`threads`** — list each entry of `THREADS` on one line
+  (`<path:line> — @author — <body>`), then ask with `AskUserQuestion` (header
+  `Threads`):
+  1. **Resolve them first** — hand off to `/anchor:resolve-feedback` and stop.
+  2. **Merge anyway** — some threads are intentionally left open (answered
+     questions the asker never resolved), and the author is the one who knows.
+     Go to Step 2.
 
-Where a repo has no approval rules configured, there's nothing to satisfy — don't
-invent a requirement; continue.
+A `none` pipeline (no CI for this commit) and `none` approvals (no approval rules)
+pass their gates; their rows say so and the flow continues.
 
-### 1e. Review threads resolved
+## Step 2: Confirm the merge
 
-Fetch unresolved, human-authored review threads (cookbook: "List unresolved review
-threads" — the same query `/anchor:resolve-feedback` uses). If any remain, surface
-them in one line each (`<file:line> — @reviewer — <ask>`) and confirm before
-landing:
+The block has already resolved the method: a **merge commit** preserving every
+commit on the branch, unless the forge is configured otherwise — GitLab's
+`merge_method` / `squash_option` and the MR's squash flag, GitHub's allowed
+strategies. Take it as given; don't read the commits to second-guess it.
 
-> `<n>` review threads are still unresolved. Merge anyway, or resolve them first?
-> `[merge / resolve first]`
+Ask with `AskUserQuestion` (header `Merge`). The question states what will happen,
+built from the block:
 
-On `resolve first`, hand off to `/anchor:resolve-feedback` and stop. On `merge`,
-continue — some threads are intentionally left open (answered questions the asker
-never marked resolved), and the author is the one who knows.
+> Merge `<CR_REF>` into `<CR_TARGET_BRANCH>` via `<MERGE_METHOD_LABEL>`?
 
-## Step 2: Choose the merge method
+When `MERGE_METHOD_SETTING` is set, lead the question with it, so the deviation
+from the default is visible where the user decides:
 
-Land the branch's commits as they stand, with a **merge commit** that preserves
-every commit on the branch (git's `--no-ff`). This is the method — don't read the
-commits to second-guess it. Whether the branch is one commit or twenty, tidy or
-noisy, is the author's history to keep; collapsing it isn't this skill's call. The
-method changes only when the project or CR is **configured** for a different one.
+> `<MERGE_METHOD_SETTING>` — merge `!42` into `main` via fast-forward, no merge
+> commit?
 
-Read that configuration and let it override the default:
+Two options:
 
-**GitLab** — the project pins the merge method; the MR pins the squash choice
-(cookbook: "Merge a CR"):
+1. **Merge** — land it.
+2. **Don't merge** — stop. There's no method menu: to land it another way, the
+   user changes the forge setting (and you re-run the gates) or names the method
+   in their reply.
 
-```bash
-glab api projects/:fullpath | jq '{merge_method, squash_option}'
-glab mr view <iid> --output json | jq '{squash}'
-```
+**The question is this step's whole output.** The settings that produced the
+method are input to it, never a paragraph ahead of it.
 
-- `merge_method`: `merge` → merge commit, the default (no override). `ff` →
-  fast-forward, no merge commit (the project mandates a linear history).
-  `rebase_merge` → semi-linear.
-- `squash_option`: `always` → squash (the project requires it). `never` → don't
-  squash. `default_on` / `default_off` → the author's per-MR `squash` checkbox
-  decides; honor the MR's `squash` field.
-
-**GitHub** — the repo pins which strategies are allowed; there's no enforced
-default beyond that (cookbook: "Merge a CR"):
-
-```bash
-gh repo view --json mergeCommitAllowed,squashMergeAllowed,rebaseMergeAllowed
-```
-
-Use `--merge` when merge commits are allowed. Only when the repo disables them
-does the method change — fall to the allowed strategy that still keeps the commits
-(`--rebase`) ahead of the one that discards them (`--squash`).
-
-Then **preview and confirm** — state what will happen and take a yes/no; don't
-offer a method menu. When the method is the merge-commit default:
-
-> Merging `!42` into `main` via merge commit (preserves 3 commits). Proceed?
-> `[yes / no]`
-
-When a setting moved it off the default, name the setting so the deviation is
-visible:
-
-> The project's merge method is fast-forward — merging `!42` into `main`
-> fast-forward, no merge commit. Proceed? `[yes / no]`
-
-On `no`, stop and don't merge. The method follows the default and the forge's
-settings, not an inline menu — so to land it differently the user either adjusts
-the project/CR settings (and you re-read them) or names the method to use. On
-`yes`, merge.
-
-**The prompt is this step's whole output.** `merge_method`, `squash_option`, the
-MR's squash flag, the allowed strategies: each is input to the prompt, never a
-paragraph ahead of it. A setting that left the default standing is nothing to
-report — say what the merge will do, not which settings declined to change it.
-Where a setting *did* move the method, the prompt above already names it, which
-is where it belongs.
-
-## Step 3: Merge
-
-Run the merge for the chosen method (cookbook: "Merge a CR"). Delete the source
-branch as part of the merge — `gh pr merge --delete-branch` / `glab mr merge
---remove-source-branch`. On GitHub this is the only place the branch gets cleaned
-up unless the repo's `deleteBranchOnMerge` is on, since a PR carries no per-PR
-preference; on GitLab it repeats what the create call set. This is a forge write:
-
-- On a **401/403 or other auth failure**, surface it and ask the user to refresh
-  credentials — do not retry or fall back (the fail-fast-on-auth rule).
-- If the forge **rejects the merge** because a gate flipped since Step 1 (a new
-  commit, a fresh unresolved thread, protection rules), re-read the specific gate it
-  names and surface that — don't force past it.
-
-### Announce the merge
-
-Once the forge confirms it, read back what the forge recorded and announce it, so
-a sibling tracking deliverables learns the CR landed and when:
+## Step 3: Merge and clean up
 
 ```bash
-# GitHub
-gh pr view <num> --json url,title,mergedAt,mergeCommit \
-  | jq -r '[.url, .title, .mergedAt, (.mergeCommit.oid // "")] | @tsv'
-
-# GitLab
-glab mr view <iid> --output json \
-  | jq -r '[.web_url, .title, .merged_at,
-            (.merge_commit_sha // .squash_commit_sha // .sha)] | @tsv'
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/merge.sh" --cr <CR_NUMBER> --sha <CR_HEAD_SHA> \
+  --method <MERGE_METHOD> --squash <MERGE_SQUASH> [--repo <checkout>]
 ```
+
+It merges guarded on the head SHA, deletes the source branch on the forge, reads
+back what landed, announces `cr.merged`, checks out and pulls the target, and
+deletes the merged local branch.
+
+- **Exit 70 with `MERGE_AUTH=1`** — surface it and ask the user to refresh
+  credentials. Don't retry or fall back.
+- **Exit 70 otherwise** — the forge refused the merge, usually because a gate
+  flipped since Step 1 (a new commit, a fresh thread, a protection rule). Report
+  `MERGE_ERROR` and run `merge-gates.sh` again to show which one; don't force past
+  it.
+- **`CLEANUP=incomplete`** — the merge landed but the local tidy-up stopped;
+  `CLEANUP_DETAIL` says where. Surface it in the result line. Don't force a branch
+  delete `git branch -d` refused: it means the local branch holds commits the
+  merge didn't carry.
+
+## Step 4: Watch the pipeline the merge triggered
+
+The merge writes a commit to the target branch, and for most repos that commit
+is what deploys, publishes, or releases. Launch the watch once Step 3 returns, as
+`${CLAUDE_PLUGIN_ROOT}/guides/watching-a-pipeline.md` describes. The landed commit
+supersedes the CR branch's pipeline, so a watch still running on that branch
+stops here:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/announce.sh" cr.merged \
-  "uri=<url>" "title=<title>" "merged_at=<merged at>" "sha=<landed sha>"
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill merge --sha <MERGE_SHA> [--repo <checkout>]
 ```
 
-Both halves are read back rather than assembled from what this run knows.
-`merged_at` is the forge's own timestamp, so a subscriber records when the merge
-happened instead of when it heard; and the landed commit sits under a different
-field per method, which is why the queries above take the first one the forge
-filled in.
+Pass `MERGE_SHA` rather than letting the helper take HEAD: a squash lands a commit
+the local branch never had, and a pull that couldn't fast-forward leaves HEAD
+elsewhere. The report's headline carries `TARGET_BRANCH`, not the branch just
+deleted.
 
-The publisher exits 0 on every path, so this can never turn a merge that landed
-into a tool call that failed. The contract it satisfies is in the marketplace repo
-at [`authoring/plugin-contract.md`](https://github.com/chris-peterson/claude-marketplace/blob/main/authoring/plugin-contract.md).
-
-## Step 4: Clean up
-
-Once the forge confirms the merge, leave the local checkout on a clean footing:
-
-1. **Return to the default branch and pull the merged result:**
-
-   ```bash
-   git -C <repo> checkout <target> && git -C <repo> pull --ff-only
-   ```
-
-2. **Delete the merged local branch.** The forge deleted the remote branch (Step 3);
-   remove its local counterpart:
-
-   ```bash
-   git -C <repo> branch -d <head>
-   ```
-
-   `-d` refuses to delete a branch whose commits aren't merged — if it refuses,
-   surface that rather than forcing with `-D`; it means the merged commit differs
-   (e.g. a squash produced a new SHA). After a squash, the branch's commits are in
-   the target under a new SHA, so `-d` will refuse; confirm the merge landed, then
-   delete with `-D`.
-
-## Step 5: Watch the pipeline the merge triggered
-
-The merge writes a commit to the default branch, and for most repos that commit
-is what deploys, publishes, or releases. The branch pipeline the gates read
-proved the change in isolation; the target branch's is the one that says it
-landed. Don't leave it unwatched and make the user think to ask.
-
-Launch it once Step 4's cleanup is done, and run it as
-`${CLAUDE_PLUGIN_ROOT}/guides/watching-a-pipeline.md` describes. The landed
-commit supersedes the CR branch's pipeline, so a watch still running on that
-branch stops here:
-
-```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill merge --sha <landed sha>
-```
-
-Pass the landed sha you read back in Step 3 rather than letting the helper take
-HEAD: a squash lands a commit the local branch never had, and a `--ff-only` pull
-that couldn't fast-forward leaves HEAD elsewhere. Retarget a non-cwd checkout
-with `--repo <checkout>`, same as the other helpers.
-
-The report's headline carries `<target>`, not the branch just deleted.
-
-Step 6's result goes out while this polls, so the flow is never held open; the
+Step 5's result goes out while this polls, so the flow is never held open; the
 pipeline report lands when the watch settles.
 
-## Step 6: Report
+## Step 5: Report
 
-One line: `Merged <CR ref> into <target> (<method>) — <merge-sha>`, with the CR URL.
-Note the branch cleanup only if it needed the user's attention (a `-d` that refused).
-Nothing more — the merge is the outcome, not a status report.
-
-**A noisy line in a forge CLI's output is not a finding.** `glab mr merge` prints
-`! No pipeline running on <branch>` when it looks for an in-flight pipeline to
-wait on and finds none, which reads alarming and means nothing. The user never
-saw it — the terminal collapsed that tool result — so explaining it invents a
-confusion to resolve. Surface such a line only where it changed the outcome.
+One line: `Merged <CR_REF> into <TARGET_BRANCH> (<method>) — <MERGE_SHA short>`,
+with `CR_URL`. Add `CLEANUP_DETAIL` only when `CLEANUP=incomplete`. Nothing more —
+the merge is the outcome, not a status report.
 
 Where the repo has something to publish, close with `/anchor:release` as the next
 step — one clause, not a pitch, and don't run it. On a repo with no version

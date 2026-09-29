@@ -452,8 +452,8 @@ step after `prepare-review` opens the CR and `resolve-feedback` clears its threa
   history — GitLab's `merge_method` / `squash_option` and the MR's squash flag,
   GitHub's allowed strategies.
 - **[MERGE-12]** The system shall preview the resolved merge method and confirm before
-  merging without offering a method menu, and shall squash only where the forge is
-  configured to.
+  merging through `AskUserQuestion`, without offering a method menu, and shall
+  squash only where the forge is configured to.
 - **[MERGE-13]** When merging, the system shall use the forge CLI, delete the source
   branch, and guard the merge on the CR head SHA.
 - **[MERGE-14]** If a forge write fails with an auth error, then the system shall
@@ -470,6 +470,10 @@ step after `prepare-review` opens the CR and `resolve-feedback` clears its threa
   once they are green, or the gates checked so far plus the one that blocked — and
   shall surface the resolved merge method through the confirmation prompt alone,
   rather than in prose ahead of it.
+- **[MERGE-18]** The system shall read the CR, the checkout, the gates, and the
+  merge method through one helper call, and shall land the merge, its read-back
+  and announcement, and the local cleanup through another, rather than through
+  per-field forge and git commands the skill composes on each run.
 
 ### RELEASE — Release
 

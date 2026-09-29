@@ -75,7 +75,7 @@ events:
         happens with nothing of anchor's running, so a subscriber that has to
         account for those reconciles against the forge rather than waiting on
         this.
-      emitted_by: skills/merge, via scripts/announce.sh
+      emitted_by: scripts/merge.sh
       fields:
         uri: the change request's web address
         title: its title, as the forge reports it
