@@ -1,6 +1,6 @@
 {
   "name": "anchor",
-  "version": "1.15.1",
+  "version": "1.15.2",
   "description": "One skill per step of the code-change lifecycle: file an issue, review the diff and commit, open and describe a change request, resolve review feedback, merge, release, and watch the pipeline. Supports multiple source forges (GitHub, GitLab).",
   "author": {
     "name": "chris-peterson"
