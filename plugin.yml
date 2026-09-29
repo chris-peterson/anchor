@@ -47,7 +47,7 @@ events:
         announcement covers the whole phase — description, labels, milestone,
         ordering dependency — rather than one per mutation, and a re-run on the
         same CR fires it again.
-      emitted_by: skills/prepare-review, via scripts/announce.sh
+      emitted_by: skills/prepare-review
       fields:
         uri: the change request's web address
         title:
@@ -106,7 +106,7 @@ events:
         issue filed a new issue. A run that adds to an issue that already
         existed announces nothing: there is no new artifact for a subscriber to
         record, and the skill's own report says what it added.
-      emitted_by: skills/issue, via scripts/announce.sh
+      emitted_by: skills/issue
       fields:
         uri: the issue's web address
         title: its title, as anchor filed it
@@ -116,7 +116,7 @@ events:
         whose version bump is a commit rather than a release announces nothing
         here; the bookkeeping commit's own commit.pushed is the artifact on that
         path.
-      emitted_by: skills/release, via scripts/announce.sh
+      emitted_by: skills/release
       fields:
         uri: the release's web address, which names the project as well as the tag
         tag: the ref it shipped as
