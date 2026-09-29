@@ -79,7 +79,7 @@ merge landed the change request. In-session merges only: what the forge complete
 | `merged_at` | always set | when the forge recorded the merge, in its own ISO-8601 form. The forge's time rather than the moment the announcement was made, so a subscriber recording completion records when it happened. |
 | `sha` | always set | the merge commit |
 
-Emitted by skills/merge, via scripts/announce.sh.
+Emitted by `scripts/merge.sh`.
 
 ## `commit.pushed` :id=commit-pushed
 
