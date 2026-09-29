@@ -48,7 +48,7 @@ prepare-review changed a change request that already existed. One announcement c
 | `uri` | always set | the change request's web address |
 | `title` | may be empty | its title, as the forge reports it. Read back rather than set here, so a change request the forge reports without one arrives with the field present and empty. |
 
-Emitted by skills/prepare-review, via scripts/announce.sh.
+Emitted by `skills/prepare-review`.
 
 ## `cr.ready` :id=cr-ready
 
@@ -110,7 +110,7 @@ issue filed a new issue. A run that adds to an issue that already existed announ
 | `uri` | always set | the issue's web address |
 | `title` | always set | its title, as anchor filed it |
 
-Emitted by skills/issue, via scripts/announce.sh.
+Emitted by `skills/issue`.
 
 ## `release.created` :id=release-created
 
@@ -125,7 +125,7 @@ release published a release, once the forge reports it exists. A repo whose vers
 | `uri` | always set | the release's web address, which names the project as well as the tag |
 | `tag` | always set | the ref it shipped as |
 
-Emitted by skills/release, via scripts/announce.sh.
+Emitted by `skills/release`.
 
 ## Reacting to one
 
