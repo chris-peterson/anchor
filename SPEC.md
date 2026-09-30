@@ -133,7 +133,9 @@ behavior, not an independent authority — review them against the source.
   and shall report staged paths it did not stage rather than committing or
   unstaging them. Scoping only the staging still lets a foreign index entry ride
   into the commit; the entry is another session's to resolve, so it is surfaced,
-  left staged, and excluded.
+  left staged, and excluded. Each scoped path is committed as the index holds
+  it: a path-limited `git commit` takes the working-tree copy, which carries an
+  edit made after the review and any hunk left unstaged.
 - **[COMMIT-04c]** Staging a path list shall succeed on every run with the same
   list, for any mix of added, modified, deleted, and renamed paths, and shall
   skip a path whose change is already staged in full. The commit flow stages its
@@ -143,6 +145,17 @@ behavior, not an independent authority — review them against the source.
   naming such a path in a `git add` is fatal to the entire invocation — so a
   staging step that cannot repeat fails the second call and takes every other
   path in the list down with it.
+- **[COMMIT-04d]** Where the caller staged only part of a file, the system shall
+  commit that file's staged hunks and no others. A path the caller names as
+  staged is taken from the index as it stands and never staged; a path named for
+  staging that is already partly staged is refused before anything is staged, so
+  the caller says which it meant. A `git add` of that path would fold the hunks
+  left out into the commit, under a message that does not describe them.
+- **[COMMIT-04e]** The system shall commit the scoped paths only while their
+  index entries match the ones the COMMIT-14 review showed, and shall otherwise
+  stop with nothing committed. The commit reads the index when it runs, so a
+  `git add` between the review and the commit (a second `git add -p`, another
+  session staging the same file) would land content nobody reviewed.
 - **[COMMIT-05]** If nothing is staged, then the system shall describe the most
   recent unpushed commit, and shall stop if HEAD is already pushed or there are
   no local changes.
@@ -166,7 +179,8 @@ behavior, not an independent authority — review them against the source.
   wrong, the system shall offer a message-only amend and let the user decide on
   the force-push.
 - **[COMMIT-14]** When changes are staged and a message is drafted, the system shall
-  open a visual review of the pending changeset (working tree vs `HEAD`) with the
+  open a visual review of the pending changeset (what the commit will carry, vs
+  `HEAD`) with the
   drafted commit message presented alongside the diff (not gated separately in
   chat) via the review wrapper, and shall not commit until the verdict is clean;
   an edited message the review returns (`editedFields`) is used for the commit.
@@ -976,6 +990,14 @@ editor's whole answer is the revised artifact, which is why the column below
   review's verdict, whatever the first one returned. Closing the open review from
   the chat side could discard what the reviewer has written in it, and a verdict
   given before the chat feedback grades a version that will not land.
+- **[DIFF-33]** Where a local-changes review names a partly staged path, the
+  system shall show the index against `HEAD` rather than the working tree, and
+  shall return `no-verdict` with `raw.exitCode` `staged-unsupported` when the
+  tool's verdict is read from edits to the working tree. The tree holds the hunks
+  the commit leaves out, so a working-tree review grades a changeset that is not
+  the one that lands; and git opens a staged diff's index side as temp copies,
+  so a reviewer's edits there never reach a file and read as an untouched tree,
+  which is approval.
 
 ### CONFIG — Configuration
 

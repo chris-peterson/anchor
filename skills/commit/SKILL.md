@@ -85,10 +85,12 @@ Run git with `-C <checkout>` when the working directory isn't the target, rather
 **This is the first command the flow runs.** It's cheap, deterministic, and it decides whether the later steps have anything to do — so nothing precedes it, tests included. Run the pre-flight recon **once**; it stages the paths you name, then gathers the resolved checkout, staging state, stat, branch/default, ahead-count, squash gate, and `anchor.*` config into one `KEY=value` block, so the steps below read a single command's output instead of six separate probes:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/commit-preflight.sh" --path <p> [--path <p>...]
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/commit-preflight.sh" --path <p> [--path <p>...] [--staged-path <p>...]
 ```
 
 **Name every path you changed, and nothing else.** One `--path` per file, relative to `REPO_ROOT`; an absolute path is refused. This is not `git add -A`: a checkout can be shared with another agent session, and staging the whole tree puts that session's in-flight files into your review and your commit, under a message that doesn't describe them. Take the list from the edits *you* made this session — the files you wrote, plus any you deleted or renamed. A path with nothing to stage is an error (exit 65), which is how a typo or a wrong-root path surfaces instead of quietly dropping a file from the commit.
+
+**A file you staged only part of goes in as `--staged-path <p>`**, not `--path`. It isn't staged, and the commit carries its staged hunks and nothing else. Naming a partly staged file as `--path` exits 67 with the index untouched, because `git add` would fold in the hunks you left out. On that exit, decide which you meant: only the staged hunks (`--staged-path`), or the whole file (`--path`, after staging the rest yourself).
 
 If the user asks to commit work you didn't make yourself, list the paths from `git status --porcelain` first, show them, and confirm the set before staging.
 
@@ -225,22 +227,22 @@ If a commit attempt in Step 6 is rejected by a `PreToolUse` hook citing a substr
 
 ## Step 5: Review the pending changeset
 
-Before committing, open the pending changeset — the working tree vs `HEAD`, the exact changes Step 6 will commit — in a visual review, **with the drafted message shown alongside it**. Launch the **dispatcher** in `--local` mode with `--message-file` (the message file from Step 3) — **not** raw `git difftool`. It stages the paths you name so a new file is in the diff at all, diffs the tree against `HEAD`, seeds the drafted message (subject as the headline, body as prose) plus a repo/branch/summary header, runs the mode the subject calls for — a git range names a base to compare against, so that is `diff`, run by `anchor.diff.tool` (`revdiff` by default); see the configuring guide's Defaults table, and — once it closes — prints the normalized result on its own stdout. So you review the message and the diff *together*, with no separate chat gate. Raw `git difftool` bypasses the header and the verdict.
+Before committing, open the pending changeset — the exact changes Step 6 will commit, against `HEAD` — in a visual review, **with the drafted message shown alongside it**. Launch the **dispatcher** in `--local` mode with `--message-file` (the message file from Step 3) — **not** raw `git difftool`. It stages the paths you name so a new file is in the diff at all, diffs the tree against `HEAD` (the index instead, when you name a `--staged-path`, since the tree still holds the hunks the commit leaves out), seeds the drafted message (subject as the headline, body as prose) plus a repo/branch/summary header, runs the mode the subject calls for — a git range names a base to compare against, so that is `diff`, run by `anchor.diff.tool` (`revdiff` by default); see the configuring guide's Defaults table, and — once it closes — prints the normalized result on its own stdout. So you review the message and the diff *together*, with no separate chat gate. Raw `git difftool` bypasses the header and the verdict.
 
 Run it as the review loop in `${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md` describes — background launch, manifest, chat feedback while it's open, reading the verdict. What's particular to a commit:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill commit --local --message-file <commit-msg-path> --path <p> [--path <p>...]
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill commit --local --message-file <commit-msg-path> --path <p> [--path <p>...] [--staged-path <p>...]
 ```
 
 - **The manifest** is a table of the files under review with their `+`/`−` counts (Step 1's `STAT` covers the same paths), the repo and branch, the tool, and the drafted commit message riding with them.
-- **The same `--path` list** you gave the Step 1 pre-flight. The review and the commit have to cover the same set of files, or the user grades a changeset that isn't the one that lands.
+- **The same `--path` and `--staged-path` lists** you gave the Step 1 pre-flight. The review and the commit have to cover the same set of files, or the user grades a changeset that isn't the one that lands. A `--staged-path` review needs a viewer that reads the index: a difftool returns `no-verdict` with `raw.exitCode` `staged-unsupported`, which goes down the fallback ladder like any other `no-verdict`.
 - **Push-existing** (Step 1 found nothing staged, unpushed commits to push) has no drafted message; review those commits instead of the working tree: `review-diff.sh --skill commit --commit`. That path is a diff with no drafted artifact, so on `edit` mode it returns `no-verdict` naming the key to change — report that rather than pushing unreviewed.
 
 What each verdict leads to here:
 
 - **`approved`** → proceed to Step 6 to commit and push.
-- **`changes-requested`** → **do not commit.** Fix the commented lines in the working tree (a reviewer's own edits per `${CLAUDE_PLUGIN_ROOT}/guides/reviewer-edits.md` — keep the fixes, answer the questions, and take their comment lines back out), then loop back to Step 2 so tests re-run before the re-review. **If a comment's `body` is short** (e.g. "I don't get what this flag means") **and the cited line range contains more than one distinct change** (e.g. two flag additions in a usage block, two unrelated lines in the same range), ask the user which token the comment refers to before fixing — a one-second clarification beats several minutes of guessing wrong. Fix the commented lines themselves; don't expand into adjacent pre-existing code (`${CLAUDE_PLUGIN_ROOT}/guides/changeset-scope.md`).
+- **`changes-requested`** → **do not commit.** Fix the commented lines in the working tree (a reviewer's own edits per `${CLAUDE_PLUGIN_ROOT}/guides/reviewer-edits.md` — keep the fixes, answer the questions, and take their comment lines back out; a fix to a `--staged-path` file reaches the commit only once you stage that hunk yourself), then loop back to Step 2 so tests re-run before the re-review. **If a comment's `body` is short** (e.g. "I don't get what this flag means") **and the cited line range contains more than one distinct change** (e.g. two flag additions in a usage block, two unrelated lines in the same range), ask the user which token the comment refers to before fixing — a one-second clarification beats several minutes of guessing wrong. Fix the commented lines themselves; don't expand into adjacent pre-existing code (`${CLAUDE_PLUGIN_ROOT}/guides/changeset-scope.md`).
 - **`incomplete`** → `Unreviewed changes — what do you want to change?`
 - **`no-verdict`**, or no verdict line at all → nothing is committed. The ladder's changeset rung is the one to walk — go file by file over the pending changeset in your reply.
 
@@ -258,10 +260,12 @@ The message file already exists — the one from Step 3, or the reviewer's edite
 - **Push-existing** (Step 1 found nothing staged but unpushed commits) → `--mode push-existing` (no message file — there's no commit to make).
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/commit.sh" --mode new --message-file <path> --path <p> [--path <p>...]
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/commit.sh" --mode new --message-file <path> --reviewed-index <REVIEW_INDEX> --path <p> [--path <p>...] [--staged-path <p>...]
 ```
 
-Carry the **same `--path` list** through from Steps 1 and 5, so the commit holds exactly what was reviewed. It scopes the commit as well as the staging: a path someone else staged stays staged rather than riding into your commit. The message-only amend is the one call that takes no `--path` — there is no tree change to scope, and `--amend` keeps every file the commit already carried.
+Carry the **same `--path` and `--staged-path` lists** through from Steps 1 and 5, so the commit holds exactly what was reviewed. They scope the commit as well as the staging: a path someone else staged stays staged rather than riding into your commit. Each path is committed as the index holds it, so an edit made after the review stays in the working tree.
+
+**Pass `--reviewed-index` the `REVIEW_INDEX` line Step 5's review printed**, from the review whose verdict you're acting on, or from the launch whose `no-verdict` sent you to the chat walk. Every launch that gets as far as opening a tool prints it. A `--path` without it exits 64. It names the index entries the reviewer was shown, and `commit.sh` exits 68 with nothing committed when they've changed since: something staged more of a reviewed file after the review. On exit 68, go back to Step 5 and review again. The message-only amend is the one call that takes no `--path` — there is no tree change to scope, and `--amend` keeps every file the commit already carried.
 
 `commit.sh` picks the push variant itself — `-u origin <branch>` for a branch with no upstream, plain `git push` otherwise, `git push --force-with-lease` when you pass `--force-with-lease`. It also **refuses to commit onto the default branch** unless you pass `--allow-default-branch`; the Step 4 branch guard means you're normally already on a feature branch, so pass that flag only for the deliberate "commit to `<default>`" case the user chose there. Target a non-cwd checkout with `--repo <checkout>`, same as the other helpers.
 

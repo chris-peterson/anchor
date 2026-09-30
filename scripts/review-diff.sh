@@ -5,6 +5,9 @@
 # stdout so the caller acts on a single command's output:
 #   REVIEW_VERDICT=<approved|changes-requested|incomplete|no-verdict>
 #   REVIEW_OUTPUT=<normalized json>   (the DIFF contract; see SPEC.md "DIFF")
+# and, for --local, a line before the tool opens:
+#   REVIEW_INDEX=<id>   the reviewed paths' index entries, for commit.sh
+#                       --reviewed-index (scripts/lib/stage-paths.sh)
 #
 # The mode follows the subject: `edit` where the review is one file with no prior
 # version, `diff` everywhere else. Adapters live in scripts/review/, one per mode,
@@ -55,6 +58,9 @@ set -euo pipefail
 #   --path <p>  a path for --local to stage, repeatable, resolved against the repo
 #     root. Only these are staged: a whole-tree add would pull a session sharing
 #     the checkout into this review (see scripts/lib/stage-paths.sh).
+#   --staged-path <p>  a partly staged path for --local, repeatable: never staged,
+#     and the review shows the index against HEAD rather than the working tree,
+#     which still holds the hunks the commit leaves out.
 # A review is resolved on two axes, and they are not the same question:
 #
 #   mode     the shape the review takes — `edit` or `diff`. The subject decides
@@ -120,6 +126,7 @@ mode_override=""
 tool_override=""
 probe_only=0
 stage_paths=()
+staged_paths=()
 # One pass over the whole argv, so a caller that writes `--repo` after the mode
 # still retargets. These used to be leading-only: a `--repo` that arrived after
 # the mode fell through to the mode parser, which collected it as an unnamed
@@ -135,6 +142,7 @@ while [[ $# -gt 0 ]]; do
     --mode)     mode_override="${2:?--mode needs edit or diff}"; shift 2 ;;
     --tool)  tool_override="${2:?--tool needs a name}"; shift 2 ;;
     --path)     stage_paths+=("${2:?--path needs a path}"); shift 2 ;;
+    --staged-path) staged_paths+=("${2:?--staged-path needs a path}"); shift 2 ;;
     --probe)    probe_only=1; shift ;;
     --title|--detail|--message-file)
                 rest+=("$1" "${2:?$1 needs a value}"); shift 2 ;;
@@ -375,6 +383,8 @@ review_subject="range"
 files_left=""
 files_right=""
 diff_range=""
+diff_staged=0
+review_index=""
 header_mode=""
 review_title=""
 review_details_json="[]"
@@ -456,6 +466,11 @@ else
     # HEAD`, and a whole-tree add to get it there would pull in a session sharing
     # the checkout (scripts/lib/stage-paths.sh).
     anchor_stage_paths "review-diff.sh" "${stage_paths[@]+"${stage_paths[@]}"}"
+    # A partly staged path leaves hunks in the working tree that the commit does
+    # not carry, so the review shows the index instead.
+    anchor_require_staged "review-diff.sh" "${staged_paths[@]+"${staged_paths[@]}"}"
+    [[ ${#staged_paths[@]} -eq 0 ]] || diff_staged=1
+    review_index=$(anchor_index_digest "${stage_paths[@]+"${stage_paths[@]}"}" "${staged_paths[@]+"${staged_paths[@]}"}")
   elif [[ "${1:-}" == "--previous" ]]; then
     git rev-parse --verify --quiet HEAD~1 >/dev/null || {
       echo "review-diff.sh: HEAD has no parent commit to compare against" >&2
@@ -531,6 +546,11 @@ else
   [[ -n "$override_details_json" ]] && review_details_json="$override_details_json"
 fi
 
+if [[ ${#staged_paths[@]} -gt 0 && "$diff_staged" -ne 1 ]]; then
+  echo "review-diff.sh: --staged-path applies to --local only" >&2
+  exit 64
+fi
+
 # --- Select the mode's adapter and delegate ----------------------------------
 
 report_superseded_key
@@ -558,7 +578,11 @@ fi
 # for a changeset nobody saw. Report `no-verdict` naming the repo the range
 # resolved against, which is also what surfaces a review pointed at the wrong
 # checkout (DIFF-21).
-if [[ "$review_subject" == "range" ]] && git diff --quiet "$diff_range" -- 2>/dev/null; then
+range_empty() {
+  if [[ "$diff_staged" -eq 1 ]]; then git diff --cached --quiet "$diff_range" --
+  else git diff --quiet "$diff_range" --; fi
+}
+if [[ "$review_subject" == "range" ]] && range_empty 2>/dev/null; then
   echo "review-diff.sh: $diff_range is empty in $(git rev-parse --show-toplevel) (target resolved via ${RESOLVED_VIA:-cwd}) — nothing to review" >&2
   jq -cn --arg m "$review_mode" --arg b "$review_tool" --arg r "$diff_range" '{
     mode:$m, tool:$b, verdict:"no-verdict",
@@ -574,8 +598,11 @@ fi
 # The review-request contract the sourced adapter reads. Exported so the
 # adapter (sourced below) counts as a consumer — it runs in this same shell.
 export review_subject review_mode review_tool
-export diff_range files_left files_right review_title review_details_json
+export diff_range diff_staged files_left files_right review_title review_details_json
 export message_file review_skill
+
+# Taken before the tool opens, so it names what the reviewer was shown.
+[[ -z "$review_index" ]] || echo "REVIEW_INDEX=$review_index"
 
 # shellcheck source=/dev/null
 source "$adapter"

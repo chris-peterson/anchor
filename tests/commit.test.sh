@@ -39,6 +39,9 @@ git -C "$repo" remote set-head origin main   # sets refs/remotes/origin/HEAD -> 
 
 msgfile="$work/msg.txt"
 
+# What the review would print as REVIEW_INDEX for these paths.
+digest() { ( cd "$repo" && source "$here/../scripts/lib/stage-paths.sh" && anchor_index_digest "$@" ); }
+
 # --- Default-branch guard: refuses on main without the escape --------------
 printf 'on main\n' > "$repo/a.txt"
 git -C "$repo" add -A
@@ -128,7 +131,8 @@ printf 'ours\n' > "$repo/mine.txt"
 printf 'theirs\n' > "$repo/other-session.txt"
 git -C "$repo" add -A
 printf 'Add mine only\n' > "$msgfile"
-out=$(bash "$commit_sh" --repo "$repo" --mode new --message-file "$msgfile" --path mine.txt)
+out=$(bash "$commit_sh" --repo "$repo" --mode new --message-file "$msgfile" \
+        --reviewed-index "$(digest mine.txt)" --path mine.txt)
 echo "$out" | grep -q '^PUSHED=ok$' || fail "scoped commit push not ok: $out"
 git -C "$repo" show --name-only --format= HEAD | grep -qx 'mine.txt' || fail "scoped commit missing mine.txt"
 if git -C "$repo" show --name-only --format= HEAD | grep -qx 'other-session.txt'; then
@@ -142,9 +146,10 @@ ok "--path commits only the named paths and leaves a foreign staged file staged"
 # `git commit --amend -- <paths>` layers the named paths onto the existing
 # commit rather than reducing it to them, so a scoped amend is not lossy.
 printf 'more ours\n' >> "$repo/mine.txt"
+git -C "$repo" add mine.txt
 printf 'Add mine only (amended)\n' > "$msgfile"
 out=$(bash "$commit_sh" --repo "$repo" --mode amend --message-file "$msgfile" \
-        --force-with-lease --path mine.txt)
+        --force-with-lease --reviewed-index "$(digest mine.txt)" --path mine.txt)
 echo "$out" | grep -q '^PUSHED=ok$' || fail "scoped amend push not ok: $out"
 git -C "$repo" ls-tree --name-only HEAD | grep -qx 'seed.txt' || fail "scoped amend dropped seed.txt from the tree"
 git -C "$repo" ls-tree --name-only HEAD | grep -qx 'mine.txt' || fail "scoped amend lost mine.txt"
@@ -153,10 +158,91 @@ if git -C "$repo" show --name-only --format= HEAD | grep -qx 'other-session.txt'
 fi
 ok "--path amend keeps the amended commit's other files and still excludes foreign work"
 
+# --- --path commits the index, not the working tree --------------------------
+# A partly staged file: the staged hunks are the reviewed changeset, and the
+# unstaged ones were left out on purpose. `git commit -- <path>` would take the
+# working-tree copy and carry them in.
+printf 'line one\nline two\n' > "$repo/partial.txt"
+git -C "$repo" add partial.txt
+printf 'Seed partial\n' > "$msgfile"
+bash "$commit_sh" --repo "$repo" --mode new --message-file "$msgfile" \
+  --reviewed-index "$(digest partial.txt)" --path partial.txt >/dev/null
+printf 'LINE ONE\nline two\n' > "$repo/partial.txt"
+git -C "$repo" add partial.txt
+printf 'LINE ONE\nline two\nleft out\n' > "$repo/partial.txt"
+printf 'Capitalize line one\n' > "$msgfile"
+out=$(bash "$commit_sh" --repo "$repo" --mode new --message-file "$msgfile" \
+        --reviewed-index "$(digest partial.txt)" --path partial.txt)
+echo "$out" | grep -q '^PUSHED=ok$' || fail "partly staged commit push not ok: $out"
+[[ "$(git -C "$repo" show HEAD:partial.txt)" == "$(printf 'LINE ONE\nline two')" ]] \
+  || fail "commit carried unstaged hunks: $(git -C "$repo" show HEAD:partial.txt)"
+[[ "$(cat "$repo/partial.txt")" == "$(printf 'LINE ONE\nline two\nleft out')" ]] \
+  || fail "the unstaged hunk should still be in the working tree"
+git -C "$repo" diff --quiet --cached -- partial.txt \
+  || fail "the committed hunk should no longer show as staged"
+if git -C "$repo" show --name-only --format= HEAD | grep -qx 'other-session.txt'; then
+  fail "partly staged commit swept in the other session's file"
+fi
+git -C "$repo" diff --cached --name-only | grep -qx 'other-session.txt' \
+  || fail "the other session's staged file should still be staged"
+ok "--path commits a partly staged file's staged hunks and leaves the rest unstaged"
+
+# a staged deletion under --path is committed as a deletion
+git -C "$repo" rm --quiet --force partial.txt
+printf 'Remove partial\n' > "$msgfile"
+bash "$commit_sh" --repo "$repo" --mode new --message-file "$msgfile" \
+  --reviewed-index "$(digest partial.txt)" --staged-path partial.txt >/dev/null
+if git -C "$repo" ls-tree --name-only HEAD | grep -qx 'partial.txt'; then
+  fail "a staged deletion under --path was not committed"
+fi
+ok "--path commits a staged deletion"
+
+# --- --reviewed-index commits only the index the review showed ------------------
+# The commit reads the index when it runs, so a `git add` after the review would
+# otherwise ship unreviewed (COMMIT-04e).
+printf 'reviewed\n' > "$repo/pinned.txt"
+git -C "$repo" add pinned.txt
+reviewed=$(digest pinned.txt)
+printf 'reviewed\nstaged after the review\n' > "$repo/pinned.txt"
+git -C "$repo" add pinned.txt
+sha_before=$(git -C "$repo" rev-parse HEAD)
+printf 'Add pinned\n' > "$msgfile"
+set +e
+out=$(bash "$commit_sh" --repo "$repo" --mode new --message-file "$msgfile" \
+        --reviewed-index "$reviewed" --path pinned.txt 2>&1)
+rc=$?
+set -e
+[[ $rc -eq 68 ]] || fail "index changed after review -> want exit 68, got $rc: $out"
+[[ "$(git -C "$repo" rev-parse HEAD)" == "$sha_before" ]] || fail "a changed index still committed"
+git -C "$repo" diff --cached --name-only | grep -qx 'pinned.txt' || fail "the refused path should stay staged"
+ok "--reviewed-index refuses (exit 68) when the index changed after the review"
+
+out=$(bash "$commit_sh" --repo "$repo" --mode new --message-file "$msgfile" \
+        --reviewed-index "$(digest pinned.txt)" --path pinned.txt)
+echo "$out" | grep -q '^PUSHED=ok$' || fail "matching --reviewed-index push not ok: $out"
+[[ "$(git -C "$repo" show HEAD:pinned.txt)" == "$(printf 'reviewed\nstaged after the review')" ]] \
+  || fail "matching --reviewed-index committed the wrong content"
+ok "--reviewed-index commits when the index matches the review"
+
+# a --path with no --reviewed-index is refused: a tree change is always reviewed
+printf 'unreviewed\n' > "$repo/unreviewed.txt"
+git -C "$repo" add unreviewed.txt
+sha_before=$(git -C "$repo" rev-parse HEAD)
+set +e
+out=$(bash "$commit_sh" --repo "$repo" --mode new --message-file "$msgfile" --path unreviewed.txt 2>&1)
+rc=$?
+set -e
+[[ $rc -eq 64 ]] || fail "--path without --reviewed-index -> want exit 64, got $rc: $out"
+[[ "$(git -C "$repo" rev-parse HEAD)" == "$sha_before" ]] || fail "--path without --reviewed-index still committed"
+git -C "$repo" reset --quiet -- unreviewed.txt
+rm -f "$repo/unreviewed.txt"
+ok "--path without --reviewed-index is refused before anything is committed"
+
 # an absolute --path is refused before anything is committed
 sha_before=$(git -C "$repo" rev-parse HEAD)
 set +e
-out=$(bash "$commit_sh" --repo "$repo" --mode new --message-file "$msgfile" --path "$repo/mine.txt" 2>&1)
+out=$(bash "$commit_sh" --repo "$repo" --mode new --message-file "$msgfile" \
+        --reviewed-index unused --path "$repo/mine.txt" 2>&1)
 rc=$?
 set -e
 [[ $rc -eq 64 ]] || fail "absolute --path -> want exit 64, got $rc: $out"

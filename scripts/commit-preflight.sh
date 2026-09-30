@@ -22,7 +22,11 @@
 # --repo <path> retargets onto a checkout other than the cwd repo
 # (see scripts/lib/resolve-context.sh).
 #
-# --path <p> names a path to stage, repeatable, relative to the repo root.
+# --path <p> names a path to stage, repeatable, relative to the repo root. A path
+# that is already partly staged is refused (exit 67) before anything is staged.
+#
+# --staged-path <p> names a path whose staged hunks are the commit, repeatable:
+# it is never staged, and it must have something staged (exit 65 otherwise).
 #
 # Output (KEY=value on stdout):
 #   REPO_ROOT=<path>        the resolved target checkout, so the skill needs no
@@ -49,10 +53,12 @@ source "$here/lib/resolve-context.sh"
 source "$here/lib/anchor-config.sh"
 CTX_REPO=""
 paths=()
+staged_paths=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
     --path)     paths+=("${2:?--path needs a path}"); shift 2 ;;
+    --staged-path) staged_paths+=("${2:?--staged-path needs a path}"); shift 2 ;;
     *) echo "commit-preflight.sh: unknown argument: $1" >&2; exit 64 ;;
   esac
 done
@@ -60,6 +66,9 @@ ctx_resolve_repo
 
 # shellcheck source=lib/stage-paths.sh
 source "$here/lib/stage-paths.sh"
+anchor_require_staged "commit-preflight.sh" "${staged_paths[@]+"${staged_paths[@]}"}"
+anchor_reject_absolute "commit-preflight.sh" "${paths[@]+"${paths[@]}"}"
+anchor_refuse_partly_staged "commit-preflight.sh" "${paths[@]+"${paths[@]}"}"
 anchor_stage_paths "commit-preflight.sh" "${paths[@]+"${paths[@]}"}"
 
 staged=0
@@ -89,7 +98,7 @@ anchor_config_warnings >&2
 
 echo "REPO_ROOT=$(git rev-parse --show-toplevel)"
 echo "STAGED=$staged"
-echo "OTHER_STAGED=$(anchor_other_staged_count "${paths[@]+"${paths[@]}"}")"
+echo "OTHER_STAGED=$(anchor_other_staged_count "${paths[@]+"${paths[@]}"}" "${staged_paths[@]+"${staged_paths[@]}"}")"
 echo "STAT=$stat"
 echo "BRANCH=$branch"
 echo "DEFAULT_BRANCH=$default_branch"
