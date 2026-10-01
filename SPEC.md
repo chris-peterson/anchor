@@ -114,6 +114,9 @@ behavior, not an independent authority — review them against the source.
 - **[COMMIT-01]** When `/anchor:commit` runs, the system shall run the project's
   test suite after the pre-flight recon and before drafting a commit message,
   discovering the runner itself so it can report progress and act on a failure.
+  Where the project or user has a skill named `verify`, the system shall run
+  that skill as the test step, once, since Claude Code also asks for it before
+  a commit.
 - **[COMMIT-02]** If the test suite fails, then the system shall stop and not commit
   until it passes, including for pre-existing failures.
 - **[COMMIT-03]** Where no test runner is found, the system shall skip the test
