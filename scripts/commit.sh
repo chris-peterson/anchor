@@ -20,16 +20,24 @@
 #
 # It does commit path-scoped when `--path` is given, which is what keeps a shared
 # checkout honest: another session's staged file stays staged rather than riding
-# into this commit under a message that never mentions it. `--amend -- <paths>`
-# keeps every file the amended commit already carried, so a message-only amend can
-# safely pass no paths at all.
+# into this commit under a message that never mentions it. What it commits for
+# each path is the staged content, so a partly staged file lands as staged, and
+# `--staged-path` is accepted as the same flag so the skill carries one list. An
+# amend keeps every file the amended commit already carried, so a message-only
+# amend can safely pass no paths at all.
+#
+# --reviewed-index <id> takes the REVIEW_INDEX the review printed and refuses
+# (exit 68) when the named paths' index entries no longer match it, so a `git
+# add` between the review and the commit cannot ship unreviewed. It is required
+# with --path: a tree change is always reviewed first, and only the message-only
+# amend, which has none, names no paths.
 #
 # --repo <path> retargets onto a checkout other than the cwd repo
 # (see scripts/lib/resolve-context.sh).
 #
 # Usage:
-#   commit.sh --mode new           --message-file <path> [--path <p>]... [--allow-default-branch]
-#   commit.sh --mode amend         --message-file <path> [--path <p>]... [--force-with-lease] [--allow-default-branch]
+#   commit.sh --mode new           --message-file <path> [--reviewed-index <id> --path <p>...] [--allow-default-branch]
+#   commit.sh --mode amend         --message-file <path> [--reviewed-index <id> --path <p>...] [--force-with-lease] [--allow-default-branch]
 #   commit.sh --mode push-existing
 #
 # Modes:
@@ -63,6 +71,8 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 # shellcheck source=lib/stage-paths.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/stage-paths.sh"
+# shellcheck source=lib/tmpfile.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/tmpfile.sh"
 # shellcheck source=lib/forge-url.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/forge-url.sh"
 
@@ -71,16 +81,18 @@ mode=""
 message_file=""
 force_with_lease=0
 allow_default_branch=0
+reviewed_index=""
 paths=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)                 CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
-    --path)                 paths+=("${2:?--path needs a path}"); shift 2 ;;
+    --path|--staged-path)   paths+=("${2:?$1 needs a path}"); shift 2 ;;
     --mode)                 mode="${2:?--mode needs a value}"; shift 2 ;;
     --message-file)         message_file="${2:?--message-file needs a path}"; shift 2 ;;
     --force-with-lease)     force_with_lease=1; shift ;;
     --allow-default-branch) allow_default_branch=1; shift ;;
+    --reviewed-index)       reviewed_index="${2:?--reviewed-index needs the REVIEW_INDEX the review printed}"; shift 2 ;;
     *) echo "commit.sh: unknown argument: $1" >&2; exit 64 ;;
   esac
 done
@@ -97,6 +109,9 @@ if [[ "$mode" != "push-existing" ]]; then
   fi
   if [[ ! -r "$message_file" ]]; then
     echo "commit.sh: message file not readable: $message_file" >&2; exit 66
+  fi
+  if [[ ${#paths[@]} -gt 0 && -z "$reviewed_index" ]]; then
+    echo "commit.sh: --path requires --reviewed-index, the REVIEW_INDEX the review printed" >&2; exit 64
   fi
 fi
 
@@ -131,16 +146,40 @@ fi
 # --- Commit -------------------------------------------------------------------
 
 if [[ "$mode" != "push-existing" ]]; then
+  if [[ -n "$reviewed_index" ]]; then
+    anchor_reject_absolute "commit.sh" "${paths[@]+"${paths[@]}"}"
+    if [[ "$(anchor_index_digest "${paths[@]+"${paths[@]}"}")" != "$reviewed_index" ]]; then
+      echo "commit.sh: the index for these paths changed after the review; nothing was committed. Review again and pass the new REVIEW_INDEX." >&2
+      exit 68
+    fi
+  fi
   commit_args=()
   [[ "$mode" == "amend" ]] && commit_args+=(--amend)
   commit_args+=(-F "$message_file")
   if [[ ${#paths[@]} -gt 0 ]]; then
     anchor_reject_absolute "commit.sh" "${paths[@]}"
-    commit_args+=(--)
-    while IFS= read -r spec; do commit_args+=("$spec"); done \
+    specs=()
+    while IFS= read -r spec; do specs+=("$spec"); done \
       < <(anchor_commit_pathspecs "${paths[@]}")
+    # `git commit -- <paths>` commits the working-tree copy of each path, which
+    # carries a partly staged file's unstaged hunks and any edit made after the
+    # review. So the commit is built from a scratch index: HEAD, plus the named
+    # paths' entries from the real index. Every other staged path stays out.
+    commit_index=$(anchor_tmpfile anchor-commit-index index)
+    trap 'rm -f "$commit_index"' EXIT
+    base=HEAD
+    git rev-parse --verify --quiet HEAD >/dev/null || base=$(git hash-object -t tree /dev/null)
+    GIT_INDEX_FILE="$commit_index" git read-tree "$base"
+    git diff --cached --no-renames --no-abbrev --raw -z "$base" -- "${specs[@]}" \
+      | while IFS= read -r -d '' meta && IFS= read -r -d '' path; do
+          read -r _ new_mode _ new_sha _ <<<"$meta"
+          printf '%s %s\t%s\0' "$new_mode" "$new_sha" "$path"
+        done \
+      | GIT_INDEX_FILE="$commit_index" git update-index -z --index-info
+    GIT_INDEX_FILE="$commit_index" git commit "${commit_args[@]}"
+  else
+    git commit "${commit_args[@]}"
   fi
-  git commit "${commit_args[@]}"
 fi
 
 commit_sha=$(git rev-parse --short HEAD)

@@ -89,6 +89,30 @@ rc=0; out=$( run --path "$repo/a.txt" 2>&1 ) || rc=$?
 [ "$rc" -eq 64 ] || fail "absolute --path -> want exit 64, got $rc: $out"
 ok "staging: an absolute --path is refused"
 
+# a partly staged path: `git add` would fold the hunks the caller left out into
+# the commit, so --path refuses it before anything moves
+git -C "$repo" add a.txt
+git -C "$repo" commit --quiet -m "add a"
+printf 'change\nstaged\n' > "$repo/a.txt"; git -C "$repo" add a.txt
+printf 'change\nstaged\nleft out\n' > "$repo/a.txt"
+index_before=$(git -C "$repo" diff --cached)
+rc=0; out=$( run --path a.txt 2>&1 ) || rc=$?
+[ "$rc" -eq 67 ] || fail "partly staged --path -> want exit 67, got $rc: $out"
+grep -q -- '--staged-path a.txt' <<<"$out" || fail "the refusal should name --staged-path: $out"
+[ "$(git -C "$repo" diff --cached)" = "$index_before" ] || fail "a refused --path must leave the index alone"
+ok "staging: a partly staged --path is refused (exit 67) and the index is untouched"
+
+# --staged-path takes the index as it stands: nothing staged, nothing counted as foreign
+o=$(run --staged-path a.txt)
+[ "$(git -C "$repo" diff --cached)" = "$index_before" ] || fail "--staged-path must not stage"
+[ "$(val STAGED "$o")" = 1 ]       || fail "--staged-path: STAGED should be 1"
+[ "$(val OTHER_STAGED "$o")" = 0 ] || fail "--staged-path is ours, not OTHER_STAGED; got $(val OTHER_STAGED "$o")"
+ok "staging: --staged-path keeps a partly staged path's index as it is"
+
+# a --staged-path with nothing staged is the same typo guard as --path
+rc=0; out=$( run --staged-path seed.txt 2>&1 ) || rc=$?
+[ "$rc" -eq 65 ] || fail "--staged-path with nothing staged -> want 65, got $rc: $out"
+ok "staging: a --staged-path with nothing staged exits 65"
 git -C "$repo" add a.txt
 
 # --- anchor.* config surfaces as JSON -------------------------------------

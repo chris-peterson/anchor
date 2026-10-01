@@ -22,6 +22,7 @@
 # shellcheck disable=SC2034
 diff_tool_caps='{"producesVerdict":true,"perHunkReview":false,"editableCommitMessage":false,"editableDescription":false,"sideMarkers":true}'
 diff_tool_install_hint='brew install umputun/apps/revdiff'
+diff_tool_reviews_index=1
 
 # The `sh` command string that runs one review. The refs come from the request
 # variables the dispatcher exported; the flags are revdiff's own.
@@ -33,6 +34,8 @@ diff_tool_command() {
 
   if [[ "$review_subject" == "files" ]]; then
     args+=("--compare-old=$files_left" "--compare-new=$files_right")
+  elif [[ "$diff_staged" -eq 1 ]]; then
+    args+=(--staged)
   else
     case "$diff_range" in
       *...*) args+=("${diff_range%%...*}" "${diff_range##*...}") ;;

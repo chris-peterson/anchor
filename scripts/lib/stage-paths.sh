@@ -69,6 +69,56 @@ anchor_stage_paths() {
   git add -- "${specs[@]}"
 }
 
+# anchor_refuse_partly_staged <caller> [<path>...]
+# Refuse a --path that already has staged changes *and* unstaged ones. Someone
+# staged part of that file on purpose, and a `git add` would fold the hunks they
+# left out into the commit. The caller says which it means: --staged-path to keep
+# the index as it is, or stage the rest itself.
+anchor_refuse_partly_staged() {
+  local caller="$1"; shift
+  local p line
+  for p in "$@"; do
+    while IFS= read -r line; do
+      case "${line:0:2}" in
+        " "?|"??"|?" ") ;;
+        *) echo "$caller: $p is partly staged; pass --staged-path $p to commit only its staged hunks, or stage the rest and pass --path" >&2
+           return 67 ;;
+      esac
+    done < <(git status --porcelain -- ":/$p")
+  done
+}
+
+# anchor_require_staged <caller> [<path>...]
+# A --staged-path is taken from the index as it stands, so it has to have
+# something staged — the same typo guard --path gets from COMMIT-04a.
+anchor_require_staged() {
+  local caller="$1"; shift
+  [[ $# -gt 0 ]] || return 0
+  anchor_reject_absolute "$caller" "$@" || return $?
+  local p
+  for p in "$@"; do
+    if git diff --cached --quiet -- ":/$p"; then
+      echo "$caller: --staged-path has nothing staged: $p" >&2
+      return 65
+    fi
+  done
+}
+
+# anchor_index_digest [<path>...]
+# One id for what a commit of <path>... would carry: their index entries against
+# HEAD, hashed. The review prints it and commit.sh checks it, so a `git add`
+# between the two is caught rather than committed unreviewed. With no paths it
+# covers every staged path, which is what a commit with no paths carries.
+anchor_index_digest() {
+  local base=HEAD
+  git rev-parse --verify --quiet HEAD >/dev/null || base=$(git hash-object -t tree /dev/null)
+  local -a specs=()
+  local p
+  for p in "$@"; do specs+=(":/$p"); done
+  git diff --cached --no-renames --no-abbrev --raw "$base" -- "${specs[@]+"${specs[@]}"}" \
+    | git hash-object --stdin
+}
+
 # anchor_other_staged_count [<path>...]
 # How many staged paths this call did not stage — another session's in-flight work
 # in a shared checkout. With no paths every staged path counts, which is the

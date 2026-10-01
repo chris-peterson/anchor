@@ -9,6 +9,7 @@
 #   review_subject       "range" | "files"
 #   review_tool       the diff tool to run
 #   diff_range           the git range (range mode)
+#   diff_staged          1 == review the index against diff_range, not the tree
 #   files_left/right     the two paths (files mode)
 #   review_title         the header title
 #   review_details_json  the header details, a JSON array of {label,value}
@@ -33,6 +34,10 @@
 #
 # and may define, where the default below doesn't fit:
 #
+#   diff_tool_reviews_index     1 == the tool can review the index when
+#                                  diff_staged is set, verdict included
+#                                  (default: it can't, and the review is
+#                                  no-verdict)
 #   diff_tool_available <name>  is the tool reachable (default: on PATH)
 #   diff_tool_before            run before the tool opens — a tool that
 #                                  reads the reviewer's answer out of the working
@@ -89,6 +94,11 @@ emit_review() {
   fi
   # shellcheck source=/dev/null
   source "$tool_file"
+
+  if [[ "${diff_staged:-0}" -eq 1 && "${diff_tool_reviews_index:-0}" -ne 1 ]]; then
+    diff_unavailable "$review_tool reports through edits to the working tree, and git opens a staged diff's index side as temp copies, so its verdict on a partly staged commit would be lost; review it with a tool that reads the index and reports itself (anchor.diff.tool=revdiff)" staged-unsupported
+    return
+  fi
 
   # PATH answers for most tools; one git launches by recipe or by a configured
   # command has its own way of saying whether it is reachable.

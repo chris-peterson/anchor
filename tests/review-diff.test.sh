@@ -336,6 +336,47 @@ ok "--local: a --path with nothing to stage exits 65 without reviewing"
 git -C "$repo" reset --quiet
 rm -f "$repo/other-session.txt"
 
+# --staged-path: a partly staged file is reviewed as the index holds it. The
+# working tree carries the hunks the commit leaves out, so revdiff is pointed at
+# the staged diff, and nothing is staged on the way in.
+rm -f "$repo/mine.txt"
+printf 'one\ntwo\nstaged\n' > "$repo/a.txt"; git -C "$repo" add a.txt
+printf 'one\ntwo\nstaged\nleft out\n' > "$repo/a.txt"
+index_before=$(git -C "$repo" diff --cached)
+export REVDIFF_ARGS_FILE="$work/staged-args.txt"
+export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
+o=$(run --local --staged-path a.txt)
+[ "$(verdict_of "$o")" = approved ] || fail "--staged-path verdict: $o"
+staged_index=$(sed -n 's/^REVIEW_INDEX=//p' <<<"$o")
+[ -n "$staged_index" ] || fail "--local should print REVIEW_INDEX: $o"
+grep -qx -- '--staged' "$REVDIFF_ARGS_FILE" || fail "revdiff should get --staged: $(cat "$REVDIFF_ARGS_FILE")"
+! grep -qx 'HEAD' "$REVDIFF_ARGS_FILE" || fail "revdiff should not diff the tree against HEAD: $(cat "$REVDIFF_ARGS_FILE")"
+[ "$(git -C "$repo" diff --cached)" = "$index_before" ] || fail "--staged-path must not stage"
+unset REVDIFF_ARGS_FILE
+ok "--local --staged-path: revdiff reviews the index, and nothing is staged"
+
+# REVIEW_INDEX names the index the review showed, so staging more of the file
+# after it gives a different id (COMMIT-04e).
+o=$(run --local --staged-path a.txt)
+[ "$(sed -n 's/^REVIEW_INDEX=//p' <<<"$o")" = "$staged_index" ] || fail "REVIEW_INDEX changed with no change to the index: $o"
+git -C "$repo" add a.txt
+printf 'one\ntwo\nstaged\nleft out\nagain\n' > "$repo/a.txt"
+o=$(run --local --staged-path a.txt)
+[ "$(sed -n 's/^REVIEW_INDEX=//p' <<<"$o")" != "$staged_index" ] || fail "REVIEW_INDEX should change once more is staged: $o"
+ok "--local: REVIEW_INDEX changes when the reviewed path's index entry does"
+
+# a difftool reports through edits to the working tree, and the index side of a
+# staged diff reaches it as temp copies, so its verdict here would be lost
+git -C "$repo" config difftool.stubtool.cmd true
+git -C "$repo" config anchor.diff.tool stubtool
+o=$(run --local --staged-path a.txt 2>/dev/null); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = no-verdict ] || fail "difftool on a staged review -> $(verdict_of "$o"), want no-verdict"
+[ "$(jq -r .raw.exitCode <<<"$j")" = staged-unsupported ] || fail "difftool staged raw.exitCode: $j"
+git -C "$repo" config anchor.diff.tool revdiff
+ok "--local --staged-path: a difftool returns no-verdict rather than losing the reviewer's edits"
+git -C "$repo" checkout --quiet -- a.txt
+git -C "$repo" reset --quiet --hard
+
 # ================== empty range ==========================================
 # Nothing to show means nothing was reviewed, and a viewer quit on an empty diff
 # is indistinguishable from an approval — so the dispatcher never launches one.
