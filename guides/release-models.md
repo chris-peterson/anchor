@@ -91,10 +91,9 @@ The shape: `on: push: tags:` on GitHub, or a `$CI_COMMIT_TAG`-gated GitLab
 pipeline (GitLab has no release-published event, so a tag is the trigger there).
 
 Same division of labor as `release-triggered` — the workflow owns whatever it
-bumps — with the tag replacing the forge release as the trigger. Whether the
-manifest bump precedes the tag or the workflow performs it is repo-specific: read
-`RELEASE_BUMP_CONVENTION` and the prior release's commits before writing
-anything. Tag from the commit that is shipping, and push the tag as its own step
+bumps — with the tag replacing the forge release as the trigger. The tag carries
+the version, so nothing in the repo is bumped before it. Tag from the commit that
+is shipping, and push the tag as its own step
 so a failed push doesn't leave a local-only tag that looks published.
 
 ## `dispatch-triggered` — a release workflow someone runs by hand

@@ -163,6 +163,9 @@ and `CR_TITLE`. Then act on `GATE_BLOCKING`:
     Offer to look at a failed job's log rather than fetching it unprompted.
   - **`manual`** — the pipeline waits on a manual action and won't progress on
     its own. Say so and stop.
+  - **`unreachable`** — the forge CLI couldn't read the pipeline, so it may be
+    red. Report `PIPELINE_ERROR` and stop; on an auth error ask the user to
+    refresh the CLI's login rather than retrying (the fail-fast-on-auth rule).
 - **`approvals`** — `missing`: stop and report what `GATE_APPROVALS_DETAIL` says is
   outstanding. `changes-requested`: stop and point at `/anchor:resolve-feedback`.
 - **`threads`** — list each entry of `THREADS` on one line
@@ -173,8 +176,10 @@ and `CR_TITLE`. Then act on `GATE_BLOCKING`:
      questions the asker never resolved), and the author is the one who knows.
      Go to Step 2.
 
-A `none` pipeline (no CI for this commit) and `none` approvals (no approval rules)
-pass their gates; their rows say so and the flow continues.
+A `none` or `skipped` pipeline (no CI for this commit, or every workflow filtered
+out) and `none` approvals (no approval rules) pass their gates; their rows say so
+and the flow continues. On GitHub a failing required check from any workflow
+reads as a `failed` pipeline, with the checks in `PIPELINE_FAILED_JOBS`.
 
 ## Step 2: Confirm the merge
 

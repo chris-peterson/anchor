@@ -20,7 +20,11 @@
 #   PIPELINE_STATE=<state>     normalized — terminal: success failed canceled
 #                              skipped manual; in-flight: running pending;
 #                              none (no pipeline for this commit yet);
+#                              unreachable (the forge CLI failed: auth, network,
+#                              rate limit — terminal, since asking again changes
+#                              nothing);
 #                              absent (origin isn't a recognized forge)
+#   PIPELINE_ERROR=<text>      (unreachable only) the CLI's first error line
 #   PIPELINE_URL=<web url>     the pipeline's web page (may be empty)
 #   PIPELINE_ID=<id>           pipeline / run id (may be empty)
 #   PIPELINE_SHA=<sha>         the commit watched
@@ -34,7 +38,8 @@
 #                              jobs:[{name, stage, state, url}]}]. This is what
 #                              the report tabulates; PIPELINE_STATE stays the
 #                              headline verdict. Absent when there's no pipeline.
-#   PIPELINE_FAILED_JOBS=<json> (state==failed only) [{name, ...}] compact array
+#   PIPELINE_FAILED_JOBS=<json> (state failed or canceled) [{name, ...}] the jobs
+#                               that failed or were canceled, compact array
 #
 # With --job <name>, the script tracks a single named job inside the pipeline
 # instead of the pipeline as a whole — so polling for one job (e.g. a Terraform
@@ -67,6 +72,12 @@
 #                                              first appear for the sha (default 120)
 
 set -euo pipefail
+
+# Where a forge call's stderr lands, so a failed read can say why.
+forge_err=$(mktemp "${TMPDIR:-/tmp}/anchor-pipeline-err.XXXXXX")
+trap 'rm -f "$forge_err"' EXIT
+# The record for a forge read that failed, as opposed to one that found nothing.
+unreachable() { jq -cn --arg e "$(head -1 "$forge_err")" '{state:"unreachable", error:$e}'; }
 
 # shellcheck source=lib/resolve-context.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
@@ -162,7 +173,8 @@ detect_forge() {
 # helper for one run's state, and leaves "is every check green" to the forge.
 probe_github() {
   local runs
-  runs=$(gh api "repos/{owner}/{repo}/actions/runs?head_sha=$sha&per_page=100" 2>/dev/null) || runs=""
+  runs=$(gh api "repos/{owner}/{repo}/actions/runs?head_sha=$sha&per_page=100" 2>"$forge_err") \
+    || { unreachable; return; }
   [[ -n "$runs" ]] || { echo '{"state":"none"}'; return; }
   jq -c --arg wf "$workflow" --arg single "$single_run" "$JQ_GH_NORMALIZE"'
     def severity:
@@ -191,7 +203,8 @@ probe_github() {
 # the commit's pipeline already is the one the CI config describes.
 probe_gitlab() {
   local pipes
-  pipes=$(glab api "projects/:fullpath/pipelines?sha=$sha&per_page=1" 2>/dev/null) || pipes=""
+  pipes=$(glab api "projects/:fullpath/pipelines?sha=$sha&per_page=1" 2>"$forge_err") \
+    || { unreachable; return; }
   [[ -n "$pipes" ]] || { echo '{"state":"none"}'; return; }
   jq -c "$JQ_GL_NORMALIZE"'
     .[0] as $p
@@ -213,7 +226,7 @@ probe() {
 
 is_terminal() {
   case "$1" in
-    success|failed|canceled|skipped|manual) return 0 ;;
+    success|failed|canceled|skipped|manual|unreachable) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -288,9 +301,9 @@ failed_jobs() {
   case "$forge" in
     github) jq -c --arg id "$id" \
               '[ .[] | select(.id == $id) | .jobs[]
-                 | select(.state == "failed") | {name, url} ]' <<<"$breakdown" ;;
+                 | select(.state == "failed" or .state == "canceled") | {name, url} ]' <<<"$breakdown" ;;
     gitlab) jq -c '[ .[] | .jobs[]
-                     | select(.state == "failed") | {name, stage, url} ]' <<<"$breakdown" ;;
+                     | select(.state == "failed" or .state == "canceled") | {name, stage, url} ]' <<<"$breakdown" ;;
     *) echo '[]' ;;
   esac
 }
@@ -301,7 +314,7 @@ failed_jobs() {
 # name repeats (a retried job), the most recent attempt wins.
 probe_job_github() {
   local runid="$1" jobname="$2" jobs
-  jobs=$(gh run view "$runid" --json jobs 2>/dev/null) || jobs=""
+  jobs=$(gh run view "$runid" --json jobs 2>"$forge_err") || { unreachable; return; }
   [[ -n "$jobs" ]] || { echo '{"state":"none"}'; return; }
   jq -c --arg name "$jobname" "$JQ_GH_NORMALIZE"'
     ( [ .jobs[] | select(.name == $name) ] | sort_by(.databaseId) | last ) as $j
@@ -315,7 +328,7 @@ probe_job_github() {
 
 probe_job_gitlab() {
   local pid="$1" jobname="$2" jobs
-  jobs=$(glab api "projects/:fullpath/pipelines/$pid/jobs?per_page=100" 2>/dev/null) || jobs=""
+  jobs=$(glab api "projects/:fullpath/pipelines/$pid/jobs?per_page=100" 2>"$forge_err") || { unreachable; return; }
   [[ -n "$jobs" ]] || { echo '{"state":"none"}'; return; }
   jq -c --arg name "$jobname" "$JQ_GL_NORMALIZE"'
     ( [ .[] | select(.name == $name) ] | sort_by(.id) | last ) as $j
@@ -335,7 +348,7 @@ probe_job() {
 }
 
 emit() {
-  local state="$1" url="$2" id="$3" wf="$4" timed_out="${5:-}"
+  local state="$1" url="$2" id="$3" wf="$4" timed_out="${5:-}" err="${6:-}"
   local breakdown=""
   [[ -n "$id" ]] && breakdown=$(runs_breakdown "$id" "$state" "$url")
   echo "PIPELINE_FORGE=$forge"
@@ -345,10 +358,11 @@ emit() {
   echo "PIPELINE_SHA=$sha"
   echo "PIPELINE_BRANCH=$branch"
   echo "PIPELINE_WORKFLOW=$wf"
+  if [[ "$state" == unreachable ]]; then echo "PIPELINE_ERROR=$err"; fi
   if [[ -n "$timed_out" ]]; then echo "PIPELINE_TIMEOUT=1"; fi
   if [[ -n "$breakdown" ]]; then
     echo "PIPELINE_RUNS=$breakdown"
-    if [[ "$state" == "failed" ]]; then
+    if [[ "$state" == "failed" || "$state" == "canceled" ]]; then
       echo "PIPELINE_FAILED_JOBS=$(failed_jobs "$breakdown" "$id")"
     fi
   fi
@@ -368,6 +382,7 @@ emit_job() {
   echo "PIPELINE_JOB_NAME=$job"
   echo "PIPELINE_JOB_STATE=$jstate"
   echo "PIPELINE_JOB_URL=$jurl"
+  if [[ -n "${probe_error:-}" ]]; then echo "PIPELINE_ERROR=$probe_error"; fi
   # An `if`, not a `&&` list: as the closing statement it would hand the caller a
   # 1 return on the ordinary no-timeout path, which `set -e` turns into exit 1.
   if [[ -n "$timed_out" ]]; then echo "PIPELINE_TIMEOUT=1"; fi
@@ -400,11 +415,14 @@ if [[ -n "$job" ]]; then
       pwf=$(jq -r '.workflow // ""' <<<"$prec")
     fi
 
-    if [[ -n "$pid" ]]; then
+    if [[ "$pstate" == unreachable ]]; then
+      jrec="$prec"
+    elif [[ -n "$pid" ]]; then
       jrec=$(probe_job "$pid" "$job")
     else
       jrec='{"state":"none"}'
     fi
+    probe_error=$(jq -r '.error // ""' <<<"$jrec")
     jstate=$(jq -r '.state' <<<"$jrec")
     jurl=$(jq -r '.url // ""' <<<"$jrec")
 
@@ -438,7 +456,9 @@ if [[ "$mode" == "status" ]]; then
   emit "$(jq -r '.state' <<<"$rec")" \
        "$(jq -r '.url // ""' <<<"$rec")" \
        "$(jq -r '.id // ""' <<<"$rec")" \
-       "$(jq -r '.workflow // ""' <<<"$rec")"
+       "$(jq -r '.workflow // ""' <<<"$rec")" \
+       "" \
+       "$(jq -r '.error // ""' <<<"$rec")"
   exit 0
 fi
 
@@ -473,4 +493,4 @@ while :; do
   elapsed=$(( elapsed + POLL_INTERVAL ))
 done
 
-emit "$state" "$url" "$id" "$wf" "$timed_out"
+emit "$state" "$url" "$id" "$wf" "$timed_out" "$(jq -r '.error // ""' <<<"$rec")"

@@ -68,6 +68,9 @@
 #   deep-links.sh --resolve <path> <token>  --forge … --cr-url … --base <ref>
 #   deep-links.sh --verify  <draft.md>  --forge … --cr-url … --base <ref>
 #
+# Every mode takes --repo <checkout> to read a repo other than the cwd one
+# (scripts/lib/resolve-context.sh).
+#
 # Exit codes:
 #   0   nothing to fix
 #   1   something to fix (unresolved placeholders, or verify suspects)
@@ -79,7 +82,10 @@ set -euo pipefail
 
 # shellcheck source=lib/tmpfile.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/tmpfile.sh"
+# shellcheck source=lib/resolve-context.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 
+CTX_REPO=""
 forge=""
 cr_url=""
 base=""
@@ -92,6 +98,7 @@ usage() { echo "deep-links.sh: $1" >&2; exit 64; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --repo)    CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
     --forge)   forge="${2:?--forge needs github|gitlab|none}"; shift 2 ;;
     --cr-url)  cr_url="${2-}"; shift 2 ;;
     --base)    base="${2:?--base needs a ref}"; shift 2 ;;
@@ -119,7 +126,9 @@ fi
 
 if [[ "$mode" == check || "$mode" == expand || "$mode" == verify ]]; then
   [[ -r "$draft" ]] || { echo "deep-links.sh: cannot read draft: $draft" >&2; exit 66; }
+  [[ "$draft" == /* ]] || draft="$PWD/$draft"
 fi
+ctx_resolve_repo
 
 # Line *content* is read from the working tree; the changed-line set comes from
 # base...HEAD. Those agree only on a clean tree — uncommitted edits shift content

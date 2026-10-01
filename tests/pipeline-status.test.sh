@@ -38,6 +38,9 @@ cat > "$bin/gh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 [ -n "${GH_ARGS_FILE:-}" ] && printf '%s\n' "$*" >> "$GH_ARGS_FILE"
+# GH_FAIL stands in for a CLI that can't reach the forge: no pipeline answer at
+# all, just an error on stderr and a non-zero exit.
+if [ -n "${GH_FAIL:-}" ]; then echo "$GH_FAIL" >&2; exit 1; fi
 sub="${1:-}"; shift || true
 case "$sub" in
   api)
@@ -409,5 +412,19 @@ f=$(val PIPELINE_FAILED_JOBS "$o")
 [ "$(jq -r 'length' <<<"$f")" = "1" ] || fail "only the failed job is a failed job: $f"
 [ "$(jq -r '.[0].stage' <<<"$f")" = "test" ] || fail "the GitLab failed-job shape keeps its stage: $f"
 ok "GitLab failed jobs are derived from the breakdown, stage intact"
+
+# --- a forge read that fails is unreachable, never none (CI-01, #46) ----------
+# "No pipeline" lets a merge gate through; a read that failed for a credential
+# or network reason has to say so, and asking again every 15s changes nothing.
+o=$(GH_FAIL="HTTP 401: Bad credentials (https://api.github.com/graphql)" run)
+[ "$(val PIPELINE_STATE "$o")" = unreachable ] || fail "a failed read should be unreachable, got: $o"
+grep -q '^PIPELINE_ERROR=HTTP 401: Bad credentials' <<<"$o" || fail "the CLI's error should reach stdout: $o"
+ok "a forge read that fails reports unreachable with the CLI's error"
+
+start=$(date +%s)
+o=$(GH_FAIL="HTTP 401: Bad credentials" PIPELINE_POLL_INTERVAL=1 PIPELINE_APPEAR_TIMEOUT=30 run --watch)
+[ "$(val PIPELINE_STATE "$o")" = unreachable ] || fail "watch on a failed read should end unreachable: $o"
+[ $(( $(date +%s) - start )) -lt 10 ] || fail "unreachable should end the watch at once, not wait out the appear window"
+ok "unreachable ends a watch at once instead of polling"
 
 echo "all pipeline-status tests passed"

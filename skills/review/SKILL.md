@@ -458,7 +458,7 @@ a plan describing them. The walk chose *which* findings; this gate approves
 their *words*. Render what the walk kept:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-post.sh" --preview --findings <FINDINGS_PATH>
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-post.sh" --preview --findings <FINDINGS_PATH> --diff <DIFF_PATH>
 ```
 
 Its output *is* the text; put it in your reply, since a Bash result reaches you
@@ -480,7 +480,7 @@ not approval of the next.
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-post.sh" --post \
-  --findings <FINDINGS_PATH> --forge <FORGE> --project <PROJECT> --cr <CR_IID> \
+  --findings <FINDINGS_PATH> --diff <DIFF_PATH> --forge <FORGE> --project <PROJECT> --cr <CR_IID> \
   [--host <HOST>] --base-sha <CR_BASE_SHA> --start-sha <CR_START_SHA> \
   [--index <n|summary>]
 ```
@@ -495,6 +495,8 @@ means the author pushed while the review was being written: every anchor now
 points at lines that may not exist. Report the two SHAs and offer to re-run from
 Step 1 against the new head — never post anyway, and never re-anchor by guessing
 where the lines went.
+
+Any other `POST_ERROR` is the forge refusing a write partway. `POSTED_INLINE` and `POSTED_SUMMARY` above it say what already landed, so report those with the refused thread the error names, and offer to post the rest with `--index` rather than re-running the whole post, which would duplicate the threads already there.
 
 Post what was approved. An improvement you notice while posting goes back
 through Step 6.
