@@ -155,9 +155,10 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --pipeline 3435505 --job
 The output is `KEY=value` lines:
 
 - `PIPELINE_STATE` — `success` · `failed` · `canceled` · `skipped` · `manual` ·
-  `running` · `pending` · `none` (no pipeline for this commit) · `absent`
-  (origin isn't a recognized forge). In watch mode, `PIPELINE_TIMEOUT=1` marks
-  the last non-terminal state when the ceiling was hit.
+  `running` · `pending` · `none` (no pipeline for this commit) · `unreachable`
+  (the forge CLI failed, with its error in `PIPELINE_ERROR`) · `absent` (origin
+  isn't a recognized forge). In watch mode, `PIPELINE_TIMEOUT=1` marks the last
+  non-terminal state when the ceiling was hit.
 - `PIPELINE_URL` — the pipeline's web page (link it).
 - `PIPELINE_WORKFLOW` — on GitHub, the workflow whose run the verdict came from;
   empty on GitLab.

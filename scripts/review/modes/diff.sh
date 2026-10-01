@@ -10,6 +10,8 @@
 #   review_tool       the diff tool to run
 #   diff_range           the git range (range mode)
 #   diff_staged          1 == review the index against diff_range, not the tree
+#   diff_paths           the paths a --local review covers, one per line
+#                          (empty: the whole tree)
 #   files_left/right     the two paths (files mode)
 #   review_title         the header title
 #   review_details_json  the header details, a JSON array of {label,value}
@@ -34,10 +36,10 @@
 #
 # and may define, where the default below doesn't fit:
 #
-#   diff_tool_reviews_index     1 == the tool can review the index when
-#                                  diff_staged is set, verdict included
-#                                  (default: it can't, and the review is
-#                                  no-verdict)
+#   diff_tool_reports_via_tree  1 == the tool's verdict is the reviewer's
+#                                  edits to the working tree, so it can grade
+#                                  only a review whose right side *is* the tree
+#                                  (default: 0, the tool reports for itself)
 #   diff_tool_available <name>  is the tool reachable (default: on PATH)
 #   diff_tool_before            run before the tool opens — a tool that
 #                                  reads the reviewer's answer out of the working
@@ -95,9 +97,19 @@ emit_review() {
   # shellcheck source=/dev/null
   source "$tool_file"
 
-  if [[ "${diff_staged:-0}" -eq 1 && "${diff_tool_reviews_index:-0}" -ne 1 ]]; then
-    diff_unavailable "$review_tool reports through edits to the working tree, and git opens a staged diff's index side as temp copies, so its verdict on a partly staged commit would be lost; review it with a tool that reads the index and reports itself (anchor.diff.tool=revdiff)" staged-unsupported
-    return
+  # git hands a difftool temp copies of any side that isn't the working tree,
+  # so an edit there never reaches a file and the untouched tree reads as
+  # approval. The index (a partly staged commit) and a commit range (a CR, the
+  # previous commit, the full branch) are both such sides.
+  if [[ "${diff_tool_reports_via_tree:-0}" -eq 1 && "$review_subject" == "range" ]]; then
+    if [[ "${diff_staged:-0}" -eq 1 ]]; then
+      diff_unavailable "$review_tool reports through edits to the working tree, and git opens a staged diff's index side as temp copies, so its verdict on a partly staged commit would be lost; review it with a tool that reads the index and reports itself (anchor.diff.tool=revdiff)" staged-unsupported
+      return
+    fi
+    if [[ "$diff_range" == *..* ]]; then
+      diff_unavailable "$review_tool reports through edits to the working tree, and git opens both sides of $diff_range as temp copies, so its verdict would be lost; review a commit range with a tool that reports itself (anchor.diff.tool=revdiff)" range-unsupported
+      return
+    fi
   fi
 
   # PATH answers for most tools; one git launches by recipe or by a configured

@@ -233,6 +233,17 @@ o=$(run --skill commit --mode edit --local --message-file "$msg"); j=$(json_of "
 grep -q 'three' "$EDITOR_BUFFER_CAPTURE" || fail "staged diff should sit below the scissors"
 ok "edit: --message-file -> editedFields[commit-message], diff below the scissors"
 
+# the diff below the scissors covers the named paths only, not a peer's edit
+printf 'peer\n' > "$repo/peer.txt"
+git -C "$repo" add peer.txt
+git -C "$repo" commit --quiet -m peer
+printf 'peer\nin flight\n' > "$repo/peer.txt"
+o=$(run --skill commit --mode edit --local --message-file "$msg" --path a.txt)
+grep -q 'three' "$EDITOR_BUFFER_CAPTURE" || fail "the named path's diff should be in the buffer"
+! grep -q 'in flight' "$EDITOR_BUFFER_CAPTURE" || fail "a peer's edit outside --path should not be in the buffer"
+git -C "$repo" checkout --quiet -- peer.txt
+ok "edit: the buffer's diff covers only --path"
+
 [[ "$(cat "$EDITOR_BUFFER_CAPTURE.path")" == *.txt ]] \
   || fail "a commit message should open in a .txt buffer, got $(cat "$EDITOR_BUFFER_CAPTURE.path")"
 ok "edit: a commit message opens in a .txt buffer"
@@ -576,6 +587,15 @@ ok "resolve: with a terminal host, git's own compiled default"
 r=$(resolve "$codebin")
 [ "$r" = "code --wait" ] || fail "with no terminal host, a blocking VS Code should be reached, got '$r'"
 ok "resolve: with nowhere to host one, a blocking VS Code on PATH"
+
+# The same, with GIT_EDITOR unset and a real terminal type, as any caller other
+# than Claude Code has it. git would answer its compiled default there, which
+# must not read as an editor the user configured (DIFF-16).
+r=$( cd "$repo" && env -u GIT_EDITOR -u VISUAL -u EDITOR PATH="$codebin:/usr/bin:/bin" \
+       TERM=xterm-256color TMUX='' ANCHOR_EDITOR_LAUNCHER='' ITERM_SESSION_ID='' \
+       ANCHOR_HOST_RUNNER='' bash "$bin/resolve-editor.sh" </dev/null )
+[ "$r" = "code --wait" ] || fail "an unset GIT_EDITOR should still reach the GUI rung, got '$r'"
+ok "resolve: an unset GIT_EDITOR under a real TERM is not read as configured"
 
 # A dumb terminal is git's answer about the stdio git itself was handed. This
 # tool puts the editor in a terminal the host opens (DIFF-17), which is a

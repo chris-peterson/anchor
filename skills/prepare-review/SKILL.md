@@ -112,7 +112,7 @@ When the CR lives in a repo other than the session's cwd (you're in repo A, the 
 
 **With B given as a path**, that path is the checkout; there's nothing to resolve.
 
-Either way, thread the checkout through every later command — the harness resets cwd between Bash calls, so each one needs it again: `prepare-review.sh --repo <path>`, `git -C <path>`, `-R <owner/name>` on `gh`/`glab` subcommands, and the URL-encoded project for `:fullpath` (plus `--hostname <host>`) on `glab api`, which has no `-R`. The full threading rules are in `${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`.
+Either way, thread the checkout through every later command — the harness resets cwd between Bash calls, so each one needs it again: `prepare-review.sh --repo <path>`, `deep-links.sh --repo <path>`, `git -C <path>`, `-R <owner/name>` on `gh`/`glab` subcommands, and the URL-encoded project for `:fullpath` (plus `--hostname <host>`) on `glab api`, which has no `-R`. The full threading rules are in `${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`.
 
 `--cr <iid|url>` resolves a CR that isn't the checkout's branch — updating an MR while the checkout sits on a WIP branch. The deep-link and diff steps still read the checkout's branch, so point `--repo` at a checkout on the CR's branch when you need those.
 
@@ -358,7 +358,7 @@ The description gets pasted into a markdown renderer, so rendering bugs are user
 
   ```bash
   bash "${CLAUDE_PLUGIN_ROOT}/scripts/deep-links.sh" --check <DESC_DRAFT_PATH> \
-    --base <DEFAULT_BRANCH>
+    --base <DEFAULT_BRANCH> [--repo <path>]
   ```
 
   It exits non-zero with one `UNRESOLVED <kind> <path> <token>` per problem, and each kind is an authoring fix: `ambiguous` (several changed lines match — the candidates are listed with their content, so copy a longer substring off the one you meant), `unchanged` (in the file but not on a changed line), `absent` (a typo), `unknown-file` (a path the range doesn't touch), `malformed` (an `anchor:` that isn't a link destination). Fix and re-run until it's clean — a placeholder that survives into Step 4's expansion stalls the write on a CR that already exists. It needs the clean tree Step 1's `STATE=match` already established: line content comes from the working tree and changed hunks from `<DEFAULT_BRANCH>...HEAD`, and it emits `DEEP_LINK_TREE=dirty` when those have diverged. Skip it on the `skip-deep-links` path, where the description carries no links at all.
@@ -422,7 +422,7 @@ It emits `CR_URL`, `CR_IID`, `CR_DRAFT`, `CR_CREATED=1`, and `DELETE_BRANCH_ON_M
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/deep-links.sh" --expand <DESC_DRAFT_PATH> \
-  --forge <FORGE> --cr-url <CR_URL> --base <DEFAULT_BRANCH>
+  --forge <FORGE> --cr-url <CR_URL> --base <DEFAULT_BRANCH> [--repo <path>]
 ```
 
 It rewrites the draft in place and reports `EXPANDED=<n>`. All-or-nothing: an unresolved placeholder leaves the file untouched and exits non-zero, which means the `--check` in the output checklist was skipped or the tree moved since. Fix what it names and re-run — the CR is already open and carrying the approved prose, so nothing is lost. Skip this on `skip-deep-links`, where the draft carries no placeholders.

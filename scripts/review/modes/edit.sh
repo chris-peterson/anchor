@@ -10,6 +10,8 @@
 #   review_tool       the editor to open
 #   diff_range           the git range (range mode)
 #   diff_staged          1 == the index against diff_range, not the tree
+#   diff_paths           the paths a --local review covers, one per line
+#                          (empty: the whole tree)
 #   files_left/right     the two paths (files mode)
 #   review_title         the header title
 #   review_details_json  the header details, a JSON array of {label,value}
@@ -184,8 +186,11 @@ emit_review() {
     if [[ "$review_subject" == "files" ]]; then
       diff -u "$files_left" "$artifact_file" || true
     else
-      if [[ "${diff_staged:-0}" -eq 1 ]]; then git diff --cached "$diff_range" || true
-      else git diff "$diff_range" || true; fi
+      local -a specs=()
+      local spec
+      while IFS= read -r spec; do specs+=("$spec"); done < <(anchor_diff_specs)
+      if [[ "${diff_staged:-0}" -eq 1 ]]; then git diff --cached "$diff_range" -- "${specs[@]+"${specs[@]}"}" || true
+      else git diff "$diff_range" -- "${specs[@]+"${specs[@]}"}" || true; fi
     fi
   } > "$buffer"
 

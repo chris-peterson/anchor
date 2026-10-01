@@ -115,6 +115,15 @@ rc=0; out=$( run --staged-path seed.txt 2>&1 ) || rc=$?
 ok "staging: a --staged-path with nothing staged exits 65"
 git -C "$repo" add a.txt
 
+# --- a named rename destination brings its source, not a foreign count -------
+git -C "$repo" commit --quiet -m "settle a.txt"
+git -C "$repo" mv a.txt renamed.txt
+o=$(run --path renamed.txt)
+[ "$(val OTHER_STAGED "$o")" = 0 ]   || fail "the rename's source is ours, not OTHER_STAGED; got $(val OTHER_STAGED "$o")"
+[ "$(val RENAME_SOURCES "$o")" = 1 ] || fail "RENAME_SOURCES should count the source; got $(val RENAME_SOURCES "$o")"
+git -C "$repo" mv renamed.txt a.txt
+ok "staging: a named rename's source is reported as RENAME_SOURCES, not OTHER_STAGED"
+
 # --- anchor.* config surfaces as JSON -------------------------------------
 git -C "$repo" config anchor.reviewBudgetMins 5
 o=$(run)
@@ -123,6 +132,16 @@ o=$(run)
   || fail "ANCHOR_CONFIG should carry anchor.reviewbudgetmins; got $(val ANCHOR_CONFIG "$o")"
 ok "anchor.* keys surface in ANCHOR_CONFIG"
 git -C "$repo" config --unset anchor.reviewBudgetMins
+
+# --- a branch never pushed still counts its commits as unpushed --------------
+git -C "$repo" checkout --quiet -f -b never-pushed main
+printf 'local only\n' > "$repo/local.txt"
+git -C "$repo" add local.txt
+git -C "$repo" commit --quiet -m "Local only"
+o=$(run)
+[ "$(val STAGED "$o")" = 0 ] || fail "nothing staged on never-pushed"
+[ "$(val AHEAD "$o")" = 1 ]  || fail "AHEAD should count against origin/main with no upstream; got '$(val AHEAD "$o")'"
+ok "no upstream: AHEAD counts the commits ahead of origin/<default>"
 
 # --- on default branch, nothing new staged --------------------------------
 git -C "$repo" checkout --quiet -f main

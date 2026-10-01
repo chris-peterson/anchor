@@ -452,11 +452,12 @@ and symlinks the working-tree side so your edits reach the real files. The tool'
 own exit code is ignored — plenty of them use non-zero to mean "the files
 differ", and the tree already said what you meant.
 
-A difftool review of a partly staged file returns `no-verdict`. anchor reads your
-answer from the edits you leave in the working tree, and git opens the index side
-of a staged diff as temp copies, so an edit made there never reaches the file and
-an untouched tree would read as approval. `revdiff` reads the index and records
-its comments itself, so it runs that review.
+A difftool review returns `no-verdict` wherever a side isn't the working tree: a
+partly staged file (the index), and a commit range (a change request, the previous
+commit, the whole branch). anchor reads your answer from the edits you leave in the
+working tree, and git opens those sides as temp copies, so an edit made there never
+reaches a file and an untouched tree would read as approval. `revdiff` records its
+comments itself, so it runs those reviews.
 
 #### Review config: `edit` :id=review-config-edit
 
