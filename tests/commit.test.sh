@@ -102,8 +102,10 @@ fi
 printf 'more feature\n' >> "$repo/b.txt"
 git -C "$repo" add -A
 printf 'Add b on feat (amended)\n' > "$msgfile"
-out=$(bash "$commit_sh" --repo "$repo" --mode amend --message-file "$msgfile" --force-with-lease)
+out=$(bash "$commit_sh" --repo "$repo" --mode amend --message-file "$msgfile" --force-with-lease \
+        --reviewed-index "$(digest b.txt)" --path b.txt)
 echo "$out" | grep -q '^PUSH_MODE=force-with-lease$' || fail "expected force-with-lease; got: $out"
+git -C "$repo" show HEAD:b.txt | grep -qx 'more feature' || fail "the squash did not carry the staged change"
 echo "$out" | grep -q '^PUSHED=ok$'                 || fail "amend push not ok: $out"
 [[ "$(git -C "$repo" rev-list --count feat)" -eq 3 ]] || fail "amend changed the commit count (should stay 3: seed, a, b)"
 [[ "$(git -C "$repo" log -1 --format=%s)" == "Add b on feat (amended)" ]] || fail "amend did not rewrite the message"
@@ -197,6 +199,17 @@ if git -C "$repo" ls-tree --name-only HEAD | grep -qx 'partial.txt'; then
 fi
 ok "--path commits a staged deletion"
 
+# --- naming a rename's new name commits both halves (#116) -------------------
+git -C "$repo" mv mine.txt mine-renamed.txt
+printf 'Rename mine\n' > "$msgfile"
+bash "$commit_sh" --repo "$repo" --mode new --message-file "$msgfile" \
+  --reviewed-index "$(digest mine-renamed.txt mine.txt)" --path mine-renamed.txt >/dev/null
+tree=$(git -C "$repo" ls-tree --name-only HEAD)
+grep -qx 'mine-renamed.txt' <<<"$tree" || fail "the rename's new name should be committed"
+! grep -qx 'mine.txt' <<<"$tree" || fail "the rename's old name should be gone from the tree"
+! git -C "$repo" diff --cached --name-only | grep -qx 'mine.txt' || fail "the rename's delete should not be left staged"
+ok "--path naming a rename's new name commits the delete with it"
+
 # --- --reviewed-index commits only the index the review showed ------------------
 # The commit reads the index when it runs, so a `git add` after the review would
 # otherwise ship unreviewed (COMMIT-04e).
@@ -237,6 +250,67 @@ set -e
 git -C "$repo" reset --quiet -- unreviewed.txt
 rm -f "$repo/unreviewed.txt"
 ok "--path without --reviewed-index is refused before anything is committed"
+
+# --- a message-only amend leaves a foreign staged path out ------------------
+# No paths means no tree change: the amend rewrites the message, and another
+# session's staged file stays staged rather than riding into it (COMMIT-04b).
+printf 'staged by a peer\n' > "$repo/peer-amend.txt"
+git -C "$repo" add peer-amend.txt
+tree_before=$(git -C "$repo" rev-parse 'HEAD^{tree}')
+printf 'Reword the last message\n' > "$msgfile"
+out=$(bash "$commit_sh" --repo "$repo" --mode amend --message-file "$msgfile" --force-with-lease)
+echo "$out" | grep -q '^PUSHED=ok$' || fail "message-only amend push not ok: $out"
+[[ "$(git -C "$repo" rev-parse 'HEAD^{tree}')" == "$tree_before" ]] \
+  || fail "a message-only amend changed the tree: $(git -C "$repo" show --name-only --format= HEAD)"
+[[ "$(git -C "$repo" log -1 --format=%s)" == "Reword the last message" ]] || fail "the message was not amended"
+git -C "$repo" diff --cached --name-only | grep -qx 'peer-amend.txt' || fail "the peer's file should still be staged"
+git -C "$repo" reset --quiet -- peer-amend.txt
+rm -f "$repo/peer-amend.txt"
+ok "a message-only amend keeps a foreign staged path out of the commit"
+
+# --- a hook that changes the commit stops it before the push (#79) -----------
+# A pre-commit hook runs against the index the commit is built from, so a hook
+# that stages a file would land it unreviewed. The commit stays local and the
+# script names what the hook changed.
+cat > "$repo/.git/hooks/pre-commit" <<'HOOK'
+#!/usr/bin/env bash
+printf 'formatted\n' > hooked.txt
+git add hooked.txt
+HOOK
+chmod +x "$repo/.git/hooks/pre-commit"
+printf 'reviewed only\n' > "$repo/hook-target.txt"
+git -C "$repo" add hook-target.txt
+remote_before=$(git -C "$remote" rev-parse refs/heads/feat)
+printf 'Add hook target\n' > "$msgfile"
+set +e
+out=$(bash "$commit_sh" --repo "$repo" --mode new --message-file "$msgfile" \
+        --reviewed-index "$(digest hook-target.txt)" --path hook-target.txt 2>&1)
+rc=$?
+set -e
+rm -f "$repo/.git/hooks/pre-commit"
+[[ $rc -eq 71 ]] || fail "a hook-changed commit -> want exit 71, got $rc: $out"
+grep -q 'hooked.txt' <<<"$out" || fail "the refusal should name the path the hook changed: $out"
+[[ "$(git -C "$remote" rev-parse refs/heads/feat)" == "$remote_before" ]] || fail "a hook-changed commit was pushed"
+git -C "$repo" reset --quiet --hard HEAD~1
+rm -f "$repo/hooked.txt"
+ok "a commit a git hook changed after the review stops before the push (exit 71)"
+
+# --- the squash gate is read again where the amend runs ----------------------
+# The flow reads it at the start, and HEAD can stop being amendable before the
+# commit step (a CR marked ready). A HEAD someone else authored is the case a
+# local repo can stage: the author guard closes the gate (RULE-05).
+printf 'theirs\n' > "$repo/theirs.txt"
+git -C "$repo" add theirs.txt
+git -C "$repo" -c user.name=Other -c user.email=other@example.com commit --quiet -m "Their commit"
+sha_before=$(git -C "$repo" rev-parse HEAD)
+printf 'Reword their commit\n' > "$msgfile"
+set +e
+out=$(bash "$commit_sh" --repo "$repo" --mode amend --message-file "$msgfile" --force-with-lease 2>&1)
+rc=$?
+set -e
+[[ $rc -eq 69 ]] || fail "an amend the gate refuses -> want exit 69, got $rc: $out"
+[[ "$(git -C "$repo" rev-parse HEAD)" == "$sha_before" ]] || fail "a refused amend still rewrote HEAD"
+ok "an amend is refused (exit 69) when the squash gate no longer allows it"
 
 # an absolute --path is refused before anything is committed
 sha_before=$(git -C "$repo" rev-parse HEAD)

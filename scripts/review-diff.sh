@@ -384,6 +384,7 @@ files_left=""
 files_right=""
 diff_range=""
 diff_staged=0
+diff_paths=""
 review_index=""
 header_mode=""
 review_title=""
@@ -470,7 +471,16 @@ else
     # not carry, so the review shows the index instead.
     anchor_require_staged "review-diff.sh" "${staged_paths[@]+"${staged_paths[@]}"}"
     [[ ${#staged_paths[@]} -eq 0 ]] || diff_staged=1
-    review_index=$(anchor_index_digest "${stage_paths[@]+"${stage_paths[@]}"}" "${staged_paths[@]+"${staged_paths[@]}"}")
+    # The review covers the paths the commit will carry and nothing else, so a
+    # peer's edits elsewhere in the tree stay out of it (COMMIT-14), and the
+    # source side of a named rename comes along with it, as it does in the commit.
+    review_paths=("${stage_paths[@]+"${stage_paths[@]}"}" "${staged_paths[@]+"${staged_paths[@]}"}")
+    while IFS= read -r src; do review_paths+=("$src"); done \
+      < <(anchor_rename_sources "${review_paths[@]+"${review_paths[@]}"}")
+    review_index=$(anchor_index_digest "${review_paths[@]+"${review_paths[@]}"}")
+    for named_path in "${review_paths[@]+"${review_paths[@]}"}"; do
+      diff_paths+="$named_path"$'\n'
+    done
   elif [[ "${1:-}" == "--previous" ]]; then
     git rev-parse --verify --quiet HEAD~1 >/dev/null || {
       echo "review-diff.sh: HEAD has no parent commit to compare against" >&2
@@ -495,8 +505,11 @@ else
   repo=$(basename "$(git rev-parse --show-toplevel)")
   branch=$(git rev-parse --abbrev-ref HEAD)
 
+  review_specs=()
+  while IFS= read -r spec; do review_specs+=("$spec"); done < <(anchor_diff_specs)
+
   if [[ "$header_mode" == "local" ]]; then
-    stat=$(git diff --cached --stat HEAD | tail -1 | sed 's/^[[:space:]]*//')
+    stat=$(git diff --cached --stat HEAD -- "${review_specs[@]+"${review_specs[@]}"}" | tail -1 | sed 's/^[[:space:]]*//')
     base=$(git log -1 --format='%h %s' HEAD)
     if [[ -n "$message_file" ]]; then
       # Seed the drafted message: subject is the review's headline, the body row
@@ -579,8 +592,8 @@ fi
 # resolved against, which is also what surfaces a review pointed at the wrong
 # checkout (DIFF-21).
 range_empty() {
-  if [[ "$diff_staged" -eq 1 ]]; then git diff --cached --quiet "$diff_range" --
-  else git diff --quiet "$diff_range" --; fi
+  if [[ "$diff_staged" -eq 1 ]]; then git diff --cached --quiet "$diff_range" -- "${review_specs[@]+"${review_specs[@]}"}"
+  else git diff --quiet "$diff_range" -- "${review_specs[@]+"${review_specs[@]}"}"; fi
 }
 if [[ "$review_subject" == "range" ]] && range_empty 2>/dev/null; then
   echo "review-diff.sh: $diff_range is empty in $(git rev-parse --show-toplevel) (target resolved via ${RESOLVED_VIA:-cwd}) — nothing to review" >&2
@@ -598,7 +611,7 @@ fi
 # The review-request contract the sourced adapter reads. Exported so the
 # adapter (sourced below) counts as a consumer — it runs in this same shell.
 export review_subject review_mode review_tool
-export diff_range diff_staged files_left files_right review_title review_details_json
+export diff_range diff_staged diff_paths files_left files_right review_title review_details_json
 export message_file review_skill
 
 # Taken before the tool opens, so it names what the reviewer was shown.

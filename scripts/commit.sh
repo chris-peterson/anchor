@@ -15,8 +15,8 @@
 # review, so the index already holds the reviewed changeset. Staging here would
 # pull in edits made after the review. The message is read from a file
 # (`--message-file`), never an argument, so a message body never lands in the
-# command line — the same reason COMMIT-17 avoids inlining the message, and it
-# keeps message text out of any command log.
+# command line, where a hook matching its words would block the commit, and it
+# stays out of any command log.
 #
 # It does commit path-scoped when `--path` is given, which is what keeps a shared
 # checkout honest: another session's staged file stays staged rather than riding
@@ -146,11 +146,25 @@ fi
 # --- Commit -------------------------------------------------------------------
 
 if [[ "$mode" != "push-existing" ]]; then
+  # A named rename destination carries its source, so the commit can't land the
+  # add without the delete. The review did the same, so the digest matches.
+  while IFS= read -r src; do paths+=("$src"); done \
+    < <(anchor_rename_sources "${paths[@]+"${paths[@]}"}")
   if [[ -n "$reviewed_index" ]]; then
     anchor_reject_absolute "commit.sh" "${paths[@]+"${paths[@]}"}"
     if [[ "$(anchor_index_digest "${paths[@]+"${paths[@]}"}")" != "$reviewed_index" ]]; then
       echo "commit.sh: the index for these paths changed after the review; nothing was committed. Review again and pass the new REVIEW_INDEX." >&2
       exit 68
+    fi
+  fi
+  # The squash gate was read at the start of the flow, and a CR can be marked
+  # ready while its review is open. Read it again where the rewrite happens.
+  if [[ "$mode" == "amend" ]]; then
+    gate=$(bash "$(dirname "${BASH_SOURCE[0]}")/squash-check.sh")
+    if ! grep -qx 'SQUASH=allowed' <<<"$gate" \
+       && ! { [[ ${#paths[@]} -eq 0 ]] && grep -qx 'ALLOW_MESSAGE_AMEND=1' <<<"$gate"; }; then
+      echo "commit.sh: HEAD can no longer be amended (it is out for review, pushed to the default branch, or not yours); nothing was committed. Land the change as a new commit." >&2
+      exit 69
     fi
   fi
   commit_args=()
@@ -176,8 +190,20 @@ if [[ "$mode" != "push-existing" ]]; then
           printf '%s %s\t%s\0' "$new_mode" "$new_sha" "$path"
         done \
       | GIT_INDEX_FILE="$commit_index" git update-index -z --index-info
+    reviewed_tree=$(GIT_INDEX_FILE="$commit_index" git write-tree)
     GIT_INDEX_FILE="$commit_index" git commit "${commit_args[@]}"
+    # A pre-commit hook runs against this same index, so a hook that stages a
+    # file puts it in the commit unreviewed. Stop before the push and name it.
+    if [[ "$(git rev-parse 'HEAD^{tree}')" != "$reviewed_tree" ]]; then
+      echo "COMMIT_SHA=$(git rev-parse --short HEAD)"
+      echo "commit.sh: a git hook changed the commit after the review; it is committed locally and not pushed. Paths the hook changed:" >&2
+      git diff --name-only "$reviewed_tree" 'HEAD^{tree}' | sed 's/^/  /' >&2
+      exit 71
+    fi
   else
+    # An amend that names no paths changes the message only; --only keeps
+    # whatever else is staged, another session's work included, out of it.
+    [[ "$mode" != "amend" ]] || commit_args+=(--only)
     git commit "${commit_args[@]}"
   fi
 fi
