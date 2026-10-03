@@ -123,7 +123,7 @@ ok "a refused mutation is an error, and announces nothing"
 
 # --- Usage -------------------------------------------------------------------
 FAIL_ON=""
-for args in "--cr 128" "--forge bitbucket --cr 1" "--forge github" "--forge github --cr 1 --nope"; do
+for args in "--cr 128" "--forge bitbucket --cr 1" "--forge github" "--forge github --cr 1 --nope" "--forge github --cr 1 --repo"; do
   # shellcheck disable=SC2086  # each case is a deliberate argv split
   run $args
   [[ "$status" -eq 64 ]] || fail "expected exit 64 for '$args', got $status"

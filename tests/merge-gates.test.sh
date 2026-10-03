@@ -170,6 +170,45 @@ run
 expect GATE_PIPELINE failed "failed run"
 ok "github: a failed pipeline blocks"
 
+# A green run, but the forge reports BLOCKED on a failing required check from
+# another workflow: the gate stops before the confirmation (MERGE-03).
+gh_runs; gh_pr '.mergeStateStatus = "BLOCKED" | .statusCheckRollup = [
+  {"name":"unit","conclusion":"SUCCESS","detailsUrl":"u1"},
+  {"name":"e2e","conclusion":"FAILURE","detailsUrl":"u9"}]'
+run
+expect GATE_PIPELINE failed "a failing required check"
+expect GATE_BLOCKING pipeline "a failing required check blocks"
+grep -q '^PIPELINE_FAILED_JOBS=.*"e2e"' <<<"$out" || fail "the failing check should be listed: $out"
+ok "github: a failing required check blocks at the pipeline gate"
+
+# Every workflow filtered out for this commit is the same as having none.
+gh_runs skipped; gh_pr
+run
+expect GATE_PIPELINE skipped "a skipped run"
+[[ "$(val GATE_BLOCKING)" != pipeline ]] || fail "a skipped pipeline should not block: $out"
+ok "github: a skipped pipeline passes the gate, like none"
+
+# A canceled pipeline stops the merge and names the jobs to look at (MERGE-07).
+cp "$fx/gh-jobs.json" "$fx/gh-jobs.keep"
+printf '[{"name":"unit","status":"completed","conclusion":"success","url":"u1"},
+         {"name":"lint","status":"completed","conclusion":"cancelled","url":"u2"}]' > "$fx/gh-jobs.json"
+gh_runs cancelled; gh_pr
+run
+expect GATE_PIPELINE canceled "a canceled run"
+grep -q '^PIPELINE_FAILED_JOBS=.*"lint"' <<<"$out" || fail "the canceled job should be listed: $out"
+mv "$fx/gh-jobs.keep" "$fx/gh-jobs.json"
+ok "github: a canceled pipeline blocks and lists its canceled jobs"
+
+# A pipeline nobody could read blocks; passing it as "none" would merge on a
+# pipeline that may be red (MERGE-09, #46).
+cp "$fx/gh-runs.json" "$fx/gh-runs.keep"
+printf 'not json' > "$fx/gh-runs.json"
+run
+mv "$fx/gh-runs.keep" "$fx/gh-runs.json"
+expect GATE_PIPELINE unreachable "an unreadable pipeline"
+expect GATE_BLOCKING pipeline "an unreadable pipeline blocks"
+ok "github: a pipeline that couldn't be read blocks rather than passing as none"
+
 gh_runs; gh_pr '.reviewDecision = "CHANGES_REQUESTED"'
 run
 expect GATE_APPROVALS changes-requested "changes requested"

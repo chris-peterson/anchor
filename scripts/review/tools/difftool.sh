@@ -26,6 +26,7 @@
 # shellcheck disable=SC2034
 diff_tool_caps='{"producesVerdict":true,"perHunkReview":false,"editableCommitMessage":false,"editableDescription":false,"sideMarkers":false}'
 diff_tool_install_hint='set diff.tool, or difftool.<name>.cmd, to a tool git can launch'
+diff_tool_reports_via_tree=1
 
 # Where the pre-launch snapshot lives, and the paths it covers.
 difftool_snapshot=""
@@ -42,7 +43,10 @@ difftool_reviewed_paths() {
   if [[ "$review_subject" == "files" ]]; then
     printf '%s\n' "$files_right"
   else
-    git diff --name-only "$diff_range" 2>/dev/null || true
+    local -a specs=()
+    local spec
+    while IFS= read -r spec; do specs+=("$spec"); done < <(anchor_diff_specs)
+    git diff --name-only "$diff_range" -- "${specs[@]+"${specs[@]}"}" 2>/dev/null || true
   fi
 }
 
@@ -74,7 +78,9 @@ diff_tool_command() {
   else
     # --dir-diff opens the whole changeset once instead of prompting file by
     # file, and symlinks the working-tree side so an edit reaches the real file.
-    cmd="$cmd --dir-diff $(anchor_host_sq "$diff_range")"
+    cmd="$cmd --dir-diff $(anchor_host_sq "$diff_range") --"
+    local spec
+    while IFS= read -r spec; do cmd="$cmd $(anchor_host_sq "$spec")"; done < <(anchor_diff_specs)
   fi
   cmd="$cmd >$(anchor_host_sq "$out_file") 2>$(anchor_host_sq "$err_file")"
   printf '%s' "$cmd"

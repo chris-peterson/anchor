@@ -42,7 +42,9 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --forge) forge="${2:-}"; shift 2 ;;
     --cr)    cr="${2:-}";    shift 2 ;;
-    --repo)  CTX_REPO="${2:-}"; shift 2 ;;
+    --repo)
+      [[ -n "${2:-}" ]] || { echo "READY_ERROR=--repo needs a path" >&2; exit 64; }
+      CTX_REPO="$2"; shift 2 ;;
     *) echo "READY_ERROR=unrecognized argument: $1" >&2; exit 64 ;;
   esac
 done
