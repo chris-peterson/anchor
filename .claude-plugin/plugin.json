@@ -18,5 +18,6 @@
     "ai",
     "claude-code"
   ],
-  "homepage": "https://chris-peterson.github.io/anchor/#/"
+  "homepage": "https://chris-peterson.github.io/anchor/#/",
+  "documentationUrl": "https://chris-peterson.github.io/anchor/#/"
 }
