@@ -9,8 +9,8 @@ default:
 generate:
     {{shipyard}} generate
 
-# read what the projection job would commit, without keeping it; `git restore .` discards
-check:
+# regenerate the artifacts and list what the projection job would commit
+check-generated:
     {{shipyard}} generate
     git --no-pager diff --stat
 
