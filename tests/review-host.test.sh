@@ -79,7 +79,7 @@ ok "an unset variable is not exported"
 # marker the command leaves behind is proof the dispatch landed.
 marker="$work/dispatched"
 rc=0
-( TMUX='' ANCHOR_HOST_RUNNER='' ITERM_SESSION_ID='' \
+( TMUX='' ANCHOR_HOST_RUNNER='' ITERM_SESSION_ID='' AGTERM_SESSION_ID='' \
   anchor_host_run "touch '$marker'" edit 'fake-editor --wait' ) || rc=$?
 [ "$rc" -eq 0 ]     || fail "the gui host should return the command's own status, got $rc"
 [ -f "$marker" ]    || fail "the dispatcher never reached the host's runner"
@@ -88,7 +88,7 @@ ok "the dispatcher runs the command in the host it selected"
 # --- and reports its own status where no host can be reached, rather than
 # running the command somewhere it did not choose.
 rc=0
-( TMUX='' ANCHOR_HOST_RUNNER='' ITERM_SESSION_ID='' \
+( TMUX='' ANCHOR_HOST_RUNNER='' ITERM_SESSION_ID='' AGTERM_SESSION_ID='' \
   anchor_host_run "touch '$work/never'" diff ) </dev/null || rc=$?
 [ "$rc" -eq "$anchor_host_rc_no_pane" ] || fail "no host should report no-pane, got $rc"
 [ ! -f "$work/never" ]                   || fail "the command ran with no host to run it in"
@@ -123,5 +123,64 @@ anchor_host_probe_seconds=1 anchor_host_await "$sentinel" probe_alive x >/dev/nu
 wait
 [ "$rc" -eq "$anchor_host_rc_no_result" ] || fail "an empty sentinel should report no-result, got $rc"
 ok "a pane closed without writing reports no-result"
+
+# ============================ the agterm host ==============================
+# The overlay is opened through agtermctl, so a stub stands in for it: `overlay
+# open` runs the command string the way agterm's `sh -c` does and records the
+# argv it was handed, and AGTERM_STUB_FAIL makes it refuse the open instead.
+stubbin="$work/stubbin"; mkdir -p "$stubbin"
+cat > "$stubbin/agtermctl" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "$AGTERM_STUB_ARGV"
+[ "$1 $2 $3" = "session overlay open" ] || exit 0
+[ -z "${AGTERM_STUB_FAIL:-}" ] || { echo "error: pane overlay already open" >&2; exit 1; }
+cd / && sh -c "$4"
+EOF
+chmod +x "$stubbin/agtermctl"
+
+agterm_run() {
+  ( cd "$target" && PATH="$stubbin:$PATH" AGTERM_SESSION_ID=SESSION-1 \
+      AGTERM_SOCKET="$work/agterm.sock" AGTERM_STUB_ARGV="$work/agterm-argv" \
+      bash -c "source '$here/../scripts/lib/review-host.sh'
+               source '$here/../scripts/review/hosts/agterm.sh'
+               review_host_run \"\$1\"" _ "$1" )
+}
+
+# --- the overlay opens on the calling session, not whichever one is selected,
+# and the command's own status comes back through the sentinel
+rc=0
+agterm_run 'pwd -P > ../seen-agterm-cwd; ( exit 10 )' || rc=$?
+[ "$rc" -eq 10 ] || fail "the agterm host should return the command's status, got $rc"
+[ "$(cat "$work/seen-agterm-cwd")" = "$(cd "$target" && pwd -P)" ] || fail "the overlay ran in $(cat "$work/seen-agterm-cwd")"
+grep -A1 -x -- '--target' "$work/agterm-argv" | grep -qx SESSION-1 \
+  || fail "the overlay was not addressed to the calling session"
+grep -qx "$work/agterm.sock" "$work/agterm-argv" || fail "agtermctl was not pointed at the session's socket"
+ok "agterm: the overlay runs on the calling session, in the caller's directory, and returns the status"
+
+# --- an overlay that never opened ran nothing, and says so
+rc=0
+AGTERM_STUB_FAIL=1 agterm_run "touch '$work/agterm-never'" 2>/dev/null || rc=$?
+[ "$rc" -eq "$anchor_host_rc_no_pane" ] || fail "a refused overlay should report no-pane, got $rc"
+[ ! -f "$work/agterm-never" ]            || fail "the command ran with no overlay to run it in"
+ok "agterm: an overlay that could not open reports no-pane"
+
+# --- selection: the session has to be named and its socket live. An agterm that
+# lost the socket to another instance advertises a path nothing listens on.
+agterm_selected() {
+  ( PATH="$stubbin:$PATH" TMUX='' ANCHOR_HOST_RUNNER='' ITERM_SESSION_ID='' \
+      AGTERM_SESSION_ID="$1" AGTERM_SOCKET="$2" \
+      bash -c "source '$here/../scripts/lib/review-host.sh'; anchor_review_host diff" </dev/null )
+}
+: > "$work/not-a-socket"
+[ -z "$(agterm_selected '' "$work/not-a-socket")" ]        || fail "agterm selected with no session id"
+[ -z "$(agterm_selected SESSION-1 "$work/not-a-socket")" ] || fail "agterm selected with no live socket"
+ok "agterm: not selected without a named session and a live socket"
+
+if command -v python3 >/dev/null 2>&1; then
+  sock="$work/live.sock"
+  python3 -c 'import socket,sys; s=socket.socket(socket.AF_UNIX); s.bind(sys.argv[1])' "$sock"
+  [ "$(agterm_selected SESSION-1 "$sock")" = agterm ] || fail "a named agterm session should select the agterm host"
+  ok "agterm: a named session with a live socket selects the agterm host"
+fi
 
 echo "PASS: review-host"

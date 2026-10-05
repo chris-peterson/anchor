@@ -36,13 +36,17 @@
 anchor_host_rc_no_result=124   # the host went away before the command reported
 anchor_host_rc_no_pane=125     # the host could not be opened, so nothing ran
 
+# Where the hosts are listed for a user, named by every no-host message rather
+# than a list of its own that drifts from the set.
+anchor_review_hosts_doc='https://chris-peterson.github.io/anchor/#/guides/configuring?id=review-hosts'
+
 # Shell-quote one argument for the command string a host's `sh` reads.
 anchor_host_sq() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 
 # The hosts, most direct first. `gui` is a blocking editor's own window, so its
 # own availability answers `edit` alone and `diff` passes over it.
 anchor_review_hosts() {
-  printf '%s\n' tmux gui iterm2
+  printf '%s\n' tmux gui iterm2 agterm
 }
 
 anchor_review_hosts_dir() {
@@ -187,7 +191,7 @@ anchor_host_run() {
 
   anchor_review_host_select "$mode" "$editor"
   if [[ -z "$anchor_resolved_host" ]]; then
-    echo "review-diff.sh: nowhere to open a review — not inside tmux, and no iTerm2 session to split" >&2
+    echo "review-diff.sh: nowhere to open a review from this session. Where a review can open, and how to name a terminal of your own: $anchor_review_hosts_doc" >&2
     return "$anchor_host_rc_no_pane"
   fi
   # Selection sourced the winner, so its review_host_run is in scope.

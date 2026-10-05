@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Reviews open in agterm.** A diff or editor review run from an [agterm](https://github.com/umputun/agterm) session opens in a floating overlay on that session, takes the keyboard, and closes when you quit the tool. It needs `agtermctl` on your `PATH` (Help ▸ Install Command Line Tool, or the Homebrew install).
+- **A review can open in a terminal `anchor` doesn't script.** Set `ANCHOR_HOST_RUNNER` to a program that runs a command string in a terminal you can see and exits with its status, and both kinds of review open there. When no terminal can be found, the message links to [Where a review opens](https://chris-peterson.github.io/anchor/#/guides/configuring?id=review-hosts).
+
 ## 1.15.2
 
 ### Changed

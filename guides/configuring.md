@@ -412,7 +412,7 @@ It reads that file itself, so the same preferences apply whether you run it by
 hand or `anchor` opens it.
 
 Prefer the file over the matching `REVDIFF_*` environment variables. `anchor`
-opens the TUI in a split of your terminal session, and a split starts with a
+opens the TUI in a terminal of its own, and that terminal starts with a
 named set of the caller's environment — `PATH`, the locale, and
 `EDITOR`/`VISUAL` — rather than a copy of your shell's. So an
 `export REVDIFF_WRAP=true` in `.zshrc` reaches a `revdiff` you start yourself and
@@ -421,7 +421,8 @@ reads it and passes the path through as `--config`. See
 [revdiff's options](https://revdiff.com/docs.html#options) for the full list.
 
 revdiff renders in a terminal, so this tool needs somewhere `anchor` can put
-one: a tmux popup inside tmux, or a split of the calling session on iTerm2. It
+one: a tmux popup inside tmux, a split of the calling session on iTerm2, or an
+overlay on the calling session in agterm. It
 reaches exactly as far as an editor review does
 ([Where a review opens](#review-hosts)). Where there is none, a revdiff review
 reports `no-verdict` naming that rather than opening on nothing.
@@ -480,8 +481,8 @@ Rungs 4 and 5 are where `anchor` goes past git: git's chain ends at 4, and a
 session that exports `GIT_EDITOR=true` with nothing else set would otherwise
 have no editor at all on a machine where `git commit` opens one.
 
-Which of the two comes first depends on where `anchor` can draw. Inside tmux or
-an iTerm2 session it can open a terminal (see below), so it takes the editor
+Which of the two comes first depends on where `anchor` can draw. Inside tmux, or
+an iTerm2 or agterm session, it can open a terminal (see below), so it takes the editor
 `git commit` would open and puts it in a pane it labels, focuses, and closes
 behind you. With nowhere to host a terminal — a plain SSH session, a CI step —
 VS Code's own window is the only thing that reaches you at all.
@@ -518,9 +519,14 @@ set, in this order:
 | tmux popup | You're inside tmux. |
 | A blocking GUI editor's own window | `edit` reviews only — the editor draws its own window, so no terminal is needed. |
 | An iTerm2 split | The calling session can be named — sideways on a wide window, below on a narrow one, and closed again when you quit. |
+| An agterm overlay | The calling session can be named (`AGTERM_SESSION_ID`) and `agtermctl` is on `PATH`. A floating panel over that session, closed again when you quit. |
 
-Anywhere else, point `ANCHOR_EDITOR_LAUNCHER` at a script that takes the file
-path and opens your editor on it, blocking until it closes.
+Anywhere else, point an environment variable at a script of your own:
+
+| Variable | Takes | Covers |
+|---|---|---|
+| `ANCHOR_HOST_RUNNER` | A `sh` command string as its one argument. Run it in a terminal you can see, wait for it, and exit with its status. | Both kinds of review, in place of every host above. |
+| `ANCHOR_EDITOR_LAUNCHER` | The path of the drafted file. Open your editor on it and block until it closes. | `edit` reviews only. |
 
 `anchor` waits as long as you take. What ends the wait early is the review
 closing without reporting a result, which means the editor never got to save.
@@ -554,7 +560,7 @@ takes it. Exiting non-zero (vim's `:cq`) aborts whatever you saved, since that
 is the editor's own way of saying stop.
 
 **Quit the editor, don't close its pane.** A terminal editor is drawing inside a
-pane `anchor` opened, so `⌘W` and `⌘Q` reach iTerm2 rather than the editor and
+pane `anchor` opened, so `⌘W` and `⌘Q` reach the terminal rather than the editor and
 take it down mid-edit. If you saved first, that save is your answer and the
 review is graded on it; if you didn't, the review reports `pane-closed` and
 nothing it gated happens. Your draft survives either way; re-run to review it

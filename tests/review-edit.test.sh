@@ -212,7 +212,7 @@ export EDITOR_STUB_MODE=save
 # VS Code, whose `gui` host needs no terminal — the case then launches an editor
 # for real and waits for someone to close it.
 o=$( cd "$repo" && PATH="$bin:/usr/bin:/bin" ANCHOR_EDITOR_LAUNCHER='' TMUX='' \
-     ITERM_SESSION_ID='' ANCHOR_HOST_RUNNER='' GIT_EDITOR=true \
+     ITERM_SESSION_ID='' AGTERM_SESSION_ID='' ANCHOR_HOST_RUNNER='' GIT_EDITOR=true \
      bash "$dispatch" --skill prepare-review --mode edit \
      --files "$prior" "$draft" </dev/null 2>/dev/null ); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = no-verdict ]            || fail "nowhere to open -> want no-verdict"
@@ -356,7 +356,7 @@ key_of() { sed -n "s/^$1=//p" <<<"$2"; }
 # ANCHOR_EDITOR_LAUNCHER, which stands in for both halves.
 probe() {
   ( cd "$repo" && PATH="$bin:/usr/bin:/bin" GIT_EDITOR=true TMUX='' \
-      ITERM_SESSION_ID='' ANCHOR_HOST_RUNNER='' \
+      ITERM_SESSION_ID='' AGTERM_SESSION_ID='' ANCHOR_HOST_RUNNER='' \
       bash "$dispatch" "$@" </dev/null )
 }
 
@@ -365,7 +365,7 @@ probe() {
 # wrong thing.
 probe_hosted() {
   ( cd "$repo" && PATH="$bin:/usr/bin:/bin" GIT_EDITOR=true TMUX='' \
-      ITERM_SESSION_ID='' ANCHOR_HOST_RUNNER="$bin/stub-host-runner.sh" \
+      ITERM_SESSION_ID='' AGTERM_SESSION_ID='' ANCHOR_HOST_RUNNER="$bin/stub-host-runner.sh" \
       bash "$dispatch" "$@" </dev/null )
 }
 
@@ -558,7 +558,7 @@ chmod +x "$codebin/code"
 # takes the `tty` host out along with them.
 resolve() {
   ( cd "$repo" && PATH="$1:/usr/bin:/bin" TERM="${2-dumb}" GIT_EDITOR=true \
-      TMUX='' ANCHOR_EDITOR_LAUNCHER='' ITERM_SESSION_ID='' \
+      TMUX='' ANCHOR_EDITOR_LAUNCHER='' ITERM_SESSION_ID='' AGTERM_SESSION_ID='' \
       ANCHOR_HOST_RUNNER="${3-}" bash "$bin/resolve-editor.sh" </dev/null )
 }
 
@@ -614,7 +614,7 @@ chmod +x "$bin/host-editor.sh"
 
 host() {
   ( cd "$repo" && TMUX='' ANCHOR_EDITOR_LAUNCHER='' ANCHOR_HOST_RUNNER='' \
-      TERM_PROGRAM="${2:-}" ITERM_SESSION_ID="$1" \
+      TERM_PROGRAM="${2:-}" ITERM_SESSION_ID="$1" AGTERM_SESSION_ID='' \
       bash "$bin/host-editor.sh" vi </dev/null )
 }
 
@@ -641,7 +641,7 @@ chmod +x "$bin/host-mode.sh"
 
 host_for() {
   ( cd "$repo" && PATH="$hostbin:$bin:/usr/bin:/bin" TMUX="${TMUX_ENV-}" \
-      ANCHOR_HOST_RUNNER='' ITERM_SESSION_ID='' \
+      ANCHOR_HOST_RUNNER='' ITERM_SESSION_ID='' AGTERM_SESSION_ID='' \
       bash "$bin/host-mode.sh" "$@" </dev/null )
 }
 

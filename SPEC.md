@@ -942,6 +942,12 @@ editor's whole answer is the revised artifact, which is why the column below
   as a plugin, whose scripts the harness invokes with no controlling terminal, so
   a host addressing the caller's own terminal is a rung the fallback ladder
   reasons about for nothing.
+- **[DIFF-25b]** The system shall take a host the user names, a program that
+  runs a command string in a terminal of the user's choosing and returns its
+  status, in place of the shipped set, and shall link to where the hosts and
+  that option are documented wherever it reports that no host can open. The shipped set covers the terminals the
+  system can script, and a terminal outside it otherwise leaves a review that
+  needs one with no way to open at all.
 - **[DIFF-26]** The system shall run the command it opens in a split in the
   directory and the environment it resolved that command against — at least the
   working directory, the executable search path, the locale, and the editor a

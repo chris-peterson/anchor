@@ -114,7 +114,7 @@ editor_launch() {
   fi
 
   if ! anchor_host_available edit "$ed"; then
-    echo "review-diff.sh: no way to open '$ed' — a terminal editor needs a terminal, and this session has none. Run inside tmux, configure a blocking GUI editor (git config core.editor 'code --wait'), or point ANCHOR_EDITOR_LAUNCHER at a script that opens one." >&2
+    echo "review-diff.sh: no way to open '$ed' — a terminal editor needs a terminal, and this session has none. Configure a blocking GUI editor (git config core.editor 'code --wait'), or see where a review can open: $anchor_review_hosts_doc" >&2
     return "$editor_rc_no_host"
   fi
 

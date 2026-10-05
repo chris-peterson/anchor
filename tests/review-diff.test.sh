@@ -150,7 +150,7 @@ ok "revdiff: a closed review pane -> no-verdict, cause named rather than numbere
 # nowhere to open a pane -> no-verdict, producesVerdict false. revdiff is a TUI,
 # so a session that cannot put a terminal on screen has no review to show, and
 # saying so beats launching into a host error.
-o=$( cd "$repo" && ANCHOR_HOST_RUNNER='' ITERM_SESSION_ID='' bash "$dispatch" --previous ); j=$(json_of "$o")
+o=$( cd "$repo" && ANCHOR_HOST_RUNNER='' ITERM_SESSION_ID='' AGTERM_SESSION_ID='' bash "$dispatch" --previous ); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = no-verdict ]                        || fail "no-host verdict"
 [ "$(jq -r .raw.exitCode <<<"$j")" = no-host ]               || fail "no-host raw.exitCode"
 [ "$(jq -r .capabilities.producesVerdict <<<"$j")" = false ] || fail "no-host producesVerdict"

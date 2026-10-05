@@ -118,8 +118,10 @@ what picks the level.
   key per mode. A difftool has nowhere to leave an annotation, so its adapter
   reads the reviewer's answer out of the working tree: the files they edited come
   back as the feedback.
-- **Review host** — where a review is put on screen: a tmux popup, a blocking
-  GUI editor's own window, the caller's terminal, an iTerm2 split. A third axis
+- **Review host** — where a review is put on screen. The set is one file per
+  host in `scripts/review/hosts/`, ranked by `anchor_review_hosts` in
+  `scripts/lib/review-host.sh`; what each looks like to a user is in
+  [Where a review opens](guides/configuring.md). A third axis
   under the mode and the tool, and the one neither of them chooses — the session
   does. Resolved from one ranked set for both modes, so `edit` and `diff` reach
   equally far, and asked of the same dispatcher by the probe and the launch so

@@ -117,7 +117,7 @@ emit_review() {
     fi
   fi
   if ! anchor_host_available diff; then
-    diff_unavailable "$review_tool needs a terminal to render, and this session has nowhere to open one — a tmux popup inside tmux, or a split of the calling iTerm2 session" no-host
+    diff_unavailable "$review_tool needs a terminal to render, and this session has nowhere to open one (see $anchor_review_hosts_doc)" no-host
     return
   fi
 
