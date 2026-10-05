@@ -5,7 +5,7 @@ description: Stage changes, run tests, review the diff and drafted commit messag
 
 # Commit and Push
 
-Stage all changes and read the repo's state, run tests, draft a commit message, review the pending changeset, then — once the review is clean — commit and push in one step.
+Stage the paths you changed and read the repo's state, run tests, draft a commit message, review the pending changeset, then — once the review is clean — commit and push in one step.
 
 **Don't narrate your work.** Every step below is an operating instruction, not a script to read aloud — follow the execute-quietly discipline: `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. For `/commit`, the only things worth surfacing are the resolved repo in one line, a failing test, any branch/shape decision that needs the user, and the review verdict; where a step prescribes exact output (e.g. `Committed [short-sha], pushed`), emit that and nothing more. **The message is not presented in chat** — it's shown in the review tool (Step 5); don't print it or ask about it separately. No "checks pass, now staging…" transitions: run the step, read the result, move on.
 
@@ -101,16 +101,17 @@ Act only on the keys; don't re-run the folded-in probes (`git add`, `look-ahead.
 | `REPO_ROOT` | the resolved checkout — the target this run operates on (see "Target repo") |
 | `STAGED` | `1` → a change to commit (read its full diff below, then test in Step 2); `0` → see push-existing |
 | `OTHER_STAGED` | `>0` → someone else staged paths you didn't name. Say so, name the count, and carry the same `--path` list into Steps 5-6 so their work stays out of your commit. Don't unstage it — it isn't yours |
+| `RENAME_SOURCES` | the old names of renames whose new name you named. They are part of this commit, not someone else's work: the review and the commit carry them with the new names, so name only the new name |
 | `STAT` | the diffstat total — what's in scope |
 | `BRANCH` / `DEFAULT_BRANCH` / `ON_DEFAULT_BRANCH` | the branch decision in Step 4 |
-| `AHEAD` | unpushed commit count (empty = no upstream) — drives push-existing |
+| `AHEAD` | unpushed commit count, counted against `origin/<default>` on a branch never pushed — drives push-existing |
 | `SQUASH` / `SQUASH_FORCE_PUSH` / `ALLOW_MESSAGE_AMEND` / `PRIOR_SUBJECT` | the squash gate in Step 4 |
 | `ANCHOR_CONFIG` | the `anchor.*` keys (JSON) for Steps 3-4 |
 
-When `STAGED=1`, read the full staged diff so you can draft the message:
+When `STAGED=1`, read the staged diff of the paths you named so you can draft the message. The rest of the index can hold another session's work, which the message must not describe:
 
 ```bash
-git diff --cached
+git diff --cached -- <p> [<p>...]
 ```
 
 **Push-existing** — when `STAGED=0`: if `AHEAD` is `0` or empty, nothing is staged and nothing is unpushed — warn there are no local changes and stop. If `AHEAD` is `≥1`, the branch has unpushed commit(s) to push: **skip Steps 2-4**, review that range in Step 5 (`review-diff.sh --commit`, not `--local`), and push in Step 6. Read the range (substitute `DEFAULT_BRANCH`):
@@ -221,15 +222,9 @@ If recommending squash:
 
 Record the choice (new commit vs squash) and proceed to Step 5; the review runs before either is executed.
 
-### When a PreToolUse hook blocks the commit
-
-Some hooks pattern-match on bash command substrings — destructive-operation gates (`npm install -g`, `git push --force`), secret-scanning regexes (`secret`/`token`/`password`/`api.?key`), or other safety guards. These can false-positive when the same string appears inside a heredoc'd commit message body — the hook sees the literal text and blocks the commit before `git` ever parses the heredoc. The trigger is often natural-language wording in the body that overlaps with the hook's keyword set.
-
-If a commit attempt in Step 6 is rejected by a `PreToolUse` hook citing a substring that's actually inside the message body (not the executed command), stop and surface the conflict to the user. Do not reach for a temp-file workaround (`Write` to `/tmp/...` then `git commit -F`) — splitting the commit into a separate `Write` plus `Bash` doubles the permission prompts, hides the message body from the bash command preview, and introduces cross-session collision risk on predictable paths. The message wording is the right thing for the diff; the hook's matcher is the limitation. The user can approve the bypass for this commit or adjust the hook.
-
 ## Step 5: Review the pending changeset
 
-Before committing, open the pending changeset — the exact changes Step 6 will commit, against `HEAD` — in a visual review, **with the drafted message shown alongside it**. Launch the **dispatcher** in `--local` mode with `--message-file` (the message file from Step 3) — **not** raw `git difftool`. It stages the paths you name so a new file is in the diff at all, diffs the tree against `HEAD` (the index instead, when you name a `--staged-path`, since the tree still holds the hunks the commit leaves out), seeds the drafted message (subject as the headline, body as prose) plus a repo/branch/summary header, runs the mode the subject calls for — a git range names a base to compare against, so that is `diff`, run by `anchor.diff.tool` (`revdiff` by default); see the configuring guide's Defaults table, and — once it closes — prints the normalized result on its own stdout. So you review the message and the diff *together*, with no separate chat gate. Raw `git difftool` bypasses the header and the verdict.
+Before committing, open the pending changeset — the exact changes Step 6 will commit, against `HEAD` — in a visual review, **with the drafted message shown alongside it**. Launch the **dispatcher** in `--local` mode with `--message-file` (the message file from Step 3) — **not** raw `git difftool`. It stages the paths you name so a new file is in the diff at all, diffs those paths (and the old name of any rename among them) against `HEAD`, and nothing else in the tree (the index instead, when you name a `--staged-path`, since the tree still holds the hunks the commit leaves out), seeds the drafted message (subject as the headline, body as prose) plus a repo/branch/summary header, runs the mode the subject calls for — a git range names a base to compare against, so that is `diff`, run by `anchor.diff.tool` (`revdiff` by default); see the configuring guide's Defaults table, and — once it closes — prints the normalized result on its own stdout. So you review the message and the diff *together*, with no separate chat gate. Raw `git difftool` bypasses the header and the verdict.
 
 Run it as the review loop in `${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md` describes — background launch, manifest, chat feedback while it's open, reading the verdict. What's particular to a commit:
 
@@ -267,7 +262,12 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/commit.sh" --mode new --message-file <path> 
 
 Carry the **same `--path` and `--staged-path` lists** through from Steps 1 and 5, so the commit holds exactly what was reviewed. They scope the commit as well as the staging: a path someone else staged stays staged rather than riding into your commit. Each path is committed as the index holds it, so an edit made after the review stays in the working tree.
 
-**Pass `--reviewed-index` the `REVIEW_INDEX` line Step 5's review printed**, from the review whose verdict you're acting on, or from the launch whose `no-verdict` sent you to the chat walk. Every launch that gets as far as opening a tool prints it. A `--path` without it exits 64. It names the index entries the reviewer was shown, and `commit.sh` exits 68 with nothing committed when they've changed since: something staged more of a reviewed file after the review. On exit 68, go back to Step 5 and review again. The message-only amend is the one call that takes no `--path` — there is no tree change to scope, and `--amend` keeps every file the commit already carried.
+**Pass `--reviewed-index` the `REVIEW_INDEX` line Step 5's review printed**, from the review whose verdict you're acting on, or from the launch whose `no-verdict` sent you to the chat walk. Every launch that gets as far as opening a tool prints it. A `--path` without it exits 64. It names the index entries the reviewer was shown, and `commit.sh` exits 68 with nothing committed when they've changed since: something staged more of a reviewed file after the review. On exit 68, go back to Step 5 and review again.
+
+Two more refusals come from `commit.sh` itself, and both stop the flow:
+
+- **Exit 69** — an amend, but HEAD can no longer be amended: the CR was marked ready, or HEAD was pushed to the default branch, since Step 1 read the gate. Nothing is committed. Say so and land the change as a new commit (`--mode new`).
+- **Exit 71** — a `pre-commit` hook changed what the commit carries after the review. It is committed locally and not pushed, and stderr names the paths the hook changed. Report them and stop; the user decides whether to keep the hook's change (review it, then push) or undo the commit (`git reset --soft HEAD~1`). The message-only amend is the one call that takes no `--path` — there is no tree change to scope, and `--amend` keeps every file the commit already carried.
 
 `commit.sh` picks the push variant itself — `-u origin <branch>` for a branch with no upstream, plain `git push` otherwise, `git push --force-with-lease` when you pass `--force-with-lease`. It also **refuses to commit onto the default branch** unless you pass `--allow-default-branch`; the Step 4 branch guard means you're normally already on a feature branch, so pass that flag only for the deliberate "commit to `<default>`" case the user chose there. Target a non-cwd checkout with `--repo <checkout>`, same as the other helpers.
 

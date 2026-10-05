@@ -34,10 +34,11 @@
 #   GATE_DRAFT=<clear|draft>
 #   GATE_MERGEABLE=<ok|conflicts|behind|unknown|blocked>
 #   GATE_MERGEABLE_DETAIL=<the forge's own value>
-#   GATE_PIPELINE=<success|running|pending|failed|canceled|manual|skipped|none|absent>
+#   GATE_PIPELINE=<success|running|pending|failed|canceled|manual|skipped|none|unreachable|absent>
 #   GATE_PIPELINE_DETAIL=<e.g. "3/3 jobs on abc1234">
 #   PIPELINE_URL=<url>          passed through from pipeline-status.sh
-#   PIPELINE_FAILED_JOBS=<json> passed through, failed state only
+#   PIPELINE_FAILED_JOBS=<json> the failed or canceled jobs, or the failing checks
+#   PIPELINE_ERROR=<text>       passed through when the pipeline was unreachable
 #   GATE_APPROVALS=<met|none|missing|changes-requested>
 #   GATE_APPROVALS_DETAIL=<e.g. "1 required, 0 left; approved by @ana">
 #   GATE_THREADS=<resolved|open>
@@ -114,7 +115,7 @@ emit() { printf '%s=%s\n' "$1" "$2"; }
 # --- The CR -----------------------------------------------------------------
 
 if [[ "$forge" == github ]]; then
-  fields=number,url,title,state,isDraft,headRefOid,headRefName,baseRefName,mergeable,mergeStateStatus,reviewDecision,commits
+  fields=number,url,title,state,isDraft,headRefOid,headRefName,baseRefName,mergeable,mergeStateStatus,reviewDecision,commits,statusCheckRollup
   view=$(gh pr view ${cr:+"$cr"} --json "$fields" 2>&1) || die "could not read the CR" "$view"
   number=$(jq -r '.number' <<<"$view")
   cr_ref="#$number"
@@ -253,19 +254,40 @@ pipeline=$(bash "$here/pipeline-status.sh" --single-run --sha "$head_sha")
 pipe_state=$(sed -n 's/^PIPELINE_STATE=//p' <<<"$pipeline")
 pipe_id=$(sed -n 's/^PIPELINE_ID=//p' <<<"$pipeline")
 pipe_runs=$(sed -n 's/^PIPELINE_RUNS=//p' <<<"$pipeline")
-emit GATE_PIPELINE "$pipe_state"
+pipe_failed=$(sed -n 's/^PIPELINE_FAILED_JOBS=//p' <<<"$pipeline")
 if [[ -n "$pipe_runs" ]]; then
   # PIPELINE_RUNS lists every run for the commit; the gate is about the one
   # the verdict came from.
-  emit GATE_PIPELINE_DETAIL "$(jq -r --arg id "$pipe_id" --arg sha "${head_sha:0:7}" \
+  pipe_detail=$(jq -r --arg id "$pipe_id" --arg sha "${head_sha:0:7}" \
     '[.[] | select(.id == $id) | .jobs[]]
-     | "\(map(select(.state == "success")) | length)/\(length) jobs on \($sha)"' <<<"$pipe_runs")"
+     | "\(map(select(.state == "success")) | length)/\(length) jobs on \($sha)"' <<<"$pipe_runs")
 else
-  emit GATE_PIPELINE_DETAIL "none for this commit"
+  pipe_detail="none for this commit"
 fi
-sed -n -e '/^PIPELINE_URL=/p' -e '/^PIPELINE_FAILED_JOBS=/p' <<<"$pipeline"
+# GitHub reports failing required checks only as BLOCKED, which the mergeable
+# read leaves to this gate, and the run above may be a different workflow. A
+# BLOCKED PR with a failing check is a pipeline block, raised here rather than
+# as the forge's refusal after the merge was confirmed.
+if [[ "$forge" == github && "$pipe_state" != failed \
+      && "$(jq -r '.mergeStateStatus' <<<"$view")" == BLOCKED ]]; then
+  failing=$(jq -c '[.statusCheckRollup[]?
+    | select((.conclusion // .state // "") as $c
+             | ["FAILURE","CANCELLED","TIMED_OUT","ACTION_REQUIRED","ERROR"] | index($c))
+    | {name: (.name // .context), url: (.detailsUrl // .targetUrl // "")}]' <<<"$view")
+  if [[ "$(jq 'length' <<<"$failing")" -gt 0 ]]; then
+    pipe_state=failed
+    pipe_detail="$(jq -r 'length' <<<"$failing") failing check(s) block the merge"
+    pipe_failed="$failing"
+  fi
+fi
+emit GATE_PIPELINE "$pipe_state"
+emit GATE_PIPELINE_DETAIL "$pipe_detail"
+sed -n -e '/^PIPELINE_URL=/p' -e '/^PIPELINE_ERROR=/p' <<<"$pipeline"
+[[ -z "$pipe_failed" ]] || echo "PIPELINE_FAILED_JOBS=$pipe_failed"
 case "$pipe_state" in
-  success|none|absent) ;;
+  # skipped: every workflow for the commit was filtered out (paths, branches),
+  # which is the same as having none.
+  success|none|absent|skipped) ;;
   *) block pipeline ;;
 esac
 

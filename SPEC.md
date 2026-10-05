@@ -90,8 +90,8 @@ behavior, not an independent authority — review them against the source.
   the working directory, then the system shall state the resolved path and ask
   which repo to target.
 - **[TARGET-07]** While operating on a repo other than the working directory, the
-  system shall address it with `git -C` and the helper `--repo` flag rather than
-  `cd`.
+  system shall name that repo in every command it issues (`git -C`, a helper's
+  `--repo`), so no command depends on the session's working directory.
 - **[TARGET-08]** If a commit-writing flow resolves a target that has no local
   checkout, then the system shall stop rather than commit to the wrong location.
 - **[TARGET-09]** The system shall accept `--repo` at any position in
@@ -138,7 +138,11 @@ behavior, not an independent authority — review them against the source.
   into the commit; the entry is another session's to resolve, so it is surfaced,
   left staged, and excluded. Each scoped path is committed as the index holds
   it: a path-limited `git commit` takes the working-tree copy, which carries an
-  edit made after the review and any hunk left unstaged.
+  edit made after the review and any hunk left unstaged. A named path that is
+  the new name of a staged rename carries the old name with it, and an amend
+  that names no paths changes only the message: a rename committed by its new
+  name alone leaves both names in the tree, and an unscoped amend takes whatever
+  else is staged.
 - **[COMMIT-04c]** Staging a path list shall succeed on every run with the same
   list, for any mix of added, modified, deleted, and renamed paths, and shall
   skip a path whose change is already staged in full. The commit flow stages its
@@ -151,14 +155,18 @@ behavior, not an independent authority — review them against the source.
 - **[COMMIT-04d]** Where the caller staged only part of a file, the system shall
   commit that file's staged hunks and no others. A path the caller names as
   staged is taken from the index as it stands and never staged; a path named for
-  staging that is already partly staged is refused before anything is staged, so
-  the caller says which it meant. A `git add` of that path would fold the hunks
+  staging that is already partly staged when the flow first stages it is refused
+  before anything is staged, so the caller says which it meant. A later restage
+  of the same list (the review, after a fix) is the flow's own edits, and
+  COMMIT-04e stops anything staged after the review. A `git add` of that path would fold the hunks
   left out into the commit, under a message that does not describe them.
 - **[COMMIT-04e]** The system shall commit the scoped paths only while their
   index entries match the ones the COMMIT-14 review showed, and shall otherwise
   stop with nothing committed. The commit reads the index when it runs, so a
   `git add` between the review and the commit (a second `git add -p`, another
-  session staging the same file) would land content nobody reviewed.
+  session staging the same file) would land content nobody reviewed. Where a git
+  hook changes what the commit carries, the system shall not push it, and shall
+  name the paths the hook changed.
 - **[COMMIT-05]** If nothing is staged, then the system shall describe the most
   recent unpushed commit, and shall stop if HEAD is already pushed or there are
   no local changes.
@@ -194,9 +202,12 @@ behavior, not an independent authority — review them against the source.
 - **[COMMIT-16]** Where the pre-flight recon reports nothing staged, the system shall
   skip the test suite, since the push-existing and no-local-changes routes make no
   commit and their commits were tested when they were made.
-- **[COMMIT-17]** If a `PreToolUse` hook blocks a commit on a substring inside the
+- ~~**[COMMIT-17]** If a `PreToolUse` hook blocks a commit on a substring inside the
   message body, then the system shall surface the conflict rather than use a
-  temp-file workaround.
+  temp-file workaround.~~
+
+  _Retired 2026-10-01: the message is committed from a file (COMMIT-18), so its body
+  never reaches a command line for a hook to match. The ID is not reused._
 - **[COMMIT-18]** When the pre-commit review verdict is clean, the system shall
   commit and push in one step, performed by a single helper (`commit.sh`) rather
   than as separate agent-run `git commit` / `git push` commands, and shall select
@@ -280,7 +291,9 @@ check.
   itself. A hand-read number still resolves — the forge scrolls to a line the bullet
   is not describing — and nothing about the rendered link reveals it. The token shall
   be matched byte for byte as written, so a token carrying a backslash resolves like
-  any other rather than reporting as a line the changeset never touched.
+  any other rather than reporting as a line the changeset never touched. The
+  description the CR ends up holding shall carry each link as the forge's own line
+  anchor.
 - **[PREPARE-10a]** If a placeholder's token matches several changed lines, or none,
   then the system shall report the candidate lines with their content and stop, rather
   than take the first match or reduce the link to the file. A token in the file but on
@@ -291,9 +304,12 @@ check.
   (`/anchor:<skill>`). A description that names the skill that drafted it is prose the
   author wrote on purpose, and reporting it as broken markup is a fault in the check
   rather than in the draft.
-- **[PREPARE-10b]** Once the CR exists, the system shall expand every placeholder into
+- ~~**[PREPARE-10b]** Once the CR exists, the system shall expand every placeholder into
   the forge's own line anchor before the description lands, and shall leave the draft
-  unmodified where any placeholder is unresolved.
+  unmodified where any placeholder is unresolved.~~
+
+  _Retired 2026-10-01: when the expansion runs is a detail of opening the CR; the
+  outcome a reader sees is PREPARE-10's last sentence. The ID is not reused._
 - **[PREPARE-11]** If a claim about prior workflow or current state lacks a citable
   source, then the system shall omit it from the description.
 - **[PREPARE-12]** Where a predecessor CR was captured, the system shall record the
@@ -306,9 +322,10 @@ check.
   path in every case, holding an empty file where no CR holds a description yet. The
   review wrapper takes a pair of paths, so a baseline reported as an empty value is a
   usage error rather than an empty left-hand side, and the review never opens.
-- **[PREPARE-14]** If no review tool is installed, or no CR exists to diff
-  against, then the system shall present the description as text in its own reply
-  and offer write / copy-only / edit, defaulting to write.
+- **[PREPARE-14]** If the description review returns no usable verdict, or no
+  review tool can open, then the system shall offer the draft outside the tool (its
+  path, then an editor where one can open, then the text in its own reply) and offer
+  write / copy-only / edit, defaulting to write.
 - **[PREPARE-15]** Before opening the description review, the system shall resolve
   every placeholder against the changed hunks of the range (`deep-links.sh --check`)
   and correct each one reported unresolved, so a placeholder cannot survive into the
@@ -367,9 +384,10 @@ ending in the handoff that marks the CR ready.
   treat its comments as the review's findings and carry each one's wording
   verbatim, rather than as feedback blocking the flow.
 - **[REVIEW-08]** The system shall place each finding at the narrowest location
-  that carries it — the line, else the method or hunk, else the file, else the
-  changeset — and shall fold a finding it cannot anchor to a line into the summary
-  comment rather than dropping it.
+  that carries it — the line, else the method or hunk, else the changeset — and
+  shall fold a finding it cannot anchor to a line, including a line outside every
+  hunk of the diff, into the summary comment rather than dropping it. If the forge
+  refuses a write partway, then the system shall report what already posted.
 - **[REVIEW-09]** The system shall obtain the user's approval of the exact text
   of every thread and of the summary comment before posting any of them, and
   shall present that text as the rendering the post is built from.
@@ -459,7 +477,9 @@ step after `prepare-review` opens the CR and `resolve-feedback` clears its threa
   report what is outstanding, pointing at `/anchor:resolve-feedback` when changes
   were requested.
 - **[MERGE-09]** Where a repo has no approval rules and where the commit has no
-  pipeline, the system shall treat that gate as not applicable rather than a failure.
+  pipeline (or every workflow was filtered out), the system shall treat that gate
+  as not applicable rather than a failure. A pipeline the system could not read is
+  not "no pipeline", and blocks the gate.
 - **[MERGE-10]** When unresolved human-authored review threads remain, the system shall
   surface them and confirm before merging, offering to hand off to
   `/anchor:resolve-feedback`.
@@ -524,8 +544,9 @@ established before anything is proposed or written.
   reporting in one line that it did. Where a repo states nothing, the system shall
   behave as though the statement were absent.
 - **[RELEASE-04]** While a CI workflow owns the bump — `release-triggered`,
-  `tag-triggered`, or `dispatch-triggered` — the system shall not bump the version
-  manifest, regenerate it, or tag, because the workflow owns those.
+  `tag-triggered`, or `dispatch-triggered` — the system shall not bump or regenerate
+  the file that records the version, and shall create only the trigger that model
+  names: the forge release, the tag, or the workflow dispatch.
 - **[RELEASE-04a]** Where the release model is `dispatch-triggered`, the system
   shall write the notes into the changelog's accruing section without retitling
   it, land them through `/anchor:commit` before dispatching, and confirm the
@@ -636,7 +657,9 @@ and writing nothing.
 ### CI — Pipeline
 
 - **[CI-01]** When `/anchor:pipeline` runs without a watch request, the system
-  shall report the commit's current pipeline state once.
+  shall report the commit's current pipeline state once. If the forge could not
+  be read, then the system shall report that, with the forge's error, rather than
+  "no pipeline", and shall not poll a read that failed.
 - **[CI-02]** When the ask is to wait or be notified, the system shall watch the
   pipeline in the background until it settles, then report.
 - **[CI-03]** If watch is requested while HEAD is unpushed, then the system
@@ -778,9 +801,9 @@ editor's whole answer is the revised artifact, which is why the column below
 - **[DIFF-11]** The system shall resolve both axes against what can actually
   open. On the **mode** axis: a mode the subject picked (CONFIG-15) that cannot
   open — `edit` with no editor to reach (DIFF-16, DIFF-17) — shall give way to
-  one that *can*, since it is a choice nobody made; a mode named in the
-  configuration shall be kept whether or not it can open, so its own report names
-  the missing piece, substituting a viewer for a configured `edit` answering a
+  one that *can*, since it is a choice nobody made; a mode the caller
+  asked for explicitly shall be kept whether or not it can open, so its own report
+  names the missing piece, substituting a viewer for a requested `edit` answering a
   different question than the caller asked. Giving way requires the other mode to
   be openable in full, program and host together (DIFF-25a): where neither can
   open, the subject's mode is kept, because a report naming the editor that is
@@ -851,9 +874,9 @@ editor's whole answer is the revised artifact, which is why the column below
   known, since a non-blocking editor returns before the user has typed and reads
   as an artifact they approved.
 - **[DIFF-17]** When asked to report how a review resolves rather than run one, the
-  system shall consider only tools it can open, emit the mode a review would run
+  system shall emit the mode a review would run
   in and the tool that would run it, report where each of those two came from,
-  name the preferred one on either axis whenever it substituted another, report
+  name the preferred mode whenever it substituted another, report
   whether anything usable is available, and shall launch nothing. Availability
   shall take both halves of what a mode needs — the program *and* somewhere to
   draw it (DIFF-25a) — in `diff` as in `edit`: a viewer that is plainly installed
@@ -881,7 +904,10 @@ editor's whole answer is the revised artifact, which is why the column below
   signal, and the reading of them is the model's (UX-08). The system shall not
   read the tool's own exit status as a verdict, since `git difftool` drops it and
   tools disagree about what non-zero means; a failure to launch is a review that
-  never happened.
+  never happened. Where a side of the review is not the working tree (the index,
+  or a commit range such as a CR, the previous commit, or the full branch), git
+  hands the tool temp copies, so the system shall return `no-verdict` rather than
+  read an untouched tree as approval.
 - **[DIFF-19]** Where a git-range review's subject is not the local `HEAD`, the
   system shall accept a caller-supplied title and detail rows and use them in
   place of the computed header, so a range fetched from another author's change

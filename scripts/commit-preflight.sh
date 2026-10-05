@@ -35,11 +35,14 @@
 #   OTHER_STAGED=<n>        staged paths this call did not stage — someone else's
 #                           in-flight work sharing the checkout, which the skill
 #                           surfaces rather than committing
+#   RENAME_SOURCES=<n>      the old names of staged renames whose new name was
+#                           named: part of this commit, not counted as foreign
 #   STAT=<summary>          the `git diff --cached --stat` total line (empty if nothing staged)
 #   BRANCH=<name>           current branch (empty on detached HEAD)
 #   DEFAULT_BRANCH=<name>   origin/HEAD -> main -> master (empty if none resolve)
 #   ON_DEFAULT_BRANCH=<0|1> 1 == BRANCH is the default branch
-#   AHEAD=<n>               unpushed commit count (empty when no upstream)
+#   AHEAD=<n>               unpushed commit count; with no upstream, the count
+#                           ahead of origin/<default> (empty when neither exists)
 #   SQUASH=<allowed|blocked> ... plus SQUASH_FORCE_PUSH / ALLOW_MESSAGE_AMEND /
 #                            PRIOR_SUBJECT — emitted verbatim by squash-check.sh
 #   ANCHOR_CONFIG=<json>    the anchor.* keys as a JSON object ({} when none)
@@ -71,10 +74,20 @@ anchor_reject_absolute "commit-preflight.sh" "${paths[@]+"${paths[@]}"}"
 anchor_refuse_partly_staged "commit-preflight.sh" "${paths[@]+"${paths[@]}"}"
 anchor_stage_paths "commit-preflight.sh" "${paths[@]+"${paths[@]}"}"
 
+# The other half of a rename the caller named is theirs, not a peer's.
+named=("${paths[@]+"${paths[@]}"}" "${staged_paths[@]+"${staged_paths[@]}"}")
+rename_sources=()
+while IFS= read -r src; do rename_sources+=("$src"); done \
+  < <(anchor_rename_sources "${named[@]+"${named[@]}"}")
+named+=("${rename_sources[@]+"${rename_sources[@]}"}")
+named_specs=()
+while IFS= read -r spec; do named_specs+=("$spec"); done \
+  < <(anchor_commit_pathspecs "${named[@]+"${named[@]}"}")
+
 staged=0
 if ! git diff --cached --quiet; then staged=1; fi
 stat=""
-[[ "$staged" -eq 1 ]] && stat=$(git diff --cached --stat | tail -1 | sed 's/^[[:space:]]*//')
+[[ "$staged" -eq 1 ]] && stat=$(git diff --cached --stat -- "${named_specs[@]+"${named_specs[@]}"}" | tail -1 | sed 's/^[[:space:]]*//')
 
 branch=$(git branch --show-current 2>/dev/null || true)
 
@@ -98,7 +111,8 @@ anchor_config_warnings >&2
 
 echo "REPO_ROOT=$(git rev-parse --show-toplevel)"
 echo "STAGED=$staged"
-echo "OTHER_STAGED=$(anchor_other_staged_count "${paths[@]+"${paths[@]}"}" "${staged_paths[@]+"${staged_paths[@]}"}")"
+echo "OTHER_STAGED=$(anchor_other_staged_count "${named[@]+"${named[@]}"}")"
+echo "RENAME_SOURCES=${#rename_sources[@]}"
 echo "STAT=$stat"
 echo "BRANCH=$branch"
 echo "DEFAULT_BRANCH=$default_branch"

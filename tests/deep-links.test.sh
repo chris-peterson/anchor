@@ -134,6 +134,11 @@ o=$(run --check "$draft" --base main) || fail "a clean draft should pass --check
 [ "$(val UNRESOLVED "$o")" = 0 ]   || fail "expected 0 unresolved; got: $o"
 ok "--check resolves every placeholder with no forge and no CR URL"
 
+o=$( cd "$work" && bash "$links" --check draft.md --base main --repo "$repo" ) \
+  || fail "--repo should check against the named checkout from another cwd: $o"
+[ "$(val UNRESOLVED "$o")" = 0 ] || fail "--repo from another cwd: $o"
+ok "--check --repo reads the named checkout, and a relative draft path still resolves"
+
 cat > "$draft" <<EOF
 - [\`app.txt\`](anchor:app.txt#FILE_LINKS)
 - see anchor:app.txt#solitary in prose

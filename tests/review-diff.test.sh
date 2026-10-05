@@ -319,8 +319,11 @@ git -C "$repo" reset --quiet
 printf 'new and mine\n' > "$repo/mine.txt"
 printf 'not mine\n' > "$repo/other-session.txt"
 export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
+export REVDIFF_ARGS_FILE="$work/scoped-args.txt"
 o=$(run --local --path mine.txt)
 [ "$(verdict_of "$o")" = approved ] || fail "--local --path verdict: $o"
+grep -qx -- '--only=mine.txt' "$REVDIFF_ARGS_FILE" || fail "revdiff should show only --path: $(cat "$REVDIFF_ARGS_FILE")"
+unset REVDIFF_ARGS_FILE
 git -C "$repo" diff --cached --name-only | grep -qx 'mine.txt' || fail "--path mine.txt should be staged"
 if git -C "$repo" diff --cached --name-only | grep -qx 'other-session.txt'; then
   fail "--local must not stage a path it was not given"
