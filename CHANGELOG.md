@@ -4,8 +4,16 @@
 
 ### Added
 
-- **Reviews open in agterm.** A diff or editor review run from an [agterm](https://github.com/umputun/agterm) session opens in a floating overlay on that session, takes the keyboard, and closes when you quit the tool. It needs `agtermctl` on your `PATH` (Help ▸ Install Command Line Tool, or the Homebrew install).
-- **A review can open in a terminal `anchor` doesn't script.** Set `ANCHOR_HOST_RUNNER` to a program that runs a command string in a terminal you can see and exits with its status, and both kinds of review open there. When no terminal can be found, the message links to [Where a review opens](https://chris-peterson.github.io/anchor/#/guides/configuring?id=review-hosts).
+- **Reviews open in agterm.** From an [agterm](https://github.com/umputun/agterm) session, a review opens in a floating overlay on that session and closes when you quit the tool. It needs `agtermctl` on your `PATH`.
+- **A review can open in a terminal `anchor` doesn't script.** Set `ANCHOR_HOST_RUNNER` to a program that runs a command in a terminal you can see. See [Where a review opens](https://chris-peterson.github.io/anchor/#/guides/configuring?id=review-hosts).
+
+### Changed
+
+- **`/anchor:commit` runs your `verify` skill as its test step** when one exists, so the suite runs once instead of twice.
+
+### Fixed
+
+- **A partly staged file commits as it is staged.** `/anchor:commit` used to fold the hunks you left unstaged into the commit. The review now shows what is staged, and the commit stops if that changes after you approve.
 
 ## 1.15.2
 
