@@ -407,6 +407,12 @@ ending in the handoff that marks the CR ready.
   system shall post it under the same gates as another author's CR — the exact
   text approved (REVIEW-09) and the pinned head re-read (REVIEW-11) — rather than
   as a self-review side effect.
+- **[REVIEW-20]** When the findings are merged, the system shall rank each by
+  severity and group them by category, and shall first present a summary of one
+  row per finding the reviewer typed or ranked important and one row per
+  remaining class, the reviewer's own first, before showing any finding's text.
+  It shall then ask what to do with each class — keep, show, pick, or drop — and
+  shall show the exact text (REVIEW-09) only of what was kept.
 
 ### FEEDBACK — Resolve feedback
 

@@ -37,8 +37,12 @@ the forge tool by the resolved CR, not by the working directory's `origin`.
 **Don't narrate your work.** Every step below is an operating instruction —
 follow the execute-quietly discipline:
 `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. The only things worth
-surfacing are the resolved CR in one line, the questions in Step 2, the drafted
-findings, and what landed where.
+surfacing are the resolved CR in one line, the questions in Step 2, the
+collated summary and its walk-through (Step 4), the exact text of what will post
+(Step 6), and what landed where. The quality agents finish one at a time; wait
+for all of them and say nothing as each arrives. The viewer's `REVIEW_OUTPUT`,
+the findings JSON, and the agents' raw reports are inputs to the summary, never
+part of the reply.
 
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
@@ -59,7 +63,9 @@ flowchart TD
 
     subgraph "Step 4: Examine against each quality"
         Complete -->|Yes| Fan["One agent per listed quality"]
-        Fan --> Doc["Merge annotations + findings"]
+        Fan --> Doc["Merge, rank, and group"]
+        Doc --> Brief["Collated summary"]
+        Brief --> Walk["Walk each class"]
     end
 
     subgraph "Step 5: Self-review"
@@ -69,13 +75,13 @@ flowchart TD
     end
 
     subgraph "Step 6-7: Approve and post"
-        Show["Show the drafted findings"] --> Gate{Approved?}
+        Show["Show the kept text"] --> Gate{Approved?}
         Gate -->|Revise| Show
         Gate -->|Keep local| Local([Review stays in the session])
         Gate -->|Post| Post["Post threads + summary"]
     end
 
-    Doc --> Who{Whose CR?}
+    Walk --> Who{Whose CR?}
     Who -->|Mine| Fix
     Who -->|Theirs| Show
     Post --> Report([Report what landed])
@@ -252,6 +258,34 @@ Then merge everything into one set:
 - **Two agents on the same line for the same reason is one finding** — keep the
   more specific and drop the rest.
 
+### Rank and group
+
+Give every merged finding a **category** and a **severity**, assigned here in one
+pass rather than by the agents, so one scale covers every lens:
+
+- **category** — `yours` for a comment the reviewer typed; otherwise the quality
+  that raised it, named as the template names it.
+- **severity** — how much the author should care:
+
+  | Severity | Means |
+  |---|---|
+  | `important` | breaks behavior a caller relies on, exposes something, or contradicts what the description claims |
+  | `consider` | a real cost, but a judgment call the author could reasonably decline |
+  | `nit` | naming, wording, layout, or an edge case nobody is likely to hit |
+
+  Mark a finding resting on something you couldn't check (a security group's
+  rules you can't read, a version you didn't run) as **theoretical**, and don't
+  rank it above `consider`.
+
+Number the findings in the order they'll be presented: the reviewer's own first,
+then `important`, `consider`, `nit`, and by category within each severity. A
+**class** is a run of findings sharing a category and severity; the reviewer's
+own comments are always one class. Numbering by rank keeps each class a
+contiguous range, which is what lets the summary below name `3-6` as one row.
+
+Nothing is dropped as low value at this stage. A finding too slight to post is
+a `nit`, and dropping it is the user's call in the walk below.
+
 ### Where each finding goes
 
 Put each remark at the **narrowest location that carries it**:
@@ -297,17 +331,20 @@ approval or requesting changes on the forge is the human reviewer's own act
 
 ### Write it out
 
-Write the findings to `FINDINGS_PATH` as JSON, then read it back rendered. The
-entries use the DIFF contract's comment shape, so a comment the user typed in
-the viewer and one an agent wrote are the same kind of object:
+Write the findings to `FINDINGS_PATH` as JSON, in rank order. It is already
+seeded, so write it without reading it first. The entries use the DIFF
+contract's comment shape, so a comment the user typed in the viewer and one an
+agent wrote are the same kind of object; `category` and `severity` ride along
+for the walk and the poster ignores them:
 
 ```json
 {
   "cr": {"url": "<CR_URL>", "headSha": "<CR_HEAD_SHA>"},
   "summary": "the overall read",
   "comments": [
-    {"body": "…", "target": "line", "file": "src/cache.js",
-     "startLine": 42, "endLine": 42, "side": "new", "origin": "reviewer"}
+    {"body": "…", "target": "line", "file": "<path>",
+     "startLine": <n>, "endLine": <n>, "side": "new", "origin": "reviewer",
+     "category": "yours", "severity": "important"}
   ]
 }
 ```
@@ -316,15 +353,54 @@ Keep `cr.headSha` exactly as Step 1 pinned it — Step 7 checks it. Set `origin`
 to `reviewer` for anything the user typed in the viewer and `agent` for a
 finding the fan-out produced.
 
-Render the findings and revise them with the user until they say what they mean:
+### Present the collated summary
 
-```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-post.sh" --preview --findings <FINDINGS_PATH>
+The first thing the user sees of the findings is a short table, not their text.
+One line says how many there are, then one row per finding or class:
+
+```text
+Review of !<iid> complete: <N> findings.
+
+| #   | Finding                                              |
+|-----|------------------------------------------------------|
+| 1   | yours: <the gist of what you said>                   |
+| 2   | important: <the one-line consequence>                |
+| 3-6 | correctness, consider (2 theoretical)                |
+| 7-9 | style nits                                           |
 ```
 
-Its output is the review — put it in your reply, since a Bash result reaches you
-and not the user. Iterate here as many rounds as the user wants; nothing has
-left the session yet.
+- The reviewer's own comments and every `important` finding get a row each,
+  with a gist of under a dozen words naming the consequence.
+- A `consider` or `nit` class collapses to one row: its range, its category and
+  severity, and how many are theoretical.
+- No finding bodies, no file paths, no summary comment, and no list of what was
+  left out. The text arrives in the walk, for the classes the user wants to see.
+
+### Walk each class
+
+Then take the classes in the summary's order with `AskUserQuestion`, up to four
+classes per call so each is its own tab. Header the question with the class's
+range (`#3-6`). The options depend on the mode:
+
+| Option | Review (someone else's CR) | Self-review (yours) |
+|---|---|---|
+| keep | **Post** — it goes to the Step 6 gate | **Fix** — it joins Step 5's fix list |
+| inspect | **Show me** — print the class's findings, then ask again | same |
+| pick | **Pick** — walk this class one finding at a time | same |
+| drop | **Drop** — nothing from this class goes anywhere | same |
+
+For the reviewer's own class, **keep** is the default and **Show me** is
+omitted: they wrote it. For an `important` finding, **Show me** is the first
+option, since a one-line gist is too thin to post or drop it on. A class of one
+has no **Pick**.
+
+**Show me** prints each finding's number, `file:line`, and body, then asks the
+same question for that class again. A reply in chat that edits a body revises
+the findings file and counts as having been shown.
+
+When the walk is done, remove every dropped finding from `FINDINGS_PATH` and
+write `summary` over what remains, so the preview and the post that follow read
+the same document the user just shaped. Nothing has left the session yet.
 
 ## Step 5: Self-review — the CR is yours
 
@@ -332,9 +408,8 @@ Reached when Step 1 reported `IS_OWN_CR=1`. Nothing in this step posts to the
 forge: a thread an author opens against themselves is a round trip with no
 reviewer in it, so the findings are a fix list instead. Steps 6 and 7 don't run.
 
-1. **Give them the fix list.** The `--preview` render is it — put it in your
-   reply as Step 4 says. Ask which findings they want acted on; a finding they
-   disagree with is dropped, not argued.
+1. **Work the fix list.** It is what the Step 4 walk kept with **Fix**; a
+   finding the author dropped there is gone, not argued.
 2. **Fix in the working tree**, one finding at a time, running the project's
    tests as you go. Commits go through `/anchor:commit`, which decides
    amend-vs-new-commit from the push state and the draft flag — don't rewrite
@@ -377,7 +452,16 @@ Then report as Step 8 describes.
 
 Everything below posts under the user's name with nothing marking it as drafted
 by an agent, so the words are theirs to approve — not a summary of them, and not
-a plan describing them. The `--preview` output *is* the text; present that.
+a plan describing them. The walk chose *which* findings; this gate approves
+their *words*. Render what the walk kept:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-post.sh" --preview --findings <FINDINGS_PATH>
+```
+
+Its output *is* the text; put it in your reply, since a Bash result reaches you
+and not the user. If the walk kept nothing, there is nothing to approve: report
+the review as local (Step 8) and stop.
 
 Then ask with `AskUserQuestion` (header `Post`):
 
@@ -417,8 +501,8 @@ through Step 6.
 
 **After a post (Steps 6-7).** One line per finding: `#N <file:line> — posted`
 plus the summary comment's outcome, and the CR URL. Say plainly what was **not**
-posted — anything the user dropped, and anything that folded into the summary for
-want of an anchor.
+posted — what the user dropped, by the summary's ranges (`#7-9 style nits —
+dropped`), and anything that folded into the summary for want of an anchor.
 
 Close by naming the verdict as the user's to record, with the invocation:
 

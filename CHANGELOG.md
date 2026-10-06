@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **`/anchor:review` opens with a short summary instead of every finding.** Findings are ranked by severity and grouped by category, with your own comments first. You then decide what to do with each group (post or fix, show it, pick from it, or drop it), and only the findings you keep are shown in full before anything posts.
+
 ## 1.16.0
 
 ### Added
