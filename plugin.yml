@@ -4,7 +4,7 @@
 # skills/rules/hooks sources — the projection job writes it, don't hand-edit it.
 
 name: anchor
-version: 1.15.2
+version: 1.16.0
 description: "One skill per step of the code-change lifecycle: file an issue, review the diff and commit, open and describe a change request, resolve review feedback, merge, release, and watch the pipeline. Supports multiple source forges (GitHub, GitLab)."
 author: chris-peterson
 repository: https://github.com/chris-peterson/anchor
