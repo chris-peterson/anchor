@@ -1182,6 +1182,17 @@ editor's whole answer is the revised artifact, which is why the column below
   default shape only when no level supplies a template.
 - **[FORGE-09]** Where `anchor.cr.templateRepo` names a repo, the system shall read
   a CR template from it only after every forge-supplied level has declined.
+- **[FORGE-10]** Where a CR description is composed into a template, the system
+  shall replace or remove every placeholder the template leaves for the author
+  (`TODO`, `TBD`, `FIXME`, `XXX`, an HTML comment, an angle-bracket prompt)
+  before the description is presented for review.
+- **[FORGE-11]** Where a CR template carries checkboxes that make claims about
+  the change, the system shall tick each only when reachable evidence shows the
+  claim true, leave it unticked when the evidence shows it false, and omit an
+  item that no reachable evidence settles, naming the omitted items to the author.
+- **[FORGE-12]** When a CR description is drafted or updated, the system shall
+  re-derive every checkbox state from evidence and shall not carry over the state
+  a box holds in the template or in the CR's existing description.
 
 ### EVENTS — Announcements to sibling plugins
 

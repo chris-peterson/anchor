@@ -218,7 +218,9 @@ When a template is found:
   scaffolding.** The test for every template line: is it there for the reviewer,
   or to guide *you* while authoring?
   - **Keep** — section headings, and checklists the approver acts on (a team
-    review-prep checklist is the team's wording, not `anchor`'s to reword or drop).
+    review-prep checklist is the team's wording, not `anchor`'s to reword or
+    drop). A checklist of claims about the change is the exception: an item
+    nothing can verify is dropped (see the checkbox rule below).
   - **Strip** — a section's placeholder / helper text (`< Type your summary here >`,
     `(Paste any relevant logs…)`, `###### Summarize the reason…`), and the
     required / optional status annotations on its heading (`## Summary - (*Required*)`,
@@ -227,10 +229,29 @@ When a template is found:
     survive into the shipped description. The same goes for static "reminder"
     sections whose links or prose
     are dev-time scaffolding (how-to / wiki links, "track your MR in Slack") rather
-    than anything about *this* change — drop them.
+    than anything about *this* change — drop them. `scripts/template-check.sh`
+    is the backstop: it lists any of the template's own placeholders (a `TODO` /
+    `TBD` / `FIXME` / `XXX` line, an HTML comment, a `<…>` prompt) still in the
+    draft.
 - **A section you have no data for** — optional → drop it; required → prompt the
   user for content (offer an opt-out / explicit "N/A"). Never ship a bare heading
   trailed by its own filler instructions.
+- **Every checkbox is a claim, and its state is verified, not inherited.** Sort
+  each item first:
+  - **Approver actions** ("Reviewer: confirmed the migration ran") are the
+    reviewer's to tick. Keep them verbatim and unchecked.
+  - **Claims about this change** ("Tests added", "Includes a breaking change",
+    "Docs updated") are the drafter's to settle. Check each against evidence you
+    can reach: the diff, a test run from this session, the pipeline, the linked
+    issue. Tick it when the evidence shows it true, leave it unticked when the
+    evidence shows it false, and **drop the item** when nothing you can reach
+    settles it either way.
+
+  A box's state in the template or in the CR's existing description is the claim
+  under test, never evidence for it. Re-derive every box on every run, updates
+  included: a box ticked when the CR opened can be false after the next push.
+  Name the items you dropped when the draft goes to review, so the author can
+  restore one they can vouch for.
 - **A checklist item that demands justification is answered with fact, not
   meta-commentary.** When a template says "explain why none of these apply" or
   "justify your selection," satisfy it with the factual reason Context already

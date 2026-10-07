@@ -270,7 +270,7 @@ If the only open item is the WHY, ask:
 
 **`TEMPLATE_SOURCE=ambiguous` — ask, don't pick.** The level holds several templates and none is a `default.md`, so `TEMPLATE_CANDIDATES` carries them as `[{name, path}]` and `TEMPLATE_PATH` is empty. Shipping more than one template is the team's deliberate choice, so put the names to the author with `AskUserQuestion` and compose into the one they choose. Never pick for them, and never fall back to `anchor`'s default narrative — the templates exist.
 
-When a template is resolved, it's the team's required scaffolding — **compose into it, don't replace it.** Fill the sections it defines; preserve the reviewer-facing structure (headings, approval checklists) verbatim while stripping author-facing scaffolding (a section's placeholder / helper text, dev-time reminder links); answer any justification checkbox with fact, not meta-commentary; and supply `anchor`'s prose where it leaves prose to the author. On a structure conflict the team template wins. The composition rules are documented in the "Honoring a project's forge template" section of `${CLAUDE_PLUGIN_ROOT}/templates/cr-description.md`.
+When a template is resolved, it's the team's required scaffolding — **compose into it, don't replace it.** Fill the sections it defines; preserve the reviewer-facing structure (headings, approval checklists) verbatim while stripping author-facing scaffolding (a section's placeholder / helper text, dev-time reminder links); answer any justification checkbox with fact, not meta-commentary; and supply `anchor`'s prose where it leaves prose to the author. **Settle every checkbox from evidence, never from the state you found it in**: a tick in the template or in the CR's current description is the claim under test, so on an update re-derive every box rather than keeping it. The template's checkbox rule says which items to tick, leave, or drop. On a structure conflict the team template wins. The composition rules are documented in the "Honoring a project's forge template" section of `${CLAUDE_PLUGIN_ROOT}/templates/cr-description.md`.
 
 ### Honor `anchor.*` config
 
@@ -353,6 +353,13 @@ The description gets pasted into a markdown renderer, so rendering bugs are user
 
 - **Backtick coverage is generous — except for forge-autolink tokens.** Re-scan the description for grep-bait: env vars (`$FAMILY`, `$CI_PIPELINE_CREATED_AT`), config keywords (`extends:`, `needs:`, `on_success`, `manual`, `allow_failure`), job/product/feature suffixes that match identifiers in the diff, CLI flags, file paths. The "if a reader might paste it into a terminal" test is more permissive than "code identifier only" — err generous. **But** scan separately for CR/issue refs (`!148`, `#42`), commit SHAs, and user @mentions — these must be **bare text** to autolink; backticks render them as inert code spans.
 - **Inline single quotes around `'all'` / `'true'` style values** read fine in prose but lose their distinguishing weight in scan-mode. Convert literal dropdown/enum values to backticks.
+- **Nothing the template left for the author survives, and every checkbox has been settled** (when a template was composed in):
+
+  ```bash
+  bash "${CLAUDE_PLUGIN_ROOT}/scripts/template-check.sh" --template <TEMPLATE_PATH> <DESC_DRAFT_PATH>
+  ```
+
+  It's a backstop for the composition rules, not a substitute for them. It reports only placeholders the template itself carries, so a comment or an angle bracket you wrote doesn't trip it. Each `PLACEHOLDER <line> <token>` is a slot drafting missed: replace it, or remove the line. It exits non-zero until none remain. Each `CHECKBOX <line> <state>` is a box to confirm you settled from evidence, whatever state it shows; the script reports the state, it doesn't vouch for it. Add the items you dropped as unverifiable to the review manifest so the author can restore one they can vouch for.
 - **Every deep link is an `anchor:` placeholder** — no line numbers, no hand-built anchors (Step 3).
 - **Resolve the placeholders before the review opens.** Every token has to name exactly one changed line, and that is checkable without a CR:
 
@@ -385,7 +392,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --mod
 
 `CURRENT_DESC_PATH` is the left-hand side — what the forge holds now, and an empty file where no CR holds anything yet. It's context for the draft, not the subject.
 
-**The manifest** names the CR (number and title), the repo and branch, the tool, and the sections the draft carries — an editor window opens behind the terminal, and a review the user cannot see is one they never grade. After the table, the next thing you say is the verdict, the feedback echoed back, or the one-line write result.
+**The manifest** names the CR (number and title), the repo and branch, the tool, the sections the draft carries, and any template checkbox items dropped as unverifiable — an editor window opens behind the terminal, and a review the user cannot see is one they never grade. After the table, the next thing you say is the verdict, the feedback echoed back, or the one-line write result.
 
 What each verdict leads to here:
 

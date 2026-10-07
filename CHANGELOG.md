@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **`/anchor:prepare-review` re-checks every checkbox in your team's CR template instead of keeping the ticks it finds.** A box ticked in the template or in the CR's current description is no longer carried into the draft. Each claim about the change is checked against the diff, test runs, or the pipeline: ticked when true, unticked when false, and dropped when nothing can confirm it, with the dropped items listed so you can put one back.
+
 ## 1.17.0
 
 ### Changed
