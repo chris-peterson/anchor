@@ -164,7 +164,7 @@ edit_via_runner() {
 }
 edit_via_runner hx
 eval "set -- $(cat "$work/edit-cmd")"
-[ "$#" -eq 4 ] && [ "$1" = hx ] && [ "$2" = -w ] && [ "$3" = "${4%/*}" ] \
+[[ "$#" -eq 4 && "$1" = hx && "$2" = -w && "$3" = "${4%/*}" ]] \
   || fail "helix should start in the buffer's directory: $(cat "$work/edit-cmd")"
 edit_via_runner myed
 eval "set -- $(cat "$work/edit-cmd")"
