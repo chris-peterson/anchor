@@ -386,6 +386,7 @@ diff_range=""
 diff_staged=0
 review_index=""
 header_mode=""
+reviews_unpushed=0
 review_title=""
 review_details_json="[]"
 message_file=""
@@ -448,6 +449,7 @@ else
       exit 65
     }
     header_mode="commit"
+    reviews_unpushed=1
     expect_consumed "${@:2}"
   elif [[ "${1:-}" == "--local" ]]; then
     diff_range="HEAD"
@@ -549,6 +551,26 @@ fi
 if [[ ${#staged_paths[@]} -gt 0 && "$diff_staged" -ne 1 ]]; then
   echo "review-diff.sh: --staged-path applies to --local only" >&2
   exit 64
+fi
+
+# A review opens partway through a flow and can wait while the user works
+# elsewhere, so the header leads with the flow that opened it and what approving
+# hands it, for a reviewer coming back to it cold.
+review_next_step() {
+  case "$review_skill" in
+    commit)
+      if [[ "$header_mode" == "local" ]]; then echo "commit this change and push it"
+      elif [[ "$reviews_unpushed" -eq 1 ]]; then echo "push these commits"; fi ;;
+    prepare-review) echo "open or update the CR with this description" ;;
+    issue)          echo "file or update the issue with this body" ;;
+    release)        echo "use these notes for the release" ;;
+    review)         echo "your annotations become findings on this CR, posted only once you approve their text" ;;
+  esac
+}
+if [[ -n "$review_skill" ]]; then
+  review_details_json=$(jq -c --arg s "/anchor:$review_skill" --arg n "$(review_next_step)" \
+    '[{label:"opened by",value:$s}] + (if $n == "" then [] else [{label:"next",value:$n}] end) + .' \
+    <<<"$review_details_json")
 fi
 
 # --- Select the mode's adapter and delegate ----------------------------------

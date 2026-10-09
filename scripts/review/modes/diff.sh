@@ -123,12 +123,20 @@ emit_review() {
 
   # The review's header, seeded so the reviewer reads what is under review beside
   # the diff. Written here rather than per tool: the content is the request's,
-  # and only the flag that carries it is the tool's.
-  local desc_file out_file err_file
+  # and only the flag that carries it is the tool's. Plain text, since revdiff
+  # highlights its description as markdown without rendering it, leaving `**`
+  # and `#` on screen. The body is prose, so it follows the rows as a paragraph.
+  local desc_file out_file err_file body
   desc_file=$(mktemp "${TMPDIR:-/tmp}/anchor-review-desc.XXXXXX")
+  body=$(jq -r '.[] | select(.label == "body") | .value' <<<"$review_details_json")
   {
-    printf '# %s\n\n' "$review_title"
-    jq -r '.[] | "- **\(.label):** \(.value)"' <<<"$review_details_json"
+    printf '%s\n\n' "$review_title"
+    jq -r '[.[] | select(.label != "body")]
+      | (map(.label | length) | max) as $w
+      | .[] | (($w - (.label | length)) as $pad
+        | "  \(.label):\(if $pad > 0 then " " * $pad else "" end) \(.value)")' \
+      <<<"$review_details_json"
+    if [[ -n "$body" ]]; then printf '\n%s\n' "$body"; fi
   } > "$desc_file"
   out_file=$(mktemp "${TMPDIR:-/tmp}/anchor-review-out.XXXXXX")
   err_file=$(mktemp "${TMPDIR:-/tmp}/anchor-review-err.XXXXXX")

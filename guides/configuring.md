@@ -519,7 +519,7 @@ set, in this order:
 | tmux popup | You're inside tmux. |
 | A blocking GUI editor's own window | `edit` reviews only — the editor draws its own window, so no terminal is needed. |
 | An iTerm2 split | The calling session can be named — sideways on a wide window, below on a narrow one, and closed again when you quit. |
-| An agterm overlay | The calling session can be named (`AGTERM_SESSION_ID`) and `agtermctl` is on `PATH`. A floating panel over that session, closed again when you quit. |
+| An agterm overlay | The calling session can be named (`AGTERM_SESSION_ID`) and `agtermctl` is on `PATH`. A floating panel over that session, opened in place without switching tabs and closed again when you quit. While it waits, the session's sidebar row shows the blocked status. |
 
 Anywhere else, point an environment variable at a script of your own:
 
@@ -620,6 +620,12 @@ Whatever you save above that line **is** the artifact — `anchor` takes it
 verbatim rather than re-drafting from it. Unlike `git commit`, lines beginning
 with `#` are kept: three of the four artifacts are markdown, where `#` is a
 heading.
+
+Below the line, the review's details start with the step that opened it and
+what approving does next. The buffer is named for the repo, branch, and artifact
+(`anchor@add-retry.commit-message.txt`), so an editor's title or status line
+says what you're reviewing. Helix starts in the buffer's own directory, so its
+status line shows that name rather than a temp path.
 
 **When the tool isn't there.** `anchor` asks which tool a review can actually
 open before it opens one — so a `revdiff` you haven't installed yet gets you the

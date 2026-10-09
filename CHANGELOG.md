@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **agterm reviews open without switching tabs.** A review now opens on the session that asked for it and waits there, instead of switching agterm to that tab while you're working in another. The session's sidebar row shows the blocked status until you visit it or the review closes.
+- **A review says which step opened it and what approving does.** The review's header (revdiff's `i` popup, or the notes below the scissors line in your editor) now starts with the skill that opened it, such as `/anchor:commit`, and what happens when you approve, such as "commit this change and push it". revdiff's popup shows the header as plain aligned text, without stray `**` and `#` characters.
+- **Editor reviews open on a named buffer.** The buffer is named for the repo, branch, and artifact (`anchor@add-retry.commit-message.txt`) instead of a random temp path, so your editor's status line says what you're reviewing. In helix, the status line shows that name rather than a temp path. Below the scissors line, the review's details start with the step that opened it and what approving does next, and the diff labels its sides `current` and `draft` instead of temp paths.
+
 ## 1.17.1
 
 ### Changed

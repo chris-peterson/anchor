@@ -123,6 +123,55 @@ ok "edit: buffer is artifact + scissors + the change under review"
   || fail "a markdown artifact should open in a .md buffer, got $(cat "$EDITOR_BUFFER_CAPTURE.path")"
 ok "edit: a markdown artifact opens in a .md buffer"
 
+# The name is what an editor's status line shows, so it carries the repo, the
+# branch, and the artifact; the directory around it is what keeps it unique.
+buffer_path=$(cat "$EDITOR_BUFFER_CAPTURE.path")
+[ "${buffer_path##*/}" = 'repo@main.description.md' ] \
+  || fail "the buffer should be named for the repo, branch, and artifact, got ${buffer_path##*/}"
+dir_name="${buffer_path%/*}"; dir_name="${dir_name##*/}"
+[[ "$dir_name" == anchor-editor.?????? ]] || fail "the buffer should sit in a directory of its own, got $dir_name"
+[ ! -e "${buffer_path%/*}" ] || fail "the buffer's directory outlived the review"
+ok "edit: the buffer is named repo@branch.artifact, in a directory of its own"
+
+# The draft opens on the first line. Below the scissors, the flow that opened
+# the review and what approving hands it come first, and the diff names its
+# sides rather than their temp paths.
+[ "$(head -1 "$EDITOR_BUFFER_CAPTURE")" = '# Why this change' ] \
+  || fail "the buffer should open on the draft: $(head -1 "$EDITOR_BUFFER_CAPTURE")"
+below=$(sed -n '/>8/,$p' "$EDITOR_BUFFER_CAPTURE")
+[ "$(grep -m1 -E '^  [a-z]' <<<"$below")" = '  opened by: /anchor:prepare-review' ] \
+  || fail "the opening skill should lead the rows below the scissors: $below"
+[ "$(grep -E '^(---|\+\+\+) ' <<<"$below")" = "$(printf '%s\n%s' '--- current' '+++ draft')" ] \
+  || fail "the diff should label its sides current and draft: $below"
+ok "edit: the draft opens on line 1; the opening skill leads the rows below the scissors"
+
+# Helix starts in the buffer's own directory, so its status line shows the
+# buffer's name. Any other editor gets the buffer alone.
+cat > "$bin/stub-edit-runner.sh" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$1" > "$EDIT_RUNNER_CAPTURE"
+eval "set -- $1"
+for file; do :; done
+cp "$file" "$file.sav" && mv -f "$file.sav" "$file"
+EOF
+chmod +x "$bin/stub-edit-runner.sh"
+edit_via_runner() {
+  ( unset ANCHOR_EDITOR_LAUNCHER
+    git -C "$repo" config anchor.edit.tool "$1"
+    ANCHOR_HOST_RUNNER="$bin/stub-edit-runner.sh" EDIT_RUNNER_CAPTURE="$work/edit-cmd" EDITOR_STUB_MODE=save \
+      run --skill prepare-review --mode edit --files "$prior" "$draft" >/dev/null
+    git -C "$repo" config --unset anchor.edit.tool )
+}
+edit_via_runner hx
+eval "set -- $(cat "$work/edit-cmd")"
+[ "$#" -eq 4 ] && [ "$1" = hx ] && [ "$2" = -w ] && [ "$3" = "${4%/*}" ] \
+  || fail "helix should start in the buffer's directory: $(cat "$work/edit-cmd")"
+edit_via_runner myed
+eval "set -- $(cat "$work/edit-cmd")"
+[ "$#" -eq 2 ] || fail "any other editor should get only the buffer: $(cat "$work/edit-cmd")"
+export EDITOR_STUB_MODE=save
+ok "edit: helix starts in the buffer's directory; any other editor gets the buffer alone"
+
 # --- saved changed -> the saved text IS the artifact ------------------------
 export EDITOR_STUB_MODE=replace
 export EDITOR_STUB_TEXT='# Rewritten by hand

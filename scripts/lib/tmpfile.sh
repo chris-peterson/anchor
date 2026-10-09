@@ -35,6 +35,16 @@
 # the platform table, and the allow rules are in guides/temp-paths.md;
 # tests/tmp-path-guidance.test.sh holds both halves in place.
 
+# A fresh directory under the same temp dir, created, for a file that needs a
+# name of its own choosing rather than a random one. The `XXXXXX` run stays
+# trailing, the shape every mktemp agrees on.
+#
+#   anchor_tmpdir anchor-editor        -> <tmpdir>/anchor-editor.a1B2c3/
+anchor_tmpdir() {
+  local dir="${TMPDIR:-/tmp}"
+  mktemp -d "${dir%/}/$1.XXXXXX"
+}
+
 anchor_tmpfile() {
   local prefix="$1" ext="${2:-md}" dir="${TMPDIR:-/tmp}"
   dir="${dir%/}" # macOS TMPDIR carries a trailing slash; avoid a `//` in the path

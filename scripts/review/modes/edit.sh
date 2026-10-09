@@ -95,6 +95,30 @@ editor_buffer_ext() {
   esac
 }
 
+# The buffer's file name, which is what an editor's status line shows, so it
+# says which repo, branch, and artifact are under review. Two sessions can
+# review the same artifact at once; each buffer gets a directory of its own, so
+# the names never meet on disk.
+editor_buffer_name() {
+  local name="$1" repo branch
+  if repo=$(git rev-parse --show-toplevel 2>/dev/null); then
+    branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
+    name="${repo##*/}@${branch//\//-}.$name"
+  fi
+  printf '%s.%s' "$name" "$(editor_buffer_ext "$1")"
+}
+
+# Helix's status line shows a path relative to its working directory, so it
+# starts in the buffer's own directory and shows the buffer's name rather than
+# a temp path.
+editor_open_args() {
+  local ed="$1" dir="$2" name
+  name="${ed%% *}"; name="${name##*/}"
+  case "$name" in
+    hx|helix) printf -- '-w %s ' "$(anchor_host_sq "$dir")" ;;
+  esac
+}
+
 # Nothing to open the editor in. Its own status, distinct from the two a host
 # reports, so the three causes reach `emit_review` apart from each other and none
 # of them is quoted back to the user as an editor's exit code.
@@ -118,7 +142,7 @@ editor_launch() {
     return "$editor_rc_no_host"
   fi
 
-  anchor_host_run "$ed $(anchor_host_sq "$file")" edit "$ed" || rc=$?
+  anchor_host_run "$ed $(editor_open_args "$ed" "${file%/*}")$(anchor_host_sq "$file")" edit "$ed" || rc=$?
   return "$rc"
 }
 
@@ -165,9 +189,10 @@ emit_review() {
     return
   fi
 
-  local original buffer
+  local original buffer_dir buffer
   original=$(cat "$artifact_file")
-  buffer=$(anchor_tmpfile anchor-editor "$(editor_buffer_ext "$artifact_target")")
+  buffer_dir=$(anchor_tmpdir anchor-editor)
+  buffer="$buffer_dir/$(editor_buffer_name "$artifact_target")"
 
   {
     printf '%s\n\n' "$original"
@@ -175,14 +200,23 @@ emit_review() {
     printf 'Everything below this line is ignored. Save to approve the text above,\n'
     printf 'unchanged if it already reads right. Quit without saving to abort, and\n'
     printf 'nothing this review gates will happen.\n\n'
+    # Which flow opened the review and what approving hands it, first in what
+    # the reviewer reads past the draft.
+    jq -r '[.[] | select(.label == "opened by" or .label == "next")]
+      | if length == 0 then empty else
+        ((map(.label | length) | max) as $w
+         | (.[] | (($w - (.label | length)) as $pad
+           | "  \(.label):\(if $pad > 0 then " " * $pad else "" end) \(.value)")), "")
+        end' <<<"$review_details_json"
     printf '%s\n' "$review_title"
     # The seeded message rides in the details as a `body` row for a viewer's header;
     # here the message is the editable region itself, so the row would be a
     # second copy the user could edit to no effect.
-    jq -r '.[] | select(.label != "body") | "  \(.label): \(.value)"' <<<"$review_details_json"
+    jq -r '.[] | select(.label != "body" and .label != "opened by" and .label != "next")
+      | "  \(.label): \(.value)"' <<<"$review_details_json"
     printf '\n'
     if [[ "$review_subject" == "files" ]]; then
-      diff -u "$files_left" "$artifact_file" || true
+      diff -u --label current --label draft "$files_left" "$artifact_file" || true
     else
       if [[ "${diff_staged:-0}" -eq 1 ]]; then git diff --cached "$diff_range" || true
       else git diff "$diff_range" || true; fi
@@ -217,7 +251,7 @@ emit_review() {
   saved=$(sed "/^${editor_scissors}\$/,\$d" "$buffer")
   # Trailing blank lines are the separator this adapter wrote, not the user's text.
   saved=$(printf '%s' "$saved" | sed -e :a -e '/^[[:space:]]*$/{$d;N;ba' -e '}')
-  rm -f "$buffer"
+  rm -rf "$buffer_dir"
 
   # A failure the host owns rides out as a named cause the way the viewer
   # tool's `absent` / `no-host` do, not as a number. Quoting one back as the

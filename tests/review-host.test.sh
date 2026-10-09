@@ -128,19 +128,30 @@ ok "a pane closed without writing reports no-result"
 # The overlay is opened through agtermctl, so a stub stands in for it: `overlay
 # open` runs the command string the way agterm's `sh -c` does and records the
 # argv it was handed, and AGTERM_STUB_FAIL makes it refuse the open instead.
+# Every `session status` call is logged one per line, and AGTERM_STUB_STATUS_FAIL
+# refuses them the way agterm refuses a write from a pane that doesn't own the
+# status.
 stubbin="$work/stubbin"; mkdir -p "$stubbin"
 cat > "$stubbin/agtermctl" <<'EOF'
 #!/usr/bin/env bash
-printf '%s\n' "$@" > "$AGTERM_STUB_ARGV"
+if [ "$1 $2" = "session status" ]; then
+  echo "$*" >> "$AGTERM_STUB_STATUS"
+  [ -z "${AGTERM_STUB_STATUS_FAIL:-}" ] || { echo "error: blocked status owned by pane split" >&2; exit 1; }
+  exit 0
+fi
 [ "$1 $2 $3" = "session overlay open" ] || exit 0
+printf '%s\n' "$@" > "$AGTERM_STUB_ARGV"
 [ -z "${AGTERM_STUB_FAIL:-}" ] || { echo "error: pane overlay already open" >&2; exit 1; }
 cd / && sh -c "$4"
 EOF
 chmod +x "$stubbin/agtermctl"
 
 agterm_run() {
+  rm -f "$work/agterm-status"
   ( cd "$target" && PATH="$stubbin:$PATH" AGTERM_SESSION_ID=SESSION-1 \
+      AGTERM_PANE=left AGTERM_PANE_ID=PANE-1 \
       AGTERM_SOCKET="$work/agterm.sock" AGTERM_STUB_ARGV="$work/agterm-argv" \
+      AGTERM_STUB_STATUS="$work/agterm-status" \
       bash -c "source '$here/../scripts/lib/review-host.sh'
                source '$here/../scripts/review/hosts/agterm.sh'
                review_host_run \"\$1\"" _ "$1" )
@@ -157,11 +168,29 @@ grep -A1 -x -- '--target' "$work/agterm-argv" | grep -qx SESSION-1 \
 grep -qx "$work/agterm.sock" "$work/agterm-argv" || fail "agtermctl was not pointed at the session's socket"
 ok "agterm: the overlay runs on the calling session, in the caller's directory, and returns the status"
 
+# --- the overlay opens in place: selecting the session would switch the tab
+# under a user who has moved on, so its sidebar row is marked instead, from the
+# caller's pane, and the mark is cleared once the review closes
+! grep -qx -- '--follow' "$work/agterm-argv" || fail "the overlay switched to the calling session's tab"
+status_set="session status blocked --auto-reset --pane left --pane-id PANE-1 --target SESSION-1 --socket $work/agterm.sock"
+status_clear="session status idle --pane left --pane-id PANE-1 --target SESSION-1 --socket $work/agterm.sock"
+[ "$(cat "$work/agterm-status")" = "$(printf '%s\n%s' "$status_set" "$status_clear")" ] \
+  || fail "the waiting session was not marked and then cleared from the caller's pane: $(cat "$work/agterm-status")"
+ok "agterm: the overlay opens without switching tabs, and marks the waiting session until it closes"
+
+# --- the mark is an extra on top of the overlay, so a refused write leaves the
+# review to run and report its own status
+rc=0
+AGTERM_STUB_STATUS_FAIL=1 agterm_run '( exit 10 )' 2>/dev/null || rc=$?
+[ "$rc" -eq 10 ] || fail "a refused status write should not change the review's status, got $rc"
+ok "agterm: a refused status write does not fail the review"
+
 # --- an overlay that never opened ran nothing, and says so
 rc=0
 AGTERM_STUB_FAIL=1 agterm_run "touch '$work/agterm-never'" 2>/dev/null || rc=$?
 [ "$rc" -eq "$anchor_host_rc_no_pane" ] || fail "a refused overlay should report no-pane, got $rc"
 [ ! -f "$work/agterm-never" ]            || fail "the command ran with no overlay to run it in"
+[ ! -f "$work/agterm-status" ]           || fail "a session was marked waiting on an overlay that never opened"
 ok "agterm: an overlay that could not open reports no-pane"
 
 # --- selection: the session has to be named and its socket live. An agterm that

@@ -179,12 +179,34 @@ export REVDIFF_DESC_CAPTURE="$work/desc.md"
 export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
 o=$(run --local --message-file "$msg")
 [ "$(verdict_of "$o")" = approved ] || fail "message-file review verdict"
-[ "$(head -1 "$REVDIFF_DESC_CAPTURE")" = "# Add a feature" ] \
+[ "$(head -1 "$REVDIFF_DESC_CAPTURE")" = "Add a feature" ] \
   || fail "subject not seeded as the header title: $(head -1 "$REVDIFF_DESC_CAPTURE")"
-grep -qx -- '- \*\*body:\*\* The body explains why.' "$REVDIFF_DESC_CAPTURE" \
-  || fail "body not seeded as a body row: $(cat "$REVDIFF_DESC_CAPTURE")"
+grep -qx -- 'The body explains why.' "$REVDIFF_DESC_CAPTURE" \
+  || fail "body not seeded as a paragraph: $(cat "$REVDIFF_DESC_CAPTURE")"
+! grep -q -- 'opened by' "$REVDIFF_DESC_CAPTURE" || fail "a review with no --skill named a skill that opened it"
+ok "--message-file seeds subject as the title and body as a paragraph"
+
+# --skill leads the header with the flow that opened the review and what
+# approving hands it, ahead of the rows the caller supplied
+o=$(run --skill commit --local --message-file "$msg")
+[ "$(sed -n 3,4p "$REVDIFF_DESC_CAPTURE")" = "$(printf '%s\n%s' \
+    '  opened by: /anchor:commit' '  next:      commit this change and push it')" ] \
+  || fail "the header should lead with the opening skill, values aligned: $(cat "$REVDIFF_DESC_CAPTURE")"
+git -C "$repo" update-ref refs/remotes/origin/main HEAD~1
+o=$(run --skill commit --commit)
+git -C "$repo" update-ref -d refs/remotes/origin/main
+grep -qE '^  next: +push these commits$' "$REVDIFF_DESC_CAPTURE" \
+  || fail "a commit review of unpushed commits should say they are pushed next: $(cat "$REVDIFF_DESC_CAPTURE")"
+o=$(run --skill commit --previous)
+! grep -q -- 'next:' "$REVDIFF_DESC_CAPTURE" \
+  || fail "a range that may already be pushed should not promise a push: $(cat "$REVDIFF_DESC_CAPTURE")"
+o=$(run --skill review HEAD~1...HEAD --title 'Their CR' --detail CR=https://example.com/pr/1)
+sed -n 3p "$REVDIFF_DESC_CAPTURE" | grep -qE '^  opened by: +/anchor:review$' \
+  || fail "the opening skill should lead the header: $(cat "$REVDIFF_DESC_CAPTURE")"
+grep -qE '^  CR: +https://example.com/pr/1$' "$REVDIFF_DESC_CAPTURE" \
+  || fail "the opening skill should join the caller's own rows, not replace them: $(cat "$REVDIFF_DESC_CAPTURE")"
 unset REVDIFF_DESC_CAPTURE
-ok "--message-file seeds subject as the title and body as a body row"
+ok "--skill names the flow that opened the review and what approving does next"
 
 # ======================= mode and tool selection ======================
 export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
@@ -284,7 +306,7 @@ export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
 export REVDIFF_DESC_CAPTURE="$work/desc.md"
 o=$( cd "$other" && bash "$dispatch" --previous --repo "$repo" )
 [ "$(verdict_of "$o")" = approved ] || fail "trailing --repo -> $(verdict_of "$o"), want approved"
-grep -qx -- '- \*\*repo:\*\* repo' "$REVDIFF_DESC_CAPTURE" \
+grep -qE '^  repo: +repo$' "$REVDIFF_DESC_CAPTURE" \
   || fail "trailing --repo reviewed the wrong checkout: $(cat "$REVDIFF_DESC_CAPTURE")"
 unset REVDIFF_DESC_CAPTURE
 ok "context: --repo after the mode retargets the review (TARGET-09)"

@@ -31,6 +31,17 @@ agterm_overlay_alive() {
   [[ "$out" != *"no overlay result"* && "$out" != *"overlay ended"* ]]
 }
 
+# The calling session's sidebar status, set from the caller's own pane: while
+# one pane owns a `blocked` status agterm refuses a non-blocked write from the
+# other, so the clear has to come from the pane that set it. The cue is an
+# extra on top of the overlay, so a refused write never fails the review.
+agterm_status() {
+  local args=(session status "$@")
+  if [[ -n "${AGTERM_PANE:-}" ]]; then args+=(--pane "$AGTERM_PANE"); fi
+  if [[ -n "${AGTERM_PANE_ID:-}" ]]; then args+=(--pane-id "$AGTERM_PANE_ID"); fi
+  agterm_ctl "${args[@]}" >/dev/null 2>&1 || true
+}
+
 # Reads the reserved statuses and the launch-script writer the dispatcher
 # defines; shellcheck lints a host standalone, since the dispatcher builds its
 # path at run time and cannot be followed across.
@@ -48,17 +59,22 @@ review_host_run() {
   # directory, which the launch script replaces with the caller's. Opened
   # without --block: agtermctl reports an overlay that could not open and a
   # command that exited 1 with the same status, and only the first means
-  # nothing ran. `--follow` selects the calling session, so the overlay is in
-  # front of the user rather than waiting on a session they have moved off.
+  # nothing ran. Opened without --follow: a review arrives partway through a
+  # flow, often after the user has moved to another tab, and selecting the
+  # session would switch the screen under them and hand keys typed for that tab
+  # to the overlay. The blocked status marks the session's sidebar row instead,
+  # and --auto-reset clears it once the user visits.
   out=$(agterm_ctl session overlay open \
     "$(anchor_host_sq "$launch") $(anchor_host_sq "$sentinel")" \
-    --size-percent 90 --follow 2>&1) || {
+    --size-percent 95 2>&1) || {
     echo "review-diff.sh: could not open an agterm overlay: $out" >&2
     rm -f "$sentinel" "$launch"
     return "$anchor_host_rc_no_pane"
   }
+  agterm_status blocked --auto-reset
 
   rc=$(anchor_host_await "$sentinel" agterm_overlay_alive x) || rc=$?
+  agterm_status idle
   rm -f "$sentinel" "$launch"
   return "$rc"
 }

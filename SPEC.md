@@ -810,6 +810,12 @@ editor's whole answer is the revised artifact, which is why the column below
   the three markdown artifacts, `.txt` for a commit message — since an editor
   picks its syntax mode and its markdown preview from the name rather than the
   content, and a reviewer reading a description wants the rendered shape.
+- **[DIFF-13a]** The system shall name the `edit` buffer for the repo, the
+  branch, and the artifact under review, in a directory of its own, and shall
+  start an editor that shows paths relative to its working directory in that
+  directory. The buffer's name is what an editor's title or status line shows,
+  and a random temp path there says nothing about which review is open; a
+  directory per buffer keeps two reviews of the same artifact apart on disk.
 - **[DIFF-14]** The system shall take the editor's save as the reviewer's
   answer: a saved buffer is `approved` and its text is the artifact, while a
   buffer left unsaved, or saved empty, is `no-verdict` with nothing the review
@@ -954,6 +960,16 @@ editor's whole answer is the revised artifact, which is why the column below
   that option are documented wherever it reports that no host can open. The shipped set covers the terminals the
   system can script, and a terminal outside it otherwise leaves a review that
   needs one with no way to open at all.
+- **[DIFF-25c]** Where the host addresses a session the user can move off, the
+  system shall open the review on that session without selecting it, and shall
+  mark the session as waiting on the reviewer where the terminal shows the user
+  every session, clearing the mark it set when the review closes. A review
+  arrives partway through a flow, often after the user has moved to other work,
+  so selecting its session switches the screen under them and hands keys typed
+  for the other session to the review. The mark says a review is waiting without
+  taking the screen; it is attempted rather than required, so a mark the
+  terminal refuses leaves the review to run, and the system clears it itself
+  rather than relying on hooks the user may not have installed.
 - **[DIFF-26]** The system shall run the command it opens in a split in the
   directory and the environment it resolved that command against — at least the
   working directory, the executable search path, the locale, and the editor a
@@ -1013,6 +1029,12 @@ editor's whole answer is the revised artifact, which is why the column below
   the one that lands; and git opens a staged diff's index side as temp copies,
   so a reviewer's edits there never reach a file and read as an untouched tree,
   which is approval.
+- **[DIFF-34]** Where the caller names the skill that opened a review, the
+  system shall lead the review's header with that skill and with what approving
+  the review hands it, ahead of the rows the caller supplied. A review opens
+  partway through a flow and can wait while the user works elsewhere, so the
+  reviewer often returns to it without remembering which flow is waiting on
+  them or what their answer sets off.
 
 ### CONFIG — Configuration
 
