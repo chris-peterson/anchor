@@ -29,6 +29,39 @@ not
 Name the failure in the terms the user can see — the editor closed, the viewer
 isn't installed, the pane went away — and then do the step.
 
+## Mark the reply as a failed review
+
+A reply on this page looks like the reply that launches a review: a manifest of
+files, a drafted message, an offer to proceed. Read quickly, a walk-through that
+ends in a question is the same shape as the ask before a review, and a reader
+who takes it for that answers "ok" to a remote change nothing has graded. So
+the failure has to be impossible to miss, at both ends of the reply.
+
+**Open with it.** The first line is an error banner: what the tool did, and that
+nothing was published.
+
+> ❌ **The review didn't run.** revdiff couldn't open its pane (the iTerm2
+> session it targeted is gone). Nothing was committed or pushed.
+
+**Close with it.** Repeat the banner directly above the question, so a reader
+who scrolls to the bottom meets the failure before the choice.
+
+**Ask with a choice that names what it does.** The question goes through
+`AskUserQuestion`, header `Unreviewed`, and the option that publishes names the
+remote action and that no tool graded it:
+
+| Option | When |
+| --- | --- |
+| **Retry the review**: try again after the cause is fixed (a new terminal tab, the tool installed) | first, when the user can fix the cause |
+| **⚠️ `<action>` without a review**: for example "⚠️ Commit and push to main without a review" | never first |
+| **Stop**: nothing changes | first, when a retry can't reach a review |
+
+**A bare "ok" doesn't publish.** Free text answering a walk-through ("ok",
+"yes", "lgtm", "go") is not approval of a remote change, because it can't be
+told apart from an answer to the ask before a review. Ask the question above
+instead. A typed reply counts only when it names the action and the missing
+review itself ("commit it without the review").
+
 ## The question that is never on the ladder
 
 > *You saw the diff — approve?*
@@ -83,8 +116,9 @@ depends on what was under review.
 
 **A drafted document** — put the full body in a fenced block in your reply.
 Running a command that prints it shows the user nothing, for the reasons
-[execute-quietly](/guides/execute-quietly) sets out. Then ask with
-`AskUserQuestion`, header `Disposition`: write it · copy only · edit.
+[execute-quietly](/guides/execute-quietly) sets out. Then ask as "Mark the
+reply as a failed review" above sets out, with copy only and edit beside the ⚠️
+option that writes it.
 
 **A changeset** — walk the hunks. Not one question over a diff the user never
 saw, and not a dump of `git diff` either: go file by file, and for each, say
@@ -95,14 +129,16 @@ in the conversation, so the sign-off at the end rests on something.
 
 Long changesets are where this gets skipped. Split it across replies rather than
 compressing it into a summary: a summary the user approves is a review of your
-summary.
+summary. Each reply opens with the error banner, and the last one closes with
+it and the question.
 
 ## Don't retry into the same wall
 
 A tool that failed to launch fails the same way on the next call. Say what
-happened once, in one line — what the output showed, that nothing was published
-— and go to the ladder. Re-running it reads as progress and produces the same
-`no-verdict`.
+happened in the error banner (what the output showed, and that nothing was
+published) and go to the ladder. Re-running it reads as progress and produces
+the same `no-verdict`. Retrying after the user fixes the cause is a new
+attempt, which is why it's the first option in the question.
 
 The exception is a tool that was never tried: where the probe named a
 substitute because the configured tool is absent, launching the substitute is a

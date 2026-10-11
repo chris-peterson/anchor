@@ -908,6 +908,12 @@ editor's whole answer is the revised artifact, which is why the column below
   `edit` mode, whose saved buffer returns a graded result through DIFF-13. Its floor shall be reading the change in the conversation — the
   artifact in full, or a changeset walked file by file — never a summary
   standing in for the change, since approval of a summary grades the summary.
+- **[DIFF-20a]** Where a review is ungraded, the system shall open and close its
+  reply with an error banner naming what the tool did and that nothing was
+  published, and shall take approval to publish only through a choice that names
+  the remote action and that no tool graded it. A bare acknowledgement in free
+  text shall not publish, since a walk-through ending in a question reads like
+  the ask before a review.
 - **[DIFF-21]** If the resolved range holds no changes, then the system shall
   report `no-verdict` with `raw.exitCode` `empty-range`, name the repo the range
   resolved against and how that target was resolved, and launch no viewer. A

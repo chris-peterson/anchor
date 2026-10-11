@@ -222,8 +222,9 @@ reviewer's comments are the *product* rather than an obstacle:
   false` means the tool graded nothing; `mode: "edit"` means edit mode was
   selected anyway and refused
   the changeset (DIFF-15), which the probe above catches first; otherwise read
-  `raw.exitCode`. Say what happened in one line, then walk the changeset rung of
-  `${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md` — file by file, in your reply.
+  `raw.exitCode`. Say what happened in the error banner, then walk the changeset
+  rung of `${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md` — file by file, in
+  your reply.
   Don't ask whether the user read the changes: this step's product *is* the
   reading, so an answer either way leaves you with no findings to carry forward.
 - **No verdict line at all** — treat as `no-verdict`; absent output is never a
