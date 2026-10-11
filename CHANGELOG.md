@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Task lists name the work, not the step number.** `/anchor:review`, `/anchor:merge`, `/anchor:release`, and `/anchor:resolve-feedback` no longer show gaps like "Step 1, 3, 4" for steps they don't track.
+
+### Fixed
+
+- **A review that didn't run can't be approved by accident.** When the review tool fails, the reply opens and closes with an error banner saying nothing was published, and asks you to retry, stop, or publish explicitly without a review. A bare "ok" no longer commits or pushes.
+- **Skills no longer print "No such tool available" on load** in sessions without the task tools. They skip task tracking instead.
+
 ## 1.18.0
 
 ### Changed
