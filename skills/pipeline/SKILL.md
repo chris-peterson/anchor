@@ -44,11 +44,10 @@ flowchart TD
 
 ## Task tracking when orchestrated
 
-At the very start, call `TaskList`. If any task is already `in_progress`, this
-skill is running inside an orchestrator (e.g. a release workflow) — run silently
-and do **not** create your own tasks; the orchestrator's list is the source of
-truth. If nothing is `in_progress`, this is a single-step check — skip
-task-tracking.
+Settle whether the task tools exist and whether an orchestrator owns the list as
+`${CLAUDE_PLUGIN_ROOT}/guides/task-tracking.md` describes. Under an
+orchestrator, run silently inside its list. Without one, this is a single-step
+check, so skip task tracking.
 
 ## Target repo
 

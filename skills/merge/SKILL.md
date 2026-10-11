@@ -71,9 +71,9 @@ flowchart TD
 
 ## Task tracking when orchestrated
 
-At the very start, call `TaskList`. If any task is already `in_progress`, this
-skill is running inside an orchestrator (e.g. a release workflow) — run silently
-and do **not** create your own tasks. Otherwise enumerate:
+Settle whether the task tools exist and whether an orchestrator owns the list as
+`${CLAUDE_PLUGIN_ROOT}/guides/task-tracking.md` describes. With the tools and no
+orchestrator, enumerate:
 
 - `Check the merge gates`
 - `Confirm the merge`

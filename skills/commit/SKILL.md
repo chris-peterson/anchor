@@ -58,13 +58,12 @@ flowchart TD
 
 ## Task tracking when orchestrated
 
-At the very start, call `TaskList`. **Only track tasks when orchestrated:** if a
-task is already `in_progress`, this skill is running inside an orchestrator (e.g.
-a release workflow) — run silently and do **not** create your own tasks; the
-orchestrator's list is the source of truth. If nothing is `in_progress`, `/commit`
-is a direct interactive invocation — **don't create a task list.** It's a short
-flow whose payoff is seeing the review quickly; a five-item task list is exactly
-the ceremony that buries the preview. Just run the steps.
+Settle whether the task tools exist and whether an orchestrator owns the list as
+`${CLAUDE_PLUGIN_ROOT}/guides/task-tracking.md` describes. **Only track tasks
+when orchestrated:** under an orchestrator, run silently inside its list. Without
+one, `/commit` is a direct interactive invocation, so **don't create a task
+list.** It's a short flow whose payoff is seeing the review quickly; a five-item
+task list is exactly the ceremony that buries the preview. Just run the steps.
 
 Review precedes the commit on purpose: the pending changeset (and the drafted
 message) are reviewed against `HEAD`, and only a clean verdict commits and pushes.

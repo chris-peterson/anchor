@@ -91,8 +91,9 @@ flowchart TD
 
 ## Task tracking when orchestrated
 
-At the very start, call `TaskList`. If any task is already `in_progress`, run
-silently inside the orchestrator's list. Otherwise enumerate:
+Settle whether the task tools exist and whether an orchestrator owns the list as
+`${CLAUDE_PLUGIN_ROOT}/guides/task-tracking.md` describes. With the tools and no
+orchestrator, enumerate:
 
 - `Fetch the change request`
 - `Review every change`

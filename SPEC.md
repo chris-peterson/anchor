@@ -1306,6 +1306,11 @@ editor's whole answer is the revised artifact, which is why the column below
   the work it tracks and carry no step number. A task list covers a subset of a
   skill's numbered steps, so numbering it from the skill's headings shows the
   user gaps for steps they never see.
+- **[UX-02b]** Before a skill calls a task tool, it shall establish from the
+  session's tool listing that the task tools exist, and skip task tracking
+  without comment when they don't. Claude Code withholds the task tools on some
+  models, and a call made to find out prints a tool error under the skill's
+  load line.
 - **[UX-03]** The system shall present multi-way user decisions through
   `AskUserQuestion` with the recommended option first.
 - **[UX-04]** The system shall not treat the output of a presentation command as
