@@ -1302,6 +1302,10 @@ editor's whole answer is the revised artifact, which is why the column below
 - **[UX-02]** When a skill starts while a task is already in progress, the
   system shall run silently inside the orchestrator's task list and not create
   its own.
+- **[UX-02a]** Where a skill creates its own task list, each task shall name
+  the work it tracks and carry no step number. A task list covers a subset of a
+  skill's numbered steps, so numbering it from the skill's headings shows the
+  user gaps for steps they never see.
 - **[UX-03]** The system shall present multi-way user decisions through
   `AskUserQuestion` with the recommended option first.
 - **[UX-04]** The system shall not treat the output of a presentation command as

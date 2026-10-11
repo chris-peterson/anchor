@@ -94,11 +94,11 @@ flowchart TD
 At the very start, call `TaskList`. If any task is already `in_progress`, run
 silently inside the orchestrator's list. Otherwise enumerate:
 
-- `Step 1: Fetch the change request`
-- `Step 3: Review every change`
-- `Step 4: Examine the diff against each quality`
-- `Step 5: Self-review the findings` *(own CR)* or
-  `Step 6: Post the approved findings` *(someone else's)*
+- `Fetch the change request`
+- `Review every change`
+- `Examine the diff against each quality`
+- `Self-review the findings` *(own CR)* or
+  `Post the approved findings` *(someone else's)*
 
 ## Step 1: Resolve and fetch the change request
 

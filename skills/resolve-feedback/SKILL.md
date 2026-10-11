@@ -53,9 +53,9 @@ flowchart TD
 At the very start, call `TaskList`. If any task is already `in_progress`, run
 silently inside the orchestrator's list. Otherwise enumerate:
 
-- `Step 1: Fetch unresolved feedback`
-- `Step 2: Triage with the author`
-- `Step 3: Apply changes and respond`
+- `Fetch unresolved feedback`
+- `Triage with the author`
+- `Apply changes and respond`
 
 If there's no unresolved feedback, mark remaining tasks `deleted`.
 

@@ -75,9 +75,9 @@ At the very start, call `TaskList`. If any task is already `in_progress`, this
 skill is running inside an orchestrator (e.g. a release workflow) — run silently
 and do **not** create your own tasks. Otherwise enumerate:
 
-- `Step 1: Check the merge gates`
-- `Step 2: Confirm the merge`
-- `Step 3: Merge and clean up`
+- `Check the merge gates`
+- `Confirm the merge`
+- `Merge and clean up`
 
 ## Target repo and CR
 

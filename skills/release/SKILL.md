@@ -73,9 +73,9 @@ At the very start, call `TaskList`. If any task is already `in_progress`, this
 skill is running inside an orchestrator — run silently and do **not** create your
 own tasks. Otherwise enumerate:
 
-- `Step 1: Establish the release model`
-- `Step 2: Decide the version and draft the notes`
-- `Step 3: Publish`
+- `Establish the release model`
+- `Decide the version and draft the notes`
+- `Publish`
 
 ## Target repo and release state
 
