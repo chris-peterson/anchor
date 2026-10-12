@@ -7,7 +7,7 @@ description: Stage changes, run tests, review the diff and drafted commit messag
 
 Stage all changes and read the repo's state, run tests, draft a commit message, review the pending changeset, then — once the review is clean — commit and push in one step.
 
-**Don't narrate your work.** Every step below is an operating instruction, not a script to read aloud — follow the execute-quietly discipline: `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. For `/commit`, the only things worth surfacing are the resolved repo in one line, a failing test, any branch/shape decision that needs the user, and the review verdict; where a step prescribes exact output (e.g. `Committed [short-sha], pushed`), emit that and nothing more. **The message is not presented in chat** — it's shown in the review tool (Step 5); don't print it or ask about it separately. No "checks pass, now staging…" transitions: run the step, read the result, move on.
+**Don't narrate your work.** Every step below is an operating instruction, not a script to read aloud — follow the execute-quietly discipline: `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. For `/commit`, the only things worth surfacing are the resolved repo in one line, a failing test, any branch/shape decision that needs the user, and the review verdict; where a step prescribes exact output (e.g. `Committed [short-sha], pushed`), emit that and nothing more. **The message is presented once, at the review (Step 5)**: in `edit` mode the buffer the user saves is the message, and in `diff` mode it's printed verbatim with the launch manifest, since a diff viewer hides it or can't show it. Don't print it again or ask about it separately. No "checks pass, now staging…" transitions: run the step, read the result, move on.
 
 **The pre-flight is internal — present the decision, not the derivation.** Staging, the working-tree state, the squash-gate result, the ahead-count, and the commit-vs-squash routing rationale are all inputs that *drive* the next decision; they are not output. Surface the decision and its options — the proposed route, the drafted message — never the `KEY=value` a helper emits, the "one commit ahead, unpushed" bookkeeping, or the chain of internal facts that led to the route. A sentence that explains *why* before it shows *what*, walking the user through the state you just read, is the failure this catches.
 
@@ -195,7 +195,7 @@ The gate folds the push-state probe (including the no-upstream `origin/<default>
 
 The vanilla path, and the common one: HEAD isn't yours to rewrite or it's out for review, so a plain new commit is the only sensible outcome — exactly what the user asked for when they said "commit." Nothing to confirm here — the message is reviewed in Step 5, and the shape is a **new commit**, so proceed straight to Step 5. The user never raised squashing; don't mention it.
 
-**Narrow exception — message-only amend (`ALLOW_MESSAGE_AMEND=1`).** When the helper permits a message-only amend and the user reports the *message* (not the code) is demonstrably wrong — pasted from a different repo, references identifiers that don't exist here, doesn't match what the diff does — the tree is unchanged, so the reviewer-protection motivation doesn't apply. Plan a message-only amend via Step 6's `commit.sh --mode amend --force-with-lease` to fix the message (there is no tree change to review, so this skips Step 5), and surface "force-push (`--force-with-lease`) affects only the message; the tree is unchanged" as an explicit choice in Step 6. The flag fires only where this is safe (a ready CR whose tree a message fix leaves untouched); when it's `0`, no amend — a new commit is the only path. Do not extend it to content rewrites; the moment any file content moves, the standard gate applies again.
+**Narrow exception — message-only amend (`ALLOW_MESSAGE_AMEND=1`).** When the helper permits a message-only amend and the user reports the *message* (not the code) is demonstrably wrong — pasted from a different repo, references identifiers that don't exist here, doesn't match what the diff does — the tree is unchanged, so the reviewer-protection motivation doesn't apply. Plan a message-only amend via Step 6's `commit.sh --mode amend --force-with-lease` to fix the message. There is no tree change for Step 5 to review, but the corrected message still publishes under the user's name: print it verbatim in a fenced block, then ask one `AskUserQuestion` (header `Amend`) whose approve option names both halves, "amend to this message and force-push (`--force-with-lease`); the tree is unchanged". Anything other than that option amends nothing. The flag fires only where this is safe (a ready CR whose tree a message fix leaves untouched); when it's `0`, no amend — a new commit is the only path. Do not extend it to content rewrites; the moment any file content moves, the standard gate applies again.
 
 ### When `SQUASH=allowed` — apply the relatedness judgment
 
@@ -218,7 +218,7 @@ If recommending squash:
 1) **Squash into "[PRIOR_SUBJECT]"** _(* recommended)_
 2) **New commit**
 
-Record the choice (new commit vs squash) and proceed to Step 5; the review runs before either is executed.
+Record the choice (new commit vs squash) and proceed to Step 5; the review runs before either is executed. **On squash, rewrite the message file now** as one message covering both the prior commit and the staged changes, so the text Step 5 shows is the text Step 6 commits.
 
 ### When a PreToolUse hook blocks the commit
 
@@ -236,7 +236,7 @@ Run it as the review loop in `${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md` 
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill commit --local --message-file <commit-msg-path> --path <p> [--path <p>...] [--staged-path <p>...]
 ```
 
-- **The manifest** is a table of the files under review with their `+`/`−` counts (Step 1's `STAT` covers the same paths), the repo and branch, the tool, and the drafted commit message riding with them.
+- **The manifest** is a table of the files under review with their `+`/`−` counts (Step 1's `STAT` covers the same paths), the repo and branch, the tool, and the drafted commit message riding with them. When the probe reports `REVIEW_MODE=diff`, print the message itself verbatim under the table in a fenced block (`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`): revdiff shows it only behind its `i` popup, a difftool not at all, and quitting either one approves it.
 - **The same `--path` and `--staged-path` lists** you gave the Step 1 pre-flight. The review and the commit have to cover the same set of files, or the user grades a changeset that isn't the one that lands. A `--staged-path` review needs a viewer that reads the index: a difftool returns `no-verdict` with `raw.exitCode` `staged-unsupported`, which goes down the fallback ladder like any other `no-verdict`.
 - **Push-existing** (Step 1 found nothing staged, unpushed commits to push) has no drafted message; review those commits instead of the working tree: `review-diff.sh --skill commit --commit`. That path is a diff with no drafted artifact, so on `edit` mode it returns `no-verdict` naming the key to change — report that rather than pushing unreviewed.
 
@@ -245,7 +245,7 @@ What each verdict leads to here:
 - **`approved`** → proceed to Step 6 to commit and push.
 - **`changes-requested`** → **do not commit.** Fix the commented lines in the working tree (a reviewer's own edits per `${CLAUDE_PLUGIN_ROOT}/guides/reviewer-edits.md` — keep the fixes, answer the questions, and take their comment lines back out; a fix to a `--staged-path` file reaches the commit only once you stage that hunk yourself), then loop back to Step 2 so tests re-run before the re-review. **If a comment's `body` is short** (e.g. "I don't get what this flag means") **and the cited line range contains more than one distinct change** (e.g. two flag additions in a usage block, two unrelated lines in the same range), ask the user which token the comment refers to before fixing — a one-second clarification beats several minutes of guessing wrong. Fix the commented lines themselves; don't expand into adjacent pre-existing code (`${CLAUDE_PLUGIN_ROOT}/guides/changeset-scope.md`).
 - **`incomplete`** → `Unreviewed changes — what do you want to change?`
-- **`no-verdict`**, or no verdict line at all → nothing is committed. The ladder's changeset rung is the one to walk — go file by file over the pending changeset in your reply. The reply opens and closes with the error banner, and the commit waits on the `Unreviewed` question (`${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md`); a bare "ok" to the walk-through doesn't commit.
+- **`no-verdict`**, or no verdict line at all → nothing is committed. The ladder's changeset rung is the one to walk — go file by file over the pending changeset in your reply, and print the drafted message verbatim in a fenced block in that same reply, since it publishes with the changeset. The reply opens and closes with the error banner, and the commit waits on the `Unreviewed` question (`${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md`); a bare "ok" to the walk-through doesn't commit.
 
 **The message is under review too.** If the result carries `editedFields` with `target: "commit-message"` — `edit` mode, where the saved buffer *is* the message — overwrite the Step 3 message file with it and commit that. A `changes-requested` comment with `target: "commit-message"` is feedback on the message itself — revise the message and re-review. In a mode that can't round-trip an edited message (`capabilities.editableCommitMessage: false`, which is every diff viewer), keep the drafted message unless a comment asks to change it.
 
@@ -253,11 +253,11 @@ What each verdict leads to here:
 
 Reached only on a clean review (or the message-only-amend exception, which has no tree change to review). `anchor` performs the commit **and** the push through one helper — `commit.sh` — rather than separate `git commit` / `git push` calls: it's a single allowlistable invocation, and it owns the push-variant plumbing (the `@{u}` / `origin/<default>` probes) so that logic never runs from skill prose.
 
-The message file already exists — the one from Step 3, or the reviewer's edited version if Step 5 returned `editedFields`. For a **squash**, write a combined message covering both the prior commit and the new changes to that file first. Then launch the helper with the shape chosen in Step 4:
+The message file already exists — the one from Step 3, or the reviewer's edited version if Step 5 returned `editedFields`. For a **squash**, it already holds the combined message Step 4 wrote and Step 5 showed; if you change a word of it now, go back to Step 5. Then launch the helper with the shape chosen in Step 4:
 
 - **New commit** → `--mode new --message-file <path>`
 - **Squash** → `--mode amend --message-file <path>`; add `--force-with-lease` when `SQUASH_FORCE_PUSH=1` (HEAD is pushed).
-- **Message-only amend** (the `ALLOW_MESSAGE_AMEND` exception) → `--mode amend --message-file <path> --force-with-lease` (a ready CR's HEAD is pushed); surface the force-push as the explicit Step 4 choice first.
+- **Message-only amend** (the `ALLOW_MESSAGE_AMEND` exception) → `--mode amend --message-file <path> --force-with-lease` (a ready CR's HEAD is pushed); only after the `Amend` question in Step 4 approved the printed message.
 - **Push-existing** (Step 1 found nothing staged but unpushed commits) → `--mode push-existing` (no message file — there's no commit to make).
 
 ```bash

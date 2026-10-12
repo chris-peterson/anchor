@@ -75,6 +75,22 @@ Name the drafted artifact riding with the diff — the commit message, the CR
 description, the release notes — because the tool shows it in a pane or a
 header the user has no reason to look for.
 
+**In `diff` mode, print that artifact verbatim under the table, in a fenced
+block.** A diff viewer draws the changeset, not the prose that rides with it:
+revdiff puts it behind its `i` popup, and a difftool has nowhere to put it at
+all. Quitting either one approves, so a message shown only there can be approved
+without being read, which CONFIRM-02 rules out. `edit` mode needs no copy: the
+buffer the reviewer saves *is* the artifact.
+
+> Opening the review in a split — revdiff, `chris-peterson/anchor` on `main`.
+> Quitting approves both the diff and this message:
+>
+> ```text
+> Add retry to checkout
+>
+> The payment API drops one request in a few hundred during deploys…
+> ```
+
 ### When anchor picked the tool, say which key would pick it instead
 
 The probe reports where each half of the choice came from —

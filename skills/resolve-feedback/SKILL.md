@@ -37,7 +37,7 @@ flowchart TD
 
     subgraph "Step 3: Act"
         Confirm -->|Proceed| Fix["Apply code changes"]
-        Fix --> Tests["Run tests"] --> Commit["Commit + push"]
+        Fix --> Tests["Run tests"] --> Commit["Review diff + message, then commit + push"]
         Commit --> Draft["Draft the replies"]
         Draft --> Approve{Author approves wording?}
         Approve -->|Edit| Draft
@@ -179,10 +179,10 @@ adaptation rules are in the bundled guide (`${CLAUDE_PLUGIN_ROOT}/guides/descrip
 ### 3b. Test and commit
 
 Run the project's test suite (same detection, exit-code gate, and silence on a
-pass as `/anchor:commit` Step 0); a failing suite blocks the push, no exceptions. Then commit **as new commits —
+pass as the "Run tests" section of `${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md`); a failing suite blocks the push, no exceptions. Then commit **as new commits —
 never amend** what the reviewer has seen: a CR with feedback on it is being
 read, so the "changes since you last looked" diff is load-bearing regardless
-of draft state. Subject names the concern, body cites the thread:
+of draft state. Subject names the concern, body cites each thread it addresses:
 
 ```text
 Rename --force to --skip-validation
@@ -191,8 +191,23 @@ Addresses review feedback from @reviewer on deploy.sh:42 — "force"
 implied more than the flag does.
 ```
 
-Show the commit(s) for confirmation, then push (plain push — the branch only
-gains commits).
+Each round of feedback lands as one commit through one review, the same one
+`/anchor:commit` runs (`${CLAUDE_PLUGIN_ROOT}/skills/commit/SKILL.md`, from
+"Stage and read changes" through "Commit and push"). Its message and its code both
+publish under the user's name, and the Step 2 triage approved what to change,
+not these words or these lines:
+
+1. Stage the files the round's fixes touched with `commit-preflight.sh --path <p>...`.
+2. Write the drafted message to `$(mktemp -u /tmp/commit-msg.XXXXXX).md`.
+3. Open the review: `review-diff.sh --skill resolve-feedback --local
+   --message-file <path> --path <p>...`, printing the manifest and, in `diff`
+   mode, the message verbatim (`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`).
+4. Act on the verdict as the commit skill's "Review the pending changeset"
+   section does: only `approved` commits;
+   `no-verdict` walks the fallback ladder with the message printed in the reply.
+5. Commit and push with `commit.sh --mode new --message-file <path>
+   --reviewed-index <REVIEW_INDEX> --path <p>...` (plain push, since the branch
+   only gains commits). Never `--force-with-lease` here.
 
 That push starts a fresh pipeline on the fix, and telling the reviewer their
 feedback is addressed reads differently if it went red. Launch the watch as

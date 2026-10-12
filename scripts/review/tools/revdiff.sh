@@ -62,14 +62,19 @@ diff_tool_command() {
 # that begins with "## " so it never looks like a header.
 #
 # The fork echoes the seeded --description back as a `(description)` block on
-# quit (and would carry an edited message there). The round-trip isn't consumed
-# yet (see the DIFF plan), so those blocks are dropped — otherwise a seeded
-# message would always read as changes-requested. TODO: when the round-trip
-# lands, route a changed `(description)` to editedFields[commit-message].
+# quit. An echo that matches the seeded header (<desc_file>) says nothing and is
+# dropped; one that differs is the reviewer writing on the message, and comes
+# back as a comment targeting it, so an edited message never reads as approved.
+# TODO: route a changed `(description)` to editedFields once the round-trip lands.
 diff_tool_comments() {
-  local out_file="$1"
+  local out_file="$1" desc_file="${2:-}"
   [[ -s "$out_file" ]] || { echo '[]'; return; }
-  jq -Rs '
+  local seed="" target=description
+  [[ -n "$desc_file" && -f "$desc_file" ]] && seed=$(cat "$desc_file")
+  [[ -z "${message_file:-}" ]] || target=commit-message
+  jq -Rs --arg seed "$seed" --arg mtarget "$target" '
+    def norm: split("\n") | map(sub("^\\s+";"") | sub("\\s+$";""))
+      | map(select(length > 0)) | join("\n");
     def parse_header:
       if test("\\(file-level\\)$") then
         capture("^(?<file>.+) \\(file-level\\)$") + {target:"file", side:"new"}
@@ -101,7 +106,12 @@ diff_tool_comments() {
             raw:$body
           }
       )
-    | [.[] | select(.file != "(description)")]
+    | ($seed | norm) as $s
+    | [.[]
+        | if .file != "(description)" then .
+          elif (.body | norm) == $s then empty
+          else .file = null | .target = $mtarget | .startLine = null | .endLine = null
+          end]
   ' "$out_file"
 }
 

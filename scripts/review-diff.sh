@@ -564,6 +564,8 @@ review_next_step() {
     prepare-review) echo "open or update the CR with this description" ;;
     issue)          echo "file or update the issue with this body" ;;
     release)        echo "use these notes for the release" ;;
+    resolve-feedback)
+      [[ "$header_mode" != "local" ]] || echo "commit this fix and push it" ;;
     review)         echo "your annotations become findings on this CR, posted only once you approve their text" ;;
   esac
 }

@@ -27,7 +27,7 @@
 #   diff_tool_install_hint    how to install it, for the `absent` report
 #   diff_tool_command <bin> <out_file> <err_file> <desc_file>
 #                                print the `sh` command string that runs a review
-#   diff_tool_comments <out_file>
+#   diff_tool_comments <out_file> <desc_file>
 #                                parse the tool's answer into the DIFF comments array
 #   diff_tool_verdict <rc> <comments_json>
 #                                map the tool's exit status onto a verdict
@@ -167,7 +167,7 @@ emit_review() {
   fi
 
   local comments verdict
-  comments=$(diff_tool_comments "$out_file")
+  comments=$(diff_tool_comments "$out_file" "$desc_file")
   verdict=$(diff_tool_verdict "$rc" "$comments")
 
   local out

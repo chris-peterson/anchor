@@ -174,13 +174,15 @@ behavior, not an independent authority — review them against the source.
   a new commit and shall not offer to squash.
 - **[COMMIT-10]** Where squashing is allowed, the system shall recommend squash for
   changes related to the prior commit and a new commit for unrelated changes.
+- **[COMMIT-10a]** When the user chooses a squash, the system shall write the
+  combined message before the review, so the text reviewed is the text committed.
 - **[COMMIT-11]** When a squash amends a pushed draft CR, the system shall follow
   the amend with `git push --force-with-lease`.
 - **[COMMIT-12]** If squashing is not on the table, then the system shall not
   mention it or explain why it is unavailable.
 - **[COMMIT-13]** Where only the message (not the tree) of a ready CR's HEAD is
-  wrong, the system shall offer a message-only amend and let the user decide on
-  the force-push.
+  wrong, the system shall offer a message-only amend, show the corrected message
+  verbatim, and ask once for approval of both that text and the force-push.
 - **[COMMIT-14]** When changes are staged and a message is drafted, the system shall
   open a visual review of the pending changeset (what the commit will carry, vs
   `HEAD`) with the
@@ -1393,6 +1395,16 @@ govern what the user must have read before that happens.
   system shall publish none of it and leave the target unchanged.
 - **[CONFIRM-06]** Where the user revises the text at the gate, the system shall
   publish the revised text and shall re-present anything it changes afterward.
+- **[CONFIRM-07]** Where the review tool shows the drafted text only on request or
+  not at all (a diff viewer), the system shall print the text verbatim when it
+  launches the review.
+- **[CONFIRM-08]** If the reviewer writes on the drafted text inside the review
+  tool, then the system shall not read the review as approval of the text as
+  drafted.
+- **[CONFIRM-09]** When a flow other than `/anchor:commit` commits on the user's
+  behalf, the system shall review the commit's message and changeset as
+  `/anchor:commit` does before committing it, once per round of feedback rather
+  than once per fix.
 
 ### SANITIZE — Sanitizing what reaches a destination
 

@@ -6,6 +6,14 @@
 
 - **Each tenet on the docs home page has its own link** (`#/?id=tenet-confirm`, `tenet-review`, `tenet-attribution`), so you can point someone at one directly. The "What's new in 1.x" page is gone; this changelog covers the same history.
 
+### Fixed
+
+- **You see the commit message before you approve it in a diff viewer.** Some diff tools show the commit message beside the diff and some don't, so anchor repeats it as close to the diff view as it can: in the reply that opens the review, next to the file list.
+- **Writing on the message in revdiff no longer approves the original.** A changed message block comes back as feedback on the message, and nothing is committed until you approve a revision.
+- **A squash commits the message you reviewed.** The combined message is written before the review opens instead of after it.
+- **A message-only amend shows the new message.** It's printed in full, and one question approves both the text and the force-push.
+- **`/anchor:resolve-feedback` reviews its fix commits.** Each round of feedback opens one diff and message review, the same one `/anchor:commit` runs, before its fixes are committed and pushed.
+
 ## 1.18.1
 
 ### Changed

@@ -47,10 +47,15 @@ for a in "$@"; do
   case "$a" in
     --output=*) out="${a#*=}" ;;
     --description-file=*)
-      [ -n "${REVDIFF_DESC_CAPTURE:-}" ] && cp "${a#*=}" "$REVDIFF_DESC_CAPTURE" ;;
+      desc="${a#*=}"
+      [ -n "${REVDIFF_DESC_CAPTURE:-}" ] && cp "$desc" "$REVDIFF_DESC_CAPTURE" ;;
   esac
 done
 [ -n "$out" ] && printf '%s' "${REVDIFF_STUB_OUTPUT:-}" > "$out"
+# The fork's echo of the seeded header, as revdiff writes a file-level note.
+if [ -n "$out" ] && [ -n "${REVDIFF_STUB_ECHO_DESC:-}" ]; then
+  { printf '\n\n## (description) (file-level)\n'; sed 's/^## / ## /' "$desc"; } >> "$out"
+fi
 exit "${REVDIFF_STUB_RC:-0}"
 EOF
 chmod +x "$bin/stub-host-runner.sh"
@@ -113,21 +118,21 @@ export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT="$md"; o=$(run --previous); j=$(js
 [ "$(jq -r '.comments[0].side' <<<"$j")" = old ] || fail "revdiff (-) -> side=old"
 ok "revdiff: (-) marker -> side=old"
 
-# (description) echo block is dropped (round-trip not consumed yet), so an
-# exit-10 whose only annotation is the seeded description reads as approved
-md=$'## (description) (file-level)\n# subject\n\n- body: seeded message'
-export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT="$md"; o=$(run --previous); j=$(json_of "$o")
-[ "$(verdict_of "$o")" = approved ]        || fail "description-only -> approved, got $(verdict_of "$o")"
-[ "$(jq '.comments|length' <<<"$j")" = 0 ] || fail "(description) block should be dropped from comments"
-ok "revdiff: (description) echo dropped -> approved, no comments"
+# the fork echoes the seeded header back as a (description) block; an echo
+# matching what was seeded says nothing, so exit 10 with only that reads approved
+export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT="" REVDIFF_STUB_ECHO_DESC=1; o=$(run --previous); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = approved ]        || fail "unchanged description echo -> approved, got $(verdict_of "$o")"
+[ "$(jq '.comments|length' <<<"$j")" = 0 ] || fail "an unchanged (description) echo should be dropped"
+ok "revdiff: an unchanged (description) echo is dropped -> approved"
 
-# a real comment alongside a (description) block survives -> changes-requested
-md=$'## (description) (file-level)\nseeded msg\n\n## a.txt:2 (+)\nfix this'
-export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT="$md"; o=$(run --previous); j=$(json_of "$o")
+# a real comment alongside the echo survives -> changes-requested
+export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT=$'## a.txt:2 (+)\nfix this'; o=$(run --previous); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = changes-requested ]       || fail "real comment + description -> changes-requested"
-[ "$(jq '.comments|length' <<<"$j")" = 1 ]         || fail "keep the 1 real comment, drop description"
-[ "$(jq -r '.comments[0].file' <<<"$j")" = a.txt ] || fail "surviving comment should be the real one"
-ok "revdiff: real comment kept, (description) dropped -> changes-requested"
+[ "$(jq '.comments|length' <<<"$j")" = 1 ]         || fail "keep the 1 real comment, drop the echo"
+ok "revdiff: real comment kept, unchanged (description) dropped -> changes-requested"
+unset REVDIFF_STUB_ECHO_DESC
+
+
 
 # rc 1 -> no-verdict (tool error)
 export REVDIFF_STUB_RC=1 REVDIFF_STUB_OUTPUT=""; o=$(run --previous); j=$(json_of "$o")
@@ -186,12 +191,26 @@ grep -qx -- 'The body explains why.' "$REVDIFF_DESC_CAPTURE" \
 ! grep -q -- 'opened by' "$REVDIFF_DESC_CAPTURE" || fail "a review with no --skill named a skill that opened it"
 ok "--message-file seeds subject as the title and body as a paragraph"
 
+# a (description) block that differs from what was seeded is the reviewer writing
+# on the message: it must never read as approved (CONFIRM-06)
+emsg="$work/edited-msg.txt"; printf 'Add retry\n\nWhy it retries.\n' > "$emsg"
+md=$'## (description) (file-level)\nAdd retry\n\nWhy it retries, and drop the second clause.'
+export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT="$md"; o=$(run --local --message-file "$emsg"); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = changes-requested ]                 || fail "edited description -> changes-requested, got $(verdict_of "$o")"
+[ "$(jq -r '.comments[0].target' <<<"$j")" = commit-message ] || fail "edited description targets the commit message"
+[ "$(jq -r '.comments[0].file' <<<"$j")" = null ]           || fail "edited description carries no file"
+ok "revdiff: an edited (description) comes back as feedback on the commit message"
+export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
+
 # --skill leads the header with the flow that opened the review and what
 # approving hands it, ahead of the rows the caller supplied
 o=$(run --skill commit --local --message-file "$msg")
 [ "$(sed -n 3,4p "$REVDIFF_DESC_CAPTURE")" = "$(printf '%s\n%s' \
     '  opened by: /anchor:commit' '  next:      commit this change and push it')" ] \
   || fail "the header should lead with the opening skill, values aligned: $(cat "$REVDIFF_DESC_CAPTURE")"
+o=$(run --skill resolve-feedback --local --message-file "$msg")
+grep -qE '^  next: +commit this fix and push it$' "$REVDIFF_DESC_CAPTURE" \
+  || fail "a resolve-feedback fix review should say it commits and pushes next: $(cat "$REVDIFF_DESC_CAPTURE")"
 git -C "$repo" update-ref refs/remotes/origin/main HEAD~1
 o=$(run --skill commit --commit)
 git -C "$repo" update-ref -d refs/remotes/origin/main
