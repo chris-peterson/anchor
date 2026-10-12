@@ -59,21 +59,31 @@ Then edit some code and run:
 
 ## Tenets
 
-- **Nothing publishes under your name until you have read the exact words.**
-  Commit messages, CR descriptions, issue bodies, review replies, release notes:
-  each reaches you verbatim before it lands, in the review tool or in the reply,
-  never as a paraphrase and never as the output of a command you would have to
-  expand. Approving a plan, a shape, or a disposition is not approving the prose
-  that later fills it. Decline and nothing is written.
-- **A review that did not happen is not an approval.** A viewer that opened and
-  reported no verdict, an editor closed without saving, a diff tool that is not
-  installed: each ends the step, and `anchor` walks a
-  [fallback](/guides/review-fallback) instead of asking *"you saw the diff, approve?"*. That question converts a tooling failure into your sign-off.
-- **No AI attribution.** No `Co-Authored-By` trailer, no *Generated with* footer.
-  The commit author and CR author fields already record who ran it.
+### Nothing publishes under your name until you have read the exact words :id=tenet-confirm
 
-Written down as requirements in [SPEC](/spec): CONFIRM-01..06 for the first,
-DIFF-12 and DIFF-20 for the second, RULE-02 for the third.
+Commit messages, CR descriptions, issue bodies, review replies, release notes:
+each reaches you verbatim before it lands, in the review tool or in the reply,
+never as a paraphrase and never as the output of a command you would have to
+expand. Approving a plan, a shape, or a disposition is not approving the prose
+that later fills it. Decline and nothing is written.
+
+Requirements: CONFIRM-01..06 in [SPEC](/spec).
+
+### A review that did not happen is not an approval :id=tenet-review
+
+A viewer that opened and reported no verdict, an editor closed without saving, a
+diff tool that is not installed: each ends the step, and `anchor` walks a
+[fallback](/guides/review-fallback) instead of asking *"you saw the diff,
+approve?"*. That question converts a tooling failure into your sign-off.
+
+Requirements: DIFF-12 and DIFF-20 in [SPEC](/spec).
+
+### No AI attribution :id=tenet-attribution
+
+No `Co-Authored-By` trailer, no *Generated with* footer. The commit author and
+CR author fields already record who ran it.
+
+Requirement: RULE-02 in [SPEC](/spec).
 
 ## Skills
 
@@ -156,7 +166,6 @@ nothing for it.
 
 ## Reference
 
-- [What's new in 1.x](/whats-new): the steps added since 0.x, and what moved
 - [Configuring `anchor`](/guides/configuring): every knob, once you want one
 - [Ambient rules](/ambient-rules): the invariants the SessionStart hook injects
   when no skill is invoked, in the form the agent receives them

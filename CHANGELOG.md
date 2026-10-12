@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Each tenet on the docs home page has its own link** (`#/?id=tenet-confirm`, `tenet-review`, `tenet-attribution`), so you can point someone at one directly. The "What's new in 1.x" page is gone; this changelog covers the same history.
+
 ## 1.18.1
 
 ### Changed
