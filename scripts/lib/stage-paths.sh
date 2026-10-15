@@ -104,6 +104,38 @@ anchor_require_staged() {
   done
 }
 
+# anchor_rename_sources [<path>...]
+# The source side of each staged rename whose destination is one of <path>...
+# (or under one, for a directory), one per line. A rename is one change to git
+# but two index entries, so a path list naming only the new name would commit
+# the add and leave the delete behind: the tree ends up holding both names.
+# Callers add these to their list rather than treating them as foreign work.
+anchor_rename_sources() {
+  [[ $# -gt 0 ]] || return 0
+  local base=HEAD status src dst p
+  git rev-parse --verify --quiet HEAD >/dev/null || return 0
+  while IFS= read -r -d '' status && IFS= read -r -d '' src && IFS= read -r -d '' dst; do
+    for p in "$@"; do
+      p="${p%/}"
+      if [[ "$dst" == "$p" || "$dst" == "$p"/* ]]; then
+        printf '%s\n' "$src"
+        break
+      fi
+    done
+  done < <(git diff --cached -M --diff-filter=R --name-status -z "$base")
+}
+
+# anchor_diff_specs
+# The root-anchored pathspecs for $diff_paths, the newline-separated paths a
+# --local review was given, one per line. Empty when the review names none, which
+# leaves it covering the whole tree.
+anchor_diff_specs() {
+  local p
+  while IFS= read -r p; do
+    [[ -n "$p" ]] && printf ':/%s\n' "$p"
+  done <<< "${diff_paths:-}"
+}
+
 # anchor_index_digest [<path>...]
 # One id for what a commit of <path>... would carry: their index entries against
 # HEAD, hashed. The review prints it and commit.sh checks it, so a `git add`

@@ -135,6 +135,36 @@ o=$(run --skill commit --local --path a.txt)
 unset DIFFTOOL_STUB_RC
 ok "difftool: the tool's own exit status is not the verdict — the tree is"
 
+# --- a peer's edit outside --path is neither shown nor read back -------------
+# The review covers what the commit will carry. A tracked file another session
+# is editing stays out of the dir-diff, so the reviewer can't write into it and
+# its changes can't come back as their feedback (COMMIT-14).
+git -C "$repo" add a.txt
+git -C "$repo" commit --quiet -m second
+printf 'peer\n' > "$repo/peer.txt"
+git -C "$repo" add peer.txt
+git -C "$repo" commit --quiet -m peer
+printf 'one\ntwo\nthree\n' > "$repo/a.txt"
+printf 'peer\nin flight\n' > "$repo/peer.txt"
+export DIFFTOOL_STUB_MODE=write DIFFTOOL_STUB_TEXT='# TODO: scoped?'
+o=$(run --skill commit --local --path a.txt); j=$(json_of "$o")
+[ "$(jq -r '[.comments[].file] | join(",")' <<<"$j")" = a.txt ] \
+  || fail "only the named path should be reviewed: $(jq -c '[.comments[].file]' <<<"$j")"
+! grep -q 'TODO: scoped' "$repo/peer.txt" || fail "the peer's file should not be opened for editing"
+git -C "$repo" checkout --quiet -- a.txt peer.txt
+git -C "$repo" reset --quiet
+ok "difftool: a peer's edit outside --path is neither shown nor read back"
+
+# --- a commit range reaches a difftool as temp copies -> no-verdict -----------
+# An edit there never reaches a file, so the untouched tree would read as an
+# approval of a range nobody could comment on (DIFF-18).
+export DIFFTOOL_STUB_MODE=write DIFFTOOL_STUB_TEXT='# TODO: lost?'
+o=$(run --skill review --previous 2>/dev/null); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = no-verdict ] || fail "a commit range on a difftool -> $(verdict_of "$o"), want no-verdict"
+[ "$(jq -r .raw.exitCode <<<"$j")" = range-unsupported ] || fail "range raw.exitCode: $j"
+export DIFFTOOL_STUB_MODE=read
+ok "difftool: a commit range returns no-verdict rather than an approval nobody gave"
+
 # --- a name git cannot launch is reported, not opened -----------------------
 git -C "$repo" config diff.tool definitely-not-a-tool
 export DIFFTOOL_STUB_MODE=read

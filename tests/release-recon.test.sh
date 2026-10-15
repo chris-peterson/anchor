@@ -309,6 +309,67 @@ o=$(run "$repo")
 [ -z "$(val RELEASE_DISPATCH_INPUTS "$o")" ] || fail "no dispatch model, so no inputs: $o"
 ok "a plain workflow_dispatch hatch does not become a release model"
 
+# --- a one-line `on:` names its events on the key line (RELEASE-03) ----------
+# `on: release` and `on: [push, release]` are valid GitHub syntax, and reading
+# either as bump-commit would hand-bump a manifest the workflow also bumps.
+for form in 'on: release' 'on: [push, release]' "on: [ 'release' ]"; do
+  repo=$(new_repo "flow-$RANDOM")
+  mkdir -p "$repo/.github/workflows"
+  printf 'name: Publish\n%s\njobs:\n  publish:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo publish\n' "$form" \
+    > "$repo/.github/workflows/publish.yml"
+  printf '{\n  "name": "x",\n  "version": "1.0.0"\n}\n' > "$repo/package.json"
+  git -C "$repo" add -A
+  git -C "$repo" commit --quiet -m flow
+  o=$(run "$repo")
+  [ "$(val RELEASE_MODEL "$o")" = "release-triggered" ] \
+    || fail "'$form' should be release-triggered: $(val RELEASE_MODEL "$o")"
+done
+ok "a one-line on: naming release -> release-triggered"
+
+# --- a `version` input that takes an exact version is not the level (RELEASE-03b)
+repo=$(new_repo exact-version)
+mkdir -p "$repo/.github/workflows"
+cat > "$repo/.github/workflows/release.yml" <<'YAML'
+name: Release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact version to publish, e.g. 1.2.3
+        required: true
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo release
+YAML
+printf '{\n  "name": "x",\n  "version": "1.0.0"\n}\n' > "$repo/package.json"
+git -C "$repo" add -A
+git -C "$repo" commit --quiet -m exact
+o=$(run "$repo")
+[ -z "$(val RELEASE_DISPATCH_BUMP_INPUT "$o")" ] \
+  || fail "a version input taking an exact version is not the level input: $o"
+cat > "$repo/.github/workflows/release.yml" <<'YAML'
+name: Release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        type: choice
+        options: [patch, minor, major]
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo release
+YAML
+git -C "$repo" add -A
+git -C "$repo" commit --quiet -m levels
+o=$(run "$repo")
+[ "$(val RELEASE_DISPATCH_BUMP_INPUT "$o")" = "version" ] \
+  || fail "a version input offering the levels is the level input: $o"
+ok "a version input is the level input only where it offers patch/minor/major"
+
 # --- release: alongside workflow_dispatch: stays release-triggered ------------
 repo=$(new_repo both-triggers)
 mkdir -p "$repo/.github/workflows"

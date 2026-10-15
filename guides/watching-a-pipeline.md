@@ -50,6 +50,10 @@ tool**, not `tail` or `$(...)`, which trip the command-substitution gate.
 - **`PIPELINE_WATCH=ran`**, or any `pipeline-status.sh` output: report the
   `PIPELINE_*` lines following `templates/pipeline-report.md`, including its
   "After a push" notes where a push started the pipeline.
+- **`PIPELINE_STATE=unreachable`**: the forge CLI failed, so nothing is known
+  about the pipeline. Report `PIPELINE_ERROR` as it reads; on an auth error
+  (401, 403, an expired token) ask the user to refresh the CLI's login and stop,
+  without retrying. It never counts as passing, and never as "no pipeline".
 - **`PIPELINE_TIMEOUT=1`**: the watch ceiling elapsed before the pipeline
   settled. Report the last state and offer to keep watching with a longer
   `--timeout`. An unsettled pipeline never counts as passing.

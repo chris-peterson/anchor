@@ -66,6 +66,10 @@ set -euo pipefail
 printf 'glab %s\n' "$*" >> "$CALL_LOG"
 [[ "${1:-}" == api ]] || { echo "stub glab: unhandled command: ${1:-}" >&2; exit 1; }
 if [[ "$*" == *"/discussions"* ]]; then
+  if [[ -n "${GL_FAIL_ON:-}" ]]; then
+    n=$(( $(cat "$GL_COUNT" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$GL_COUNT"
+    [[ "$n" -eq "$GL_FAIL_ON" ]] && { echo "422 line_code can't be blank" >&2; exit 1; }
+  fi
   for ((i=1; i<=$#; i++)); do
     [[ "${!i}" == "--input" ]] && { j=$((i+1)); cat "${!j}" >> "$PAYLOAD_LOG"; }
   done
@@ -116,8 +120,21 @@ cat > "$findings" <<'EOF'
 }
 EOF
 
+# The range's diff: src/cache.js new lines 40-45, src/flag.js old lines 8-15.
+diffp="$work/range.diff"
+cat > "$diffp" <<'EOF'
+diff --git a/src/cache.js b/src/cache.js
+--- a/src/cache.js
++++ b/src/cache.js
+@@ -40,5 +40,6 @@ function key() {
+diff --git a/src/flag.js b/src/flag.js
+--- a/src/flag.js
++++ b/src/flag.js
+@@ -8,8 +8,2 @@ if (flag) {
+EOF
+
 # --- Preview: anchorable findings numbered, the rest folded into the summary --
-preview=$(bash "$review_post_sh" --preview --findings "$findings")
+preview=$(bash "$review_post_sh" --preview --findings "$findings" --diff "$diffp")
 [[ "$preview" == *"Inline threads (2)"* ]] || fail "preview: expected 2 inline threads"
 [[ "$preview" == *"src/cache.js:42"* ]]    || fail "preview: missing the single-line anchor"
 [[ "$preview" == *"src/flag.js:10-14"* ]]  || fail "preview: missing the multi-line range"
@@ -128,7 +145,7 @@ ok "preview: anchors what it can and folds the rest into the summary (REVIEW-08)
 
 # --- GitHub: the whole review posts as one submission ------------------------
 reset_logs
-out=$(bash "$review_post_sh" --post --findings "$findings" \
+out=$(bash "$review_post_sh" --post --findings "$findings" --diff "$diffp" \
         --forge github --project example/repo --cr 7)
 [[ "$(key "$out" POSTED_INLINE)" == 2 ]]  || fail "GitHub: POSTED_INLINE=$(key "$out" POSTED_INLINE)"
 [[ "$(key "$out" POSTED_SUMMARY)" == 1 ]] || fail "GitHub: POSTED_SUMMARY=$(key "$out" POSTED_SUMMARY)"
@@ -155,7 +172,7 @@ ok "GitHub: the posted summary is the previewed one (REVIEW-14)"
 
 # --- GitHub: --index posts exactly one finding -------------------------------
 reset_logs
-out=$(bash "$review_post_sh" --post --findings "$findings" \
+out=$(bash "$review_post_sh" --post --findings "$findings" --diff "$diffp" \
         --forge github --project example/repo --cr 7 --index 1)
 [[ "$(key "$out" POSTED_INLINE)" == 1 ]]  || fail "GitHub --index: POSTED_INLINE"
 [[ "$(key "$out" POSTED_SUMMARY)" == 0 ]] || fail "GitHub --index: should not post the summary"
@@ -165,7 +182,7 @@ ok "GitHub: --index posts one finding and leaves the rest (REVIEW-12)"
 
 # --- GitLab: one POST per thread, then the summary note ----------------------
 reset_logs
-out=$(bash "$review_post_sh" --post --findings "$findings" \
+out=$(bash "$review_post_sh" --post --findings "$findings" --diff "$diffp" \
         --forge gitlab --project 'grp/sub/repo' --cr 7 \
         --base-sha basesha --start-sha startsha)
 [[ "$(key "$out" POSTED_INLINE)" == 2 ]]  || fail "GitLab: POSTED_INLINE=$(key "$out" POSTED_INLINE)"
@@ -191,7 +208,7 @@ reset_logs
 GL_DROP_POSITION=1
 export GL_DROP_POSITION
 set +e
-out=$(bash "$review_post_sh" --post --findings "$findings" \
+out=$(bash "$review_post_sh" --post --findings "$findings" --diff "$diffp" \
         --forge gitlab --project example/repo --cr 7 \
         --base-sha basesha --start-sha startsha 2>/dev/null)
 rc=$?
@@ -205,7 +222,7 @@ ok "GitLab: a 201 that dropped the position is reported, not counted as posted"
 reset_logs
 CURRENT_HEAD="headsha2"
 set +e
-out=$(bash "$review_post_sh" --post --findings "$findings" \
+out=$(bash "$review_post_sh" --post --findings "$findings" --diff "$diffp" \
         --forge github --project example/repo --cr 7 2>/dev/null)
 rc=$?
 set -e
@@ -220,7 +237,7 @@ ok "a moved head refuses before anything is written (REVIEW-11)"
 unpinned="$work/unpinned.json"
 jq 'del(.cr.headSha)' "$findings" > "$unpinned"
 set +e
-out=$(bash "$review_post_sh" --post --findings "$unpinned" \
+out=$(bash "$review_post_sh" --post --findings "$unpinned" --diff "$diffp" \
         --forge github --project example/repo --cr 7 2>/dev/null)
 rc=$?
 set -e
@@ -232,10 +249,36 @@ ok "an unpinned findings file is refused rather than posted against the live hea
 reset_logs
 empty="$work/empty.json"
 jq '.comments = []' "$findings" > "$empty"
-out=$(bash "$review_post_sh" --post --findings "$empty" \
+out=$(bash "$review_post_sh" --post --findings "$empty" --diff "$diffp" \
         --forge github --project example/repo --cr 7)
 [[ "$(key "$out" POSTED_INLINE)" == 0 ]]  || fail "empty: POSTED_INLINE"
 [[ "$(key "$out" POSTED_SUMMARY)" == 1 ]] || fail "empty: the summary should still post"
 ok "a review with no inline findings still lands its summary"
+
+# --- a line outside every hunk folds into the summary (REVIEW-08) -------------
+# The forge rejects a thread on a line the diff doesn't show, and a rejection
+# would stop the post. Sorting it out up front keeps the finding, in the summary.
+outside="$work/outside.json"
+jq '.comments += [{"body": "Far from the change.", "target": "line",
+      "file": "src/cache.js", "startLine": 400, "endLine": 400, "side": "new"}]' \
+  "$findings" > "$outside"
+preview=$(bash "$review_post_sh" --preview --findings "$outside" --diff "$diffp")
+grep -q '^## Inline threads (2)' <<<"$preview" || fail "the out-of-hunk line should not be an inline thread: $preview"
+grep -q 'src/cache.js:400.*Far from the change' <<<"$preview" \
+  || fail "the out-of-hunk finding should fold into the summary, named with its line: $preview"
+ok "a line outside every hunk folds into the summary, in the preview and the post alike"
+
+# --- a forge failure partway through says what already landed ---------------
+reset_logs
+export GL_COUNT="$work/gl-count" GL_FAIL_ON=2
+rm -f "$GL_COUNT"
+rc=0
+out=$(bash "$review_post_sh" --post --findings "$findings" --diff "$diffp" \
+        --forge gitlab --project group/repo --cr 7 --base-sha b --start-sha s) || rc=$?
+unset GL_FAIL_ON
+[ "$rc" -ne 0 ] || fail "a refused thread should fail the post: $out"
+[ "$(key "$out" POSTED_INLINE)" = 1 ] || fail "the thread that landed before the failure should be counted: $out"
+grep -q '^POST_ERROR=.*src/flag.js' <<<"$out" || fail "the error should name the refused thread: $out"
+ok "a forge failure partway reports what already posted and which thread it refused"
 
 echo "# all checks passed"

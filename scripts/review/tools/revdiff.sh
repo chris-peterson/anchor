@@ -22,7 +22,6 @@
 # shellcheck disable=SC2034
 diff_tool_caps='{"producesVerdict":true,"perHunkReview":false,"editableCommitMessage":false,"editableDescription":false,"sideMarkers":true}'
 diff_tool_install_hint='brew install umputun/apps/revdiff'
-diff_tool_reviews_index=1
 
 # The `sh` command string that runs one review. The refs come from the request
 # variables the dispatcher exported; the flags are revdiff's own.
@@ -43,6 +42,14 @@ diff_tool_command() {
       *)     args+=("$diff_range") ;;
     esac
   fi
+  # A directory is a prefix to include; a file is shown exactly, since a prefix
+  # would also take `a.txt.bak` along with `a.txt`.
+  local p top
+  top=$(git rev-parse --show-toplevel)
+  while IFS= read -r p; do
+    [[ -n "$p" ]] || continue
+    if [[ -d "$top/$p" ]]; then args+=("--include=${p%/}/"); else args+=("--only=$p"); fi
+  done <<< "${diff_paths:-}"
 
   cmd="REVDIFF_EXIT_CODE_ON_ANNOTATIONS=true $(anchor_host_sq "$bin")"
   cmd="$cmd $(anchor_host_sq "--output=$out_file")"

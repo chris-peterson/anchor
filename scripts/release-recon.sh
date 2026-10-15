@@ -195,7 +195,20 @@ fi
 workflow_trigger() {
   awk '
     # A top-level key (column 0, not a comment) opens a new block.
-    /^[^[:space:]#]/ { on_block = ($0 ~ /^("on"|'"'"'on'"'"'|on)[[:space:]]*:/); next }
+    /^[^[:space:]#]/ {
+      on_block = ($0 ~ /^("on"|'"'"'on'"'"'|on)[[:space:]]*:/)
+      # `on: release` and `on: [push, release]` name the events on the key line
+      # itself. A tag filter needs a block, so only the two events read here.
+      if (on_block) {
+        v = $0; sub(/^[^:]*:/, "", v); sub(/#.*/, "", v); gsub(/[][ \t"'"'"']/, "", v)
+        n = split(v, ev, ",")
+        for (i = 1; i <= n; i++) {
+          if (ev[i] == "release") r = 1
+          if (ev[i] == "workflow_dispatch") d = 1
+        }
+      }
+      next
+    }
     !on_block { next }
     /^[[:space:]]+release[[:space:]]*:/ { r = 1 }
     /^[[:space:]]+tags([[:space:]]*:|-ignore)/ { t = 1 }
@@ -260,9 +273,31 @@ bump_input_of() {
   while read -r i; do
     [[ -n "$i" ]] || continue
     case "$(lower "$i")" in
-      bump|level|bump_level|bump-level|release_type|release-type|version|semver) echo "$i"; return ;;
+      bump|level|bump_level|bump-level|release_type|release-type) echo "$i"; return ;;
+      # `version` as often takes the exact version (`1.2.3`) as a level, and
+      # dispatching `version=minor` into one of those fails the release. It is
+      # the level input only where its own options offer the levels.
+      version|semver)
+        if input_block "$1" "$i" | grep -qE '(^|[^[:alnum:]])(patch|minor|major)([^[:alnum:]]|$)'; then
+          echo "$i"; return
+        fi ;;
     esac
   done < <(dispatch_inputs "$1")
+}
+
+# The lines under one workflow_dispatch input's key, up to the next key at its
+# indentation or shallower.
+input_block() {
+  awk -v want="$2" '
+    /^[[:space:]]*$/ { next }
+    {
+      match($0, /^[ ]*/); ind = RLENGTH
+      k = $0; sub(/^[[:space:]]*/, "", k); sub(/[[:space:]]*:.*/, "", k)
+      if (inblk && ind <= blkind) exit
+      if (inblk) { print; next }
+      if (k == want && $0 ~ /:[[:space:]]*$/) { inblk = 1; blkind = ind }
+    }
+  ' "$1"
 }
 
 detect_ci_model() {

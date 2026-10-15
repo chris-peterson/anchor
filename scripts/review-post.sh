@@ -17,10 +17,12 @@
 #     ]
 #   }
 #
-# `target: "line"` with a file and a start line is anchorable and posts as an
-# inline thread. Everything else — a `file` or `changeset` target, or a line
-# target the forge rejects — folds into the summary comment rather than being
-# dropped. GitHub could carry a file-level comment natively (`subject_type:
+# `target: "line"` with a file and a start line inside one of the diff's hunks
+# is anchorable and posts as an inline thread. Everything else — a `file` or
+# `changeset` target, or a line outside every hunk, which the forge would reject
+# — folds into the summary comment rather than being dropped. The hunks come
+# from --diff, the range's unified diff review-cr.sh wrote, so the preview and
+# the post sort the findings the same way. GitHub could carry a file-level comment natively (`subject_type:
 # file`) and GitLab lists `position_type: file` without specifying it, so
 # anchoring only lines keeps the two forges saying the same thing.
 #
@@ -30,8 +32,8 @@
 # mismatch instead of landing comments on a diff nobody reviewed.
 #
 # Usage:
-#   review-post.sh --preview  --findings <path> --forge <f> --project <p> --cr <n>
-#   review-post.sh --post     --findings <path> --forge <f> --project <p> --cr <n> \
+#   review-post.sh --preview  --findings <path> --diff <path>
+#   review-post.sh --post     --findings <path> --diff <path> --forge <f> --project <p> --cr <n> \
 #                             [--host <h>] [--base-sha <s>] [--start-sha <s>] \
 #                             [--index <n|summary>]
 #
@@ -43,7 +45,9 @@
 # Output (KEY=value on stdout):
 #   POSTED_INLINE=<n>     inline threads that landed
 #   POSTED_SUMMARY=<0|1>  whether the summary comment landed
-#   POST_ERROR=<message>  on refusal or failure (with a non-zero exit)
+#   POST_ERROR=<message>  on refusal or failure (with a non-zero exit), after
+#                         the two counts above, so a post that failed partway
+#                         says what already landed
 
 set -euo pipefail
 
@@ -52,6 +56,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/tmpfile.sh"
 
 mode=""
 findings=""
+diff_file=""
 forge=""
 project=""
 cr_iid=""
@@ -64,6 +69,7 @@ while [[ $# -gt 0 ]]; do
     --preview)    mode=preview; shift ;;
     --post)       mode=post; shift ;;
     --findings)   findings="${2:?--findings needs a path}"; shift 2 ;;
+    --diff)       diff_file="${2:?--diff needs a path}"; shift 2 ;;
     --forge)      forge="${2:?--forge needs github|gitlab}"; shift 2 ;;
     --project)    project="${2:?--project needs a path}"; shift 2 ;;
     --cr)         cr_iid="${2:?--cr needs a number}"; shift 2 ;;
@@ -77,16 +83,44 @@ done
 
 [[ -n "$mode" ]] || { echo "review-post.sh: one of --preview / --post is required" >&2; exit 64; }
 [[ -r "$findings" ]] || { echo "review-post.sh: cannot read findings file: $findings" >&2; exit 66; }
+[[ -r "$diff_file" ]] || { echo "review-post.sh: --diff <path> is required: the range's unified diff, to check each line against its hunks" >&2; exit 64; }
 
-fail() { echo "POST_ERROR=$*"; exit 65; }
+posted_inline=0
+posted_summary=0
+fail() {
+  if [[ "$mode" == post ]]; then
+    echo "POSTED_INLINE=$posted_inline"
+    echo "POSTED_SUMMARY=$posted_summary"
+  fi
+  echo "POST_ERROR=$*"
+  exit 65
+}
 
 jq -e . "$findings" >/dev/null 2>&1 || fail "findings file is not valid JSON: $findings"
 
 # --- Split the findings into anchored and unanchored --------------------------
 
-anchorable='.target == "line" and (.file // "") != "" and (.startLine // 0) > 0'
-anchored=$(jq -c "[.comments[] | select($anchorable)]" "$findings")
-loose=$(jq -c "[.comments[] | select($anchorable | not)]" "$findings")
+# Each hunk as {file, side, from, to}: the new side's lines for "new", the old
+# side's for "old". A line comment both forges accept sits inside one of these.
+hunks=$(awk '
+  /^\+\+\+ / { f = $2; sub(/^b\//, "", f); next }
+  /^--- /     { o = $2; sub(/^a\//, "", o); next }
+  /^@@ / {
+    split($2, a, ","); split($3, b, ",")
+    os = substr(a[1], 2) + 0; oc = (a[2] == "" ? 1 : a[2] + 0)
+    ns = substr(b[1], 2) + 0; nc = (b[2] == "" ? 1 : b[2] + 0)
+    if (nc > 0) printf "{\"file\":\"%s\",\"side\":\"new\",\"from\":%d,\"to\":%d}\n", f, ns, ns + nc - 1
+    if (oc > 0) printf "{\"file\":\"%s\",\"side\":\"old\",\"from\":%d,\"to\":%d}\n", (o == "/dev/null" ? f : o), os, os + oc - 1
+  }
+' "$diff_file" | jq -s -c .)
+
+# shellcheck disable=SC2016  # $c, $end, $side, $hunks are jq variables
+anchorable='.target == "line" and (.file // "") != "" and (.startLine // 0) > 0
+  and (. as $c | ($c.endLine // $c.startLine) as $end | ($c.side // "new") as $side
+       | any($hunks[]; .file == $c.file and .side == $side
+                       and .from <= $c.startLine and $end <= .to))'
+anchored=$(jq -c --argjson hunks "$hunks" "[.comments[] | select($anchorable)]" "$findings")
+loose=$(jq -c --argjson hunks "$hunks" "[.comments[] | select($anchorable | not)]" "$findings")
 anchored_count=$(jq 'length' <<<"$anchored")
 
 # The summary body is the prose plus every finding that could not be anchored,
@@ -97,7 +131,9 @@ anchored_count=$(jq 'length' <<<"$anchored")
 summary=$(jq -r --argjson loose "$loose" '
   (.summary // "") as $prose
   | ($loose | map(
-      "- " + (if (.file // "") != "" then "**" + .file + "** — " else "" end) + .body
+      "- " + (if (.file // "") != ""
+               then "**" + .file + (if (.startLine // 0) > 0 then ":" + (.startLine|tostring) else "" end) + "** — "
+               else "" end) + .body
     ) | join("\n")) as $rest
   | if $rest == "" then $prose
     else ($prose | if . == "" then "" else . + "\n\n" end)
@@ -153,18 +189,17 @@ esac
 [[ "$current" == "$pinned" ]] \
   || fail "head-moved: the CR is now at ${current}, the review was taken at ${pinned} — re-run /anchor:review against the new head rather than anchoring to lines that have moved"
 
-posted_inline=0
-posted_summary=0
-
 post_summary() {
   local path
   [[ -n "$summary" ]] || return 0
   path=$(anchor_tmpfile "cr-review-summary")
   printf '%s\n' "$summary" > "$path"
   case "$forge" in
-    github) gh pr comment "$cr_iid" -R "$project" --body-file "$path" >/dev/null ;;
+    github) gh pr comment "$cr_iid" -R "$project" --body-file "$path" >/dev/null \
+              || fail "the forge refused the summary comment" ;;
     gitlab) gl_api -X POST "projects/${gl_project}/merge_requests/${cr_iid}/notes" \
-              -F "body=@${path}" >/dev/null ;;
+              -F "body=@${path}" >/dev/null \
+              || fail "the forge refused the summary comment" ;;
   esac
   posted_summary=1
 }
@@ -186,7 +221,7 @@ post_one() {
                   -F "body=@${path}" -f "commit_id=${pinned}" -f "path=${file}"
                   -F "line=${end}" -f "side=${gh_side}")
       [[ "$start" != "$end" ]] && args+=(-F "start_line=${start}" -f "start_side=${gh_side}")
-      gh api "${args[@]}" >/dev/null
+      gh api "${args[@]}" >/dev/null || fail "the forge refused the thread on ${file}:${end}"
       ;;
     gitlab)
       # A flat -F "position[...]" is silently dropped and the note lands
@@ -204,7 +239,8 @@ post_one() {
       ' > "$payload"
       local out
       out=$(gl_api -X POST "projects/${gl_project}/merge_requests/${cr_iid}/discussions" \
-              --input "$payload" -H "Content-Type: application/json")
+              --input "$payload" -H "Content-Type: application/json") \
+        || fail "the forge refused the thread on ${file}:${end}"
       # GitLab answers 201 for an unanchored note too, so confirm the position
       # survived rather than reporting a thread that landed at the bottom.
       [[ "$(jq -r '.notes[0].type // ""' <<<"$out")" == "DiffNote" ]] \
@@ -234,7 +270,8 @@ elif [[ "$forge" == github && "$anchored_count" -gt 0 ]]; then
             then {start_line: .startLine, start_side: $side}
             else {} end)]}
   ' > "$payload"
-  gh api -X POST "repos/${project}/pulls/${cr_iid}/reviews" --input "$payload" >/dev/null
+  gh api -X POST "repos/${project}/pulls/${cr_iid}/reviews" --input "$payload" >/dev/null \
+    || fail "the forge refused the batched review; nothing from it landed"
   posted_inline="$anchored_count"
   [[ -n "$summary" ]] && posted_summary=1
 else
