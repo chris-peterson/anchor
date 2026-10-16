@@ -85,6 +85,14 @@ set -euo pipefail
 #     what a caller passes back after probing, so the review opens in the shape
 #     the probe said was reachable.
 #   --tool <name>  run this tool within the mode, ignoring the config key.
+#   --annotations <file>  preload these notes into the review, in revdiff's
+#     own markdown (`## <path>:<line> (+|-| )` then the body). The reviewer
+#     reads, edits, and deletes them in place, and the set they leave comes back
+#     as the comments, plus REVIEW_RETURNED=<path> holding that set as JSON. A
+#     tool that can't preload notes refuses the review rather than dropping them.
+#   --untracked  show untracked files in the tree too (a working-tree review
+#     only), so a file the review writes for the reviewer to edit is in front of
+#     them. Refused the same way by a tool that can't show one.
 #   --probe  report how a review would resolve, and exit without launching
 #     anything — what a skill asks before deciding whether a visual review is
 #     available at all. Pass it the same mode flag and paths as the launch: the
@@ -124,6 +132,8 @@ CTX_REPO=""
 review_skill=""
 mode_override=""
 tool_override=""
+review_annotations=""
+review_untracked=0
 probe_only=0
 stage_paths=()
 staged_paths=()
@@ -143,6 +153,8 @@ while [[ $# -gt 0 ]]; do
     --tool)  tool_override="${2:?--tool needs a name}"; shift 2 ;;
     --path)     stage_paths+=("${2:?--path needs a path}"); shift 2 ;;
     --staged-path) staged_paths+=("${2:?--staged-path needs a path}"); shift 2 ;;
+    --annotations) review_annotations="${2:?--annotations needs a file}"; shift 2 ;;
+    --untracked) review_untracked=1; shift ;;
     --probe)    probe_only=1; shift ;;
     --title|--detail|--message-file)
                 rest+=("$1" "${2:?$1 needs a value}"); shift 2 ;;
@@ -561,6 +573,15 @@ else
   [[ -n "$override_details_json" ]] && review_details_json="$override_details_json"
 fi
 
+if [[ -n "$review_annotations" && ! -r "$review_annotations" ]]; then
+  echo "review-diff.sh: annotations file not readable: $review_annotations" >&2
+  exit 66
+fi
+if [[ "$review_untracked" -eq 1 && ( "$review_subject" != "range" || "$diff_range" == *..* ) ]]; then
+  echo "review-diff.sh: --untracked shows files beside a working-tree diff; $([[ "$review_subject" == range ]] && echo "$diff_range compares two commits" || echo "a --files review has no tree")" >&2
+  exit 64
+fi
+
 if [[ ${#staged_paths[@]} -gt 0 && "$diff_staged" -ne 1 ]]; then
   echo "review-diff.sh: --staged-path applies to --local only" >&2
   exit 64
@@ -579,7 +600,7 @@ review_next_step() {
     release)        echo "use these notes for the release" ;;
     resolve-feedback)
       [[ "$header_mode" != "local" ]] || echo "commit this fix and push it" ;;
-    review)         echo "your annotations become findings on this CR, posted only once you approve their text" ;;
+    review)         echo "your notes decide what each item becomes; nothing commits or posts until you approve it" ;;
   esac
 }
 if [[ -n "$review_skill" ]]; then
@@ -594,6 +615,10 @@ report_superseded_key
 resolve_review
 review_mode="$resolved_mode"
 review_tool="$resolved_tool"
+if [[ "$review_mode" != diff ]] && [[ -n "$review_annotations" || "$review_untracked" -eq 1 ]]; then
+  echo "review-diff.sh: --annotations and --untracked belong to a diff review, and this one resolved to $review_mode mode" >&2
+  exit 64
+fi
 
 # One adapter per mode. Within `diff`, the tool's own half lives in
 # review/tools/<tool>.sh, which that adapter sources — so a second viewer is a
@@ -636,7 +661,7 @@ fi
 # adapter (sourced below) counts as a consumer — it runs in this same shell.
 export review_subject review_mode review_tool
 export diff_range diff_staged diff_paths files_left files_right review_title review_details_json
-export message_file review_skill
+export message_file review_skill review_annotations review_untracked
 
 # Taken before the tool opens, so it names what the reviewer was shown.
 [[ -z "$review_index" ]] || echo "REVIEW_INDEX=$review_index"

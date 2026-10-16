@@ -4,6 +4,12 @@
 
 ### Changed
 
+- **`/anchor:review` works in rounds you decide in revdiff.** It examines the CR, makes the fixes it's confident in, and opens revdiff on the result with a note on every finding and a `.review.md` table of them in the file tree. Keep a note to keep the finding, edit it or annotate its row to change it, delete its row to drop it, and add notes of your own. On someone else's CR, kept fixes post as suggestions (one run of lines) or threads, after you approve the exact text, and the edits happen in a temporary worktree so your checkout is untouched. On your own CR, each round lands as one commit through `/anchor:commit`, and you're offered one more round over that commit. The quality-and-severity summary and its walk are gone.
+- **`/anchor:review` counts its rounds.** Each round says which pass it is and records how many items it made or proposed, what your notes kept, changed, dropped, or added (and how much you wrote), and how many lines it changed as a percent of the CR. Later rounds show that trend, and the offer of another round recommends stopping unless the last one fixed something important, so a review that's down to polish is easy to spot.
+- **`/anchor:review` starts with open feedback.** On your own CR with unresolved threads, it offers `/anchor:resolve-feedback` before a new pass. On someone else's, it checks each open thread against the latest head first and doesn't raise them again as new findings.
+- **`/anchor:review` needs revdiff.** It runs revdiff whatever `anchor.diff.tool` names, and stops before examining anything when revdiff isn't installed or can't open. The other skills keep their configurable tool.
+- **Reviews flag less.** The default review qualities ask only for findings with a cost: a bug, an exposure, behavior the description doesn't match, or a decision that's expensive to reverse. Style preferences and nits are out unless you add them to the template. A review with nothing to say ends in one line.
+- **Self-review findings no longer post as threads on your own CR.** File them with `/anchor:issue` instead; `/anchor:review` offers to for each finding you mark that way.
 - **Each tenet on the docs home page has its own link** (`#/?id=tenet-confirm`, `tenet-review`, `tenet-attribution`), so you can point someone at one directly. The "What's new in 1.x" page is gone; this changelog covers the same history.
 
 ### Fixed

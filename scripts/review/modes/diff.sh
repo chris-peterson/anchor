@@ -15,6 +15,8 @@
 #   files_left/right     the two paths (files mode)
 #   review_title         the header title
 #   review_details_json  the header details, a JSON array of {label,value}
+#   review_annotations   notes to preload, in revdiff's markdown (empty: none)
+#   review_untracked     1 == show untracked files beside the diff
 #
 # A diff tool is a TUI, so it needs a terminal to render, and anchor launches
 # review from a background Bash call with no controlling TTY. The terminal comes
@@ -96,6 +98,17 @@ emit_review() {
   fi
   # shellcheck source=/dev/null
   source "$tool_file"
+
+  # A request the tool can't carry is refused rather than dropped: preloaded
+  # notes that never reach the reviewer read back as notes they deleted.
+  if [[ -n "${review_annotations:-}" ]] && [[ "$(jq -r '.preloadsAnnotations // false' <<<"$diff_tool_caps")" != true ]]; then
+    diff_unavailable "$review_tool can't preload review notes; this review needs a viewer that can (anchor.diff.tool=revdiff)" annotations-unsupported
+    return
+  fi
+  if [[ "${review_untracked:-0}" -eq 1 ]] && [[ "$(jq -r '.showsUntracked // false' <<<"$diff_tool_caps")" != true ]]; then
+    diff_unavailable "$review_tool can't show untracked files; this review needs a viewer that can (anchor.diff.tool=revdiff)" untracked-unsupported
+    return
+  fi
 
   # git hands a difftool temp copies of any side that isn't the working tree,
   # so an edit there never reaches a file and the untouched tree reads as
@@ -202,6 +215,13 @@ emit_review() {
 
   rm -f "$out_file" "$err_file" "$desc_file"
   ! declare -F diff_tool_cleanup >/dev/null || diff_tool_cleanup
+  # The set of notes the reviewer left, kept beside the ones that were preloaded
+  # so a caller compares the two from files rather than from this output line.
+  if [[ -n "${review_annotations:-}" ]]; then
+    local returned="${review_annotations%.md}.returned.json"
+    printf '%s\n' "$comments" > "$returned"
+    echo "REVIEW_RETURNED=$returned"
+  fi
   echo "REVIEW_VERDICT=$verdict"
   echo "REVIEW_OUTPUT=$out"
 }
