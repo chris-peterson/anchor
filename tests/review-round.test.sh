@@ -131,13 +131,15 @@ ok "read: kept, changed, a deleted note with its row asks, and a note of your ow
 # Deleting a row drops the item; a note on a row changes it.
 grep -v '^| 1 ' "$table" > "$table.tmp"; mv "$table.tmp" "$table"
 row3=$(grep -n '^| 3 ' "$table" | cut -d: -f1)
-jq --argjson n "$row3" '. + [{body:"make this a follow-up", target:"line", file:".review.md", startLine:$n, endLine:$n, side:"new"}]' \
+jq --argjson n "$row3" '. + [{body:"make this a follow-up", target:"line", file:".review.md", startLine:$n, endLine:$n, side:"new"},
+                              {body:"fewer rounds, please", target:"line", file:".review.md", startLine:1, endLine:1, side:"new"}]' \
   "$returned" > "$returned.2"
 o=$(round_cmd read --dir "$dir" --returned "$returned.2")
 [[ "$(val DROP "$o")" == 1 ]] || fail "a deleted row drops: $o"
 [[ ",$(val CHANGE "$o")," == *",3,"* ]] || fail "a note on a row changes it: $o"
 [[ "$(jq -r '.items[] | select(.id==3) | .rowNotes[0]' "$(val ROUND_READ "$o")")" == "make this a follow-up" ]] || fail "row note text"
-ok "read: a deleted row drops its item, and a note on a row changes it"
+[[ "$(jq -r '.tableNotes[0]' "$(val ROUND_READ "$o")")" == "fewer rounds, please" ]] || fail "a note off the rows: $(jq -c .tableNotes "$(val ROUND_READ "$o")")"
+ok "read: a deleted row drops its item, a note on a row changes it, and a note off the rows is kept"
 
 # An edit the reviewer made from inside revdiff comes back as theirs.
 printf 'reviewer\n' >> "$root/c.txt"

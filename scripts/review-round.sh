@@ -340,12 +340,12 @@ read)
     def rowmap: split("\n") | map(select(test("^\\| *#?[0-9]")))
       | map({id:(capture("^\\| *#?(?<n>[0-9]+)").n|tonumber), row:.});
     def norm: gsub("\\s+"; " ") | sub("^ "; "") | sub(" $"; "");
-    def tag: (.body | split("\n")[0] | capture("^#(?<n>[0-9]+) ")?.n | tonumber?) // null;
+    def tag: (.body | split("\n")[0] | capture("^#(?<n>[0-9]+) ") | .n | tonumber)? // null;
     ($rows0 | rowmap) as $r0 | ($rows | rowmap) as $r1
     | ($table | split("\n")) as $tl
     | ($ret | map(select(.file != $tname))) as $codenotes
     | ($ret | map(select(.file == $tname))
-        | map(. + {rowId: ((.startLine // 0) as $n | if $n > 0 then ($tl[$n-1] // "" | capture("^\\| *#?(?<n>[0-9]+)")?.n | tonumber?) else null end)})) as $tnotes
+        | map(. + {rowId: ((.startLine // 0) as $n | if $n > 0 then (($tl[$n-1] // "" | capture("^\\| *#?(?<n>[0-9]+)") | .n | tonumber)? // null) else null end)})) as $tnotes
     | ($seeded[0]) as $s
     | {items: [$items[0].items[] as $i
         | ($r0 | map(select(.id == $i.id)) | first | .row) as $was
