@@ -350,6 +350,9 @@ check.
   project's own labels and, where exactly one plausibly fits, one of its open
   milestones to the change request, adding to rather than replacing what the CR
   already carries, and asking the author where the choice is not clear.
+- **[PREPARE-19]** Where the change request resolves an issue on its own forge, the
+  system shall reference that issue in the description with the forge's closing
+  keyword, so that merging the change request closes the issue.
 
 ### REVIEW — Review a change request
 
