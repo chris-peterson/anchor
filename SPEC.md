@@ -1477,6 +1477,22 @@ govern what the user must have read before that happens.
   behalf, the system shall review the commit's message and changeset as
   `/anchor:commit` does before committing it, once per round of feedback rather
   than once per fix.
+- **[CONFIRM-10]** Where a flow drafts edits to two or more targets in one round
+  (issue edits, thread replies), the system shall present the set for approval in
+  a review tool, one file per item showing its current text against the proposed
+  text, rather than in the reply, since a reply holding several drafts scrolls the
+  first ones away before the question arrives.
+- **[CONFIRM-11]** The system shall list the batch's items in a table the
+  reviewer edits in the review, and shall carry context for the review in notes
+  on the items, which it shall not publish.
+- **[CONFIRM-12]** When a batch review closes, the system shall decide each
+  item's outcome deterministically in a script: an item left as it was is kept,
+  an item whose file the reviewer edited publishes their text verbatim, an item
+  carrying a new or edited note is redrafted into a further round, and an item
+  whose row was deleted is dropped.
+- **[CONFIRM-13]** If a batch review does not complete, then the system shall
+  publish none of its items, and shall not present the drafts in the reply as a
+  substitute for the review.
 
 ### SANITIZE — Sanitizing what reaches a destination
 
