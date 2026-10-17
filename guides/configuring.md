@@ -125,6 +125,12 @@ recommends [revdiff](https://revdiff.com), a terminal-native reviewer. A viewer
 named here that neither `anchor` nor git can launch reports that rather than
 opening something else.
 
+`/anchor:review` runs revdiff whatever this key names. Its review is a set of
+notes preloaded into the diff, one per finding, that you keep, edit, or delete
+in place, and revdiff is the viewer that takes them and hands back what you
+left. Without revdiff, `/anchor:review` says so and stops before examining
+anything.
+
 These two are the *tool* half of a review, one key per mode, and they are the
 only half you set: which mode a review runs in follows what it is reviewing
 ([A mode per subject](#a-mode-per-subject)). Whichever tool runs, it returns a

@@ -35,6 +35,7 @@ doesn't arrive.
 | [Running a review](/guides/running-a-review) | The loop every review follows: probe, launch, what chat feedback does while it's open, and what each verdict means | `commit`, `prepare-review`, `review`, `issue`, `release` |
 | [When the review tool didn't grade it](/guides/review-fallback) | What an ungraded change gets instead of a *"you saw the diff, approve?"* prompt | `commit`, `prepare-review`, `review`, `issue`, `release` |
 | [Reading a reviewer's edits](/guides/reviewer-edits) | How to read feedback a difftool leaves as edits in the working tree rather than as annotations | `commit`, `prepare-review`, `review`, `issue`, `release` |
+| [Reviewing a batch of edits](/guides/batch-review) | How edits to several issues or threads are approved as one set in revdiff, and what each item's outcome leads to | `issue`, `resolve-feedback` |
 | [Staying in changeset scope](/guides/changeset-scope) | How far a fix may reach when a comment lands next to pre-existing code the diff doesn't own | `commit`, `resolve-feedback` |
 
 ## Mechanics

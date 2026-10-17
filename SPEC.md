@@ -350,15 +350,21 @@ check.
   project's own labels and, where exactly one plausibly fits, one of its open
   milestones to the change request, adding to rather than replacing what the CR
   already carries, and asking the author where the choice is not clear.
+- **[PREPARE-19]** Where the change request resolves an issue on its own forge, the
+  system shall reference that issue in the description with the forge's closing
+  keyword, so that merging the change request closes the issue.
 
 ### REVIEW — Review a change request
 
 The `review` skill: the reviewer's side of the seam `prepare-review` and
-`resolve-feedback` sit on either end of. It examines a CR's diff against the
-qualities the user has set and produces findings anchored to files and lines.
-Authorship then picks where those findings go — threads on someone else's CR once
-the user approves the wording, or a working-tree fix list on the user's own,
-ending in the handoff that marks the CR ready.
+`resolve-feedback` sit on either end of. It works in rounds. Each round examines
+a CR's diff against the qualities the user has set, groups the findings into
+items, makes the fixes the agent would stand behind, and puts the result in front
+of the user in revdiff with a note on every item, where the user keeps, changes,
+or drops each one in place. Authorship then picks where the kept items go:
+suggestions and threads on someone else's CR once the user approves the wording,
+or a commit per round on the user's own, ending in the handoff that marks the CR
+ready.
 
 - **[REVIEW-01]** When `/anchor:review` runs, the system shall resolve the target
   repo as the other skills do and gather the CR via a single recon script,
@@ -375,16 +381,19 @@ ending in the handoff that marks the CR ready.
   self-review a draft is the expected state and shall pass without comment.
 - **[REVIEW-04]** The system shall read the CR's description before its diff, and
   shall treat what the description does not account for as a finding.
-- **[REVIEW-05]** The system shall present the CR's entire diff range in a review
-  tool, unfiltered and without a skip path, so that findings are made against
-  changes the user has seen.
+- **[REVIEW-05]** The system shall present the CR's entire diff range in revdiff,
+  together with the round's edits and its notes, unfiltered and without a skip
+  path, so that what the user decides is decided against changes they have
+  seen. Where revdiff cannot open, the system shall say what is missing and stop
+  before examining the diff, since the review is carried by notes no other
+  viewer takes.
 - **[REVIEW-06]** If the tool reports the review as `incomplete`, then the
   system shall name what went unreviewed and re-open the review rather than
   write findings over it. A `reviewCompleteness` of `null` shall be
   read as unmeasured, never as complete.
-- **[REVIEW-07]** When the tool returns `changes-requested`, the system shall
-  treat its comments as the review's findings and carry each one's wording
-  verbatim, rather than as feedback blocking the flow.
+- **[REVIEW-07]** When the review closes, the system shall treat a note the user
+  added as a finding of their own and carry its wording verbatim, rather than as
+  feedback blocking the flow.
 - **[REVIEW-08]** The system shall place each finding at the narrowest location
   that carries it — the line, else the method or hunk, else the changeset — and
   shall fold a finding it cannot anchor to a line, including a line outside every
@@ -414,25 +423,56 @@ ending in the handoff that marks the CR ready.
   change.
 - **[REVIEW-16]** The system shall examine the diff against each listed quality
   independently, one agent per quality, and shall merge their findings into one
-  set, dropping duplicates and keeping a comment the reviewer typed ahead of an
-  agent finding on the same line.
+  set, dropping duplicates.
 - **[REVIEW-17]** Where the resolved CR was written by the invoking user, the
-  system shall run a self-review: findings become a working-tree fix list, nothing
-  is posted to the forge, and re-reviewing the corrected diff is a loop within the
-  same invocation.
+  system shall run a self-review: the round's edits are made in the user's
+  checkout, which shall be on the CR head with nothing uncommitted, the kept items
+  land as one commit per round through `/anchor:commit`, and nothing is posted to
+  the forge.
 - **[REVIEW-18]** When a self-review ends, the system shall offer to mark the CR
   ready and to request reviewers, and shall do neither without the user choosing
   it.
-- **[REVIEW-19]** Where the author wants a self-review finding on the record, the
-  system shall post it under the same gates as another author's CR — the exact
-  text approved (REVIEW-09) and the pinned head re-read (REVIEW-11) — rather than
-  as a self-review side effect.
-- **[REVIEW-20]** When the findings are merged, the system shall rank each by
-  severity and group them by category, and shall first present a summary of one
-  row per finding the reviewer typed or ranked important and one row per
-  remaining class, the reviewer's own first, before showing any finding's text.
-  It shall then ask what to do with each class — keep, show, pick, or drop — and
-  shall show the exact text (REVIEW-09) only of what was kept.
+- **[REVIEW-19]** When the findings are merged, the system shall group the
+  findings one change resolves into one item, and give each item an id, a slug,
+  a severity, and a status: applied, proposed, filed as an issue, or left as is.
+  The system shall apply an item only where it is confident in the fix and the
+  fix stays local to the code it fixes, and shall record each applied item's
+  change on its own, so that one item can be reverted without the others.
+- **[REVIEW-20]** Before the review opens, the system shall seed a note for every
+  item at each site it touches, headed with the item's id, slug, and severity and,
+  for an unapplied item, its status, and shall write a table of the items beside
+  the diff that is never committed. It shall refuse to open a review over a note
+  revdiff would drop, so that a missing note always means the user removed it.
+- **[REVIEW-21]** When the review closes, the system shall read each item's fate
+  from what the user left: notes and row unchanged keep it, an edited note or an
+  edited or annotated row changes it, a deleted row drops it and reverts it, and a
+  note deleted with its row left in place is asked about rather than read as a
+  drop. A file the user edited from inside the review shall be kept as the
+  user's own fix.
+- **[REVIEW-22]** Where the CR was written by someone else, the system shall make
+  the round's edits in a worktree at the CR head, leaving the user's checkout
+  untouched, and shall post a kept applied item whose change is one run of lines
+  as a suggestion and any other kept item as a thread, each anchored to the line
+  it maps to in the CR head.
+- **[REVIEW-23]** When no finding clears the review-qualities template's bar, the
+  system shall say so in one line and treat the review as complete: nothing posts
+  on someone else's CR, and a self-review goes straight to the handoff.
+- **[REVIEW-24]** When a self-review round is committed, the system shall offer
+  another round scoped to that round's commit, showing how much each round so far
+  changed, and shall end the review when the user declines.
+- **[REVIEW-25]** The system shall remove a round's table, its state, and any
+  worktree it made when the round's edits are committed or posted, and when the
+  review stops after the round began.
+- **[REVIEW-26]** Before examining a CR that already has unresolved review
+  threads, the system shall surface them: on the user's own CR it shall offer to
+  resolve them through `/anchor:resolve-feedback` first, and on someone else's it
+  shall check each against the head and keep the examination from raising an
+  open thread again as a finding of its own.
+- **[REVIEW-27]** The system shall number a review's rounds within a session and
+  record, for each, the items by status, what the user's notes decided and how
+  many lines they ran to, and the lines the round changed as a percent of the
+  CR's own diff, and shall show that trend with each later round, so that a
+  review looping on polish is visible as a percent that stops falling.
 
 ### FEEDBACK — Resolve feedback
 
@@ -1069,6 +1109,12 @@ editor's whole answer is the revised artifact, which is why the column below
   partway through a flow and can wait while the user works elsewhere, so the
   reviewer often returns to it without remembering which flow is waiting on
   them or what their answer sets off.
+- **[DIFF-35]** Where the caller passes notes to preload, or asks for untracked
+  files to be shown, the system shall hand them to a tool that can carry them and
+  return the set of notes the reviewer left, and shall report `no-verdict` with a
+  named cause for a tool that cannot, rather than opening a review that silently
+  drops them. A note on an unchanged line shall come back anchored to its file and
+  line.
 
 ### CONFIG — Configuration
 
@@ -1431,6 +1477,22 @@ govern what the user must have read before that happens.
   behalf, the system shall review the commit's message and changeset as
   `/anchor:commit` does before committing it, once per round of feedback rather
   than once per fix.
+- **[CONFIRM-10]** Where a flow drafts edits to two or more targets in one round
+  (issue edits, thread replies), the system shall present the set for approval in
+  a review tool, one file per item showing its current text against the proposed
+  text, rather than in the reply, since a reply holding several drafts scrolls the
+  first ones away before the question arrives.
+- **[CONFIRM-11]** The system shall list the batch's items in a table the
+  reviewer edits in the review, and shall carry context for the review in notes
+  on the items, which it shall not publish.
+- **[CONFIRM-12]** When a batch review closes, the system shall decide each
+  item's outcome deterministically in a script: an item left as it was is kept,
+  an item whose file the reviewer edited publishes their text verbatim, an item
+  carrying a new or edited note is redrafted into a further round, and an item
+  whose row was deleted is dropped.
+- **[CONFIRM-13]** If a batch review does not complete, then the system shall
+  publish none of its items, and shall not present the drafts in the reply as a
+  substitute for the review.
 
 ### SANITIZE — Sanitizing what reaches a destination
 

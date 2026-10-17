@@ -28,6 +28,7 @@
   - [Running a review](/guides/running-a-review)
   - [When the review tool didn't grade it](/guides/review-fallback)
   - [Reading a reviewer's edits](/guides/reviewer-edits)
+  - [Reviewing a batch of edits](/guides/batch-review)
   - [Staying in changeset scope](/guides/changeset-scope)
   - [Configuring anchor](/guides/configuring)
   - [Forge cookbook](/guides/forge-cookbook)

@@ -37,8 +37,12 @@ case "${1:-}" in
   pr)   [[ "${2:-}" == view ]] || { echo "stub gh: unhandled pr $2" >&2; exit 1; }
         [[ -s "$CR_JSON" ]] || { echo "no pull requests found" >&2; exit 1; }
         cat "$CR_JSON" ;;
-  api)  [[ "${2:-}" == user ]] || { echo "stub gh: unhandled api $2" >&2; exit 1; }
-        echo "$FORGE_SELF" ;;
+  api)  case "${2:-}" in
+          user)    echo "$FORGE_SELF" ;;
+          graphql) if [[ -s "${THREADS_JSON:-}" ]]; then cat "$THREADS_JSON"
+                   else echo '{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[]}}}}}'; fi ;;
+          *) echo "stub gh: unhandled api $2" >&2; exit 1 ;;
+        esac ;;
   *) echo "stub gh: unhandled command: ${1:-}" >&2; exit 1 ;;
 esac
 EOF
@@ -51,8 +55,11 @@ case "${1:-}" in
   mr)   [[ "${2:-}" == view ]] || { echo "stub glab: unhandled mr $2" >&2; exit 1; }
         [[ -s "$CR_JSON" ]] || { echo "no open merge request" >&2; exit 1; }
         cat "$CR_JSON" ;;
-  api)  [[ "${2:-}" == user ]] || { echo "stub glab: unhandled api $2" >&2; exit 1; }
-        printf '{"username":"%s"}\n' "$FORGE_SELF" ;;
+  api)  case "$*" in
+          "api user") printf '{"username":"%s"}\n' "$FORGE_SELF" ;;
+          *discussions*) if [[ -s "${THREADS_JSON:-}" ]]; then cat "$THREADS_JSON"; else echo '[]'; fi ;;
+          *) echo "stub glab: unhandled $*" >&2; exit 1 ;;
+        esac ;;
   *) echo "stub glab: unhandled command: ${1:-}" >&2; exit 1 ;;
 esac
 EOF
@@ -143,6 +150,24 @@ git -C "$repo" rev-parse --verify --quiet "${head}^{commit}" >/dev/null \
   || fail "GitHub: CR head was not fetched into the checkout"
 ok "GitHub: fetches the head through refs/pull/<n>/head with no branch checkout"
 
+[[ "$(key "$out" OPEN_THREADS)" == 0 ]] || fail "GitHub: no threads -> OPEN_THREADS=0, got $(key "$out" OPEN_THREADS)"
+export THREADS_JSON="$work/threads.json"
+jq -n '{data:{repository:{pullRequest:{reviewThreads:{nodes:[
+  {id:"T1", isResolved:false, path:"feature.txt", line:2,
+   comments:{nodes:[{author:{login:"contributor"}, body:"why two?"}, {author:{login:"reviewer"}, body:"see above"}]}},
+  {id:"T2", isResolved:false, path:"feature.txt", line:3,
+   comments:{nodes:[{author:{login:"reviewer"}, body:"rename three"}]}},
+  {id:"T3", isResolved:true, path:"feature.txt", line:1,
+   comments:{nodes:[{author:{login:"contributor"}, body:"done"}]}}]}}}}}' > "$THREADS_JSON"
+out=$(bash "$review_cr_sh" 7 --repo "$repo")
+[[ "$(key "$out" OPEN_THREADS)" == 2 && "$(key "$out" OPEN_THREADS_MINE)" == 1 ]] \
+  || fail "GitHub: 2 open threads, 1 mine: $(grep OPEN_ <<<"$out")"
+fb="$(key "$out" OPEN_FEEDBACK_PATH)"
+[[ "$(jq -r '.[0] | "\(.author) \(.file):\(.line) \(.replies) \(.mine)"' "$fb")" == "contributor feature.txt:2 1 false" ]] \
+  || fail "GitHub: open feedback shape: $(cat "$fb")"
+unset THREADS_JSON
+ok "GitHub: reports the open review threads, and which the user started"
+
 diff_path="$(key "$out" DIFF_PATH)"
 desc_path="$(key "$out" DESC_PATH)"
 grep -q '^+one$' "$diff_path" || fail "GitHub: diff does not carry the CR's additions"
@@ -211,6 +236,21 @@ gl_cr_json "$head" "$base" reviewer opened false
 out=$(bash "$review_cr_sh" 7 --repo "$repo")
 [[ "$(key "$out" IS_OWN_CR)" == 1 ]] || fail "own CR not detected"
 ok "reports IS_OWN_CR when the author is the authenticated user"
+
+# --- GitLab: open discussions, skipping system notes and resolved threads ----
+export THREADS_JSON="$work/discussions.json"
+jq -n '[
+  {id:"D1", notes:[{system:false, resolvable:true, resolved:false, author:{username:"contributor"},
+                    body:"is this right?", position:{new_path:"feature.txt", new_line:1}}]},
+  {id:"D2", notes:[{system:false, resolvable:true, resolved:true, author:{username:"contributor"}, body:"fixed"}]},
+  {id:"D3", notes:[{system:true, resolvable:false, resolved:false, author:{username:"bot"}, body:"added 1 commit"}]}]' > "$THREADS_JSON"
+out=$(bash "$review_cr_sh" 7 --repo "$repo")
+[[ "$(key "$out" OPEN_THREADS)" == 1 && "$(key "$out" OPEN_THREADS_MINE)" == 0 ]] \
+  || fail "GitLab: 1 open thread: $(grep OPEN_ <<<"$out")"
+[[ "$(jq -r '.[0] | "\(.id) \(.file):\(.line)"' "$(key "$out" OPEN_FEEDBACK_PATH)")" == "D1 feature.txt:1" ]] \
+  || fail "GitLab: open feedback shape"
+unset THREADS_JSON
+ok "GitLab: reports open discussions, skipping system notes and resolved ones"
 
 # --- A merged CR still resolves, with its state reported ---------------------
 gl_cr_json "$head" "$base" contributor merged false

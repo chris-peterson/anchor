@@ -20,7 +20,7 @@
 # tool standalone (the dispatcher builds its path at run time) and so cannot
 # see the consumer.
 # shellcheck disable=SC2034
-diff_tool_caps='{"producesVerdict":true,"perHunkReview":false,"editableCommitMessage":false,"editableDescription":false,"sideMarkers":true}'
+diff_tool_caps='{"producesVerdict":true,"perHunkReview":false,"editableCommitMessage":false,"editableDescription":false,"sideMarkers":true,"preloadsAnnotations":true,"showsUntracked":true}'
 diff_tool_install_hint='brew install umputun/apps/revdiff'
 
 # The `sh` command string that runs one review. The refs come from the request
@@ -30,6 +30,10 @@ diff_tool_command() {
   local bin="$1" out_file="$2" err_file="$3" desc_file="$4"
   local cmd arg
   local -a args=("--description-file=$desc_file")
+  # Both are flags rather than REVDIFF_CONFIG entries: revdiff reads
+  # --annotations from the command line only.
+  [[ -z "${review_annotations:-}" ]] || args+=("--annotations=$review_annotations")
+  [[ "${review_untracked:-0}" -ne 1 ]] || args+=(--untracked)
 
   if [[ "$review_subject" == "files" ]]; then
     args+=("--compare-old=$files_left" "--compare-new=$files_right")
@@ -64,7 +68,8 @@ diff_tool_command() {
 }
 
 # Parse revdiff's markdown annotations into the DIFF comments array. Each block is
-#   ## <file> (file-level)         | ## <file>:<line> (+|-)  | ## <file>:<a>-<b> (+|-)
+#   ## <file> (file-level)  | ## <file>:<line> (+|-| )  | ## <file>:<a>-<b> (+|-| )
+# where ( ) is an unchanged line, numbered on the new side as (+) is.
 # followed by a possibly multi-line body. revdiff space-prefixes any body line
 # that begins with "## " so it never looks like a header.
 #
@@ -85,14 +90,14 @@ diff_tool_comments() {
     def parse_header:
       if test("\\(file-level\\)$") then
         capture("^(?<file>.+) \\(file-level\\)$") + {target:"file", side:"new"}
-      elif test(":[0-9]+-[0-9]+ \\([-+]\\)$") then
-        capture("^(?<file>.+):(?<s>[0-9]+)-(?<e>[0-9]+) \\((?<sd>[-+])\\)$")
+      elif test(":[0-9]+-[0-9]+ \\([-+ ]\\)$") then
+        capture("^(?<file>.+):(?<s>[0-9]+)-(?<e>[0-9]+) \\((?<sd>[-+ ])\\)$")
         | {file, target:"line", startLine:(.s|tonumber), endLine:(.e|tonumber),
-           side:(if .sd=="+" then "new" else "old" end)}
-      elif test(":[0-9]+ \\([-+]\\)$") then
-        capture("^(?<file>.+):(?<s>[0-9]+) \\((?<sd>[-+])\\)$")
+           side:(if .sd=="-" then "old" else "new" end)}
+      elif test(":[0-9]+ \\([-+ ]\\)$") then
+        capture("^(?<file>.+):(?<s>[0-9]+) \\((?<sd>[-+ ])\\)$")
         | {file, target:"line", startLine:(.s|tonumber), endLine:(.s|tonumber),
-           side:(if .sd=="+" then "new" else "old" end)}
+           side:(if .sd=="-" then "old" else "new" end)}
       else
         {file:null, target:"changeset", side:"new"}
       end;

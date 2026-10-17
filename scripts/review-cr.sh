@@ -42,6 +42,11 @@
 #   DIFF_PATH=<path>             the unified diff of the range
 #   FINDINGS_PATH=<path>         empty temp file for the skill's findings JSON
 #   IS_OWN_CR=<0|1>              1 == the authenticated user wrote this CR
+#   OPEN_THREADS=<n>             unresolved review threads a person started
+#   OPEN_THREADS_MINE=<n>        how many of those the authenticated user started
+#   OPEN_FEEDBACK_PATH=<path>    those threads as JSON: [{id, author, mine,
+#                                file, line, body, replies}], body being the
+#                                opening comment and replies the count after it
 #
 # On a failure that leaves nothing to review it prints REVIEW_ERROR=<message>
 # and exits non-zero, rather than emitting a half-populated block the skill
@@ -154,6 +159,45 @@ esac
 is_own=0
 [[ -n "$self" && "$self" == "$cr_author" ]] && is_own=1
 
+# --- Open feedback -------------------------------------------------------------
+
+# Threads already open on the CR come before any new pass: on the author's own
+# CR they are what /anchor:resolve-feedback works, and on someone else's they
+# are the questions the next head is supposed to answer.
+feedback_path=$(anchor_tmpfile "cr-review-feedback" json)
+case "$forge" in
+  github)
+    owner="${project%%/*}"; repo_name="${project#*/}"
+    # GraphQL variables, not shell ones: the single quotes are deliberate.
+    # shellcheck disable=SC2016
+    threads=$(gh api graphql -f query='query($owner:String!,$repo:String!,$pr:Int!){
+      repository(owner:$owner,name:$repo){pullRequest(number:$pr){
+        reviewThreads(first:100){nodes{id isResolved path line
+          comments(first:50){nodes{author{login} body}}}}}}}' \
+      -f owner="$owner" -f repo="$repo_name" -F pr="$cr_iid" 2>&1) \
+      || die "could not read the CR's review threads: $(head -1 <<<"$threads")"
+    jq --arg self "$self" '[.data.repository.pullRequest.reviewThreads.nodes[]
+      | select(.isResolved | not)
+      | (.comments.nodes[0]) as $first
+      | {id, author:($first.author.login // ""), mine:(($first.author.login // "") == $self),
+         file:.path, line, body:($first.body // ""), replies:((.comments.nodes | length) - 1)}]' \
+      <<<"$threads" > "$feedback_path"
+    ;;
+  gitlab)
+    gl_args=(api)
+    [[ "$host" == "gitlab.com" ]] || gl_args+=(--hostname "$host")
+    threads=$(glab "${gl_args[@]}" "projects/$(jq -rn --arg p "$project" '$p | @uri')/merge_requests/${cr_iid}/discussions?per_page=100" 2>&1) \
+      || die "could not read the MR's discussions: $(head -1 <<<"$threads")"
+    jq --arg self "$self" '[.[] | select(.notes[0].system == false)
+      | select([.notes[] | .resolvable and (.resolved | not)] | any)
+      | (.notes[0]) as $first
+      | {id, author:($first.author.username // ""), mine:(($first.author.username // "") == $self),
+         file:($first.position.new_path // null), line:($first.position.new_line // null),
+         body:($first.body // ""), replies:((.notes | length) - 1)}]' \
+      <<<"$threads" > "$feedback_path"
+    ;;
+esac
+
 # --- Fetch the head into the local checkout ----------------------------------
 
 # Both forges publish every CR head under a read-only ref namespace, so this
@@ -219,3 +263,6 @@ echo "DESC_PATH=$desc_path"
 echo "DIFF_PATH=$diff_path"
 echo "FINDINGS_PATH=$findings_path"
 echo "IS_OWN_CR=$is_own"
+echo "OPEN_THREADS=$(jq length "$feedback_path")"
+echo "OPEN_THREADS_MINE=$(jq '[.[] | select(.mine)] | length' "$feedback_path")"
+echo "OPEN_FEEDBACK_PATH=$feedback_path"

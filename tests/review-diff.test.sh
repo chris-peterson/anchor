@@ -132,6 +132,48 @@ export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT=$'## a.txt:2 (+)\nfix this'; o=$(r
 ok "revdiff: real comment kept, unchanged (description) dropped -> changes-requested"
 unset REVDIFF_STUB_ECHO_DESC
 
+# unchanged-line marker ( ) -> a line comment on the new side, not a changeset one
+export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT=$'## a.txt:1 ( )\nnote on context\n\n## a.txt:1-2 ( )\nnote on a range'
+o=$(run --previous); j=$(json_of "$o")
+[ "$(jq -r '.comments[0] | "\(.target) \(.file) \(.startLine) \(.side)"' <<<"$j")" = "line a.txt 1 new" ] \
+  || fail "( ) -> line a.txt 1 new, got $(jq -c '.comments[0]' <<<"$j")"
+[ "$(jq -r '.comments[1] | "\(.startLine)-\(.endLine) \(.side)"' <<<"$j")" = "1-2 new" ] \
+  || fail "( ) range -> 1-2 new, got $(jq -c '.comments[1]' <<<"$j")"
+ok "revdiff: ( ) marker -> a line comment on the new side"
+
+# --annotations preloads notes and returns the set the reviewer left as JSON
+notes="$work/notes.md"; printf '## a.txt:2 (+)\n#1 seeded\n' > "$notes"
+export REVDIFF_ARGS_FILE="$work/args.txt"
+export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT=$'## a.txt:2 (+)\n#1 seeded, edited'
+o=$(run --previous --annotations "$notes")
+grep -qx -- "--annotations=$notes" "$REVDIFF_ARGS_FILE" || fail "--annotations not passed: $(cat "$REVDIFF_ARGS_FILE")"
+returned=$(sed -n 's/^REVIEW_RETURNED=//p' <<<"$o")
+[ "$returned" = "$work/notes.returned.json" ] || fail "REVIEW_RETURNED path: $o"
+[ "$(jq -r '.[0].body' "$returned")" = "#1 seeded, edited" ] || fail "returned notes: $(cat "$returned")"
+unset REVDIFF_ARGS_FILE
+ok "--annotations: passed to revdiff, and the returned set lands in REVIEW_RETURNED"
+
+# --untracked reaches revdiff on a working-tree review, and is refused on two refs
+export REVDIFF_ARGS_FILE="$work/args.txt" REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
+printf 'one\ntwo\nthree\n' > "$repo/a.txt"
+run HEAD --untracked >/dev/null
+grep -qx -- '--untracked' "$REVDIFF_ARGS_FILE" || fail "--untracked not passed: $(cat "$REVDIFF_ARGS_FILE")"
+git -C "$repo" checkout --quiet -- a.txt
+rc=0; run --previous --untracked >/dev/null 2>&1 || rc=$?
+[ "$rc" = 64 ] || fail "--untracked over two commits should exit 64, got $rc"
+unset REVDIFF_ARGS_FILE
+ok "--untracked: passed on a working-tree review, refused between two commits"
+
+# a viewer that can't preload notes refuses rather than dropping them
+git -C "$repo" config difftool.stubtool.cmd true
+git -C "$repo" config anchor.diff.tool stubtool
+printf 'one\ntwo\nthree\n' > "$repo/a.txt"
+o=$(run HEAD --annotations "$notes" 2>/dev/null); j=$(json_of "$o")
+[ "$(jq -r .raw.exitCode <<<"$j")" = annotations-unsupported ] || fail "difftool + annotations: $j"
+git -C "$repo" checkout --quiet -- a.txt
+git -C "$repo" config anchor.diff.tool revdiff
+ok "--annotations: a viewer that can't preload notes refuses the review"
+
 
 
 # rc 1 -> no-verdict (tool error)
