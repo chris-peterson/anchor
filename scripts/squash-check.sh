@@ -34,7 +34,7 @@
 # checkout (see scripts/lib/resolve-context.sh).
 #
 # The stdout is an OUTPUT CONTRACT, not a fact dump: it exports the decision the
-# skill acts on plus the one datum it must present, and keeps the facts that
+# skill acts on plus the data it must present, and keeps the facts that
 # produced the decision (push state, CR state, author identity, the block reason)
 # inside this script. The skill can't narrate what it never receives — so the
 # gate stays quiet by construction rather than by a "don't say this" instruction
@@ -53,6 +53,9 @@
 #                                   and force-pushed). Named by what it PERMITS, not
 #                                   why — the reason itself never crosses the boundary
 #   PRIOR_SUBJECT=<subject>        HEAD's subject line (for the squash option text)
+#   CR_REF=<repo>#<n>|<repo>!<n>   the branch's CR as its forge writes it, empty
+#                                   with none (the review manifest names it)
+#   CR_URL=<url>                   that CR's page
 
 set -euo pipefail
 
@@ -121,18 +124,33 @@ fi
 
 # --- CR review state ----------------------------------------------------------
 
+# One line each: the draft flag, the CR's number, its page. A field the forge
+# leaves out comes back as an empty line, so the reads below stay aligned.
 cr_state=none
 case "$forge" in
   gitlab)
-    draft=$(glab mr view --output json 2>/dev/null | jq -r '.draft // empty' || true)
+    cr=$(glab mr view --output json 2>/dev/null \
+      | jq -r '(.draft | values | tostring) // "", (.iid // "" | tostring), (.web_url // "")' || true)
+    sep='!'
     ;;
   github)
-    draft=$(gh pr view --json isDraft --jq '.isDraft' 2>/dev/null || true)
+    cr=$(gh pr view --json isDraft,number,url \
+      --jq '(.isDraft | values | tostring) // "", (.number // "" | tostring), (.url // "")' 2>/dev/null || true)
+    sep='#'
     ;;
   *)
-    draft=""
+    cr=""
     ;;
 esac
+draft="" cr_number="" cr_url=""
+{ IFS= read -r draft; IFS= read -r cr_number; IFS= read -r cr_url; } <<<"$cr" || true
+
+# The manifest names a CR the way its forge writes one: the project's own name,
+# then # or ! and the number.
+cr_ref=""
+if [[ -n "$cr_number" && -n "$cr_url" ]]; then
+  cr_ref="$(sed -E 's#(/-)?/(pull|merge_requests)/[0-9]+$##; s#.*/##' <<<"$cr_url")${sep}${cr_number}"
+fi
 if [[ "$draft" == "true" ]]; then
   cr_state=draft
 elif [[ "$draft" == "false" ]]; then
@@ -149,7 +167,10 @@ squash=blocked
 force_push=0
 allow_message_amend=0
 
-if [[ "$other_author" -eq 1 ]]; then
+if ! git rev-parse --verify --quiet HEAD >/dev/null; then
+  # No commit yet, so nothing to amend.
+  :
+elif [[ "$other_author" -eq 1 ]]; then
   # HEAD authored by someone else — amending rewrites their commit, never a target
   # (even for a message-only fix).
   :
@@ -184,3 +205,5 @@ echo "SQUASH=$squash"
 echo "SQUASH_FORCE_PUSH=$force_push"
 echo "ALLOW_MESSAGE_AMEND=$allow_message_amend"
 echo "PRIOR_SUBJECT=$prior_subject"
+echo "CR_REF=$cr_ref"
+echo "CR_URL=$cr_url"

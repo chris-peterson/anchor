@@ -120,7 +120,9 @@ Running a command that prints it shows the user nothing, for the reasons
 reply as a failed review" above sets out, with copy only and edit beside the ⚠️
 option that writes it.
 
-**A changeset** — walk the hunks. Not one question over a diff the user never
+**A changeset** — walk the hunks. (`/anchor:review` has no rung here: its
+review is the notes revdiff carries, so it stops and names what's missing
+instead.) Not one question over a diff the user never
 saw, and not a dump of `git diff` either: go file by file, and for each, say
 what changed and why it changed, quoting the lines that carry the decision.
 Invite feedback per file rather than once at the end. This is slower than a
@@ -144,11 +146,15 @@ The exception is a tool that was never tried: where the probe named a
 substitute because the configured tool is absent, launching the substitute is a
 first attempt, not a retry.
 
-**`raw.exitCode: "unsaved"` and `"pane-closed"` are neither this case nor a step
-here** — both are re-openable, and DIFF-14 treats them that way. The tool
-worked. On `unsaved` the reviewer left the editor without writing, so the draft
-went ungraded; saving is what approves it, unchanged included, and that is the
-sentence they need. On `pane-closed` the terminal went away before the tool could
+**`raw.exitCode: "unsaved"`, `"pane-closed"`, and `"undecided"` are neither
+this case nor a step here**: all three are re-openable, and DIFF-14 and DIFF-42
+treat them that way. The tool worked. On `undecided` the reviewer quit without
+choosing (revdiff with no note on Accept or Reject, or an editor without
+saving): without the error banner, ask with `AskUserQuestion` whether to accept,
+reject, or reopen the review, and act on the answer as that verdict; an answer
+typed in place of the three is feedback. On `unsaved` a GUI editor returned
+without waiting, so there was nothing to save; the output names the flag it
+needs, and that is the sentence they need. On `pane-closed` the terminal went away before the tool could
 answer — a `⌘W` on the pane rather than a quit. Either way the draft is intact:
 say which happened and open it again. Walking it in chat instead replaces
 something their editor would have shown them properly.
