@@ -49,8 +49,12 @@ anchor_review_hosts() {
   printf '%s\n' tmux gui iterm2 agterm
 }
 
+# Resolved once, as sourced: a review can change directory before its host is
+# selected (a --files review moves into its scratch repo), which would strand a
+# path relative to how the dispatcher was invoked.
+anchor_review_hosts_path="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../review/hosts"
 anchor_review_hosts_dir() {
-  printf '%s' "$(dirname "${BASH_SOURCE[0]}")/../review/hosts"
+  printf '%s' "$anchor_review_hosts_path"
 }
 
 # Select the host that would run a $1-mode review of an editor $2, leaving its

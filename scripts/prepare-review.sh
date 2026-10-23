@@ -264,7 +264,7 @@ resolve_cr() {
       cr_url=$(jq -r '.web_url // empty' <<<"$json")
       [[ -z "$cr_url" ]] && return 1
       cr_iid=$(jq -r '.iid // empty' <<<"$json")
-      cr_draft=$(jq -r '.draft // empty' <<<"$json")
+      cr_draft=$(jq -r '.draft | values' <<<"$json")
       cr_head=$(jq -r '.sha // empty' <<<"$json")
       cr_desc=$(jq -r '.description // ""' <<<"$json")
       cr_title=$(jq -r '.title // ""' <<<"$json")
@@ -290,7 +290,7 @@ resolve_cr() {
       cr_url=$(jq -r '.url // empty' <<<"$json")
       [[ -z "$cr_url" ]] && return 1
       cr_iid=$(jq -r '.number // empty' <<<"$json")
-      cr_draft=$(jq -r '.isDraft // empty' <<<"$json")
+      cr_draft=$(jq -r '.isDraft | values' <<<"$json")
       cr_head=$(jq -r '.headRefOid // empty' <<<"$json")
       cr_desc=$(jq -r '.body // ""' <<<"$json")
       cr_title=$(jq -r '.title // ""' <<<"$json")

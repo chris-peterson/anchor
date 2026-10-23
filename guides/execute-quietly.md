@@ -57,19 +57,30 @@ behind them.
 ## Exception: show what is going under review
 
 A review asks the user to grade something, and the tool draws it one file — or
-one buffer — at a time. The *set* is what it never shows: which files are in
-scope, how much each one moved, which repo and branch they belong to, and what
-rides alongside them. So print that manifest as a table in the message that
-launches the review, and let the tool render the contents.
+one buffer — at a time. The *set* is what it never shows: what the review
+belongs to, how big it is, and what approving it sets off. So print that
+manifest as a table in the message that launches the review, under the line
+saying where the review is (`running-a-review.md`), and let the tool render the
+contents:
 
-> Opening the review in a split — revdiff, `chris-peterson/anchor` on `main`,
-> with the drafted commit message:
+| Row | What it holds |
+| --- | --- |
+| Repo | the CR as its forge writes it, linked: `<repo>#<n>` on GitHub, `<repo>!<n>` on GitLab. With no CR, the repo and the branch |
+| Size | how much is under review: the files and lines a changeset touches, the sections a drafted document holds |
+| Tool | the tool's name |
+| What's next | what approving hands on to: the commit and push, the CR update, the publish |
+
+How to answer is the tool's to say: `(context).md` and the notes carry it, so
+the manifest stops at what is under review.
+
+> 👀 The review is open in an iTerm2 split of this pane.
 >
-> | File | Change |
-> |------|--------|
-> | `scripts/lib/review-host.sh` | +45 −29 |
-> | `tests/review-host.test.sh` | +76, new file |
-> | `SPEC.md` | +18 −15 |
+> | | |
+> | --- | --- |
+> | Repo | [`acme-widget#12`](https://github.com/acme/acme-widget/pull/12) |
+> | Size | 3 files, +139 −44 |
+> | Tool | revdiff |
+> | What's next | commit and push |
 
 Name the drafted artifact riding with the diff — the commit message, the CR
 description, the release notes — because the tool shows it in a pane or a
@@ -77,13 +88,12 @@ header the user has no reason to look for.
 
 **In `diff` mode, print that artifact verbatim under the table, in a fenced
 block.** A diff viewer draws the changeset, not the prose that rides with it:
-revdiff puts it behind its `i` popup, and a difftool has nowhere to put it at
-all. Quitting either one approves, so a message shown only there can be approved
+revdiff puts it in a `(context).md` file the reviewer has to open, and a
+difftool has nowhere to put it at all. Quitting either one approves, so a message shown only there can be approved
 without being read, which CONFIRM-02 rules out. `edit` mode needs no copy: the
 buffer the reviewer saves *is* the artifact.
 
-> Opening the review in a split — revdiff, `chris-peterson/anchor` on `main`.
-> Quitting approves both the diff and this message:
+> (the manifest above, then) Quitting approves both the diff and this message:
 >
 > ```text
 > Add retry to checkout

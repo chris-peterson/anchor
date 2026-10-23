@@ -118,7 +118,7 @@ echo "BRANCH=$branch"
 echo "DEFAULT_BRANCH=$default_branch"
 echo "ON_DEFAULT_BRANCH=$on_default"
 echo "AHEAD=$ahead"
-# squash-check emits SQUASH / SQUASH_FORCE_PUSH / ALLOW_MESSAGE_AMEND / PRIOR_SUBJECT.
+# squash-check emits SQUASH / SQUASH_FORCE_PUSH / ALLOW_MESSAGE_AMEND / PRIOR_SUBJECT / CR_REF / CR_URL.
 # Runs in this script's cwd (already the target repo), so it needs no --repo.
 bash "$here/squash-check.sh"
 echo "ANCHOR_CONFIG=$config_json"

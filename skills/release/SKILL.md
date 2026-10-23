@@ -278,9 +278,10 @@ notes cover, the tool from the probe, and the sections the draft holds.
 
 What each verdict leads to here: `approved` moves on to the publish
 confirmation below, carrying the `editedFields` text with `target:
-"release-notes"` where `edit` mode returned one, the draft otherwise;
-`changes-requested` folds the comments in and re-opens; `incomplete`,
-`no-verdict`, a missing verdict line, and a probe reporting nothing installed
+"release-notes"` where the result carries one, the draft otherwise;
+`changes-requested` folds the comments in and re-opens; `rejected` publishes
+nothing and stops, with no fallback; `no-verdict` with `raw.exitCode` `undecided` asks Accept, Reject, or Reopen and acts on the answer (`${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md`); `incomplete`,
+any other `no-verdict`, a missing verdict line, and a probe reporting nothing installed
 take the ladder in `${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md` with the
 drafted notes as the artifact.
 

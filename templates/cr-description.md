@@ -46,6 +46,11 @@ guide's deep links**.
 - What problem or need drove this change? Use the author's *why* from Step 2.
 - Link any ticket, incident, or design doc. Mention a tracker URL or a bare id
   and `anchor` links it — expanding a bare id against `anchor.workTrackerBaseUri`.
+- Reference each forge issue the CR resolves as `Closes #<n>` (on GitLab,
+  `Closes <group>/<project>#<n>` for one in another project). `Closes` is a
+  closing keyword on both forges, so the merge to the default branch closes the
+  issue. Any other mention, such as `Refs #<n>`, links the CR and the issue: each forge
+  shows the CR on the issue, and the issue stays open.
 
 **Two short paragraphs, and the reviewer should know what this CR does by the end
 of the first.** Orientation earns its words only as much as the reviewer needs to

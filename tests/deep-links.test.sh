@@ -150,6 +150,20 @@ grep -q '^UNRESOLVED malformed' <<<"$o" \
   || fail "an anchor: written as prose must not pass silently: $o"
 ok "--check reports an ambiguous placeholder and an anchor: outside a link"
 
+# A bare destination ends at the first `)`, so a token holding parentheses is cut
+# there. What's left still names one line, and expanding it would leave the rest
+# of the token in the description as text.
+cat > "$draft" <<EOF
+- [\`app.txt\`](anchor:app.txt#Deep-link construction (Review guide)) — a heading
+EOF
+cp "$draft" "$work/draft.before"
+o=$(run --check "$draft" --base main) && fail "a token cut at its own ')' should exit non-zero: $o"
+grep -q '^UNRESOLVED unbracketed app.txt Deep-link construction (Review guide$' <<<"$o" \
+  || fail "the cut token should be reported unbracketed: $o"
+o=$(gh --expand "$draft") && fail "--expand should refuse a cut token: $o"
+cmp -s "$draft" "$work/draft.before" || fail "--expand should leave the draft untouched: $(cat "$draft")"
+ok "--check reports a bare placeholder whose token holds a parenthesis"
+
 # A description that names the skill which drafted it carries the same prefix a
 # placeholder does. Reading `/anchor:prepare-review` as broken markup reports a
 # fault in prose the author wrote on purpose.
