@@ -120,7 +120,9 @@ Running a command that prints it shows the user nothing, for the reasons
 reply as a failed review" above sets out, with copy only and edit beside the ⚠️
 option that writes it.
 
-**A changeset** — walk the hunks. Not one question over a diff the user never
+**A changeset** — walk the hunks. (`/anchor:review` has no rung here: its
+review is the notes revdiff carries, so it stops and names what's missing
+instead.) Not one question over a diff the user never
 saw, and not a dump of `git diff` either: go file by file, and for each, say
 what changed and why it changed, quoting the lines that carry the decision.
 Invite feedback per file rather than once at the end. This is slower than a

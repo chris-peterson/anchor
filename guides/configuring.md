@@ -32,6 +32,7 @@ The four verbosity dials are listed in lifecycle order, and they descend:
 |---|---|---|
 | [`anchor.edit.tool`](#key-edit-tool) | `core.editor`, then git's chain | Which editor an `edit` review opens. |
 | [`anchor.diff.tool`](#key-diff-tool) | git's own `diff.tool` | Which viewer a `diff` review opens. Set neither and a `diff` review says so instead of opening. |
+| [`anchor.diff.hints`](#key-diff-hints) | `true` | A revdiff review's `(context).md` names the keys that step through it and leave notes. |
 | [`anchor.reviewBudgetMins`](#key-reviewbudgetmins) | `10` | Descriptions are written for ten minutes of focused review — enough for the change and the topics around it. |
 | [`anchor.issue.verbosity`](#key-issueverbosity) | `75` | Issue bodies run long: the people who pick the work up need the context in the issue. |
 | [`anchor.commit.verbosity`](#key-commitverbosity) | `50` | Commit bodies run to the why plus the context the diff doesn't show. |
@@ -125,6 +126,12 @@ recommends [revdiff](https://revdiff.com), a terminal-native reviewer. A viewer
 named here that neither `anchor` nor git can launch reports that rather than
 opening something else.
 
+`/anchor:review` runs revdiff whatever this key names. Its review is a set of
+notes preloaded into the diff, one per finding, that you keep, edit, or delete
+in place, and revdiff is the viewer that takes them and hands back what you
+left. Without revdiff, `/anchor:review` says so and stops before examining
+anything.
+
 These two are the *tool* half of a review, one key per mode, and they are the
 only half you set: which mode a review runs in follows what it is reviewing
 ([A mode per subject](#a-mode-per-subject)). Whichever tool runs, it returns a
@@ -136,6 +143,18 @@ than a review, so no tool reaches a review without one.
 How the chosen tool renders the diff is its own knob, not an `anchor.*` key: see
 [Review config](#review-config) (per mode:
 [`diff`](#review-config-diff), [`edit`](#review-config-edit)).
+
+### `anchor.diff.hints` :id=key-diff-hints
+
+```bash
+git config anchor.diff.hints false
+```
+
+A revdiff review's `(context).md` names, in the box under its size, the keys
+that step through the changes and add an annotation, read from revdiff's own
+bindings so a key you remapped is named as remapped, and how to hide them.
+Once you know them, `false` drops those rows, or tell the agent "hide diff
+hints" and it sets this for you. What quitting does stays.
 
 ### `anchor.reviewBudgetMins` :id=key-reviewbudgetmins
 
@@ -605,17 +624,53 @@ Until you set one of them, the launch message says the tool was `anchor`'s pick
 and names the key — the same hint the editor ladder prints.
 
 **What `editor` does with the draft.** It opens the artifact in a buffer with the
-change under review below a scissors line, the way `git commit --verbose` does:
+change under review below a scissors line, the way `git commit --verbose` does.
+A commit message opens as `<repo>@<branch>/COMMIT_EDITMSG`, so your editor's
+gitcommit mode greys the context and colours the diff:
 
 ```text
 Add retry to checkout
 
 The gateway drops idle connections, so the first call after …
------------------------- >8 ------------------------
-Everything below this line is ignored. Save to approve the text above,
-unchanged if it already reads right. Quit without saving to abort, and
-nothing this review gates will happen.
+
+# ------------------------ >8 ------------------------
+# Do not modify or remove the line above.
+# Everything below the line above is ignored.
+# ╭─────────────────────────────────────────────────────────────────────────╮
+# │ Save to approve the text above the line, unchanged if it already reads  │
+# │ right. Quit without saving to abort, and nothing this review gates will │
+# │ happen.                                                                 │
+# │                                                                         │
+# │ To ask for changes instead, save, then quit with exit code 2 (:w, then  │
+# │ :cq 2 in Helix or Vim), and the saved draft opens in revdiff to         │
+# │ annotate.                                                               │
+# ╰─────────────────────────────────────────────────────────────────────────╯
 ```
+
+**Asking for a change instead of making it.** Some drafts need a change you'd
+rather describe than write. Save, then quit the editor with exit code 2, and the
+same review reopens in your diff viewer ([`anchor.diff.tool`](#key-diff-tool))
+with the draft as saved, where a note on a line asks Claude to revise it. Any
+edit you saved before switching is kept. Save first: Vim's `:cq` quits without
+writing, so an unsaved edit is lost, while Helix's `:cq` refuses to quit with
+one pending. The buffer offers this only when a viewer is named. In Helix, one
+key can do both steps:
+
+```toml
+# ~/.config/helix/config.toml
+[keys.normal.space]
+f = "@:noop Annotate in revdiff<ret>:w<ret>:cq 2<ret>"
+```
+
+Press `space`, then `f`. The menu labels a macro with its own text, so the
+`:noop` at the front, which does nothing, is what names the entry. Helix's `space` menu keeps its own order and drops rows
+from the bottom in a short pane, so a key you add lists last and can be cut off;
+taking `f` puts the switch in the first row. It replaces the file picker on
+`space f` in every buffer (`space F` still opens one, at the working directory).
+
+A CR description, an issue body, or release notes opens as a `.md` buffer,
+where `#` is a heading, so the same context sits in an HTML comment under the
+scissors line instead.
 
 Whatever you save above that line **is** the artifact — `anchor` takes it
 verbatim rather than re-drafting from it. Unlike `git commit`, lines beginning

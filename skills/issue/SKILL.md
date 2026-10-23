@@ -1,11 +1,11 @@
 ---
 name: issue
-description: File a new forge issue (or update an existing one) that leads with WHY the work is needed. Use when filing, creating, drafting, or updating a single issue or ticket. To find, browse, or pick which issue to work on next, use the `backlog` skill instead.
+description: File a new forge issue (or update an existing one) that leads with WHY the work is needed, or review edits to several issues as one batch. Use when filing, creating, drafting, or updating an issue or ticket, or editing several at once (retitle, relabel, close, rewrite bodies). To find, browse, or pick which issue to work on next, use the `backlog` skill instead.
 ---
 
 # Issue
 
-File a new issue whose job is to convey *why* the work is needed and *how* the author intends to approach it — written for a reader who has never seen this part of the system. This is the authoring counterpart to the `backlog` skill: `issue` *drafts and writes* one issue (a new one, or an update to a known one), while `backlog` *surveys what is already filed* to find the next thing to work on. An issue describes work **to be done**, so unlike `commit` and `prepare-review` there is no diff to read from: the raw material is the author's intent, gathered up front.
+File a new issue whose job is to convey *why* the work is needed and *how* the author intends to approach it — written for a reader who has never seen this part of the system. This is the authoring counterpart to the `backlog` skill: `issue` *drafts and writes* issues (a new one, an update to a known one, or a batch of edits across several), while `backlog` *surveys what is already filed* to find the next thing to work on. An issue describes work **to be done**, so unlike `commit` and `prepare-review` there is no diff to read from: the raw material is the author's intent, gathered up front.
 
 **Don't narrate your work.** Every step below is an operating instruction, not a script to read aloud — follow the execute-quietly discipline: `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`. For this skill, the only things worth surfacing are a question you need answered, the drafted issue with its options, and the final URL.
 
@@ -74,6 +74,28 @@ Act on `TARGET_VIA`:
   - **GitHub:** add `-R <TARGET_PROJECT>` to the `gh issue …` calls.
   - **GitLab:** the create/update use `glab api projects/:fullpath/…`, but `:fullpath` resolves from the *cwd* git dir — substitute the URL-encoded `TARGET_PROJECT` for `:fullpath` and add `--hostname <TARGET_HOST>` (required for self-hosted, harmless elsewhere).
   - `TARGET_LOCAL` — the checkout, set when the target is the repo you're standing in. Only the template step needs it; create/update are pure-remote and work without it (the common case for a repo you named from elsewhere).
+
+## Several issues at once
+
+When the request covers two or more issues (filing one per plugin, relabelling a
+set, closing the ones a release finished, rewriting several bodies), run the steps
+below for each issue, then review them as one batch in revdiff instead of
+presenting them in chat. Follow `${CLAUDE_PLUGIN_ROOT}/guides/batch-review.md`,
+with this skill's items in `${CLAUDE_PLUGIN_ROOT}/templates/batch-items.md`:
+
+- **Issue** items, one per issue. Labels are replaced only where the request
+  asked for it; otherwise the Step 5 add-only rule holds.
+- **Change request** items, for an open CR the request moves with its issues
+  (onto a milestone, a label).
+- **Milestone** items, where the request plans a release: the milestones it
+  creates, and the title, due date, description, or state of the ones already
+  open. They publish before the issues.
+- **Notes**: only where an edit rests on something the reviewer would have to
+  look up, such as the thread or commit that settled it.
+
+Gather intent (Step 2) once for the batch where the issues share it, and ask per
+issue only where they don't. The Step 6 disposition question doesn't apply: the
+batch review is the gate.
 
 ## Step 1: Resolve the issue
 
@@ -266,4 +288,4 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill issue --mode <REVIEW
 
 **The manifest** names the repo, the issue (its number and title when updating one), the tool from the probe, and the sections the draft holds. After the table, the next thing you say is the verdict.
 
-What each verdict leads to here: `approved` files the issue — the `editedFields` text with `target: "issue-body"` where `edit` mode returned one, the draft otherwise; `changes-requested` folds the comments in and re-presents; `incomplete`, `no-verdict`, and a missing verdict line file nothing and take the ladder in `${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md` with the drafted body as the artifact.
+What each verdict leads to here: `approved` files the issue — the `editedFields` text with `target: "issue-body"` where the result carries one, the draft otherwise; `changes-requested` folds the comments in and re-presents; `incomplete`, `no-verdict`, and a missing verdict line file nothing and take the ladder in `${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md` with the drafted body as the artifact.

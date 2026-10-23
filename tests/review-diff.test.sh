@@ -23,6 +23,9 @@ ok()   { echo "ok - $*"; }
 work="$(mktemp -d "${TMPDIR:-/tmp}/anchor-review-test.XXXXXX")"
 cleanup() { rm -rf "$work"; }
 trap cleanup EXIT
+# A changes-requested --local review saves its state under $TMPDIR (DIFF-37).
+export TMPDIR="$work/tmp"
+mkdir -p "$TMPDIR"
 
 bin="$work/bin"
 mkdir -p "$bin"
@@ -31,15 +34,17 @@ mkdir -p "$bin"
 # it to scripts/lib/review-host.sh, which opens it in a pane. This stub stands in
 # via ANCHOR_HOST_RUNNER, so the suite drives the real command string rather
 # than a launcher's argv: it unpacks the string back into an argv, records it to
-# $REVDIFF_ARGS_FILE, copies the seeded header (--description-file, which the
+# $REVDIFF_ARGS_FILE and the variables it sets to $REVDIFF_ENV_FILE, copies the seeded header (--description-file, which the
 # adapter deletes on return) to $REVDIFF_DESC_CAPTURE, writes
 # $REVDIFF_STUB_OUTPUT to the --output file the adapter named, and exits
 # $REVDIFF_STUB_RC.
 cat > "$bin/stub-host-runner.sh" <<'EOF'
 #!/usr/bin/env bash
-cmd=${1#REVDIFF_EXIT_CODE_ON_ANNOTATIONS=true }
-cmd=${cmd% 2>*}
+cmd=${1% 2>*}
 eval "set -- $cmd"
+env=()
+while [[ "$1" == REVDIFF_*=* ]]; do env+=("$1"); shift; done
+[ -n "${REVDIFF_ENV_FILE:-}" ] && printf '%s\n' "${env[@]}" > "$REVDIFF_ENV_FILE"
 shift   # the revdiff binary itself
 [ -n "${REVDIFF_ARGS_FILE:-}" ] && printf '%s\n' "$@" > "$REVDIFF_ARGS_FILE"
 out=""
@@ -52,9 +57,10 @@ for a in "$@"; do
   esac
 done
 [ -n "$out" ] && printf '%s' "${REVDIFF_STUB_OUTPUT:-}" > "$out"
-# The fork's echo of the seeded header, as revdiff writes a file-level note.
-if [ -n "$out" ] && [ -n "${REVDIFF_STUB_ECHO_DESC:-}" ]; then
-  { printf '\n\n## (description) (file-level)\n'; sed 's/^## / ## /' "$desc"; } >> "$out"
+# The tree as the reviewer saw it: the context file, and what git reports.
+if [ -n "${REVDIFF_TREE_CAPTURE:-}" ]; then
+  cp "(context).md" "$REVDIFF_TREE_CAPTURE.context" 2>/dev/null || rm -f "$REVDIFF_TREE_CAPTURE.context"
+  git status --porcelain > "$REVDIFF_TREE_CAPTURE.status"
 fi
 exit "${REVDIFF_STUB_RC:-0}"
 EOF
@@ -65,7 +71,14 @@ export ANCHOR_HOST_RUNNER="$bin/stub-host-runner.sh"
 # the adapter resolves the tool on PATH before building it, so the suite has to
 # carry one to test against a machine that has revdiff rather than whatever the
 # host happens to have installed.
-printf '#!/usr/bin/env bash\nexit 0\n' > "$bin/revdiff"
+# Its one direct call is --dump-keys, answered with a remapped next-change key.
+cat > "$bin/revdiff" <<'EOF'
+#!/usr/bin/env bash
+[ "${1:-}" = --dump-keys ] && [ -z "${REVDIFF_STUB_NO_KEYS:-}" ] \
+  && printf '%s\n' '# File/Hunk' 'map n next_item' 'map > next_hunk' 'map [ prev_hunk' \
+       '# Annotations' 'map a confirm' 'map enter confirm' 'map A annotate_file'
+exit 0
+EOF
 chmod +x "$bin/revdiff"
 
 export PATH="$bin:$PATH"
@@ -118,19 +131,145 @@ export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT="$md"; o=$(run --previous); j=$(js
 [ "$(jq -r '.comments[0].side' <<<"$j")" = old ] || fail "revdiff (-) -> side=old"
 ok "revdiff: (-) marker -> side=old"
 
-# the fork echoes the seeded header back as a (description) block; an echo
-# matching what was seeded says nothing, so exit 10 with only that reads approved
-export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT="" REVDIFF_STUB_ECHO_DESC=1; o=$(run --previous); j=$(json_of "$o")
-[ "$(verdict_of "$o")" = approved ]        || fail "unchanged description echo -> approved, got $(verdict_of "$o")"
-[ "$(jq '.comments|length' <<<"$j")" = 0 ] || fail "an unchanged (description) echo should be dropped"
-ok "revdiff: an unchanged (description) echo is dropped -> approved"
+# the header sits at the tree root as (context).md, which git never sees, and
+# --only carries it beside every changed path; the file is gone once it closes
+cap="$work/tree"
+export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT="" REVDIFF_TREE_CAPTURE="$cap" REVDIFF_ARGS_FILE="$work/ctx.args"
+o=$(run --previous)
+[ -s "$cap.context" ]                                  || fail "the review should open with (context).md at the root"
+head -1 "$cap.context" | grep -q '^# '                 || fail "(context).md should open with the title as a heading: $(cat "$cap.context")"
+[ "$(sed -n 2p "$cap.context")" = "" ] || fail "a blank line sets the title off: $(cat "$cap.context")"
+[ "$(grep -cx '' "$cap.context")" = 1 ] || fail "a title with no body spends no other blank line: $(cat "$cap.context")"
+# shellcheck disable=SC2016
+[ "$(sed -n 3p "$cap.context")" = 'in `HEAD~1...HEAD`' ] \
+  || fail "the size comes straight after the title: $(cat "$cap.context")"
+# shellcheck disable=SC2016
+grep -qE -- '^┆ `\[` <- prev +next -> `>` ┆$' "$cap.context" \
+  || fail "(context).md should name prev and next on one row: $(cat "$cap.context")"
+# shellcheck disable=SC2016
+grep -qF -- '┆ `a` to the current line' "$cap.context" || fail "(context).md should name one key to annotate a line: $(cat "$cap.context")"
+# shellcheck disable=SC2016
+grep -qF -- '┆ `A` to the current file' "$cap.context" || fail "(context).md should name one key to annotate a file: $(cat "$cap.context")"
+# shellcheck disable=SC2016
+[ "$(grep '^┆' "$cap.context" | tail -1 | sed 's/ *┆$//')" = '┆ *Tell the agent "hide diff hints" to stop showing these.*' ] \
+  || fail "(context).md should say how to hide the keys: $(cat "$cap.context")"
+# shellcheck disable=SC2016
+grep -qxF -- '`repo` on `main`' "$cap.context"         || fail "(context).md should say where the change sits: $(cat "$cap.context")"
+# shellcheck disable=SC2016
+grep -qxF -- 'commit `'"$(git -C "$repo" rev-parse --short HEAD)"'` by T' "$cap.context" \
+  || fail "(context).md should name the commit and its author: $(cat "$cap.context")"
+# shellcheck disable=SC2016
+grep -qxF -- 'in `HEAD~1...HEAD`' "$cap.context" \
+  || fail "(context).md should give the range: $(cat "$cap.context")"
+# shellcheck disable=SC2016
+[ "$(sed -n '/^```diff$/,/^```$/p' "$cap.context")" = "$(printf '%s\n' '```diff' ' 1 file' '+██████████ 1' '```')" ] \
+  || fail "(context).md should draw the change's size as bars in a diff fence: $(cat "$cap.context")"
+[ ! -s "$cap.status" ]                                 || fail "git should see nothing while the review is open: $(cat "$cap.status")"
+grep -qxF -- '--only=(context).md' "$work/ctx.args"    || fail "--only should name the context file: $(cat "$work/ctx.args")"
+grep -qxF -- '--only=a.txt' "$work/ctx.args"           || fail "--only should still name the changed file: $(cat "$work/ctx.args")"
+[ ! -e "$repo/(context).md" ]                          || fail "(context).md should be removed when the review closes"
+grep -qxF '/(context).md' "$(git -C "$repo" rev-parse --git-path info/exclude)" \
+  || grep -qxF '/(context).md' "$repo/$(git -C "$repo" rev-parse --git-path info/exclude)" \
+  || fail "info/exclude should carry the context file"
+ok "revdiff: the header is a (context).md at the root that git never sees, gone when the review closes"
 
-# a real comment alongside the echo survives -> changes-requested
-export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT=$'## a.txt:2 (+)\nfix this'; o=$(run --previous); j=$(json_of "$o")
-[ "$(verdict_of "$o")" = changes-requested ]       || fail "real comment + description -> changes-requested"
-[ "$(jq '.comments|length' <<<"$j")" = 1 ]         || fail "keep the 1 real comment, drop the echo"
-ok "revdiff: real comment kept, unchanged (description) dropped -> changes-requested"
-unset REVDIFF_STUB_ECHO_DESC
+# a review that preloads notes carries its own table there and gets no context
+printf '## a.txt:2 (+)\nseeded\n' > "$work/preload.md"
+export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=$'## a.txt:2 (+)\nseeded'
+o=$(run --previous --annotations "$work/preload.md")
+[ ! -e "$cap.context" ]                                || fail "a review with preloaded notes should get no context file"
+! grep -qF -- '--only=(context).md' "$work/ctx.args"   || fail "a review with preloaded notes should not name the context file"
+ok "revdiff: a review that preloads notes gets no context file"
+
+# its own table in that place is shown though git excludes it, and a note on it
+# reads back as a note on the table
+printf '# Round 1\n\n| # | slug |\n|---|---|\n| 1 | one |\n' > "$repo/(context).md"
+export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT=$'## (context).md:5 (+)\ndrop this one'
+o=$(run --previous --annotations "$work/preload.md"); j=$(json_of "$o")
+rm -f "$repo/(context).md"
+grep -qxF -- '--only=(context).md' "$work/ctx.args"    || fail "a preloaded review's own table should be named: $(cat "$work/ctx.args")"
+grep -qxF -- '--only=a.txt' "$work/ctx.args"           || fail "the changed file should still be named: $(cat "$work/ctx.args")"
+[ "$(jq -r '.comments[0] | "\(.target) \(.file) \(.startLine)"' <<<"$j")" = "line (context).md 5" ] \
+  || fail "a note on the table should stay on the table: $(jq -c '.comments' <<<"$j")"
+ok "revdiff: a preloaded review's own (context).md is shown, and notes on it stay on it"
+unset REVDIFF_TREE_CAPTURE REVDIFF_ARGS_FILE
+
+# unchanged-line marker ( ) -> a line comment on the new side, not a changeset one
+export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT=$'## a.txt:1 ( )\nnote on context\n\n## a.txt:1-2 ( )\nnote on a range'
+o=$(run --previous); j=$(json_of "$o")
+[ "$(jq -r '.comments[0] | "\(.target) \(.file) \(.startLine) \(.side)"' <<<"$j")" = "line a.txt 1 new" ] \
+  || fail "( ) -> line a.txt 1 new, got $(jq -c '.comments[0]' <<<"$j")"
+[ "$(jq -r '.comments[1] | "\(.startLine)-\(.endLine) \(.side)"' <<<"$j")" = "1-2 new" ] \
+  || fail "( ) range -> 1-2 new, got $(jq -c '.comments[1]' <<<"$j")"
+ok "revdiff: ( ) marker -> a line comment on the new side"
+
+# --annotations preloads notes and returns the set the reviewer left as JSON
+notes="$work/notes.md"; printf '## a.txt:2 (+)\n#1 seeded\n' > "$notes"
+export REVDIFF_ARGS_FILE="$work/args.txt"
+export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT=$'## a.txt:2 (+)\n#1 seeded, edited'
+o=$(run --previous --annotations "$notes")
+grep -qx -- "--annotations=$notes" "$REVDIFF_ARGS_FILE" || fail "--annotations not passed: $(cat "$REVDIFF_ARGS_FILE")"
+returned=$(sed -n 's/^REVIEW_RETURNED=//p' <<<"$o")
+[ "$returned" = "$work/notes.returned.json" ] || fail "REVIEW_RETURNED path: $o"
+[ "$(jq -r '.[0].body' "$returned")" = "#1 seeded, edited" ] || fail "returned notes: $(cat "$returned")"
+unset REVDIFF_ARGS_FILE
+ok "--annotations: passed to revdiff, and the returned set lands in REVIEW_RETURNED"
+
+# --untracked reaches revdiff on a working-tree review, and is refused on two refs
+export REVDIFF_ARGS_FILE="$work/args.txt" REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
+printf 'one\ntwo\nthree\n' > "$repo/a.txt"
+run HEAD --untracked >/dev/null
+grep -qx -- '--untracked' "$REVDIFF_ARGS_FILE" || fail "--untracked not passed: $(cat "$REVDIFF_ARGS_FILE")"
+git -C "$repo" checkout --quiet -- a.txt
+rc=0; run --previous --untracked >/dev/null 2>&1 || rc=$?
+[ "$rc" = 64 ] || fail "--untracked over two commits should exit 64, got $rc"
+unset REVDIFF_ARGS_FILE
+ok "--untracked: passed on a working-tree review, refused between two commits"
+
+# a viewer that can't preload notes refuses rather than dropping them
+git -C "$repo" config difftool.stubtool.cmd true
+git -C "$repo" config anchor.diff.tool stubtool
+printf 'one\ntwo\nthree\n' > "$repo/a.txt"
+o=$(run HEAD --annotations "$notes" 2>/dev/null); j=$(json_of "$o")
+[ "$(jq -r .raw.exitCode <<<"$j")" = annotations-unsupported ] || fail "difftool + annotations: $j"
+git -C "$repo" checkout --quiet -- a.txt
+git -C "$repo" config anchor.diff.tool revdiff
+ok "--annotations: a viewer that can't preload notes refuses the review"
+
+# --explain: the agent's notes on its own change ride with the message header,
+# and a note the reviewer only read, or deleted, is no feedback (UX-12, DIFF-41)
+printf 'one\ntwo\nthree\n' > "$repo/a.txt"
+printf '{"notes":[{"file":"a.txt","line":3,"note":"three closes the list"}]}\n' > "$work/explain-in.json"
+e=$( cd "$repo" && bash "$here/../scripts/review-explain.sh" --notes "$work/explain-in.json" --path a.txt )
+xnotes=$(sed -n 's/^EXPLAIN_NOTES=//p' <<<"$e")
+xmsg="$work/xmsg.txt"; printf 'Add three\n' > "$xmsg"
+[ "$(sed -n 's/^REVIEW_PRELOADS=//p' <<<"$(run --skill commit --probe --local)")" = 1 ] || fail "revdiff preloads notes"
+export REVDIFF_ARGS_FILE="$work/x.args" REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT; REVDIFF_STUB_OUTPUT=$(cat "$xnotes")
+o=$(REVDIFF_TREE_CAPTURE="$work/x" run --skill commit --local --message-file "$xmsg" --path a.txt --explain "$xnotes")
+grep -qx -- "--annotations=$xnotes" "$REVDIFF_ARGS_FILE" || fail "--explain notes not preloaded: $(cat "$REVDIFF_ARGS_FILE")"
+grep -qx '# Add three' "$work/x.context" || fail "the message header rides with the notes: $(cat "$work/x.context" 2>&1)"
+[ "$(verdict_of "$o")" = approved ] || fail "a note returned as seeded was read, not feedback: $o"
+REVDIFF_STUB_OUTPUT=""
+o=$(run --skill commit --local --message-file "$xmsg" --path a.txt --explain "$xnotes")
+[ "$(verdict_of "$o")" = approved ] || fail "a deleted note was read and set aside: $o"
+REVDIFF_STUB_OUTPUT=$(sed 's/three closes the list/why not four?/' "$xnotes")
+o=$(run --skill commit --local --message-file "$xmsg" --path a.txt --explain "$xnotes"); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = changes-requested ] || fail "an edited note is feedback: $o"
+[ "$(jq -r '.comments[0].body' <<<"$j")" = 'why not four?' ] || fail "the edited note comes back: $j"
+unset REVDIFF_ARGS_FILE
+ok "--explain: notes ride with the header, and only an edited note is feedback"
+
+# A viewer that can't show notes opens without them, and the probe says so first.
+export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
+git -C "$repo" config anchor.diff.tool stubtool
+[ "$(sed -n 's/^REVIEW_PRELOADS=//p' <<<"$(run --skill commit --probe --local)")" = 0 ] || fail "a difftool doesn't preload notes"
+o=$(run --skill commit --local --message-file "$xmsg" --path a.txt --explain "$xnotes" 2>/dev/null); j=$(json_of "$o")
+[ "$(jq -r .raw.exitCode <<<"$j")" != annotations-unsupported ] || fail "--explain should open without the notes: $j"
+[ "$(verdict_of "$o")" = approved ] || fail "a difftool review with --explain still grades: $o"
+git -C "$repo" config anchor.diff.tool revdiff
+git -C "$repo" reset --quiet
+git -C "$repo" checkout --quiet -- a.txt
+ok "--explain: a viewer that can't show notes opens without them, and the probe reports it"
 
 
 
@@ -191,15 +330,53 @@ grep -qx -- 'The body explains why.' "$REVDIFF_DESC_CAPTURE" \
 ! grep -q -- 'opened by' "$REVDIFF_DESC_CAPTURE" || fail "a review with no --skill named a skill that opened it"
 ok "--message-file seeds subject as the title and body as a paragraph"
 
-# a (description) block that differs from what was seeded is the reviewer writing
-# on the message: it must never read as approved (CONFIRM-06)
+# (context).md carries the message's paragraphs as written
+pmsg="$work/para-msg.txt"; printf 'Add a feature\n\nFirst paragraph.\n\nSecond paragraph.\n' > "$pmsg"
+o=$(REVDIFF_TREE_CAPTURE="$work/para" run --local --message-file "$pmsg")
+[ "$(tail -4 "$work/para.context")" = "$(printf '%s\n' '' 'First paragraph.' '' 'Second paragraph.')" ] \
+  || fail "(context).md should close on the body, after a blank line, with its paragraph breaks: $(cat "$work/para.context")"
+[ "$(grep -n '^First paragraph' "$work/para.context" | cut -d: -f1)" -gt "$(grep -n '^base ' "$work/para.context" | cut -d: -f1)" ] \
+  || fail "the body follows where the change sits: $(cat "$work/para.context")"
+ok "revdiff: (context).md keeps the commit message's paragraphs"
+
+o=$(REVDIFF_TREE_CAPTURE="$work/cta" run --local --skill commit --message-file "$pmsg")
+# shellcheck disable=SC2016
+grep -qF -- '┆ `q with no annotations: commit this change and push it`' "$work/cta.context" \
+  || fail "(context).md should say what quitting does, as inline code: $(cat "$work/cta.context")"
+# shellcheck disable=SC2016
+grep -qF -- '┆ `q with annotations: the agent revises, and you review again`' "$work/cta.context" \
+  || fail "(context).md should say what a note does: $(cat "$work/cta.context")"
+! grep -q 'anchor:commit\|Claude' "$work/cta.context" || fail "(context).md names neither the skill nor the model: $(cat "$work/cta.context")"
+# shellcheck disable=SC2016
+[ "$(grep -n '<- prev' "$work/cta.context" | cut -d: -f1)" -lt "$(grep -n '^┆ `q with no annotations' "$work/cta.context" | cut -d: -f1)" ] \
+  || fail "the box holds the keys before what quitting does: $(cat "$work/cta.context")"
+# shellcheck disable=SC2016
+[ "$(grep -n '^└' "$work/cta.context" | cut -d: -f1)" -lt "$(grep -n '^`repo`' "$work/cta.context" | cut -d: -f1)" ] \
+  || fail "the repo follows the box: $(cat "$work/cta.context")"
+# shellcheck disable=SC2016
+grep -qx 'base `[0-9a-f]*`' "$work/cta.context" || fail "a base no remote holds is named, not linked: $(cat "$work/cta.context")"
+ok "revdiff: (context).md boxes the keys and what quitting does"
+
+git -C "$repo" config anchor.diff.hints false
+o=$(REVDIFF_TREE_CAPTURE="$work/nohints" run --local --skill commit --message-file "$pmsg")
+! grep -q '<- prev\|To add an annotation\|hide diff hints' "$work/nohints.context" || fail "anchor.diff.hints=false hides the keys: $(cat "$work/nohints.context")"
+grep -q '^┆ `q with no annotations' "$work/nohints.context"  || fail "the box stays when the keys are hidden"
+git -C "$repo" config --unset anchor.diff.hints
+o=$(REVDIFF_STUB_NO_KEYS=1 REVDIFF_TREE_CAPTURE="$work/nokeys" run --local --message-file "$pmsg")
+! grep -q '<- prev\|To add an annotation' "$work/nokeys.context" || fail "a revdiff mapping none of the actions gets no key line: $(cat "$work/nokeys.context")"
+ok "revdiff: anchor.diff.hints=false hides the key line, and an unmapped action is left out"
+
+# a note on (context).md is the reviewer writing on the message: it must never
+# read as approved (CONFIRM-08)
 emsg="$work/edited-msg.txt"; printf 'Add retry\n\nWhy it retries.\n' > "$emsg"
-md=$'## (description) (file-level)\nAdd retry\n\nWhy it retries, and drop the second clause.'
-export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT="$md"; o=$(run --local --message-file "$emsg"); j=$(json_of "$o")
-[ "$(verdict_of "$o")" = changes-requested ]                 || fail "edited description -> changes-requested, got $(verdict_of "$o")"
-[ "$(jq -r '.comments[0].target' <<<"$j")" = commit-message ] || fail "edited description targets the commit message"
-[ "$(jq -r '.comments[0].file' <<<"$j")" = null ]           || fail "edited description carries no file"
-ok "revdiff: an edited (description) comes back as feedback on the commit message"
+md=$'## (context).md:3 ( )\ndrop the second clause'
+export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT="$md"; o=$(REVDIFF_TREE_CAPTURE="$work/emsg" run --local --message-file "$emsg"); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = changes-requested ]                 || fail "a note on the context -> changes-requested, got $(verdict_of "$o")"
+[ "$(jq -r '.comments[0].target' <<<"$j")" = commit-message ] || fail "a note on the context targets the commit message"
+[ "$(jq -r '.comments[0].file' <<<"$j")" = null ]           || fail "a note on the context carries no file"
+[ "$(jq -r '.comments[0].startLine' <<<"$j")" = 3 ] || fail "a note on the context keeps its line: $j"
+[ "$(jq -r '.comments[0].quote' <<<"$j")" = "$(sed -n 3p "$work/emsg.context")" ] || fail "a note on the context quotes its line: $j"
+ok "revdiff: a note on (context).md comes back as feedback on the commit message"
 export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
 
 # --skill leads the header with the flow that opened the review and what
@@ -432,5 +609,38 @@ o=$( cd "$other" && bash "$dispatch" --local 2>/dev/null ); j=$(json_of "$o")
 [ ! -e "$REVDIFF_ARGS_FILE" ] || fail "empty range should not launch a viewer"
 unset REVDIFF_ARGS_FILE
 ok "empty range: no-verdict, nothing launched (DIFF-21)"
+
+# A batch of nothing but new items has no tracked change; under --untracked the
+# new files are what is shown, so the range is not empty. The context file alone
+# doesn't count.
+export REVDIFF_ARGS_FILE="$work/untracked-args.txt"; rm -f "$REVDIFF_ARGS_FILE"
+printf '# guide\n' > "$other/(context).md"
+o=$( cd "$other" && bash "$dispatch" --tool revdiff HEAD --untracked 2>/dev/null ); j=$(json_of "$o")
+[ "$(jq -r .raw.exitCode <<<"$j")" = empty-range ] || fail "the context file alone is no content: $j"
+printf 'new\n' > "$other/new-item.md"
+o=$( cd "$other" && bash "$dispatch" --tool revdiff HEAD --untracked 2>/dev/null ); j=$(json_of "$o")
+[ "$(jq -r .raw.exitCode <<<"$j")" != empty-range ] || fail "a new file under --untracked is content: $j"
+[ -e "$REVDIFF_ARGS_FILE" ] || fail "a review of new files only should launch the viewer"
+rm -f "$other/new-item.md" "$other/(context).md"
+unset REVDIFF_ARGS_FILE
+ok "empty range: under --untracked, a new file is content and the context file is not"
+
+# A first commit has no HEAD to diff against; the review runs against the empty
+# tree, and the agent's notes anchor the same way.
+first="$work/first"
+git init --quiet -b main "$first"
+git -C "$first" config user.email t@example.com; git -C "$first" config user.name T
+git -C "$first" config anchor.diff.tool revdiff
+printf 'one\ntwo\n' > "$first/a.txt"
+printf '{"notes":[{"file":"a.txt","line":2,"note":"two"}]}\n' > "$work/first-in.json"
+e=$( cd "$first" && bash "$here/../scripts/review-explain.sh" --notes "$work/first-in.json" --path a.txt ) \
+  || fail "notes anchor on a first commit: $e"
+printf 'First\n' > "$work/first-msg.txt"
+export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
+o=$( cd "$first" && bash "$dispatch" --skill commit --local --message-file "$work/first-msg.txt" --path a.txt \
+       --explain "$(sed -n 's/^EXPLAIN_NOTES=//p' <<<"$e")" ) || fail "a first commit's review fails: $o"
+[ "$(verdict_of "$o")" = approved ] || fail "a first commit's review grades: $o"
+[ "$(git -C "$first" rev-list --all | wc -l | tr -d ' ')" = 0 ] || fail "the review leaves the branch with no commit"
+ok "--local: a first commit is reviewed against the empty tree"
 
 echo "# all checks passed"

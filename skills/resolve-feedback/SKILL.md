@@ -245,20 +245,24 @@ is right. Reply content:
   docs should say, prefer fixing that and replying with the pointer.
 - For defers: where the ask landed (issue/CR link).
 
-Present them together, each body **verbatim** — the text as it will appear on
-the thread, not a paraphrase of it. A summary hides exactly the thing the user
-is being asked to approve:
+**Two or more replies are reviewed as one batch in revdiff**, per
+`${CLAUDE_PLUGIN_ROOT}/guides/batch-review.md`, each a thread reply item from
+`${CLAUDE_PLUGIN_ROOT}/templates/batch-items.md`. Publish each `keep` and
+`edited` item's `body` in 3d.
+
+One gate for the whole set, not one per thread: the same approval asked N times
+reads as noise, and the user starts approving without reading.
+
+**A single reply** is presented in chat, its body **verbatim**: the text as it
+will appear on the thread, not a paraphrase of it.
 
 | # | Where | Reply |
 |---|-------|-------|
 | 1 | `src/deploy.sh:42` | addressed in <url> |
-| 2 | `taskdef.yml:7` | Fargate would mean rebuilding the image on every deploy — the EC2 launch type keeps the layer cache warm. |
 
 Then ask with `AskUserQuestion` (header `Replies`): **Post as drafted** /
-**Edit** (they name the numbers and what to change; redraft and show the table
-again) / **Skip replying** (leave the threads for a later round). One gate for
-the whole set, not one per thread — the same approval asked N times reads as
-noise, and the user starts approving without reading.
+**Edit** (they say what to change; redraft and show it again) / **Skip
+replying** (leave the thread for a later round).
 
 This is not the Step 2 gate. Step 2 settles *what happens to each thread*
 while the words are still unwritten; approving a disposition is not approving
