@@ -78,6 +78,31 @@ approve?"*. That question converts a tooling failure into your sign-off.
 
 Requirements: DIFF-12 and DIFF-20 in [SPEC](/spec).
 
+### Feedback sits beside the code it is about :id=tenet-in-place
+
+A finding, an answer to your question, or a note on a change goes on the line it
+concerns: the line that changed, or the line you asked on. You read it where you
+were already reading, the way you would in any code review, instead of leaving
+the diff to find what a note means.
+
+Requirement: UX-09 in [SPEC](/spec).
+
+### An explanation lasts as long as it stays true :id=tenet-transient
+
+| What it explains | Lasts | Goes in |
+| --- | --- | --- |
+| why the code is this way | the code's lifetime | a comment, rarely |
+| why this change exists | the history | the commit message, the CR description |
+| why this line is this way, what was weighed, what to check | this review | a note on the line, gone when the review closes |
+
+When `anchor` shows you a change it wrote, the reasoning you need to judge it
+arrives as notes on the lines it concerns, and leaves with the review. The
+commit message, the CR description, and the code keep only what stays true, so
+they stay short, and nothing in the permanent record narrates a decision to a
+reader who wasn't there for it.
+
+Requirement: UX-12 in [SPEC](/spec); [notes on your own changes](/guides/review-notes).
+
 ### No AI attribution :id=tenet-attribution
 
 No `Co-Authored-By` trailer, no *Generated with* footer. The commit author and
@@ -91,7 +116,7 @@ Requirement: RULE-02 in [SPEC](/spec).
 |---|---|
 | [`/anchor:commit`](/skills/commit) | Review the changeset, then commit with a why-first message and push |
 | [`/anchor:prepare-review`](/skills/prepare-review) | Rebase on the default branch and open a draft change request |
-| [`/anchor:review`](/skills/review) | Read every change in a CR, weigh it against your qualities, post findings inline |
+| [`/anchor:review`](/skills/review) | Weigh a CR against your qualities, make the clear fixes, and decide each finding in revdiff |
 | [`/anchor:resolve-feedback`](/skills/resolve-feedback) | Work a CR's review threads to done, one by one |
 | [`/anchor:merge`](/skills/merge) | Check the merge gates, wait on the pipeline, then land the CR and clean up |
 | [`/anchor:release`](/skills/release) | Work out what's shipping, recommend a version, draft the notes, publish |

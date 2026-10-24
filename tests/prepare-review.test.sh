@@ -651,4 +651,21 @@ out=$(bash "$prepare_review_sh" --repo "$repo")
   || fail "expected NOTHING_TO_REVIEW=0 on a feature branch; got: $out"
 ok "a feature branch with a CR reports NOTHING_TO_REVIEW=0"
 
+# A ready CR reports CR_DRAFT=false, which the post-rebase force-push gate
+# tells apart from the empty value of no CR.
+repo="$(make_repo gitlab.com gl-ready)"
+glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false
+sed 's/"draft":true/"draft":false/' "$CR_AFTER_CREATE" > "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo")
+[[ "$(key "$out" CR_DRAFT)" == false ]] || fail "a ready MR should report CR_DRAFT=false; got: $out"
+ok "a ready MR reports CR_DRAFT=false"
+
+repo="$(make_repo github.com gh-ready)"
+gh_pr_json "$(git -C "$repo" rev-parse HEAD)"
+sed 's/"isDraft":true/"isDraft":false/' "$CR_AFTER_CREATE" > "$CR_JSON"
+export DELETE_ON_MERGE=true
+out=$(bash "$prepare_review_sh" --repo "$repo")
+[[ "$(key "$out" CR_DRAFT)" == false ]] || fail "a ready PR should report CR_DRAFT=false; got: $out"
+ok "a ready PR reports CR_DRAFT=false"
+
 echo "all prepare-review tests passed"

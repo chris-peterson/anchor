@@ -43,6 +43,7 @@
 #   UNRESOLVED unchanged    <path> <token>   in the file, but not in a changed hunk
 #   UNRESOLVED unknown-file <path> <token>   the path isn't in <base>...HEAD
 #   UNRESOLVED malformed    <path> <token>   an `anchor:` outside a link destination
+#   UNRESOLVED unbracketed  <path> <token>   a bare destination cut at the token's own `)`
 #
 # `ambiguous` and `unchanged` list the candidate lines with their content, so the
 # fix is to copy a longer, unique substring off the line that was meant. Nothing
@@ -287,6 +288,7 @@ why_for() {
     absent)       echo "no line of the file contains it — check the spelling against the diff" ;;
     unknown-file) echo "${base}...HEAD does not touch this path" ;;
     malformed)    echo "an \`anchor:\` that is not a markdown link destination — write it as [text](anchor:<path>#<token>)" ;;
+    unbracketed)  echo "a bare destination ends at the first \`)\`, so the token was cut there — write it as [text](<anchor:<path>#<token>>)" ;;
   esac
 }
 
@@ -351,6 +353,16 @@ run_resolution() {
     spec=$(spec_of "$match")
     path=$(spec_path "$spec")
     token=$(spec_token "$spec")
+
+    # The bare form stops at the first `)`, so any `(` left in it opened a pair
+    # the cut closed. The truncated token can still name one line, and expanding
+    # it would leave the token's tail in the description as text.
+    if [[ "$match" == "](anchor:"* && "$spec" == *"("* ]]; then
+      RESOLVE_CANDIDATES=""
+      report_unresolved unbracketed "$path" "$token" "$(why_for unbracketed)"
+      unresolved=$((unresolved + 1))
+      continue
+    fi
 
     resolve "$path" "$token"
     if [[ "$RESOLVE_KIND" != "ok" ]]; then

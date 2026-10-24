@@ -105,6 +105,7 @@ Act only on the keys; don't re-run the folded-in probes (`git add`, `look-ahead.
 | `BRANCH` / `DEFAULT_BRANCH` / `ON_DEFAULT_BRANCH` | the branch decision in Step 4 |
 | `AHEAD` | unpushed commit count, counted against `origin/<default>` on a branch never pushed — drives push-existing |
 | `SQUASH` / `SQUASH_FORCE_PUSH` / `ALLOW_MESSAGE_AMEND` / `PRIOR_SUBJECT` | the squash gate in Step 4 |
+| `CR_REF` / `CR_URL` | the branch's CR as its forge writes it (`<repo>#<n>`, `<repo>!<n>`) and its page, for Step 5's manifest; empty with no CR |
 | `ANCHOR_CONFIG` | the `anchor.*` keys (JSON) for Steps 3-4 |
 
 When `STAGED=1`, read the staged diff of the paths you named so you can draft the message. The rest of the index can hold another session's work, which the message must not describe:
@@ -141,7 +142,7 @@ If no test suite is found, skip this step silently.
 
 ## Step 3: Write the commit message
 
-Write the message following the format in `${CLAUDE_PLUGIN_ROOT}/templates/commit-message.md` — it owns the *shape* (the [cbea.ms](https://cbea.ms/git-commit/) rules and the trailer). Spend your effort on the *why*; the code already shows the *how*. If the change is trivial (typo fix, one-liner), a subject-only message is fine.
+Write the message following the format in `${CLAUDE_PLUGIN_ROOT}/templates/commit-message.md` — it owns the *shape* (the [cbea.ms](https://cbea.ms/git-commit/) rules and the trailer). Spend your effort on the *why*; the code already shows the *how*. If the change is trivial (typo fix, one-liner), a subject-only message is fine. The message says why the change exists; why a given line is the way it is, what you weighed, and what you want checked go in Step 5's notes, which the reviewer reads on the line and which leave with the review (`${CLAUDE_PLUGIN_ROOT}/guides/review-notes.md`).
 
 Keep the body free of loaded framing — temporal blame, size-minimizers, self-congratulatory adverbs, defensive softeners. The tone discipline lives in `${CLAUDE_PLUGIN_ROOT}/guides/loaded-framing.md` (shared with `prepare-review` and `issue`); consult it while drafting.
 
@@ -227,22 +228,31 @@ Before committing, open the pending changeset — the exact changes Step 6 will 
 
 Run it as the review loop in `${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md` describes — background launch, manifest, chat feedback while it's open, reading the verdict. What's particular to a commit:
 
+**Notes on your changes** (COMMIT-23). Before the launch, write a note for each hunk a reader would stop and ask about, by the bar in `${CLAUDE_PLUGIN_ROOT}/guides/review-notes.md`: one per hunk at most, none on a mechanical change, and none at all for a changeset with nothing to ask about. When the caller handed you notes (`/anchor:review` hands each kept item's reason), seed those and add your own only for hunks they leave unexplained. Write them to a unique temp file as `{"notes": [{"file": "<path>", "line": <n>, "note": "<text>"}]}` (a line numbered in the working tree; no `line` for a note on the whole file) and anchor them with the same path list:
+
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill commit --local --message-file <commit-msg-path> --path <p> [--path <p>...] [--staged-path <p>...]
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-explain.sh" --notes <notes.json> --path <p> [--path <p>...]
 ```
 
-- **The manifest** is a table of the files under review with their `+`/`−` counts (Step 1's `STAT` covers the same paths), the repo and branch, the tool, and the drafted commit message riding with them. When the probe reports `REVIEW_MODE=diff`, print the message itself verbatim under the table in a fenced block (`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`): revdiff shows it only behind its `i` popup, a difftool not at all, and quitting either one approves it.
+Each `EXPLAIN_ERROR` names a note the review has nowhere to show: move it onto the change it explains, or drop it. Pass `EXPLAIN_NOTES` to the launch as `--explain`. With no notes, leave `--explain` off.
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill commit --local --message-file <commit-msg-path> --path <p> [--path <p>...] [--staged-path <p>...] [--explain <EXPLAIN_NOTES>]
+```
+
+- **The manifest** is the table in `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`: **Repo** is `CR_REF` linked to `CR_URL` (the repo and branch when there's no CR), **Size** is Step 1's `STAT`, and **What's next** is the commit and push, or the amend and force-push with lease a squash takes. When the probe reports `REVIEW_MODE=diff`, print the message itself verbatim under the table in a fenced block (`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`): revdiff shows it in a `(context).md` file the reviewer has to open, a difftool not at all, and quitting either one approves it.
+- **Notes the tool can't show.** When the probe reports `REVIEW_PRELOADS=0`, the review opens without them: list them in the manifest, one line each, `file:line` and the note.
 - **The same `--path` and `--staged-path` lists** you gave the Step 1 pre-flight. The review and the commit have to cover the same set of files, or the user grades a changeset that isn't the one that lands. A `--staged-path` review needs a viewer that reads the index: a difftool returns `no-verdict` with `raw.exitCode` `staged-unsupported`, which goes down the fallback ladder like any other `no-verdict`.
 - **Push-existing** (Step 1 found nothing staged, unpushed commits to push) has no drafted message; review those commits instead of the working tree: `review-diff.sh --skill commit --commit`. That path is a diff with no drafted artifact, so on `edit` mode it returns `no-verdict` naming the key to change — report that rather than pushing unreviewed.
 
 What each verdict leads to here:
 
 - **`approved`** → proceed to Step 6 to commit and push.
-- **`changes-requested`** → **do not commit.** Fix the commented lines in the working tree (a reviewer's own edits per `${CLAUDE_PLUGIN_ROOT}/guides/reviewer-edits.md` — keep the fixes, answer the questions, and take their comment lines back out; a fix to a `--staged-path` file reaches the commit only once you stage that hunk yourself), then loop back to Step 2 so tests re-run before the re-review. **If a comment's `body` is short** (e.g. "I don't get what this flag means") **and the cited line range contains more than one distinct change** (e.g. two flag additions in a usage block, two unrelated lines in the same range), ask the user which token the comment refers to before fixing — a one-second clarification beats several minutes of guessing wrong. Fix the commented lines themselves; don't expand into adjacent pre-existing code (`${CLAUDE_PLUGIN_ROOT}/guides/changeset-scope.md`).
+- **`changes-requested`** → **do not commit.** Fix the commented lines in the working tree (a reviewer's own edits per `${CLAUDE_PLUGIN_ROOT}/guides/reviewer-edits.md` — keep the fixes, answer the questions, and take their comment lines back out; a fix to a `--staged-path` file reaches the commit only once you stage that hunk yourself), then loop back to Step 2 so tests re-run before the re-review, which opens as a reply to the first: only what you changed, with your answer to each comment on its line (`${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md`, "Re-reviewing a changeset is a reply"). Seed the replies with `review-reply.sh --state <REVIEW_STATE> --replies <file>` and the same `--path` list, then launch `review-diff.sh --skill commit --local --reply <REVIEW_STATE> --message-file <commit-msg-path> --path <p>...`. **If a comment's `body` is short** (e.g. "I don't get what this flag means") **and the cited line range contains more than one distinct change** (e.g. two flag additions in a usage block, two unrelated lines in the same range), ask the user which token the comment refers to before fixing — a one-second clarification beats several minutes of guessing wrong. Fix the commented lines themselves; don't expand into adjacent pre-existing code (`${CLAUDE_PLUGIN_ROOT}/guides/changeset-scope.md`).
 - **`incomplete`** → `Unreviewed changes — what do you want to change?`
 - **`no-verdict`**, or no verdict line at all → nothing is committed. The ladder's changeset rung is the one to walk — go file by file over the pending changeset in your reply, and print the drafted message verbatim in a fenced block in that same reply, since it publishes with the changeset. The reply opens and closes with the error banner, and the commit waits on the `Unreviewed` question (`${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md`); a bare "ok" to the walk-through doesn't commit.
 
-**The message is under review too.** If the result carries `editedFields` with `target: "commit-message"` — `edit` mode, where the saved buffer *is* the message — overwrite the Step 3 message file with it and commit that. A `changes-requested` comment with `target: "commit-message"` is feedback on the message itself — revise the message and re-review. In a mode that can't round-trip an edited message (`capabilities.editableCommitMessage: false`, which is every diff viewer), keep the drafted message unless a comment asks to change it.
+**The message is under review too.** If the result carries `editedFields` with `target: "commit-message"` — `edit` mode's saved buffer, or the message as saved before an edit review was switched to the viewer — overwrite the Step 3 message file with it and commit that. A `changes-requested` comment with `target: "commit-message"` is feedback on the message itself — revise the message and re-review. Its `quote` is the `(context).md` line it sat on: a quote from the title or the body is about the message, and one from the size, the box, or the repo and base lines is about the review's own text, which you report back rather than fold into the message. In a mode that can't round-trip an edited message (`capabilities.editableCommitMessage: false`, which is every diff viewer), keep the drafted message unless a comment asks to change it.
 
 ## Step 6: Commit and push
 

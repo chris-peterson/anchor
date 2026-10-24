@@ -85,6 +85,32 @@ set -euo pipefail
 #     what a caller passes back after probing, so the review opens in the shape
 #     the probe said was reachable.
 #   --tool <name>  run this tool within the mode, ignoring the config key.
+#   --explain <notes.md>  the notes review-explain.sh wrote about the agent's own
+#     changes (UX-12): preloaded where the tool can show notes, and left out
+#     where it can't, so the review opens either way (the probe's
+#     REVIEW_PRELOADS says which). A note returned as seeded, or deleted, was
+#     read; only an edited or a new one is the reviewer answering.
+#   --annotations <file>  preload these notes into the review, in revdiff's
+#     own markdown (`## <path>:<line> (+|-| )` then the body). The reviewer
+#     reads, edits, and deletes them in place, and the set they leave comes back
+#     as the comments, plus REVIEW_RETURNED=<path> holding that set as JSON. A
+#     tool that can't preload notes refuses the review rather than dropping them.
+#   --untracked  show untracked files in the tree too (a working-tree review
+#     only), so a file the review writes for the reviewer to edit is in front of
+#     them. Refused the same way by a tool that can't show one.
+#   --reply <dir>  re-open a --local review as a reply to the last one: the
+#     state dir a `changes-requested` review printed as REVIEW_STATE, seeded by
+#     review-reply.sh. The diff runs from the changeset as that review closed to
+#     the tree now, so it shows what changed in answer; the replies are preloaded
+#     as notes and head the context file, and a note returned as it was seeded is
+#     the reply rather than feedback (DIFF-37). The context file stacks the size
+#     of each pass, newest first, down to the change the first review saw
+#     (DIFF-38), written to `sizes.tsv` in that dir for the tool to draw.
+#   A `--local` review that comes back `changes-requested` prints
+#     REVIEW_STATE=<dir> for that --reply: the changeset as the review closed
+#     (`reviewed`, a commit), the comments it returned (`comments.json`), and
+#     on a reply, the changeset as each review before it closed (`earlier`,
+#     oldest first).
 #   --probe  report how a review would resolve, and exit without launching
 #     anything — what a skill asks before deciding whether a visual review is
 #     available at all. Pass it the same mode flag and paths as the launch: the
@@ -110,6 +136,10 @@ set -euo pipefail
 #         question: not "which viewer shows the changeset" but "can the user be
 #         handed the drafted artifact to edit" — the rung a skill offers when
 #         the viewer is missing or died (see guides/review-fallback.md).
+#       REVIEW_HOST=tmux|gui|iterm2|agterm|launcher   where the review will be
+#         drawn (scripts/review/hosts/); empty when nowhere can. The manifest
+#         names it, since a split of the session's pane doesn't take the eye the
+#         way a popup or an overlay over it does.
 # shellcheck source=lib/resolve-context.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 # shellcheck source=lib/review-editor.sh
@@ -120,10 +150,20 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/review-host.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/review-difftool.sh"
 # shellcheck source=lib/stage-paths.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/stage-paths.sh"
+# shellcheck source=lib/size-stack.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/size-stack.sh"
+# shellcheck source=lib/tmpfile.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/tmpfile.sh"
 CTX_REPO=""
 review_skill=""
 mode_override=""
 tool_override=""
+review_annotations=""
+review_explain=""
+review_seeded=""
+review_reply=""
+review_untracked=0
+local_base=HEAD
 probe_only=0
 stage_paths=()
 staged_paths=()
@@ -143,6 +183,10 @@ while [[ $# -gt 0 ]]; do
     --tool)  tool_override="${2:?--tool needs a name}"; shift 2 ;;
     --path)     stage_paths+=("${2:?--path needs a path}"); shift 2 ;;
     --staged-path) staged_paths+=("${2:?--staged-path needs a path}"); shift 2 ;;
+    --annotations) review_annotations="${2:?--annotations needs a file}"; shift 2 ;;
+    --explain)  review_explain="${2:?--explain needs the notes review-explain.sh wrote}"; shift 2 ;;
+    --reply)    review_reply="${2:?--reply needs the state dir review-reply.sh seeded}"; shift 2 ;;
+    --untracked) review_untracked=1; shift ;;
     --probe)    probe_only=1; shift ;;
     --title|--detail|--message-file)
                 rest+=("$1" "${2:?$1 needs a value}"); shift 2 ;;
@@ -318,6 +362,22 @@ resolve_review() {
 }
 preferred_mode=""
 
+# Whether the resolved tool shows notes preloaded into it: a diff tool whose
+# adapter says so. Asked of the adapter in a subshell, so the probe answers from
+# the same capabilities the launch acts on.
+tool_preloads() {
+  [[ "$resolved_mode" == diff && -n "$resolved_tool" ]] || { echo 0; return; }
+  (
+    # shellcheck source=review/modes/diff.sh
+    source "$(dirname "${BASH_SOURCE[0]}")/review/modes/diff.sh"
+    f=$(diff_tool_file "$resolved_tool")
+    [[ -n "$f" ]] || { echo 0; exit 0; }
+    # shellcheck source=/dev/null
+    source "$f"
+    if [[ "$(jq -r '.preloadsAnnotations // false' <<<"$diff_tool_caps")" == true ]]; then echo 1; else echo 0; fi
+  )
+}
+
 if [[ "$probe_only" == "1" ]]; then
   report_superseded_key
   resolve_review
@@ -343,6 +403,12 @@ if [[ "$probe_only" == "1" ]]; then
     echo "REVIEW_AVAILABLE=0"
   fi
   echo "REVIEW_EDIT_AVAILABLE=$edit_available"
+  echo "REVIEW_PRELOADS=$(tool_preloads)"
+  if [[ "$resolved_mode" == edit ]]; then
+    echo "REVIEW_HOST=$(anchor_editor_host "$(anchor_editor_resolve)")"
+  else
+    echo "REVIEW_HOST=$(anchor_review_host diff)"
+  fi
   exit 0
 fi
 
@@ -453,8 +519,18 @@ else
     reviews_unpushed=1
     expect_consumed "${@:2}"
   elif [[ "${1:-}" == "--local" ]]; then
-    diff_range="HEAD"
+    local_base=$(anchor_local_base)
+    diff_range="$local_base"
     header_mode="local"
+    if [[ -n "$review_reply" ]]; then
+      [[ -s "$review_reply/reviewed" && -f "$review_reply/notes.json" && -f "$review_reply/reply.md" ]] || {
+        echo "review-diff.sh: --reply needs a state dir review-reply.sh has seeded: $review_reply" >&2; exit 66; }
+      [[ -z "$review_annotations$review_explain" ]] || { echo "review-diff.sh: --reply brings its own notes; drop --annotations and --explain" >&2; exit 64; }
+      [[ ${#staged_paths[@]} -eq 0 ]] || {
+        echo "review-diff.sh: --reply diffs the working tree against the last review, and a --staged-path review shows the index" >&2; exit 64; }
+      diff_range=$(cat "$review_reply/reviewed")
+      review_annotations="$review_reply/notes.md"
+    fi
     # --message-file seeds the drafted commit message into the review so the
     # reviewer reviews it alongside the diff (and can edit it in-tool).
     if [[ "${2:-}" == "--message-file" ]]; then
@@ -505,14 +581,34 @@ else
   fi
 
   repo=$(basename "$(git rev-parse --show-toplevel)")
-  branch=$(git rev-parse --abbrev-ref HEAD)
+  branch=$(git symbolic-ref --quiet --short HEAD || git rev-parse --short HEAD)
 
   review_specs=()
   while IFS= read -r spec; do review_specs+=("$spec"); done < <(anchor_diff_specs)
 
   if [[ "$header_mode" == "local" ]]; then
-    stat=$(git diff --cached --stat HEAD -- "${review_specs[@]+"${review_specs[@]}"}" | tail -1 | sed 's/^[[:space:]]*//')
-    base=$(git log -1 --format='%h %s' HEAD)
+    stat=$(git diff --cached --stat "$local_base" -- "${review_specs[@]+"${review_specs[@]}"}" | tail -1 | sed 's/^[[:space:]]*//')
+    if [[ -n "$review_reply" ]]; then
+      # Newest first: what changed since the last review closed, what changed
+      # after each review before it, and the change as the first review saw it.
+      passes=()
+      if [[ -f "$review_reply/earlier" ]]; then
+        while IFS= read -r snap; do passes+=("$snap"); done < "$review_reply/earlier"
+      fi
+      passes+=("$(cat "$review_reply/reviewed")")
+      {
+        git diff --numstat --no-renames "${passes[${#passes[@]} - 1]}" -- "${review_specs[@]+"${review_specs[@]}"}" \
+          | anchor_size_row "this round"
+        for (( i = ${#passes[@]} - 1; i >= 1; i-- )); do
+          git diff --numstat --no-renames "${passes[i - 1]}" "${passes[i]}" -- "${review_specs[@]+"${review_specs[@]}"}" \
+            | anchor_size_row "after review $i"
+        done
+        git diff --numstat --no-renames "$local_base" "${passes[0]}" -- "${review_specs[@]+"${review_specs[@]}"}" \
+          | anchor_size_row "original change"
+      } > "$review_reply/sizes.tsv"
+    fi
+    base=""
+    [[ "$local_base" != HEAD ]] || base=$(git log -1 --format='%h %s' HEAD)
     if [[ -n "$message_file" ]]; then
       # Seed the drafted message: subject is the review's headline, the body row
       # is the message prose the tool renders, so message + diff are reviewed
@@ -535,22 +631,26 @@ else
     base_ref="${diff_range%%...*}"
     count=$(git rev-list --count "${base_ref}..HEAD" 2>/dev/null || echo "?")
     review_title="Full diff vs ${base_ref}"
+    stat=$(git diff --shortstat "$diff_range" 2>/dev/null | sed 's/^[[:space:]]*//')
     review_details_json=$(jq -n \
       --arg repo "$repo" --arg br "$branch" --arg base "$base_ref" \
-      --arg r "$diff_range" --arg n "$count" \
+      --arg r "$diff_range" --arg n "$count" --arg s "$stat" \
       '[{label:"repo",value:$repo},{label:"branch",value:$br},
-        {label:"base",value:$base},{label:"range",value:$r},{label:"commits",value:$n}]')
+        {label:"base",value:$base},{label:"range",value:$r},{label:"commits",value:$n}]
+       + (if $s == "" then [] else [{label:"summary",value:$s}] end)')
   else
     subject=$(git log -1 --format=%s HEAD)
     body=$(git log -1 --format=%b HEAD)
     hash=$(git log -1 --format=%h HEAD)
     author=$(git log -1 --format='%an <%ae>' HEAD)
     review_title="$subject"
+    stat=$(git diff --shortstat "$diff_range" 2>/dev/null | sed 's/^[[:space:]]*//')
     review_details_json=$(jq -n \
       --arg repo "$repo" --arg br "$branch" --arg c "$hash" \
-      --arg a "$author" --arg b "$body" --arg r "$diff_range" \
+      --arg a "$author" --arg b "$body" --arg r "$diff_range" --arg s "$stat" \
       '[{label:"repo",value:$repo},{label:"branch",value:$br},
         {label:"commit",value:$c},{label:"author",value:$a},{label:"range",value:$r}]
+       + (if $s == "" then [] else [{label:"summary",value:$s}] end)
        + (if $b == "" then [] else [{label:"body",value:$b}] end)')
   fi
 
@@ -559,6 +659,25 @@ else
   # it would attribute the range to the wrong commit.
   [[ -n "$override_title" ]] && review_title="$override_title"
   [[ -n "$override_details_json" ]] && review_details_json="$override_details_json"
+fi
+
+if [[ -n "$review_annotations" && ! -r "$review_annotations" ]]; then
+  echo "review-diff.sh: annotations file not readable: $review_annotations" >&2
+  exit 66
+fi
+if [[ -n "$review_explain" ]]; then
+  [[ -z "$review_annotations" ]] || { echo "review-diff.sh: --explain and --annotations are two sets of notes; pass one" >&2; exit 64; }
+  [[ -r "$review_explain" && -r "${review_explain%.md}.json" ]] \
+    || { echo "review-diff.sh: --explain needs the notes review-explain.sh wrote: $review_explain" >&2; exit 66; }
+fi
+if [[ "$review_untracked" -eq 1 && ( "$review_subject" != "range" || "$diff_range" == *..* ) ]]; then
+  echo "review-diff.sh: --untracked shows files beside a working-tree diff; $([[ "$review_subject" == range ]] && echo "$diff_range compares two commits" || echo "a --files review has no tree")" >&2
+  exit 64
+fi
+
+if [[ -n "$review_reply" && "$review_annotations" != "$review_reply/notes.md" ]]; then
+  echo "review-diff.sh: --reply answers a --local review" >&2
+  exit 64
 fi
 
 if [[ ${#staged_paths[@]} -gt 0 && "$diff_staged" -ne 1 ]]; then
@@ -579,7 +698,7 @@ review_next_step() {
     release)        echo "use these notes for the release" ;;
     resolve-feedback)
       [[ "$header_mode" != "local" ]] || echo "commit this fix and push it" ;;
-    review)         echo "your annotations become findings on this CR, posted only once you approve their text" ;;
+    review)         echo "your notes decide what each item becomes; nothing commits or posts until you approve it" ;;
   esac
 }
 if [[ -n "$review_skill" ]]; then
@@ -594,6 +713,14 @@ report_superseded_key
 resolve_review
 review_mode="$resolved_mode"
 review_tool="$resolved_tool"
+if [[ -n "$review_explain" && "$(tool_preloads)" == 1 ]]; then
+  review_annotations="$review_explain"
+  review_seeded="${review_explain%.md}.json"
+fi
+if [[ "$review_mode" != diff ]] && [[ -n "$review_annotations" || "$review_untracked" -eq 1 ]]; then
+  echo "review-diff.sh: --annotations and --untracked belong to a diff review, and this one resolved to $review_mode mode" >&2
+  exit 64
+fi
 
 # One adapter per mode. Within `diff`, the tool's own half lives in
 # review/tools/<tool>.sh, which that adapter sources — so a second viewer is a
@@ -614,8 +741,17 @@ fi
 # same way an approved review is — so launching one manufactures an `approved`
 # for a changeset nobody saw. Report `no-verdict` naming the repo the range
 # resolved against, which is also what surfaces a review pointed at the wrong
-# checkout (DIFF-21).
+# checkout (DIFF-21). A reply opens on an empty range: its notes answer
+# questions that changed nothing, and the changeset itself was graded already.
+# Under --untracked a new file is part of what is shown, so a batch of nothing
+# but new items is not empty; the context file is the review's own, not content.
 range_empty() {
+  [[ -z "$review_reply" ]] || return 1
+  if [[ "$review_untracked" -eq 1 ]] \
+     && git ls-files --others --exclude-standard -- "${review_specs[@]+"${review_specs[@]}"}" \
+          | grep -qvxF '(context).md'; then
+    return 1
+  fi
   if [[ "$diff_staged" -eq 1 ]]; then git diff --cached --quiet "$diff_range" -- "${review_specs[@]+"${review_specs[@]}"}"
   else git diff --quiet "$diff_range" -- "${review_specs[@]+"${review_specs[@]}"}"; fi
 }
@@ -636,10 +772,25 @@ fi
 # adapter (sourced below) counts as a consumer — it runs in this same shell.
 export review_subject review_mode review_tool
 export diff_range diff_staged diff_paths files_left files_right review_title review_details_json
-export message_file review_skill
+export message_file review_skill review_annotations review_seeded review_reply review_untracked
 
 # Taken before the tool opens, so it names what the reviewer was shown.
 [[ -z "$review_index" ]] || echo "REVIEW_INDEX=$review_index"
+
+# Called by the adapter once a review returns `changes-requested`. The tree is
+# taken as the review closed, so an edit the reviewer made in the tool is part
+# of what they saw, and the next review (--reply) shows only what answered them.
+review_state_save() {
+  [[ "$header_mode" == local && "$diff_staged" -eq 0 ]] || return 0
+  local dir
+  dir=$(anchor_tmpdir anchor-review-state)
+  anchor_review_snapshot "${review_paths[@]+"${review_paths[@]}"}" > "$dir/reviewed"
+  printf '%s\n' "$1" > "$dir/comments.json"
+  if [[ -n "$review_reply" ]]; then
+    { [[ ! -f "$review_reply/earlier" ]] || cat "$review_reply/earlier"; cat "$review_reply/reviewed"; } > "$dir/earlier"
+  fi
+  echo "REVIEW_STATE=$dir"
+}
 
 # shellcheck source=/dev/null
 source "$adapter"

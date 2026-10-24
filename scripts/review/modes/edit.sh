@@ -32,8 +32,11 @@
 # Verdict mapping (DIFF-13):
 #   saved, changed or not -> approved; a changed artifact rides back in
 #                            editedFields and is adopted verbatim
-#   closed without saving, emptied, or exited non-zero (vim's `:cq`) ->
-#                            no-verdict, which already halts the flow and is
+#   exited 2 (`:cq 2`)    -> the review reopens in `diff` mode on the draft as
+#                            saved, and returns that mode's verdict, carrying
+#                            any edit made before the switch in editedFields
+#   closed without saving, emptied, or exited non-zero otherwise (vim's `:cq`)
+#                         -> no-verdict, which already halts the flow and is
 #                            never read as approval
 #
 # The save is the answer. It is one keystroke either way, it is an act rather
@@ -57,12 +60,44 @@ source "$(dirname "${BASH_SOURCE[0]}")/../../lib/review-editor.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/../../lib/review-host.sh"
 # shellcheck source=../../lib/tmpfile.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../../lib/tmpfile.sh"
+# shellcheck source=../../lib/callout.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../../lib/callout.sh"
 
 editor_caps='{"producesVerdict":true,"perHunkReview":false,"editableCommitMessage":true,"editableDescription":true,"sideMarkers":false}'
 
 # Cut point between the editable artifact and the read-only context below it.
-# git's own marker, minus the leading `#`, since `#` lines are kept here.
+# A commit message gets git's own marker, `#` and all, in a buffer named the way
+# git names its own, so the editor's gitcommit mode greys the context and
+# colours the diff. A markdown draft gets the marker without the `#`, since `#`
+# is a heading there, and its context sits in an HTML comment instead.
 editor_scissors='------------------------ >8 ------------------------'
+editor_commit_scissors="# $editor_scissors"
+
+# What the reviewer reads past the draft: how to answer, then the flow that
+# opened the review and what approving hands it, then what is under review.
+# The seeded message rides in the details as a `body` row for a viewer's header;
+# here the message is the editable region itself, so the row would be a second
+# copy the user could edit to no effect.
+# shellcheck disable=SC2154
+editor_context() {
+  local viewer cta='Save to approve the text above the line, unchanged if it already reads right. Quit without saving to abort, and nothing this review gates will happen.'
+  viewer=$(editor_viewer)
+  [[ -z "$viewer" ]] || cta+="
+
+To ask for changes instead, save, then quit with exit code $editor_rc_annotate (:w, then :cq $editor_rc_annotate in Helix or Vim), and the saved draft opens in $viewer to annotate."
+  printf 'Everything below the line above is ignored.\n'
+  anchor_box "$cta"
+  printf '\n'
+  jq -r '[.[] | select(.label == "opened by" or .label == "next")]
+    | if length == 0 then empty else
+      ((map(.label | length) | max) as $w
+       | (.[] | (($w - (.label | length)) as $pad
+         | "  \(.label):\(if $pad > 0 then " " * $pad else "" end) \(.value)")), "")
+      end' <<<"$review_details_json"
+  printf '%s\n' "$review_title"
+  jq -r '.[] | select(.label != "body" and .label != "opened by" and .label != "next")
+    | "  \(.label): \(.value)"' <<<"$review_details_json"
+}
 
 editor_emit() {
   local verdict="$1" rc="$2" note="${3:-}" edited_json="${4:-[]}"
@@ -102,12 +137,16 @@ editor_buffer_ext() {
 # review the same artifact at once; each buffer gets a directory of its own, so
 # the names never meet on disk.
 editor_buffer_name() {
-  local name="$1" repo branch
+  local name="$1" repo branch where=""
   if repo=$(git rev-parse --show-toplevel 2>/dev/null); then
     branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
-    name="${repo##*/}@${branch//\//-}.$name"
+    where="${repo##*/}@${branch//\//-}"
   fi
-  printf '%s.%s' "$name" "$(editor_buffer_ext "$1")"
+  if [[ "$1" == commit-message ]]; then
+    printf '%s/COMMIT_EDITMSG' "${where:-commit}"
+    return
+  fi
+  printf '%s%s.%s' "${where:+$where.}" "$name" "$(editor_buffer_ext "$1")"
 }
 
 # Helix's status line shows a path relative to its working directory, so it
@@ -125,6 +164,55 @@ editor_open_args() {
 # reports, so the three causes reach `emit_review` apart from each other and none
 # of them is quoted back to the user as an editor's exit code.
 editor_rc_no_host=123
+
+# The status a reviewer quits with to annotate the draft in the diff viewer
+# rather than edit it: for a change they want made rather than make themselves.
+editor_rc_annotate=2
+
+# The viewer a `diff` review would open, resolved the way the dispatcher
+# resolves it; empty when none is named. Call it in a subshell, since it
+# resolves over the dispatcher's settled state.
+# shellcheck disable=SC2034,SC2154
+editor_viewer() {
+  resolved_mode="diff"; tool_override=""
+  resolve_tool
+  printf '%s' "$resolved_tool"
+}
+
+# Reopen this review in `diff` mode on draft $3, the artifact $1 as the reviewer
+# left it, and relay that mode's result. What they edited before switching
+# rides back in editedFields, so the draft a skill revises or adopts is the one
+# they annotated.
+# shellcheck disable=SC2034,SC2154
+editor_annotate() {
+  local target="$1" original="$2" draft="$3" draft_file empty_file="" edited='[]' line
+  draft_file=$(anchor_tmpfile anchor-annotate "$(editor_buffer_ext "$target")")
+  printf '%s\n' "$draft" > "$draft_file"
+  if [[ "$review_subject" == files ]]; then
+    files_right="$draft_file"
+    if [[ ! -f "${files_left:-}" ]]; then
+      empty_file=$(anchor_tmpfile anchor-annotate-empty "$(editor_buffer_ext "$target")")
+      : > "$empty_file"
+      files_left="$empty_file"
+    fi
+  else
+    message_file="$draft_file"
+  fi
+  [[ "$draft" == "$original" ]] || edited=$(jq -cn --arg t "$target" --arg o "$original" --arg e "$draft" \
+    '[{target:$t, original:$o, edited:$e}]')
+
+  review_mode="diff"
+  review_tool=$(editor_viewer)
+  # shellcheck source=diff.sh
+  source "$(dirname "${BASH_SOURCE[0]}")/diff.sh"
+  while IFS= read -r line; do
+    case "$line" in
+      REVIEW_OUTPUT=*) printf 'REVIEW_OUTPUT=%s\n' "$(jq -c --argjson e "$edited" '.editedFields = $e' <<<"${line#REVIEW_OUTPUT=}")" ;;
+      *)               printf '%s\n' "$line" ;;
+    esac
+  done < <(emit_review)
+  rm -f "$draft_file" "$empty_file"
+}
 
 # Open $2 in the resolved editor $1 and return the editor's exit status, in
 # whichever host the dispatcher picked for this session — or one of the statuses
@@ -144,7 +232,11 @@ editor_launch() {
     return "$editor_rc_no_host"
   fi
 
-  anchor_host_run "$ed $(editor_open_args "$ed" "${file%/*}")$(anchor_host_sq "$file")" edit "$ed" || rc=$?
+  # A COMMIT_EDITMSG sits in a directory named for its repo and branch, and the
+  # editor starts above it so the status line carries both.
+  local wdir="${file%/*}"
+  [[ "${file##*/}" != COMMIT_EDITMSG ]] || wdir="${wdir%/*}"
+  anchor_host_run "$ed $(editor_open_args "$ed" "$wdir")$(anchor_host_sq "$file")" edit "$ed" || rc=$?
   return "$rc"
 }
 
@@ -195,27 +287,18 @@ emit_review() {
   original=$(cat "$artifact_file")
   buffer_dir=$(anchor_tmpdir anchor-editor)
   buffer="$buffer_dir/$(editor_buffer_name "$artifact_target")"
+  mkdir -p "${buffer%/*}"
 
   {
     printf '%s\n\n' "$original"
-    printf '%s\n' "$editor_scissors"
-    printf 'Everything below this line is ignored. Save to approve the text above,\n'
-    printf 'unchanged if it already reads right. Quit without saving to abort, and\n'
-    printf 'nothing this review gates will happen.\n\n'
-    # Which flow opened the review and what approving hands it, first in what
-    # the reviewer reads past the draft.
-    jq -r '[.[] | select(.label == "opened by" or .label == "next")]
-      | if length == 0 then empty else
-        ((map(.label | length) | max) as $w
-         | (.[] | (($w - (.label | length)) as $pad
-           | "  \(.label):\(if $pad > 0 then " " * $pad else "" end) \(.value)")), "")
-        end' <<<"$review_details_json"
-    printf '%s\n' "$review_title"
-    # The seeded message rides in the details as a `body` row for a viewer's header;
-    # here the message is the editable region itself, so the row would be a
-    # second copy the user could edit to no effect.
-    jq -r '.[] | select(.label != "body" and .label != "opened by" and .label != "next")
-      | "  \(.label): \(.value)"' <<<"$review_details_json"
+    if [[ "$artifact_target" == commit-message ]]; then
+      printf '%s\n' "$editor_commit_scissors" "# Do not modify or remove the line above."
+      editor_context | sed -e 's/^/# /' -e 's/^# $/#/'
+    else
+      printf '%s\n<!--\n' "$editor_scissors"
+      editor_context | sed 's/-->/-- >/g'
+      printf -- '-->\n'
+    fi
     printf '\n'
     if [[ "$review_subject" == "files" ]]; then
       diff -u --label current --label draft "$files_left" "$artifact_file" || true
@@ -253,10 +336,17 @@ emit_review() {
   rm -f "$write_ref"
 
   local saved
-  saved=$(sed "/^${editor_scissors}\$/,\$d" "$buffer")
+  saved=$(sed -E "/^(# )?${editor_scissors}\$/,\$d" "$buffer")
   # Trailing blank lines are the separator this adapter wrote, not the user's text.
   saved=$(printf '%s' "$saved" | sed -e :a -e '/^[[:space:]]*$/{$d;N;ba' -e '}')
   rm -rf "$buffer_dir"
+
+  if [[ "$rc" == "$editor_rc_annotate" ]]; then
+    local draft="$original"
+    [[ "$wrote" -eq 0 || -z "${saved//[[:space:]]/}" ]] || draft="$saved"
+    editor_annotate "$artifact_target" "$original" "$draft"
+    return
+  fi
 
   # A failure the host owns rides out as a named cause the way the viewer
   # tool's `absent` / `no-host` do, not as a number. Quoting one back as the

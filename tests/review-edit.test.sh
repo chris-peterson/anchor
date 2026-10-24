@@ -53,7 +53,7 @@ case "${EDITOR_STUB_MODE:-save}" in
     ;;
   replace)
     scissors='------------------------ >8 ------------------------'
-    rest=$(sed -n "/^${scissors}\$/,\$p" "$buffer")
+    rest=$(sed -En "/^(# )?${scissors}\$/,\$p" "$buffer")
     { printf '%s\n\n' "${EDITOR_STUB_TEXT:-}"; printf '%s\n' "$rest"; } > "$buffer"
     ;;
   empty) : > "$buffer" ;;
@@ -115,6 +115,7 @@ ok "edit: saved unchanged -> approved, no editedFields"
 grep -qx '# Why this change' "$EDITOR_BUFFER_CAPTURE" || fail "markdown heading missing from buffer"
 grep -q '>8' "$EDITOR_BUFFER_CAPTURE"                 || fail "scissors line missing from buffer"
 grep -q 'Stale text' "$EDITOR_BUFFER_CAPTURE"         || fail "the diff against the prior file is not below the scissors"
+grep -q '^│ Save to approve' "$EDITOR_BUFFER_CAPTURE"  || fail "what saving does is outlined: $(cat "$EDITOR_BUFFER_CAPTURE")"
 ok "edit: buffer is artifact + scissors + the change under review"
 
 # The editor reads the name to pick its mode, so a markdown artifact opens under
@@ -293,14 +294,28 @@ grep -q 'three' "$EDITOR_BUFFER_CAPTURE" || fail "the named path's diff should b
 git -C "$repo" checkout --quiet -- peer.txt
 ok "edit: the buffer's diff covers only --path"
 
-[[ "$(cat "$EDITOR_BUFFER_CAPTURE.path")" == *.txt ]] \
-  || fail "a commit message should open in a .txt buffer, got $(cat "$EDITOR_BUFFER_CAPTURE.path")"
-ok "edit: a commit message opens in a .txt buffer"
+# git's own shape, so the editor's gitcommit mode greys the context: the buffer
+# named the way git names it, under the repo and branch, and git's scissors with
+# the context commented below it.
+[[ "$(cat "$EDITOR_BUFFER_CAPTURE.path")" == */repo@main/COMMIT_EDITMSG ]] \
+  || fail "a commit message should open in repo@main/COMMIT_EDITMSG, got $(cat "$EDITOR_BUFFER_CAPTURE.path")"
+grep -qxF '# ------------------------ >8 ------------------------' "$EDITOR_BUFFER_CAPTURE" \
+  || fail "a commit buffer should carry git's scissors: $(cat "$EDITOR_BUFFER_CAPTURE")"
+grep -qxF '#   opened by: /anchor:commit' "$EDITOR_BUFFER_CAPTURE" \
+  || fail "the context below a commit's scissors should be commented: $(cat "$EDITOR_BUFFER_CAPTURE")"
+ok "edit: a commit message opens as git's COMMIT_EDITMSG, its context commented"
 
 # The seeded message is the editable region, so it is not repeated as a header row.
 [ "$(grep -c 'The body explains why' "$EDITOR_BUFFER_CAPTURE")" = 1 ] \
   || fail "the message body appears twice in the buffer"
 ok "edit: the seeded message body is not duplicated in the header"
+
+# A markdown draft keeps `#` for headings, so its context is an HTML comment.
+o=$(run --skill prepare-review --mode edit --files "$prior" "$draft")
+[ "$(sed -n '/>8/{n;p;}' "$EDITOR_BUFFER_CAPTURE")" = '<!--' ] \
+  || fail "a markdown draft's context should open a comment under the scissors: $(cat "$EDITOR_BUFFER_CAPTURE")"
+grep -qxF -- '-->' "$EDITOR_BUFFER_CAPTURE" || fail "the comment should close before the diff"
+ok "edit: a markdown draft's context sits in an HTML comment"
 
 # --- the artifact target follows the invoking skill ------------------------
 export EDITOR_STUB_MODE=replace EDITOR_STUB_TEXT='## Issue body'
@@ -441,7 +456,14 @@ o=$( cd "$repo" && PATH="$bin:/usr/bin:/bin" ANCHOR_EDITOR_LAUNCHER="$bin/stub-e
      bash "$dispatch" --skill commit --probe --mode edit )
 [ "$(key_of REVIEW_AVAILABLE "$o")" = 1 ]      || fail "a reachable editor makes a selected edit mode available"
 [ "$(key_of REVIEW_EDIT_AVAILABLE "$o")" = 1 ] || fail "a reachable editor should be reported as offerable"
-ok "probe: a reachable editor is reported on its own axis"
+[ "$(key_of REVIEW_HOST "$o")" = launcher ]    || fail "the probe names where the review opens: $o"
+ok "probe: a reachable editor is reported on its own axis, with where it opens"
+
+o=$(probe_hosted --skill commit --probe --mode diff)
+[ "$(key_of REVIEW_HOST "$o")" = launcher ] || fail "a diff probe names the host the viewer opens in: $o"
+o=$(probe --skill commit --probe --mode edit)
+grep -qx 'REVIEW_HOST=' <<<"$o" || fail "with nowhere to open, the host is reported empty: $o"
+ok "probe: REVIEW_HOST names where the review opens in either mode, and is empty when nowhere can"
 
 # Whether what is about to open is something the user chose (UX-07). The mode
 # here comes from a config key and the editor from anchor's own ladder, so the
@@ -744,5 +766,56 @@ ok "host: the gui window answers edit alone"
 [ "$(host_for edit gvim)" != gui ]               || fail "gvim without -f does not block"
 [ "$(host_for edit 'my-editor --hold')" != gui ] || fail "an unrecognized flag should not read as blocking"
 ok "host: the wait flag each known editor needs is what selects the gui host"
+
+# ====================== annotating instead of editing ======================
+# Quitting the editor with exit code 2 hands the draft to the diff viewer, for a
+# change the reviewer wants made rather than makes. The runner runs the command
+# for real, and the stub revdiff keeps the draft it was shown and answers with
+# $REVDIFF_STUB_OUTPUT.
+cat > "$bin/run-host.sh" <<'EOF'
+#!/usr/bin/env bash
+sh -c "$1"
+EOF
+chmod +x "$bin/run-host.sh"
+cat > "$viewerbin/revdiff" <<'EOF'
+#!/usr/bin/env bash
+for a in "$@"; do
+  case "$a" in
+    --output=*)      out="${a#--output=}" ;;
+    --compare-new=*) cp "${a#--compare-new=}" "$REVDIFF_NEW_CAPTURE" ;;
+  esac
+done
+[ -z "${REVDIFF_STUB_OUTPUT:-}" ] || printf '%s\n' "$REVDIFF_STUB_OUTPUT" > "$out"
+exit "${REVDIFF_STUB_RC:-0}"
+EOF
+chmod +x "$viewerbin/revdiff"
+git -C "$repo" config anchor.diff.tool revdiff
+export ANCHOR_EDITOR_LAUNCHER="$bin/stub-editor.sh" ANCHOR_HOST_RUNNER="$bin/run-host.sh"
+export REVDIFF_NEW_CAPTURE="$work/annotated.md" EDITOR_BUFFER_CAPTURE="$work/buffer.txt"
+
+o=$(EDITOR_STUB_MODE=replace EDITOR_STUB_TEXT='# Edited first' EDITOR_STUB_RC=2 \
+    REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT=$'## proposed.md:1 (+)\nsay which gateway' \
+    run --skill prepare-review --mode edit --files "$nothing" "$draft"); j=$(json_of "$o")
+grep -q ':cq 2' "$EDITOR_BUFFER_CAPTURE"           || fail "the buffer should name the exit code that switches: $(cat "$EDITOR_BUFFER_CAPTURE")"
+grep -q 'saved draft opens in revdiff' "$EDITOR_BUFFER_CAPTURE" || fail "the buffer should name the viewer it switches to"
+[ "$(head -1 "$REVDIFF_NEW_CAPTURE")" = '# Edited first' ] || fail "the viewer should show the draft as saved: $(cat "$REVDIFF_NEW_CAPTURE")"
+[ "$(verdict_of "$o")" = changes-requested ]       || fail "a note in the viewer -> changes-requested: $o"
+[ "$(jq -r .mode <<<"$j")" = diff ]                || fail "the result is the viewer's: $j"
+[ "$(jq '.comments|length' <<<"$j")" = 1 ]         || fail "the note comes back as a comment: $j"
+[ "$(jq -r '.editedFields[0].edited' <<<"$j")" = '# Edited first' ] || fail "the edit made before switching rides back: $j"
+[ "$(jq -r '.editedFields[0].target' <<<"$j")" = description ] || fail "the edit is aimed at the artifact: $j"
+ok "annotate: exit 2 reopens the saved draft in the viewer, and its notes and the earlier edit both come back"
+
+o=$(EDITOR_STUB_MODE=quit EDITOR_STUB_RC=2 REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT='' \
+    run --skill prepare-review --mode edit --files "$nothing" "$draft"); j=$(json_of "$o")
+cmp -s "$REVDIFF_NEW_CAPTURE" "$draft"             || fail "an unsaved switch shows the draft as drafted: $(cat "$REVDIFF_NEW_CAPTURE")"
+[ "$(verdict_of "$o")" = approved ]                || fail "a viewer quit with no notes -> approved: $o"
+[ "$(jq '.editedFields|length' <<<"$j")" = 0 ]     || fail "nothing was edited: $j"
+ok "annotate: switching without saving shows the draft as drafted"
+
+git -C "$repo" config --unset anchor.diff.tool
+EDITOR_STUB_MODE=save run --skill prepare-review --mode edit --files "$nothing" "$draft" >/dev/null
+! grep -q ':cq 2' "$EDITOR_BUFFER_CAPTURE"         || fail "with no viewer named, the buffer offers no switch: $(cat "$EDITOR_BUFFER_CAPTURE")"
+ok "annotate: the switch is offered only where a viewer is named"
 
 echo "# all checks passed"

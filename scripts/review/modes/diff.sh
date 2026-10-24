@@ -15,6 +15,11 @@
 #   files_left/right     the two paths (files mode)
 #   review_title         the header title
 #   review_details_json  the header details, a JSON array of {label,value}
+#   review_annotations   notes to preload, in revdiff's markdown (empty: none)
+#   review_seeded        the agent's own notes as JSON, read back as read rather
+#                          than as feedback (empty: none)
+#   review_reply         the state dir of a reply review (empty: not one)
+#   review_untracked     1 == show untracked files beside the diff
 #
 # A diff tool is a TUI, so it needs a terminal to render, and anchor launches
 # review from a background Bash call with no controlling TTY. The terminal comes
@@ -66,14 +71,24 @@ diff_unavailable() {
     | { read -r out; echo "REVIEW_VERDICT=no-verdict"; echo "REVIEW_OUTPUT=$out"; }
 }
 
+# The adapter that runs <tool>: a name anchor ships an adapter for wins, and
+# anything else git can launch as a difftool goes to the adapter that drives
+# them all. Empty when neither fits.
+diff_tool_file() {
+  local tool_dir tool_file
+  tool_dir="$(dirname "${BASH_SOURCE[0]}")/../tools"
+  tool_file="${tool_dir}/$1.sh"
+  if [[ ! -r "$tool_file" && -r "${tool_dir}/difftool.sh" ]] && anchor_difftool_known "$1"; then
+    tool_file="${tool_dir}/difftool.sh"
+  fi
+  [[ ! -r "$tool_file" ]] || printf '%s' "$tool_file"
+}
+
 # Consumes the review-request variables the dispatcher exports before sourcing
 # this adapter; shellcheck can't follow that cross-file.
 # shellcheck disable=SC2154
 emit_review() {
-  # A name anchor ships an adapter for wins; anything else git can launch as a
-  # difftool goes to the adapter that drives them all, so the user's own
-  # `diff.tool` needs no adapter of its own.
-  local tool_dir tool_file
+  local tool_file
   # Nothing named the viewer, and nothing stands in for it. Say which key names
   # one and what anchor recommends putting there, rather than picking a tool the
   # user never chose and reporting its verdict as theirs.
@@ -82,20 +97,26 @@ emit_review() {
     diff_unavailable "no diff viewer configured. Set anchor.diff.tool (or git's own diff.tool) to the viewer you want — anchor recommends revdiff: brew install umputun/apps/revdiff" no-tool
     return
   fi
-  tool_dir="$(dirname "${BASH_SOURCE[0]}")/../tools"
-  tool_file="${tool_dir}/${review_tool}.sh"
-  if [[ ! -r "$tool_file" && -r "${tool_dir}/difftool.sh" ]] \
-     && anchor_difftool_known "$review_tool"; then
-    tool_file="${tool_dir}/difftool.sh"
-  fi
-  if [[ ! -r "$tool_file" ]]; then
+  tool_file=$(diff_tool_file "$review_tool")
+  if [[ -z "$tool_file" ]]; then
     # Resolution keeps a name it could not place so this report can carry it.
     diff_tool_caps='{"producesVerdict":false,"perHunkReview":false,"editableCommitMessage":false,"editableDescription":false,"sideMarkers":false}'
-    diff_unavailable "no adapter for diff tool '${review_tool}' (looked in $(dirname "$tool_file")). Set anchor.diff.tool to one anchor ships." unknown-tool
+    diff_unavailable "no adapter for diff tool '${review_tool}' (looked in $(dirname "${BASH_SOURCE[0]}")/../tools). Set anchor.diff.tool to one anchor ships." unknown-tool
     return
   fi
   # shellcheck source=/dev/null
   source "$tool_file"
+
+  # A request the tool can't carry is refused rather than dropped: preloaded
+  # notes that never reach the reviewer read back as notes they deleted.
+  if [[ -n "${review_annotations:-}" ]] && [[ "$(jq -r '.preloadsAnnotations // false' <<<"$diff_tool_caps")" != true ]]; then
+    diff_unavailable "$review_tool can't preload review notes; this review needs a viewer that can (anchor.diff.tool=revdiff)" annotations-unsupported
+    return
+  fi
+  if [[ "${review_untracked:-0}" -eq 1 ]] && [[ "$(jq -r '.showsUntracked // false' <<<"$diff_tool_caps")" != true ]]; then
+    diff_unavailable "$review_tool can't show untracked files; this review needs a viewer that can (anchor.diff.tool=revdiff)" untracked-unsupported
+    return
+  fi
 
   # git hands a difftool temp copies of any side that isn't the working tree,
   # so an edit there never reaches a file and the untouched tree reads as
@@ -178,9 +199,30 @@ emit_review() {
     return
   fi
 
-  local comments verdict
+  local comments returned verdict
   comments=$(diff_tool_comments "$out_file" "$desc_file")
+  returned="$comments"
+  # The agent's own notes (a reply, or what it said about its changes) come back
+  # among the reviewer's. One returned as it was seeded was read, and one deleted
+  # was read and set aside; only an edited or a new note is the reviewer
+  # answering.
+  local seeded="${review_seeded:-}"
+  [[ -z "${review_reply:-}" ]] || seeded="$review_reply/notes.json"
+  if [[ -n "$seeded" ]]; then
+    comments=$(jq -c --slurpfile seeded "$seeded" '
+      def norm: gsub("\\s+"; " ") | sub("^ "; "") | sub(" $"; "");
+      [.[] | . as $c
+        | select(any($seeded[0][];
+            .file == $c.file
+            and (if .marker == "file" then $c.target == "file" else .line == $c.startLine end)
+            and (.body | norm) == ($c.body | norm)) | not)]' <<<"$comments")
+  fi
   verdict=$(diff_tool_verdict "$rc" "$comments")
+  # Saved only where the next review can carry the replies.
+  if [[ "$verdict" == changes-requested ]] && declare -F review_state_save >/dev/null \
+     && [[ "$(jq -r '.preloadsAnnotations // false' <<<"$diff_tool_caps")" == true ]]; then
+    review_state_save "$comments"
+  fi
 
   local out
   out=$(jq -cn \
@@ -202,6 +244,13 @@ emit_review() {
 
   rm -f "$out_file" "$err_file" "$desc_file"
   ! declare -F diff_tool_cleanup >/dev/null || diff_tool_cleanup
+  # The set of notes the reviewer left, kept beside the ones that were preloaded
+  # so a caller compares the two from files rather than from this output line.
+  if [[ -n "${review_annotations:-}" ]]; then
+    local returned_file="${review_annotations%.md}.returned.json"
+    printf '%s\n' "$returned" > "$returned_file"
+    echo "REVIEW_RETURNED=$returned_file"
+  fi
   echo "REVIEW_VERDICT=$verdict"
   echo "REVIEW_OUTPUT=$out"
 }
