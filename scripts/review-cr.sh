@@ -58,6 +58,10 @@
 #                                that takes in every unreviewed commit
 #   REVIEW_STATUS_DIFF_PATH=<path>  the diff from REVIEW_STATUS_FROM to the head
 #
+#   On any CR whose description has the section:
+#   REVIEW_DECISIONS_PATH=<path> the decisions earlier reviews recorded there, as
+#                                a JSON array of strings; [] without the section
+#
 # On a failure that leaves nothing to review it prints REVIEW_ERROR=<message>
 # and exits non-zero, rather than emitting a half-populated block the skill
 # would act on. An auth failure surfaces the same way (the fail-fast-on-auth
@@ -282,9 +286,13 @@ echo "OPEN_THREADS=$(jq length "$feedback_path")"
 echo "OPEN_THREADS_MINE=$(jq '[.[] | select(.mine)] | length' "$feedback_path")"
 echo "OPEN_FEEDBACK_PATH=$feedback_path"
 
+recorded=$(review_status_data "$desc_path") \
+  || die "the CR's Review status section holds data that isn't JSON; fix or delete its opening comment"
+decisions_path=$(anchor_tmpfile "cr-review-decisions" json)
+review_status_notes "$recorded" > "$decisions_path"
+echo "REVIEW_DECISIONS_PATH=$decisions_path"
+
 if [[ "$is_own" == 1 ]]; then
-  recorded=$(review_status_data "$desc_path") \
-    || die "the CR's Review status section holds data that isn't JSON; fix or delete its opening comment"
   rows=$(review_status_rows "$recorded" "$cr_base" "$cr_head")
   unreviewed=$(jq -c '[.[] | select(.rounds == 0) | .sha]' <<<"$rows")
   oldest=$(jq -r '.[0] // empty' <<<"$unreviewed")

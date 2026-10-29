@@ -339,8 +339,6 @@ as it will land. Each kept item is a note in the diff and a row in the table bel
   n=$(state n)
   [[ "$n" == 1 ]] || about+="
 This is round $n: it looks only at what round $(( n - 1 ))'s commit changed."
-  about+="
-$(anchor_revdiff_box revdiff "")"
   if [[ "$pass" == items ]]; then
     accept="the agent takes out what you dropped and makes the changes you asked for, then opens the whole change with the fixes you kept"
   elif [[ "$(state place)" == in-place ]]; then
@@ -363,21 +361,18 @@ $(anchor_revdiff_box revdiff "")"
 $sizes"
   jq -r '.items[] | "| \(.id) | \(.slug) | \(.severity) | \({applied:"", proposed:"proposed", issue:"file an issue", leave:"leave it"}[.status]) | \(.finding | gsub("\\|"; "\\|") | gsub("\n"; " ")) |"' "$items" \
     | anchor_items_table "${title:-Review of a change request}" "$about
-$where
-$(anchor_verdict_section "$accept" "stop the round, and nothing is committed or posted")
-## How to answer
-Answer on each item's note in the diff:
-- **Keep it**: leave the note as it is, or answer \`ok\`, \`yes\`, \`apply\`, or 👍.
-- **Drop it**: delete the note, or answer \`drop\`, \`ignore\`, \`leave\`, or \`no\`.
-  A fix in the tree comes back out.
-- **Change it**: write what you want instead.
-- **Something new**: add a note of your own anywhere.
-- **Finish**: choose in the Verdict section above, or leave a lone \`lgtm\` or
-  \`stop\` on this file, off the rows. A word on an item's note or row answers
-  that item.
 An item with no proposal is $made in the tree.
 This file, \`(context).md\`, is the guide to the review; it leaves the tree when
-the review closes." \
+the review closes.
+$where
+
+$(anchor_review_box --answer "Answer each item on its note in the diff, or on its row:
+- **Keep it**: leave the note as it is.
+- **Change it**: write what you want instead.
+- **Drop it**: delete the note, or answer \`drop\`. A fix in the tree comes back out.
+- **Something new**: add a note of your own anywhere." \
+  revdiff "$accept" "stop the round, and nothing is committed or posted")
+" \
       "| # | slug | severity | proposal | finding |" > "$root/$TABLE"
   if [[ -s "$dir/far.jsonl" ]]; then
     jq -rs '"## Notes away from the changes",

@@ -142,12 +142,16 @@ grep -q 'The agent opened this review in revdiff' "$table" || fail "the table sa
 grep -q 'is the guide to the' "$table" || fail "the table says it is the guide, not an item"
 # shellcheck disable=SC2016
 grep -qE '^│ `\[` ← prev +next → `\]` │$' "$table" || fail "the table names the keys: $(cat "$table")"
-grep -qF -- '- **Accept**: every item goes out as you left or answered it' "$table" || fail "Accept says what publishes: $(cat "$table")"
-grep -qF -- '- **Reject**: stop, and nothing publishes' "$table" || fail "Reject says nothing publishes: $(cat "$table")"
-grep -qF "A word on an item's note or row answers that item" "$table" || fail "the table tells an item's answer from the verdict: $(cat "$table")"
+# shellcheck disable=SC2016
+grep -qF -- '- `approve`: every item goes out as you left or answered it' "$table" || fail "Accept says what publishes: $(cat "$table")"
+# shellcheck disable=SC2016
+grep -qF -- '- `reject`: stop, and nothing publishes' "$table" || fail "Reject says nothing publishes: $(cat "$table")"
+sed -n '/^╭─ Review /,/^╰/p' "$table" | grep -qF "Answer each item on its note or its row" || fail "the box says how to answer an item, apart from the verdict: $(cat "$table")"
 grep -qxF '| 7 | issues/7.md | Retitle \| relabel, add the fix | [link](https://example.com/issues/7) |' "$table" || fail "row 7: $(cat "$table")"
 grep -qxF '| r1 | replies/1.md | new: Reply on deploy.sh:42 |  |' "$table" || fail "row r1: $(cat "$table")"
-[[ "$(grep '^## ' "$table" | tr '\n' ,)" == "## Verdict,## Issues,## Replies," ]] || fail "rows group under their kind's heading: $(cat "$table")"
+[[ "$(grep '^## ' "$table" | tr '\n' ,)" == "## Issues,## Replies," ]] || fail "rows group under their kind's heading: $(cat "$table")"
+[ "$(grep -n '^╭─ Review ' "$table" | cut -d: -f1)" -lt "$(grep -n '^## Issues' "$table" | cut -d: -f1)" ] \
+  || fail "the Review box comes before the rows: $(cat "$table")"
 [[ "$(awk '/^## Issues$/ { s = 1 } /^## Replies$/ { s = 0 } s && /^\| [0-9]/' "$table" | wc -l | tr -d ' ')" == 2 ]] \
   || fail "both issues sit under Issues: $(cat "$table")"
 ok "start: notes anchor above their lines with the right marker, and the table groups a row per item, with its link, by kind"

@@ -34,8 +34,11 @@
 # (scripts/prepare-review.sh, CR_REVIEW_STATUS_PATH), and the write puts it back.
 # It prints STATUS_CARRIED=<0|1>.
 #
+# --note records a decision the review made (one per flag), on the newest commit
+# the round reviewed; the wording is the caller's.
+#
 # Usage:
-#   review-status.sh record --cr <n> --base <sha> --head <sha> --result <approved|changes-requested> [--repo <path>]
+#   review-status.sh record --cr <n> --base <sha> --head <sha> --result <approved|changes-requested> [--note <text>]... [--repo <path>]
 #   review-status.sh carry  --section <file> --into <draft>
 
 set -euo pipefail
@@ -50,7 +53,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/tmpfile.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/review-status.sh"
 
 usage() {
-  echo "usage: review-status.sh record --cr <n> --base <sha> --head <sha> --result <approved|changes-requested> [--repo <path>]" >&2
+  echo "usage: review-status.sh record --cr <n> --base <sha> --head <sha> --result <approved|changes-requested> [--note <text>]... [--repo <path>]" >&2
   echo "       review-status.sh carry --section <file> --into <draft>" >&2
   exit 64
 }
@@ -88,8 +91,10 @@ fi
 shift
 
 CTX_REPO="" cr="" base="" head="" result=""
+notes=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --note)   notes+=("${2:?--note needs text}"); shift 2 ;;
     --cr)     cr="${2:?--cr needs a number}"; shift 2 ;;
     --base)   base="${2:?--base needs a sha}"; shift 2 ;;
     --head)   head="${2:?--head needs a sha}"; shift 2 ;;
@@ -171,7 +176,7 @@ fi
 
 recorded=$(review_status_data "$desc") \
   || { echo "STATUS_ERROR=the CR's Review status section holds data that isn't JSON; fix or delete its opening comment" >&2; exit 65; }
-data=$(review_status_add "$recorded" "$base" "$head" "$result" "$self")
+data=$(review_status_add "$recorded" "$base" "$head" "$result" "$self" "${notes[@]+"${notes[@]}"}")
 rows=$(review_status_rows "$data" "$cr_base" "$tip")
 section=$(anchor_tmpfile cr-review-status-section md)
 review_status_section "$data" "$rows" > "$section"

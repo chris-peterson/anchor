@@ -25,6 +25,11 @@ proportionally more.
 - **Simplicity**: Complexity that costs something now: a hidden bug, dead code
   that will be mistaken for live code, or an abstraction that is expensive to
   reverse once callers depend on it. Not code that could merely be shorter.
+- **Documentation**: User-facing documentation the change leaves wrong or
+  incomplete: a README, a guide, a help string, a usage example that no longer
+  matches what the code does. Where the repo keeps a changelog, whether this
+  change is recorded there the way its recent entries record theirs. A repo
+  without one doesn't need one.
 
 ## Output
 

@@ -47,6 +47,8 @@ git -C "$repo" commit --quiet -m feature
 head=$(git -C "$repo" rev-parse HEAD)
 
 round_cmd() { bash "$round" "$@"; }
+# A table's boxes as one line of text, so a sentence the box wrapped reads whole.
+boxed() { sed -n 's/^│ \(.*\)│$/\1/p' "$1" | tr -s ' \n' ' '; }
 
 # ============================ start ======================================
 
@@ -120,14 +122,15 @@ grep -qx '# Review of #7: Tidy the list' "$table" || fail "a first round is the 
 grep -q 'has 3 items for you: 2 drafted' "$table" || fail "the table says what the review found: $(cat "$table")"
 grep -q "This diff holds only those drafts, from the change request's head" "$table" \
   || fail "the items pass says it shows only the drafts: $(cat "$table")"
-grep -qF -- '- **Accept**: the agent takes out what you dropped and makes the changes you asked for, then opens the whole change with the fixes you kept' "$table" \
+# shellcheck disable=SC2016
+boxed "$table" | grep -qF -- '- `approve`: the agent takes out what you dropped and makes the changes you asked for, then opens the whole change with the fixes you kept' \
   || fail "the items pass says Accept leads to the whole change: $(cat "$table")"
 [[ "$(val ROUND_FROM "$o")" == "$head" ]] || fail "the items pass diffs from the CR head: $o"
-[ "$(grep -n '^## Verdict' "$table" | cut -d: -f1)" -lt "$(grep -n '^## How to answer' "$table" | cut -d: -f1)" ] \
-  || fail "the Verdict section comes before how to answer: $(cat "$table")"
+sed -n '/^╭─ Review /,/^╰/p' "$table" | grep -qF 'Answer each item on its note in the diff, or on its row' \
+  || fail "the Review box says how to answer an item: $(cat "$table")"
 # shellcheck disable=SC2016
-grep -qF -- 'or leave a lone `lgtm` or' "$table" \
-  || fail "how to answer says how to finish: $(cat "$table")"
+boxed "$table" | grep -qF -- 'leave a single note here saying `approve` or `reject`' \
+  || fail "the Review box says how to finish: $(cat "$table")"
 grep -q "on \`$(git -C "$root" branch --show-current)\` · \[change request\](https://example.com/pr/7)" "$table" \
   || fail "the table names the branch and links the CR: $(cat "$table")"
 grep -qF "This file, \`(context).md\`, is the guide to the review" "$table" || fail "the table says what it is"
@@ -261,7 +264,8 @@ wt_items="$work/wt-items.json"
 jq -n '{items:[{id:1, slug:"two-lines", severity:"nit", status:"applied", finding:"Adds x and y",
   reason:"The list needs them.", sites:[{file:"a.txt", line:4}]}]}' > "$wt_items"
 round_cmd seed --dir "$dir" --pass whole --items "$wt_items" --title "Review of #9: Theirs" >/dev/null
-grep -qF -- '- **Accept**: the agent drafts what you kept' "$root/(context).md" \
+# shellcheck disable=SC2016
+boxed "$root/(context).md" | grep -qF -- '- `approve`: the agent drafts what you kept' \
   || fail "a round on someone else's CR says Accept drafts posts: $(cat "$root/(context).md")"
 grep -q 'posts nothing until you approve' "$root/(context).md" \
   || fail "a round on someone else's CR posts nothing unapproved: $(cat "$root/(context).md")"
@@ -269,7 +273,7 @@ grep -q '← prev' "$root/(context).md" || fail "the round names the keys: $(cat
 GIT_CONFIG_GLOBAL="$work/hints-off" git config --global anchor.hints false
 GIT_CONFIG_GLOBAL="$work/hints-off" round_cmd seed --dir "$dir" --pass whole --items "$wt_items" --title "Review of #9: Theirs" >/dev/null
 ! grep -q '← prev\|hide hints' "$root/(context).md" || fail "anchor.hints=false drops the round's keys: $(cat "$root/(context).md")"
-grep -qxF '## Verdict' "$root/(context).md" || fail "the round keeps the Verdict section: $(cat "$root/(context).md")"
+grep -q '^╭─ Review ' "$root/(context).md" || fail "the round keeps the Review box: $(cat "$root/(context).md")"
 grep -q 'whole change request with the 1 item you kept' "$root/(context).md" || fail "the whole pass names the kept items, singular: $(cat "$root/(context).md")"
 ok "seed: a round on someone else's CR says what Accept drafts, and posts nothing unapproved"
 
@@ -427,7 +431,8 @@ o=$(round_cmd seed --dir "$tdir" --pass whole --items "$work/tp-kept.json") || f
 [[ "$(val ROUND_FROM "$o")" == "$t0" ]] || fail "the whole pass diffs from the merge base: $o"
 grep -q 'm.txt	+	20' "$tdir/changed.tsv" || fail "the whole pass holds the CR's own change: $(cat "$tdir/changed.tsv")"
 grep -q 'whole change request with the 1 item you kept' "$tp/(context).md" || fail "the whole pass says what it is: $(cat "$tp/(context).md")"
-grep -qF -- '- **Accept**: the agent makes the changes you kept or asked for, then opens the commit' "$tp/(context).md" \
+# shellcheck disable=SC2016
+boxed "$tp/(context).md" | grep -qF -- '- `approve`: the agent makes the changes you kept or asked for, then opens the commit' \
   || fail "the whole pass's Accept leads to the commit: $(cat "$tp/(context).md")"
 [[ -f "$tdir/read.items.json" ]] || fail "the items pass's answers are kept aside for finish"
 # The reviewer drops item 1 too, now that they see it in the whole change.

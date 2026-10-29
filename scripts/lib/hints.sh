@@ -2,16 +2,14 @@
 # The lines a review's context names the review tool's keys in, for a reviewer
 # new to the tool, and the switch that hides them once they know the keys.
 #
-# Sourced only; the caller sources lib/callout.sh first.
+# Sourced only.
 #
 #   anchor_hints_on <qualifier>   whether the hints are wanted: anchor.<qualifier>.hints,
 #                                 else anchor.hints, else true (CONFIG-21)
 #   anchor_revdiff_hints <bin>    revdiff's keys for stepping and annotating, read
 #                                 from the bindings <bin> has
-#   anchor_hints_off              how to hide the hints, last in the box
-#   anchor_revdiff_box <bin> <text>
-#                                 the box a revdiff review's context opens with:
-#                                 the keys, then <text>, then how to hide the keys
+#   anchor_hints_off              how to hide the hints, last in an editor
+#                                 review's box
 
 anchor_hints_on() {
   local key v rc
@@ -55,13 +53,5 @@ anchor_revdiff_hints() {
 
 # In italics, since it is for the reader who already knows the keys.
 anchor_hints_off() {
-  printf '%s\n' '*Tell the agent "hide hints" to stop showing these.*'
-}
-
-anchor_revdiff_box() {
-  local box=""
-  ! anchor_hints_on diff || box=$(anchor_revdiff_hints "$1")
-  [[ -z "$2" ]] || box+="${box:+$'\n\n'}$2"
-  ! anchor_hints_on diff || [[ -z "$box" ]] || box+=$'\n\n'"$(anchor_hints_off)"
-  [[ -z "$box" ]] || anchor_box "$box"
+  printf '%s\n' '*Tell the agent "hide hints" to stop showing this box.*'
 }

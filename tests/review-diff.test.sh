@@ -37,8 +37,8 @@ mkdir -p "$bin"
 # $REVDIFF_ARGS_FILE and the variables it sets to $REVDIFF_ENV_FILE, copies the seeded header (--description-file, which the
 # adapter deletes on return) to $REVDIFF_DESC_CAPTURE, writes
 # $REVDIFF_STUB_OUTPUT to the --output file the adapter named, and exits
-# $REVDIFF_STUB_RC. It also adds a note on the line of (context).md's Verdict
-# section that REVDIFF_STUB_CHOOSE names (accept, reject, both, or empty for
+# $REVDIFF_STUB_RC. It also adds a note on the line of (context).md's Review
+# box that REVDIFF_STUB_CHOOSE names (accept, reject, both, or empty for
 # none; accept when unset), as a reviewer choosing does, exiting 10 for it.
 # With $REVDIFF_STUB_EDIT, it writes that text over each file it shows but the
 # context file, as `e` in revdiff does.
@@ -65,8 +65,12 @@ for a in "$@"; do
 done
 body="${REVDIFF_STUB_OUTPUT:-}" rc="${REVDIFF_STUB_RC:-0}"
 for c in ${REVDIFF_STUB_CHOOSE-accept}; do
-  label=$(printf '%s' "${c:0:1}" | tr '[:lower:]' '[:upper:]')${c:1}
-  n=$(grep -n -F -- "- **$label" "(context).md" 2>/dev/null | head -1 | cut -d: -f1)
+  case "$c" in
+    accept) pat='- `approve`:' ;;
+    reject) pat='- `reject`:' ;;
+    *) pat="- **$(printf '%s' "${c:0:1}" | tr '[:lower:]' '[:upper:]')${c:1}" ;;
+  esac
+  n=$(grep -n -F -- "$pat" "(context).md" 2>/dev/null | head -1 | cut -d: -f1)
   [ -n "$n" ] || continue
   body="${body:+$body$'\n\n'}## (context).md:$n (+)"$'\n'"$c"
   [ "$rc" != 0 ] || rc=10
@@ -144,7 +148,7 @@ export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT="$md"; o=$(REVDIFF_STUB_CHOOSE="" 
 [ "$(jq -r '.comments[1].file' <<<"$j")" = a.txt ]  || fail "revdiff comment1 file"
 ok "revdiff: rc 10 -> changes-requested + line and file-level comments parsed"
 
-# The verdict is a note on a line of (context).md's Verdict section.
+# The verdict is a note on a line of (context).md's Review box.
 export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
 o=$(REVDIFF_STUB_CHOOSE=accept REVDIFF_KEYS_CAPTURE="$work/keys.txt" run --skill commit --previous); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = approved ] || fail "a note on Accept approves: $o"
@@ -195,9 +199,13 @@ o=$(run --previous --annotations "$work/one-note.md"); returned=$(sed -n 's/^REV
 [ "$(jq -r '.[0].body' "$returned")" = reject ] || fail "the answer reaches the caller: $(cat "$returned")"
 # In a review of items, only the shared table decides, off its rows, and answers
 # on the items' notes don't count against the word.
+# shellcheck source=../scripts/lib/callout.sh
+source "$here/../scripts/lib/callout.sh"
+# shellcheck source=../scripts/lib/hints.sh
+source "$here/../scripts/lib/hints.sh"
 # shellcheck source=../scripts/lib/verdict.sh
 source "$here/../scripts/lib/verdict.sh"
-{ printf '# Batch\n'; anchor_verdict_section "publish" "stop"; printf '| # | slug |\n|---|---|\n| 1 | one |\n'; } > "$work/batch-table.md"
+{ printf '# Batch\n'; anchor_review_box revdiff "publish" "stop"; printf '| # | slug |\n|---|---|\n| 1 | one |\n'; } > "$work/batch-table.md"
 REVDIFF_STUB_OUTPUT=$'## a.txt:2 (+)\n#1 seeded\n\n## a.txt:1 (+)\nabort'
 o=$(run --previous --annotations "$work/one-note.md")
 [ "$(verdict_of "$o")" = changes-requested ] || fail "in a review of items, a lone abort on an item's file is a note: $o"
@@ -231,10 +239,13 @@ o=$(run --previous)
 [ -s "$cap.context" ]                                  || fail "the review should open with (context).md at the root"
 head -1 "$cap.context" | grep -q '^# '                 || fail "(context).md should open with the title as a heading: $(cat "$cap.context")"
 [ "$(sed -n 2p "$cap.context")" = "" ] || fail "a blank line sets the title off: $(cat "$cap.context")"
-[ "$(grep -cx '' "$cap.context")" = 1 ] || fail "a title with no body spends no other blank line: $(cat "$cap.context")"
 # shellcheck disable=SC2016
-[ "$(sed -n 3p "$cap.context")" = 'in `HEAD~1...HEAD`' ] \
-  || fail "the size comes straight after the title: $(cat "$cap.context")"
+[ "$(sed -n 3p "$cap.context")" = '`repo` on `main`' ] \
+  || fail "where the change sits comes straight after the title: $(cat "$cap.context")"
+[ "$(awk '/^╭/ && prev != "" { n++ } /^╰/ { want = 1; prev = $0; next } want && $0 != "" { n++ } { want = 0; prev = $0 } END { print n + 0 }' "$cap.context")" = 0 ] \
+  || fail "a blank line sets off each box: $(cat "$cap.context")"
+[ "$(grep -n '^╰' "$cap.context" | tail -1 | cut -d: -f1)" -lt "$(grep -n '^commit ' "$cap.context" | cut -d: -f1)" ] \
+  || fail "the commit follows every instruction: $(cat "$cap.context")"
 # shellcheck disable=SC2016
 grep -qE -- '^│ `\[` ← prev +next → `>` │$' "$cap.context" \
   || fail "(context).md should name prev and next on one row: $(cat "$cap.context")"
@@ -243,7 +254,7 @@ grep -qF -- '│ `a` to the current line' "$cap.context" || fail "(context).md s
 # shellcheck disable=SC2016
 grep -qF -- '│ `A` to the current file' "$cap.context" || fail "(context).md should name one key to annotate a file: $(cat "$cap.context")"
 # shellcheck disable=SC2016
-[ "$(grep '^│' "$cap.context" | tail -1 | sed 's/ *│$//')" = '│ *Tell the agent "hide hints" to stop showing these.*' ] \
+[ "$(sed -n '/^╭─ Review /,/^╰/p' "$cap.context" | grep '^│' | tail -1 | sed 's/ *│$//')" = '│ *Tell the agent "hide hints" to shrink this box to the choices.*' ] \
   || fail "(context).md should say how to hide the keys: $(cat "$cap.context")"
 # shellcheck disable=SC2016
 grep -qxF -- '`repo` on `main`' "$cap.context"         || fail "(context).md should say where the change sits: $(cat "$cap.context")"
@@ -285,7 +296,7 @@ grep -qxF -- '--only=a.txt' "$work/ctx.args"           || fail "the changed file
   || fail "a note on the table should stay on the table: $(jq -c '.comments' <<<"$j")"
 ok "revdiff: a preloaded review's own (context).md is shown, and notes on it stay on it"
 
-# The caller's table carries a Verdict section too: a preloaded note returned as
+# The caller's table carries a Review box too: a preloaded note returned as
 # it was is no answer, and the choice stays out of the notes the caller reads.
 export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT=$'## a.txt:2 (+)\nseeded'
 cp "$work/batch-table.md" "$repo/(context).md"
@@ -442,8 +453,9 @@ REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT=$'## acme#7.md:1 (+)\nsay why'
 o=$(GIT_EDITOR=hx ANCHOR_EDITOR_LAUNCHER="$bin/stub-editor.sh" EDITOR_BUFFER_CAPTURE="$work/relaunch.buffer" \
     REVDIFF_TREE_CAPTURE="$work/relaunch" REVDIFF_STUB_CHOOSE=relaunch \
     run --skill issue --mode diff --files "$work/current.md" "$work/edit-draft.md" --name 'acme#7'); j=$(json_of "$o")
-grep -qF -- '- **Relaunch in hx**: quit revdiff and start this review over in hx' "$work/relaunch.context" \
-  || fail "the Verdict section should offer the relaunch: $(cat "$work/relaunch.context")"
+sed -n 's/^│ \(.*\)│$/\1/p' "$work/relaunch.context" | tr -s ' \n' ' ' \
+  | grep -qF -- '- **Relaunch in hx**: leave a note on this line to quit revdiff and start this review over in hx' \
+  || fail "the Review box should offer the relaunch: $(cat "$work/relaunch.context")"
 [ "$(jq -r '"\(.mode) \(.verdict)"' <<<"$j")" = "edit approved" ] || fail "the relaunch should end as the editor review: $j"
 grep -qF 'acme#7.md:1: say why' "$work/relaunch.buffer" || fail "the note should ride into the editor: $(cat "$work/relaunch.buffer")"
 REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
@@ -528,30 +540,37 @@ pmsg="$work/para-msg.txt"; printf 'Add a feature\n\nFirst paragraph.\n\nSecond p
 o=$(REVDIFF_TREE_CAPTURE="$work/para" run --local --message-file "$pmsg")
 [ "$(tail -4 "$work/para.context")" = "$(printf '%s\n' '' 'First paragraph.' '' 'Second paragraph.')" ] \
   || fail "(context).md should close on the body, after a blank line, with its paragraph breaks: $(cat "$work/para.context")"
-[ "$(grep -n '^First paragraph' "$work/para.context" | cut -d: -f1)" -gt "$(grep -n '^base ' "$work/para.context" | cut -d: -f1)" ] \
+[ "$(grep -n '^First paragraph' "$work/para.context" | cut -d: -f1)" -gt "$(grep -n '^@ ' "$work/para.context" | cut -d: -f1)" ] \
   || fail "the body follows where the change sits: $(cat "$work/para.context")"
 ok "revdiff: (context).md keeps the commit message's paragraphs"
 
 o=$(REVDIFF_TREE_CAPTURE="$work/cta" run --local --skill commit --message-file "$pmsg")
-grep -qxF -- '## Verdict' "$work/cta.context" || fail "(context).md should carry the Verdict section: $(cat "$work/cta.context")"
-grep -qxF -- '- **Accept**: commit this change and push it' "$work/cta.context" \
+grep -q -- '^╭─ Review ─' "$work/cta.context" || fail "(context).md should carry the Review box: $(cat "$work/cta.context")"
+# shellcheck disable=SC2016
+grep -qE -- '^│ - `approve`: commit this change and push it +│$' "$work/cta.context" \
   || fail "Accept should say what approving does next: $(cat "$work/cta.context")"
-grep -qF -- '- **Reject**: stop' "$work/cta.context" || fail "Reject should say what it does: $(cat "$work/cta.context")"
+# shellcheck disable=SC2016
+grep -qF -- '- `reject`: stop' "$work/cta.context" || fail "Reject should say what it does: $(cat "$work/cta.context")"
 ! grep -q 'q with' "$work/cta.context" || fail "the box no longer carries the quit lines: $(cat "$work/cta.context")"
 ! grep -q 'anchor:commit\|Claude' "$work/cta.context" || fail "(context).md names neither the skill nor the model: $(cat "$work/cta.context")"
-[ "$(grep -n '^╰' "$work/cta.context" | cut -d: -f1)" -lt "$(grep -n '^## Verdict' "$work/cta.context" | cut -d: -f1)" ] \
-  || fail "the Verdict section follows the box: $(cat "$work/cta.context")"
 # shellcheck disable=SC2016
-[ "$(grep -n '^## Verdict' "$work/cta.context" | cut -d: -f1)" -lt "$(grep -n '^`repo`' "$work/cta.context" | cut -d: -f1)" ] \
-  || fail "the repo follows the Verdict section: $(cat "$work/cta.context")"
+[ "$(grep -n '← prev' "$work/cta.context" | cut -d: -f1)" -lt "$(grep -n '│ - `approve`:' "$work/cta.context" | cut -d: -f1)" ] \
+  || fail "the keys come before the choices, in one box: $(cat "$work/cta.context")"
+[ "$(grep -c '^╭' "$work/cta.context")" = 1 ] || fail "the instructions sit in one box: $(cat "$work/cta.context")"
 # shellcheck disable=SC2016
-grep -qx 'base `[0-9a-f]*`' "$work/cta.context" || fail "a base no remote holds is named, not linked: $(cat "$work/cta.context")"
+[ "$(grep -n '^`repo`' "$work/cta.context" | cut -d: -f1)" -lt "$(grep -n '^╭─ Review ' "$work/cta.context" | cut -d: -f1)" ] \
+  || fail "the repo comes before the instructions: $(cat "$work/cta.context")"
+# shellcheck disable=SC2016
+grep -qx '@ `[0-9a-f]*`' "$work/cta.context" || fail "a base no remote holds is named, not linked: $(cat "$work/cta.context")"
 ok "revdiff: (context).md boxes the keys, then says what each verdict does"
 
 git -C "$repo" config anchor.hints false
 o=$(REVDIFF_TREE_CAPTURE="$work/nohints" run --local --skill commit --message-file "$pmsg")
-! grep -q '← prev\|To add an annotation\|hide hints' "$work/nohints.context" || fail "anchor.hints=false hides the keys: $(cat "$work/nohints.context")"
-grep -qxF '## Verdict' "$work/nohints.context"  || fail "the Verdict section stays when the keys are hidden"
+! grep -q '← prev\|To add an annotation\|hide hints\|When you are done' "$work/nohints.context" || fail "anchor.hints=false hides the keys and how to choose: $(cat "$work/nohints.context")"
+[ "$(sed -n '/^╭─ Review /,/^╰/p' "$work/nohints.context" | sed -n 's/^│ \(.*\)│$/\1/p' | grep -cv '^- \|^  ')" = 0 ] \
+  || fail "anchor.hints=false leaves the Review box holding only the choices: $(cat "$work/nohints.context")"
+# shellcheck disable=SC2016
+grep -q '^│ - `approve`:' "$work/nohints.context" || fail "anchor.hints=false keeps the choices: $(cat "$work/nohints.context")"
 git -C "$repo" config anchor.diff.hints true
 o=$(REVDIFF_TREE_CAPTURE="$work/diffhints" run --local --skill commit --message-file "$pmsg")
 grep -q '← prev' "$work/diffhints.context" || fail "anchor.diff.hints=true outranks anchor.hints=false: $(cat "$work/diffhints.context")"
