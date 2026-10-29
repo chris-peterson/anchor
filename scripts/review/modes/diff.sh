@@ -62,7 +62,7 @@
 #                                whether a note sits on the review's shared
 #                                context, off its items, where a lone verdict
 #                                word decides a review of items (default: no
-#                                such place, so only the Verdict section does)
+#                                such place, so only the Review box does)
 #
 # The statuses a *host* owns — an absent tool, no terminal, a pane that closed
 # before the tool reported — never reach the tool: they are not verdicts the
@@ -257,7 +257,7 @@ emit_review() {
       ($pre | map(key)) as $k | [.[] | select(key as $c | $k | index([$c]) | not)]' <<<"$comments")
   fi
   # A review whose one note says only a verdict word chooses as a note on the
-  # Verdict section does, wherever it sits, except where a preloaded note sat:
+  # Review box does, wherever it sits, except where a preloaded note sat:
   # there it answers that note. In a review of items (a batch, a round, which
   # preload notes and write their own context), answers on the items' notes
   # don't count against it, and only a note on the shared file decides, since a

@@ -84,9 +84,8 @@ learn it:
 > Each item is a file: current text on the left, proposed on the right. Edit a
 > file to change it yourself, or leave a note on it to have it redrafted. Answer
 > `drop` on an item's note (or `no`, `skip`) to drop it. When you're done, leave a
-> note on **Accept** in `(context).md` to send the items as you left them, or on
-> **Reject** to stop with nothing published, then quit with `q`. A lone `lgtm`
-> or `stop` in `(context).md`, off the rows, does the same.
+> single note in `(context).md`, off the rows, saying `approve` to send the items
+> as you left them or `reject` to stop with nothing published, then quit with `q`.
 
 `rejected` publishes nothing: finish the batch and say so, with no error banner.
 `no-verdict` with `raw.exitCode` `undecided` means the reviewer quit without

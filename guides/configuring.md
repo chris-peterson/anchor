@@ -175,12 +175,14 @@ How the chosen tool renders the diff is its own knob, not an `anchor.*` key: see
 git config --global anchor.hints false
 ```
 
-A review names the keys that work it, in a box at the top of its context:
+A review names the keys that work it, in a box in its context:
 in revdiff, the keys that step through the changes and add an annotation, read
 from revdiff's own bindings so a key you remapped is named as remapped; in
 Helix or Vim, the chords that approve, reject, and switch to revdiff
 ([Ending a review](#ending-a-review)). Once you know them, `false` drops those rows, or tell the agent "hide
-hints" and it sets this for you. The Verdict section below the box stays.
+hints" and it sets this for you. In revdiff, the keys share one Review box with
+the choices that end the review, and hiding the hints shrinks it to those
+choices.
 
 To keep the hints in one mode only, qualify the key with it:
 `anchor.diff.hints` for revdiff, `anchor.edit.hints` for the editor. The
@@ -355,8 +357,8 @@ text and a status, so you choose with a save or a chord.
 
 | You want to | `diff` (revdiff) | `edit` in Helix or Vim | `edit` in another editor |
 | --- | --- | --- | --- |
-| **Approve** | A note on **Accept** in `(context).md`, or one note anywhere saying only `lgtm`, then `q` | `ZZ` | Save and quit |
-| **Reject**: nothing the review gates happens | A note on **Reject**, or one note saying only `stop`, then `q` | `ZX` | Quit with exit code 2, or save an empty buffer |
+| **Approve** | A single note saying `approve`, then `q`; to keep other notes as comments, put it on the `approve` line in `(context).md` | `ZZ` | Save and quit |
+| **Reject**: nothing the review gates happens | A single note saying `reject`, then `q` | `ZX` | Quit with exit code 2, or save an empty buffer |
 | **Ask for changes** | Notes where they apply, with neither chosen, then `q` | `ZD`: saves and reopens the draft in revdiff to annotate | Save, then quit with exit code 3 |
 | **Leave without choosing** | `q` with no note of your own | Quit without saving | Quit without saving |
 | **Switch tools** | A note on **Relaunch in `<editor>`**, then `q`: the review starts over in your editor | `ZD`, as above | Exit code 3, as above |
@@ -515,8 +517,8 @@ can miss the one `anchor` opens. `REVDIFF_CONFIG` is the exception: `anchor`
 reads it and passes the path through as `--config`. See
 [revdiff's options](https://revdiff.com/docs.html#options) for the full list.
 
-**How a revdiff review ends.** `(context).md` has a Verdict section: a note on
-**Accept** approves and a note on **Reject** stops, then you quit with `q`. The
+**How a revdiff review ends.** `(context).md` has a Review box: leave a single
+note saying `approve` or `reject`, then quit with `q`. The
 rest, and how it compares with an editor review, is in [Ending a
 review](#ending-a-review). A review of one drafted file (a CR description, an
 issue body, release notes) opens the same way, in a scratch repo that holds the
@@ -725,7 +727,7 @@ The gateway drops idle connections, so the first call after …
 # │ `ZD` ask for changes in revdiff (saves, then exit code 3)       │
 # │ Quit without saving, and you're asked what to do.               │
 # │                                                                 │
-# │ *Tell the agent "hide hints" to stop showing these.*            │
+# │ *Tell the agent "hide hints" to stop showing this box.*         │
 # ╰─────────────────────────────────────────────────────────────────╯
 ```
 

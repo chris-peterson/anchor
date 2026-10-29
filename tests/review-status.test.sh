@@ -78,7 +78,9 @@ run() {
 }
 
 # The table's rows as "<short sha> <rounds> [<reviewed by>] <result>", oldest first.
-table() { sed -n 's/^| \([0-9a-f]\{8\}\) | \([0-9]*\) | \([^|]*\) | \(.*\) |$/\1 \2 [\3] \4/p' "$fx/body.md"; }
+table() { sed -n 's/^| \([0-9a-f]\{8\}\) | \([0-9]*\) | \([^|]*\) | \([^|]*[^ |]\) | .*|$/\1 \2 [\3] \4/p' "$fx/body.md"; }
+# One commit's Notes cell.
+notes_of() { sed -n "s/^| $1 | .* | \(.*\) |\$/\1/p" "$fx/body.md"; }
 sha8() { git -C "$repo" rev-parse --short=8 "$1"; }
 
 # --- GitHub -----------------------------------------------------------------
@@ -97,7 +99,9 @@ run --cr 7 --base "$main" --head HEAD --result approved
 [[ "$(val STATUS_RECORDED)" == 3 ]] || fail "a whole-CR round counts every commit: $out"
 [[ "$(val STATUS_UNREVIEWED)" == 0 ]] || fail "nothing should be left unreviewed: $out"
 head -n 1 "$fx/body.md" | grep -qx 'Why this change exists.' || fail "the description above the section should survive: $(cat "$fx/body.md")"
-grep -qx '## Review status' "$fx/body.md" || fail "the section should be appended: $(cat "$fx/body.md")"
+grep -qx '<summary>Review status</summary>' "$fx/body.md" || fail "the section should be appended: $(cat "$fx/body.md")"
+grep -qx '</details>' "$fx/body.md" || fail "the table should collapse under its summary: $(cat "$fx/body.md")"
+! grep -q '^#' "$fx/body.md" || fail "the section adds no heading to the description: $(cat "$fx/body.md")"
 [[ "$(table)" == "$(sha8 HEAD~2) 1 [me] approved
 $(sha8 HEAD~1) 1 [me] approved
 $(sha8 HEAD) 1 [me] approved" ]] || fail "first round table:"$'\n'"$(table)"
@@ -108,8 +112,22 @@ run --cr 7 --base HEAD~1 --head HEAD --result changes-requested
 [[ "$(table)" == "$(sha8 HEAD~2) 1 [me] approved
 $(sha8 HEAD~1) 1 [me] approved
 $(sha8 HEAD) 2 [me] changes-requested" ]] || fail "second round table:"$'\n'"$(table)"
-[[ "$(grep -c '## Review status' "$fx/body.md")" == 1 ]] || fail "the section should be replaced, not repeated: $(cat "$fx/body.md")"
+[[ "$(grep -c '<summary>Review status</summary>' "$fx/body.md")" == 1 ]] || fail "the section should be replaced, not repeated: $(cat "$fx/body.md")"
 ok "a round over one commit counts only that commit, and replaces the section"
+
+run --cr 7 --base HEAD~2 --head HEAD --result approved --note "declined to refactor the uploader" --note 'kept a|b --> as is'
+[[ "$status" == 0 ]] || fail "a round with notes exited $status: $out"
+[[ "$(notes_of "$(sha8 HEAD)")" == 'declined to refactor the uploader; kept a\|b --> as is' ]] \
+  || fail "the notes ride on the newest commit the round reviewed: $(cat "$fx/body.md")"
+[[ -z "$(notes_of "$(sha8 HEAD~1)")" ]] || fail "an older commit in the round gets no note: $(cat "$fx/body.md")"
+data_line=$(grep '^<!-- anchor:review-status ' "$fx/body.md")
+[[ "$data_line" == *' -->' && "${data_line%' -->'}" != *'-->'* ]] \
+  || fail "a note's --> can't close the data comment early: $(cat "$fx/body.md")"
+# shellcheck source=../scripts/lib/review-status.sh
+source "$here/../scripts/lib/review-status.sh"
+[[ "$(review_status_notes "$(review_status_data "$fx/body.md")")" == '["declined to refactor the uploader","kept a|b --> as is"]' ]] \
+  || fail "the notes read back as written: $(review_status_data "$fx/body.md")"
+ok "a round's notes ride on its newest commit, and read back whole"
 
 # A new commit on top is in the table at no rounds until a review covers it.
 printf 'd\n' > "$repo/d.txt"
@@ -135,8 +153,8 @@ git -C "$repo" commit --quiet -a --amend --no-edit
 gh_pr
 run --cr 7 --base HEAD~2 --head HEAD~1 --result approved
 [[ "$(table)" == "$(sha8 HEAD~3) 1 [me] approved
-$(sha8 HEAD~2) 1 [me] approved
-$(sha8 HEAD~1) 3 [me] approved
+$(sha8 HEAD~2) 2 [me] approved
+$(sha8 HEAD~1) 4 [me] approved
 $(sha8 HEAD) 0 [] not reviewed" ]] || fail "after rebase and amend:"$'\n'"$(table)"
 [[ "$(val STATUS_UNREVIEWED)" == 1 ]] || fail "the amended commit is unreviewed: $out"
 ok "a rebased commit keeps its rounds by patch-id; an amended one starts at none"

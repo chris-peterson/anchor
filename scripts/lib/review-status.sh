@@ -1,26 +1,33 @@
 #!/usr/bin/env bash
 # The Review status section of a CR description: each commit on the CR, how many
-# review rounds it has been in, who reviewed it, and the result of the latest one. A review of a
+# review rounds it has been in, who reviewed it, the result of the latest one,
+# and the decisions a review recorded on it. A review of a
 # range gives every commit in it another round, so a commit reviewed on its own
 # and again as part of the whole change counts both.
 #
 # A commit is keyed by its patch-id, not its sha: a rebase that leaves its change
 # as it was keeps its rounds, and an amend that changes it starts again at none.
 # The keys live in a comment the forge doesn't render, on the line that opens
-# the section; the table below it is what a reader sees.
+# the section; the table below it is what a reader sees, collapsed under a
+# summary line, since it is a record the author's prose shouldn't sit beside as
+# an equal. Both forges render markdown inside <details> once blank lines set it
+# off from the tags.
 #
 # Sourced only. Every function reads the repo in the current directory.
 #
 #   review_status_data <description file>
-#                         the recorded rounds as {"<key>": {rounds, by, result}};
-#                         {} for a description without the section
+#                         the recorded rounds as {"<key>": {rounds, by, result,
+#                         notes}}; {} for a description without the section
 #   review_status_rows <data json> <base> <head>
 #                         the commits in <base>..<head>, oldest first, as
-#                         [{sha, key, rounds, by, result}], 0 rounds where
+#                         [{sha, key, rounds, by, result, notes}], 0 rounds where
 #                         unrecorded
-#   review_status_add <data json> <base> <head> <result> <reviewer>
+#   review_status_add <data json> <base> <head> <result> <reviewer> [<note>...]
 #                         the data with every commit in <base>..<head> given
-#                         another round by <reviewer> whose result is <result>
+#                         another round by <reviewer> whose result is <result>,
+#                         and each <note> added to the newest of them
+#   review_status_notes <data json>
+#                         every note recorded, on any commit, as a JSON array
 #   review_status_section <data json> <rows json>
 #                         the section, opening comment through closing comment
 #   review_status_splice <description file> <section file>
@@ -56,26 +63,42 @@ review_status_data() {
 review_status_rows() {
   review_status_keys "$2" "$3" | jq -Rnc --argjson d "$1" '
     [inputs | split(" ") | {sha: .[0], key: .[1]}
-     | . + {rounds: ($d[.key].rounds // 0), by: ($d[.key].by // []), result: ($d[.key].result // "")}]'
+     | . + {rounds: ($d[.key].rounds // 0), by: ($d[.key].by // []), result: ($d[.key].result // ""),
+            notes: ($d[.key].notes // [])}]'
 }
 
+# A decision is about the change as the round saw it, so it rides on the newest
+# commit the round reviewed.
 review_status_add() {
-  review_status_keys "$2" "$3" | jq -Rnc --argjson d "$1" --arg r "$4" --arg w "$5" '
-    reduce (inputs | split(" ")[1]) as $k ($d;
-      (.[$k].by // []) as $by
-      | .[$k] = {rounds: ((.[$k].rounds // 0) + 1),
-                 by: (if ($by | index([$w])) then $by else $by + [$w] end),
-                 result: $r})'
+  local data="$1" from="$2" to="$3" result="$4" reviewer="$5"
+  shift 5
+  review_status_keys "$from" "$to" | jq -Rnc --argjson d "$data" --arg r "$result" --arg w "$reviewer" \
+    --args '[inputs | split(" ")[1]] as $keys
+    | reduce $keys[] as $k ($d;
+        (.[$k].by // []) as $by
+        | .[$k] = (.[$k] + {rounds: ((.[$k].rounds // 0) + 1),
+                            by: (if ($by | index([$w])) then $by else $by + [$w] end),
+                            result: $r}))
+    | if ($keys | length) > 0 and ($ARGS.positional | length) > 0
+      then .[$keys[-1]].notes = ((.[$keys[-1]].notes // []) + $ARGS.positional)
+      else . end' "$@"
+}
+
+review_status_notes() {
+  jq -c '[.[] | .notes // [] | .[]]' <<<"$1"
 }
 
 # Commits drop off the table when the CR no longer has them, and their keys stay
 # in the data: a commit that comes back unchanged keeps what it had.
+# The data's `>` is written as its JSON escape, so a note holding `-->` can't
+# close the comment that carries it.
 review_status_section() {
-  printf '<!-- %s %s -->\n' "$REVIEW_STATUS_MARK" "$(jq -c . <<<"$1")"
-  printf '## Review status\n\n'
-  printf '| Commit | Review rounds | Reviewed by | Latest result |\n| --- | --- | --- | --- |\n'
+  printf '<!-- %s %s -->\n' "$REVIEW_STATUS_MARK" "$(jq -c . <<<"$1" | sed 's/>/\\u003e/g')"
+  printf '<details>\n<summary>Review status</summary>\n\n'
+  printf '| Commit | Review rounds | Reviewed by | Latest result | Notes |\n| --- | --- | --- | --- | --- |\n'
   # A login goes in bare: an @ in a description notifies the person it names.
-  jq -r '.[] | "| \(.sha[0:8]) | \(.rounds) | \(.by | join(", ")) | \(if .rounds == 0 then "not reviewed" else .result end) |"' <<<"$2"
+  jq -r '.[] | "| \(.sha[0:8]) | \(.rounds) | \(.by | join(", ")) | \(if .rounds == 0 then "not reviewed" else .result end) | \(.notes | join("; ") | gsub("\\|"; "\\|") | gsub("\n"; " ")) |"' <<<"$2"
+  printf '\n</details>\n'
   printf '<!-- /%s -->\n' "$REVIEW_STATUS_MARK"
 }
 

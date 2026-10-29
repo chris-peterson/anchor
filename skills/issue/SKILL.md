@@ -282,11 +282,11 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill issue --probe \
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill issue --mode <REVIEW_MODE> --files \
   <current-path> <draft-path> --name '<repo>#<number>' \
-  --title 'Issue body — proposed edits' \
+  --title '<repo>#<number>: <issue title>' \
   --detail repo=<repo>
 ```
 
-`--name` gives the reviewed file the issue's reference in place of the draft's temp name, `<repo>` being the last segment of the project path. A new issue has no number yet: drop it, and the editor names the buffer for the repo and branch.
+`--name` gives the reviewed file the issue's reference in place of the draft's temp name, `<repo>` being the last segment of the project path, and `--title` heads the review with the same reference and the issue's title. A new issue has no number yet: drop `--name`, title it `<repo>: <issue title>`, and the editor names the buffer for the repo and branch.
 
 **The manifest** names the repo, the issue (its number and title when updating one), the tool from the probe, and the sections the draft holds. After the table, the next thing you say is the verdict.
 

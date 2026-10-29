@@ -258,13 +258,14 @@ before any of them publish. This file, \`(context).md\`, is the guide to the
 review and isn't one of the items.
 Each row is one item, and each item is a file in this tree: its current text on
 the left, the proposed text on the right. Notes in the diff are context for this
-review and go nowhere else. To change one, edit its file or leave a note on it
-saying what to change. To drop one, answer \`drop\` on its note (or \`no\`,
-\`skip\`), or delete its row. A word on an item's note or row answers that item;
-to finish, choose in the Verdict section below, or leave a lone \`lgtm\` or
-\`stop\` on this file, off the rows.
-$(anchor_revdiff_box revdiff "")
-$(anchor_verdict_section "every item goes out as you left or answered it, and one you asked to change is redrafted for another batch" "stop, and nothing publishes")"
+review and go nowhere else.
+
+$(anchor_review_box --answer "Answer each item on its note or its row:
+- **Keep it**: leave it as it is.
+- **Change it**: edit its file, or leave a note saying what to change.
+- **Drop it**: answer \`drop\`, or delete its row." \
+  revdiff "every item goes out as you left or answered it, and one you asked to change is redrafted for another batch" "stop, and nothing publishes")
+"
     for kind in "${KINDS[@]}"; do
       rows=$(jq -r --arg k "$kind/" '.items[] | select(.file | startswith($k))
         | "| \(.id | tostring | gsub("\\|"; "\\|")) | \(.file) | \(if .current then "" else "new: " end)\(.summary // "" | gsub("\\|"; "\\|") | gsub("\n"; " ")) | \(if .url then "[link](\(.url))" else "" end) |"' "$items")

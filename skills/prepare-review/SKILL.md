@@ -387,9 +387,11 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --pro
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --mode <REVIEW_MODE> --files \
   <CURRENT_DESC_PATH> <DESC_DRAFT_PATH> --name '<CR_REFERENCE>' \
-  --title 'CR description' \
+  --title '<CR_REFERENCE>: <CR_TITLE>' \
   --detail branch=<BRANCH> --detail CR=<CR_URL>
 ```
+
+The title is the review's heading, so it names the CR under review: its reference and title, and on `CR_PENDING` the repo and the Step 3 title (`<repo>: <title>`), since there is no reference yet.
 
 `CURRENT_DESC_PATH` is the left-hand side — what the forge holds now, and an empty file where no CR holds anything yet. It's context for the draft, not the subject. `--name` gives the reviewed file the CR's reference (`<repo>#<number>`, `<repo>!<iid>`) in place of the draft's temp name; drop it where `CR_REFERENCE` is empty, and the editor names the buffer for the repo and branch.
 

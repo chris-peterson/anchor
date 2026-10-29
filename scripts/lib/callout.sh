@@ -4,10 +4,13 @@
 #
 # Sourced, not executed.
 #
-#   anchor_box <text>   the text wrapped and outlined
+#   anchor_box <text> [<title>]
+#                       the text wrapped and outlined, <title> set into the
+#                       top edge
 #
 # A blank line in <text> separates paragraphs, and a tab splits a row, its
-# right part set against the box's right edge. Inline code is never split
+# right part set against the box's right edge. A line opening with `- ` is a
+# list item, its wrapped rows indented under its text. Inline code is never split
 # across rows, since a span broken by the wrap loses its highlighting. The right
 # edge stays straight only when every character is one terminal cell wide
 # (guides/review-palette.md), so the text holds no emoji. The outline is the
@@ -24,7 +27,7 @@ anchor_box_cols() {
 }
 
 anchor_box() {
-  local para word line rule="" w=0 i lw ww h='─' v='│' tl='╭' tr='╮' bl='╰' br='╯' _cols
+  local para word line indent top rule="" w=0 i lw ww h='─' v='│' tl='╭' tr='╮' bl='╰' br='╯' _cols
   local -a words box_rows=()
   while IFS= read -r para; do
     para=$(awk '{ o = ""; c = 0
@@ -34,12 +37,13 @@ anchor_box() {
       print o }' <<<"$para")
     read -ra words <<<"$para"
     if [[ ${#words[@]} == 0 ]]; then box_rows+=(""); continue; fi
-    line=""
+    line="" indent=""
+    [[ "${words[0]}" != - ]] || indent="  "
     for word in "${words[@]}"; do
       anchor_box_cols "$line"; lw=$_cols
       anchor_box_cols "$word"; ww=$_cols
       if [[ -n "$line" && $(( lw + 1 + ww )) -gt $ANCHOR_CALLOUT_WIDTH ]]; then
-        box_rows+=("$line"); line="$word"
+        box_rows+=("$line"); line="$indent$word"
       else
         line="${line:+$line }$word"
       fi
@@ -47,8 +51,12 @@ anchor_box() {
     box_rows+=("$line")
   done <<<"$1"
   for line in "${box_rows[@]}"; do anchor_box_cols "$line"; (( _cols > w )) && w=$_cols; done
+  top="${2:+$h $2 }"
+  anchor_box_cols "$top"
+  (( _cols + 1 > w + 2 )) && w=$(( _cols - 1 ))
   for (( i = 0; i < w + 2; i++ )); do rule+="$h"; done
-  printf '%s%s%s\n' "$tl" "$rule" "$tr"
+  for (( i = _cols; i < w + 2; i++ )); do top+="$h"; done
+  printf '%s%s%s\n' "$tl" "$top" "$tr"
   for line in "${box_rows[@]}"; do
     anchor_box_cols "$line"
     if [[ "$line" == *$'\x1e'* ]]; then

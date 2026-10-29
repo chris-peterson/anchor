@@ -119,6 +119,7 @@ what it surfaces:
 | `FINDINGS_PATH` | where Step 7 writes what will post; already seeded |
 | `OPEN_THREADS` / `OPEN_THREADS_MINE` / `OPEN_FEEDBACK_PATH` | review threads already open on the CR; see "Open feedback comes first" below |
 | `REVIEW_STATUS_*` | self-review only: which commits the CR's Review status section says no round has covered; see "Start where the last review stopped" below |
+| `REVIEW_DECISIONS_PATH` | what earlier reviews recorded in that section's Notes (REVIEW-34), as a JSON array; settled, see Step 3 |
 
 A `REVIEW_ERROR=…` line means there is nothing to review: surface it and stop.
 On a 401/403 the same line carries the auth failure: ask the user to refresh
@@ -189,7 +190,7 @@ better one than most line-level remarks.
 Then read `DIFF_PATH` against that. Where the diff does something the description
 doesn't account for, that gap is the highest-value thing you have.
 
-A `## Review status` section at the end of the description is anchor's record
+A collapsed Review status section at the end of the description is anchor's record
 of the review rounds, not the author's prose; leave it out of the examination.
 
 ## Step 3: Examine the diff against each quality
@@ -203,9 +204,10 @@ quality it lists and none it doesn't.
 concurrently. Each gets the diff (`DIFF_PATH` on the first round; the round
 commit's diff on a later one, see Step 7), what Step 2 established the change is
 for, one quality's name and wording verbatim, the template's Output section, and
-from round 2 on the ledger's `rejected` list as settled: what the user dropped is
-not raised again unless the code has since changed in a way that makes it newly
-valid. Nothing about the other qualities, and no number of findings to aim for:
+as settled both the decisions in `REVIEW_DECISIONS_PATH` and, from round 2 on,
+the ledger's `rejected` list: what the user dropped, in this session or an
+earlier review, is not raised again unless the code has since changed in a way
+that makes it newly valid. Nothing about the other qualities, and no number of findings to aim for:
 independent lenses are the point, and a quota is what fills a review with
 filler.
 
@@ -213,7 +215,7 @@ What the agents return are **candidates**, not findings.
 
 ### Judge the candidates
 
-Four lenses each find something; whether it is worth the user's attention is a
+Each lens finds something; whether it is worth the user's attention is a
 judgment none of them made. Make it here, once, over the merged list, holding
 every candidate to the template's Output section:
 
@@ -361,9 +363,8 @@ key into the reply, since nobody should have to open the table to learn it:
 > Delete it, or answer `drop` / `no`, to drop it. Write anything else to change
 > it, and add a note of your own for anything new. A note far from the changes
 > is in `(context).md` instead; answer it on its row the same way. Then leave a
-> note on **Accept** in `(context).md` to go ahead, or on **Reject** to stop the
-> round, and quit with `q`. A lone `lgtm` or `stop` in `(context).md`, off
-> the rows, does the same.
+> single note in `(context).md`, off the rows, saying `approve` to go ahead or
+> `reject` to stop the round, and quit with `q`.
 
 When it closes, read `REVIEW_RETURNED` from its output. `approved` and
 `changes-requested` both mean the review ran; the returned notes are the answer,
@@ -574,11 +575,16 @@ says which of the two it lacked:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-status.sh" record --cr <CR_IID> \
-  --base <REVIEW_BASE> --head <CR_HEAD_SHA> --result <approved|changes-requested>
+  --base <REVIEW_BASE> --head <CR_HEAD_SHA> --result <approved|changes-requested> \
+  [--note "<decision>"]...
 ```
 
 The result is `changes-requested` when the round kept an item and `approved`
-when it kept none. On your own CR, the round's commit gets its own round from
+when it kept none. Pass one `--note` for each item the user dropped this round,
+saying what they decided in a few words (*declined to split the parser*), so a
+later review, in this session or another, holds it as settled (REVIEW-34). Name
+people by bare login, never with `@`: the note lands in the description, where a
+mention notifies. On your own CR, the round's commit gets its own round from
 `/anchor:commit`, whose review covers it. A `STATUS_ERROR` leaves the round's
 work as it is: say what it reported in one line and go on.
 

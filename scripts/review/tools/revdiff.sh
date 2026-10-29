@@ -13,7 +13,7 @@
 #   * a `--files` review runs in a scratch repo rather than revdiff's compare
 #     mode, which refuses --only and --annotations, so it gets the context file
 #     like any other.
-#   * the verdict is a note on the context file's Verdict section
+#   * the verdict is a note in the context file's Review box
 #     (lib/verdict.sh), since revdiff's own quits can't carry one: `q` with
 #     nothing to say and `Q` discarding everything both exit 0 with no output.
 #     `Q` is unbound for the review, so the one way out is `q`.
@@ -192,14 +192,14 @@ revdiff_relaunch_editor() {
 }
 
 # The header as markdown, written for what revdiff colors in a .md file: the
-# title as a heading, and the change's size under it, since how big a review is
-# decides how to read it. Then the keys that work the review, in a box the reader
-# who knows them skips, and the Verdict section, which says what each way of
-# ending the review leads to. Then where the change sits, the repo and the base as links, and
-# details anchor doesn't place (a caller's own --detail) as `label: value`. The
-# details of the change come last: the body, set off by a blank line, then a
-# reply's table and answers. revdiff shows the source, so no other line is spent
-# on spacing. The popup copy stays plain text.
+# title as a heading, then where the change sits (the repo and the base as
+# links) and its size, since how big a review is decides how to read it. Then
+# the instructions, in one box set off by blank lines (lib/verdict.sh): the keys
+# that work the review, and what each way of ending it leads to. The details of
+# the change come
+# last, below every instruction: the commit, details anchor doesn't place (a
+# caller's own --detail) as `label: value`, the body, then a reply's table and
+# answers. The popup copy stays plain text.
 # shellcheck disable=SC2016,SC2154
 revdiff_header() {
   local repo="$1" repo_url="$2" path exclude body where line label value next sha url
@@ -212,17 +212,6 @@ revdiff_header() {
   body=$(jq -r '.[] | select(.label == "body") | .value' <<<"$review_details_json")
   {
     printf '# %s\n\n' "$review_title"
-    value=$(revdiff_detail range)
-    [[ -z "$value" ]] || value="in \`$value\`"
-    if [[ -n "${review_reply:-}" && -s "$review_reply/sizes.tsv" ]]; then
-      anchor_size_stack current < "$review_reply/sizes.tsv"
-    elif [[ -n "$(revdiff_detail summary)" ]]; then
-      revdiff_size "$(revdiff_detail summary)" "$value"
-    elif [[ -n "$value" ]]; then
-      printf '%s\n' "$value"
-    fi
-    anchor_revdiff_box "$review_tool" ""
-    anchor_verdict_section "${next:-approve this review}" "stop, and nothing this review gates happens" "$(revdiff_relaunch_editor)"
     if [[ -n "$repo" ]]; then
       where="\`$repo\`"
       [[ -z "$repo_url" ]] || where="[$repo]($repo_url)"
@@ -234,8 +223,20 @@ revdiff_header() {
       sha="${value%% *}" url=""
       # A base only this checkout holds has no page to link to.
       [[ -z "$(git branch -r --contains "$sha" 2>/dev/null | head -1)" ]] || url=$(anchor_commit_web_url "$sha")
-      if [[ -n "$url" ]]; then printf 'base [%s](%s)\n' "$sha" "$url"; else printf 'base `%s`\n' "$sha"; fi
+      if [[ -n "$url" ]]; then printf '@ [%s](%s)\n' "$sha" "$url"; else printf '@ `%s`\n' "$sha"; fi
     fi
+    value=$(revdiff_detail range)
+    [[ -z "$value" ]] || value="in \`$value\`"
+    if [[ -n "${review_reply:-}" && -s "$review_reply/sizes.tsv" ]]; then
+      anchor_size_stack current < "$review_reply/sizes.tsv"
+    elif [[ -n "$(revdiff_detail summary)" ]]; then
+      revdiff_size "$(revdiff_detail summary)" "$value"
+    elif [[ -n "$value" ]]; then
+      printf '%s\n' "$value"
+    fi
+    printf '\n'
+    anchor_review_box "$review_tool" "${next:-approve this review}" "stop, and nothing this review gates happens" "$(revdiff_relaunch_editor)"
+    printf '\n'
     value=$(revdiff_detail commit)
     if [[ -n "$value" ]]; then
       line="commit \`$value\`"
@@ -355,7 +356,7 @@ diff_tool_command() {
 # A note on a reply's part of that file answers the reply, so it is aimed at the
 # changeset. Either keeps its line and quotes it: the file is gone once the
 # review closes, and a note on the keys or the size isn't about the message.
-# A note on one of the Verdict section's lines, whoever wrote the file, is the
+# A note on one of the Review box's choice lines, whoever wrote the file, is the
 # reviewer's choice: target `verdict`, with `choice` naming the line.
 diff_tool_comments() {
   local out_file="$1"
@@ -425,7 +426,7 @@ diff_tool_shared_note() {
   ! sed -n "${line}p" "$(git rev-parse --show-toplevel)/$REVDIFF_CONTEXT_FILE" | grep -q '^|'
 }
 
-# The choice on the Verdict section decides; with none, notes of the reviewer's
+# The choice in the Review box decides; with none, notes of the reviewer's
 # ask for a revision, and a review with neither (or both choices) is undecided.
 diff_tool_verdict() {
   local rc="$1" comments="$2" chosen

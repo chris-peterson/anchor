@@ -375,6 +375,12 @@ check.
 - **[PREPARE-20]** When the system redrafts the description of a CR that has a
   Review status section (REVIEW-31), it shall leave the section out of the draft
   and its review, and put it back unchanged when it writes the description.
+- **[PREPARE-21]** Where the changeset carries changes that neither needs, the
+  system shall open the Review guide with one line naming them as unrelated and
+  give each its own group, headed by the concern, without arguing for a split.
+  A reviewer reading a guide ranked by criticality alone can't tell two
+  unrelated changes from one change and its supporting edits, and judges them
+  as one.
 
 ### REVIEW — Review a change request
 
@@ -540,7 +546,9 @@ ready.
 - **[REVIEW-31]** Where the CR is the user's own, the system shall keep a Review
   status section in its description: a table of the CR's commits, how many
   review rounds each has been in, who reviewed it, and the latest round's
-  result. It shall name a reviewer by login without an `@`, since a mention in
+  result, collapsed under a `Review status` summary rather than headed as a
+  section of the description, since it is anchor's record and the description's
+  headings are the author's. It shall name a reviewer by login without an `@`, since a mention in
   a description notifies the person named. It shall key
   each commit by its patch-id, so a rebase that leaves a commit's change as it
   was keeps its rounds and an amend that changes it starts at none. A session's
@@ -560,6 +568,14 @@ ready.
   a round, it shall review the whole CR. Where every commit has one, it shall
   ask, re-reviewing the whole CR by default, with handing the CR off (marking it
   ready, requesting reviewers) as the alternative.
+- **[REVIEW-34]** When a round that reached its verdict is recorded, the system
+  shall record each item the user dropped as a decision in the Review status
+  section's data, on the newest commit the round reviewed, and show it in a
+  Notes column; and when a review starts on a CR with the section, it shall hold
+  every recorded decision as settled, raising one again only where the code has
+  since changed in a way that makes it newly valid. A session's round ledger
+  ends with the session, so without the record the next review raises what the
+  user already declined.
 
 ### FEEDBACK — Resolve feedback
 
@@ -905,11 +921,11 @@ this" nullability from SARIF's `notApplicable`.
 
 | `verdict` | `diff` (revdiff) | `edit` | meaning |
 |---|---|---|---|
-| `approved` | a note on the Verdict section's Accept line (DIFF-42) | saved, changed or not | clean — proceed |
-| `changes-requested` | a note of the reviewer's, and none on the Verdict section (exit 10) | — | blocking feedback to address |
-| `rejected` | a note on the Verdict section's Reject line | exited 2 (`ZX`), or saved empty | the reviewer declined — nothing the review gates happens, and nothing falls back |
+| `approved` | a lone `approve` note, or a note on the Review box's `approve` line (DIFF-42) | saved, changed or not | clean — proceed |
+| `changes-requested` | a note of the reviewer's, and none on the Review box (exit 10) | — | blocking feedback to address |
+| `rejected` | a lone `reject` note, or a note on the Review box's `reject` line | exited 2 (`ZX`), or saved empty | the reviewer declined — nothing the review gates happens, and nothing falls back |
 | `incomplete` | — | — | not every hunk was reviewed; for a tool that tracks per-hunk review (`capabilities.perHunkReview`) |
-| `no-verdict` | exit 1, or `q` with no note of the reviewer's, or notes on both Verdict lines (`raw.exitCode` `undecided`) | closed without saving (`undecided`), or any other non-zero exit | no usable verdict — the cause (closed early, tool error, an aborted edit, or no verdict chosen) is read from `raw.exitCode` and `capabilities.producesVerdict` |
+| `no-verdict` | exit 1, or `q` with no note of the reviewer's, or notes on both the `approve` and `reject` lines (`raw.exitCode` `undecided`) | closed without saving (`undecided`), or any other non-zero exit | no usable verdict — the cause (closed early, tool error, an aborted edit, or no verdict chosen) is read from `raw.exitCode` and `capabilities.producesVerdict` |
 
 `edit` has no `changes-requested` row because it returns text, not comments: an
 editor's whole answer is the revised artifact, which is why the column below
@@ -991,6 +1007,8 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   directory. The buffer's name is what an editor's title or status line shows,
   and a random temp path there says nothing about which review is open; a
   directory per buffer keeps two reviews of the same artifact apart on disk.
+  The review's title shall name the same object, by its reference and its own
+  title, rather than the kind of artifact.
 - **[DIFF-14]** The system shall take the editor's save as the reviewer's
   answer: a saved buffer is `approved` and its text is the artifact, a buffer
   saved empty is `rejected`, and a buffer left unsaved is `no-verdict` with
@@ -1290,22 +1308,30 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   removed when the review closes, so the edit has to be carried out before then.
 - **[DIFF-46]** Where a revdiff review carries a draft (a `--files` review, or a
   commit message) and an `edit` review could open, the system shall offer a
-  third Verdict choice that relaunches the review in the user's editor, named by
+  third choice in the Review box that relaunches the review in the user's editor, named by
   its command, and when chosen shall start the review over in `edit` mode on the
   draft as it stands, carrying the reviewer's other notes into the buffer's
   context. The choice names a relaunch of the review rather than an edit, so it
   doesn't read as editing the commit message, and it is the way back from the
   viewer that `ZD` (DIFF-44) is the way into it.
 - **[DIFF-40]** Where a `diff` review's context file states what quitting does,
-  the system shall put the change's size directly under the title, then, in a
-  box drawn in solid lines, one key for each of the viewer's actions for the
-  previous and next change, on one row, and for annotating a line and a file,
-  read from the viewer's own bindings; and last, how to hide the keys; then the
-  Verdict section (DIFF-42). A review round's and a batch's table shall carry the
-  same box and Verdict section. Every terminal draws solid box lines joined. A
-  reviewer coming back to a review cold reads how big it is first, a reviewer who
-  knows the keys skips the box, and what each way of ending the review does has
-  to stand apart from the prose around it. Where a reviewer's note sits on the context file, the system shall
+  the system shall put where the change sits (the repo and the base, as links)
+  and the change's size directly under the title, the base as `@` and its
+  link; then the instructions, in one Review box drawn in solid lines with its
+  name in the top edge and a blank line on either side: one key for each of the
+  viewer's actions for the previous and next change, on one row, and for
+  annotating a line and a file, read from the viewer's own bindings; how to
+  finish, by a single note saying `approve` or `reject`; the choices (DIFF-42);
+  what other notes do; and last, how to hide the hints, which shrinks the box to
+  the choices. The commit, the caller's own details, and the body follow every
+  instruction. A review round's and a batch's table shall carry the same box,
+  with how to answer an item (keep, change, drop) in place of what other notes
+  do.
+  Every terminal draws solid box lines joined. A reviewer coming back to a
+  review cold reads what and how big it is first, a reviewer who knows how a
+  review works skips the box, the hide line sits in the one box it shrinks, and
+  what each way of ending the review does has to stand apart from the prose
+  around it. Where a reviewer's note sits on the context file, the system shall
   return it with its line and that line's text, since the file is gone once the
   review closes and a note on the keys or the size is not about the message.
 - **[DIFF-41]** Where a review carries the agent's notes on its own changes
@@ -1316,18 +1342,20 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   rather than define it, so a tool that can't show them still grades the change.
 - **[DIFF-42]** Where a `diff` review's tool quits with the same status for a
   reviewer with nothing to say as for one who discarded what they said, the
-  system shall put a Verdict section in the review's context file, or in the
-  caller's table where it writes its own: an Accept line naming what approving
-  does next, and a Reject line saying nothing the review gates happens. A note on
-  the Accept line shall read as `approved`, with the reviewer's other notes
-  carried as comments; a note on the Reject line as `rejected`; notes elsewhere
+  system shall put a Review box in the review's context file, or in the
+  caller's table where it writes its own: an `approve` line naming what
+  approving does next, and a `reject` line saying nothing the review gates
+  happens. A note on the `approve` line shall read as `approved`, with the
+  reviewer's other notes carried as comments; a note on the `reject` line as
+  `rejected`; notes elsewhere
   and none on either line as `changes-requested`; and a review that leaves no
   note of the reviewer's, or a note on both lines, as `no-verdict` with
   `raw.exitCode` `undecided`, which the caller asks about (Accept, Reject, or
   reopen) rather than reading as approval or walking the fallback ladder. A
   review whose one note of the reviewer's says only `lgtm`, `ship it`,
-  `approve`, or `accept` shall read as a note on the Accept line, and one saying
-  only `reject`, `stop`, `abort`, or `cancel` as a note on the Reject line,
+  `approve`, or `accept` shall read as a note on the `approve` line, and one
+  saying only `reject`, `stop`, `abort`, or `cancel` as a note on the `reject`
+  line,
   wherever it sits except where a preloaded note sat, since there it answers
   that note; among other notes the word is one more note. In a review of items
   (a batch, a round), only a note on the shared table, off its rows, decides
@@ -1348,7 +1376,7 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   caller passes one (DIFF-13a) and the right side's name otherwise, and the
   repository removed when the review closes. The right side is a temp file, and
   its random name says nothing about which issue or CR the reviewer is editing. The review then carries the same context file,
-  keys, and Verdict section as any other (DIFF-36, DIFF-40, DIFF-42). A single drafted
+  keys, and Review box as any other (DIFF-36, DIFF-40, DIFF-42). A single drafted
   description, issue body, or release notes is what the reviewer sends out under
   their name, so it needs what approving does stated as much as a changeset does.
 
@@ -1498,7 +1526,10 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   `false`, the system shall leave the review tool's keys out of every context
   that mode's review shows: a `diff` review's context file, a review round's and
   a batch's table (DIFF-40), and the editor keys in an `edit` review's buffer
-  (DIFF-39), while keeping the Verdict section (DIFF-42). The keys help a
+  (DIFF-39); and in a `diff` review, leave the Review box (DIFF-40) holding its
+  choices (DIFF-42) alone, since the choices are how the review ends and the
+  prose around them explains what the reviewer already knows. The keys and that
+  prose help a
   reviewer new to the tool and repeat themselves on every review after that.
 
 ### FORGE — Forge integration & output
