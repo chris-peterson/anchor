@@ -6,11 +6,13 @@
 #
 # Sourced only.
 #
-#   anchor_verdict_section <accept> <reject>
-#                         the section, naming what each choice leads to
+#   anchor_verdict_section <accept> <reject> [<editor>]
+#                         the section, naming what each choice leads to; with
+#                         <editor>, a third choice relaunches the review there
 #   anchor_verdict_lines <file>
-#                         where the choices sit in <file>, as `accept\t<n>` and
-#                         `reject\t<n>`; nothing for a file without the section
+#                         where the choices sit in <file>, as `accept\t<n>`,
+#                         `reject\t<n>`, and `relaunch\t<n>`; nothing for a
+#                         file without the section
 
 ANCHOR_VERDICT_HEADING="## Verdict"
 
@@ -20,7 +22,8 @@ anchor_verdict_section() {
     'Choose by leaving a note (any text) on one of these lines, then quit with `q`:' \
     "- **Accept**: $1" \
     "- **Reject**: $2" \
-    'With a note on neither, your notes go back for a revision you review again.' \
+    ${3:+"- **Relaunch in $3**: quit revdiff and start this review over in $3, where what you save is the draft"} \
+    'With none of these chosen, your notes go back for a revision you review again.' \
     'A review whose only note says `lgtm`, `ship it`, or `approve` accepts, and one saying `reject`, `stop`, `abort`, or `cancel` rejects.'
 }
 
@@ -31,5 +34,6 @@ anchor_verdict_lines() {
     on && /^## / { exit }
     on && index($0, "- **Accept**:") == 1 { print "accept\t" NR }
     on && index($0, "- **Reject**:") == 1 { print "reject\t" NR }
+    on && index($0, "- **Relaunch in ") == 1 { print "relaunch\t" NR }
   ' "$1"
 }

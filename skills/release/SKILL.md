@@ -268,7 +268,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill release --probe \
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill release --mode <REVIEW_MODE> --files \
-  <RELEASE_NOTES_BASELINE> <RELEASE_NOTES_PATH> \
+  <RELEASE_NOTES_BASELINE> <RELEASE_NOTES_PATH> --name '<repo>@<NEW_VERSION>' \
   --title 'Release notes' \
   --detail version=<NEW_VERSION> --detail range=<RELEASE_RANGE>
 ```

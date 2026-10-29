@@ -116,7 +116,7 @@ Requirement: RULE-02 in [SPEC](/spec).
 |---|---|
 | [`/anchor:commit`](/skills/commit) | Review the changeset, then commit with a why-first message and push |
 | [`/anchor:prepare-review`](/skills/prepare-review) | Rebase on the default branch and open a draft change request |
-| [`/anchor:review`](/skills/review) | Weigh a CR against your qualities, make the clear fixes, and decide each finding in revdiff |
+| [`/anchor:review`](/skills/review) | Weigh a CR against your qualities, draft a fix per finding, and decide each one in revdiff before reviewing the whole change |
 | [`/anchor:resolve-feedback`](/skills/resolve-feedback) | Work a CR's review threads to done, one by one |
 | [`/anchor:merge`](/skills/merge) | Check the merge gates, wait on the pipeline, then land the CR and clean up |
 | [`/anchor:release`](/skills/release) | Work out what's shipping, recommend a version, draft the notes, publish |

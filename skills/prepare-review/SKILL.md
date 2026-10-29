@@ -93,6 +93,7 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 | `PRIOR_CR_IID` / `PRIOR_CR_STATE` | non-empty → the branch name already carries a CR that isn't open, which this run passed over; name it once (see "A reused branch name") |
 | `STATE` | `match` → proceed; anything else → surface and stop (see "Act on `STATE`") |
 | `CURRENT_DESC_PATH` | the review's left-hand side in Step 4 — an empty file until a CR holds a description |
+| `CR_REVIEW_STATUS_PATH` | the description's Review status section (REVIEW-31), set aside so the draft and its review hold prose alone; the write puts it back. Empty where there is none |
 | `DESC_DRAFT_PATH` | where to write the drafted description in Step 4 — already `mktemp`'d, so don't make your own |
 | `TEMPLATE_PATH` | the CR template to compose into (Step 3); empty when the hierarchy holds none, or when the pick needs the author |
 | `TEMPLATE_SOURCE` | which level answered — `local` / `project-settings` / `inherited` / `configured` / `ambiguous` / `none` |
@@ -385,12 +386,12 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --pro
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --mode <REVIEW_MODE> --files \
-  <CURRENT_DESC_PATH> <DESC_DRAFT_PATH> \
+  <CURRENT_DESC_PATH> <DESC_DRAFT_PATH> --name '<CR_REFERENCE>' \
   --title 'CR description' \
   --detail branch=<BRANCH> --detail CR=<CR_URL>
 ```
 
-`CURRENT_DESC_PATH` is the left-hand side — what the forge holds now, and an empty file where no CR holds anything yet. It's context for the draft, not the subject.
+`CURRENT_DESC_PATH` is the left-hand side — what the forge holds now, and an empty file where no CR holds anything yet. It's context for the draft, not the subject. `--name` gives the reviewed file the CR's reference (`<repo>#<number>`, `<repo>!<iid>`) in place of the draft's temp name; drop it where `CR_REFERENCE` is empty, and the editor names the buffer for the repo and branch.
 
 **The manifest** names the CR (number and title), the repo and branch, the tool, the sections the draft carries, and any template checkbox items dropped as unverifiable — an editor window opens behind the terminal, and a review the user cannot see is one they never grade. After the table, the next thing you say is the verdict, the feedback echoed back, or the one-line write result.
 
@@ -439,6 +440,14 @@ It rewrites the draft in place and reports `EXPANDED=<n>`. All-or-nothing: an un
 **3. Write the expanded body to the CR.** The `--open` above already landed the approved text, so this is the same write in both cases: it replaces that body with the expanded one, or updates a pre-existing CR.
 
 **Screenshots referenced by local path (GitLab) upload first.** `glab api --method POST projects/<id>/uploads --form "file=@local.png"` returns a `markdown` field pointing at a hosted URL — swap each local reference for its upload result in `DESC_DRAFT_PATH` before the write below, so the description lands with working images on the first try. See the forge cookbook's binary-upload recipe; the `-F`/`--form` distinction there is the part that bites.
+
+**Put the Review status section back** first, so the write keeps the record of the CR's review rounds:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-status.sh" carry --section <CR_REVIEW_STATUS_PATH> --into <DESC_DRAFT_PATH>
+```
+
+`STATUS_CARRIED=0` means the CR had none, and the draft is unchanged.
 
 - **GitHub:** `gh pr edit --body-file <DESC_DRAFT_PATH>`.
 - **GitLab:** use the API form `glab api -X PUT projects/:fullpath/merge_requests/<CR_IID> -F "description=@<DESC_DRAFT_PATH>"` — `glab mr update -d` doesn't accept a file. See the bundled forge cookbook (`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`) for the full canonical invocation.

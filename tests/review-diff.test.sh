@@ -40,6 +40,8 @@ mkdir -p "$bin"
 # $REVDIFF_STUB_RC. It also adds a note on the line of (context).md's Verdict
 # section that REVDIFF_STUB_CHOOSE names (accept, reject, both, or empty for
 # none; accept when unset), as a reviewer choosing does, exiting 10 for it.
+# With $REVDIFF_STUB_EDIT, it writes that text over each file it shows but the
+# context file, as `e` in revdiff does.
 cat > "$bin/stub-host-runner.sh" <<'EOF'
 #!/usr/bin/env bash
 cmd=${1% 2>*}
@@ -54,6 +56,8 @@ for a in "$@"; do
   case "$a" in
     --output=*) out="${a#*=}" ;;
     --keys=*) [ -n "${REVDIFF_KEYS_CAPTURE:-}" ] && cp "${a#*=}" "$REVDIFF_KEYS_CAPTURE" ;;
+    --only=*) [ -n "${REVDIFF_STUB_EDIT:-}" ] && [ "${a#*=}" != "(context).md" ] \
+                && printf '%s\n' "$REVDIFF_STUB_EDIT" > "${a#*=}" ;;
     --description-file=*)
       desc="${a#*=}"
       [ -n "${REVDIFF_DESC_CAPTURE:-}" ] && cp "$desc" "$REVDIFF_DESC_CAPTURE" ;;
@@ -62,7 +66,7 @@ done
 body="${REVDIFF_STUB_OUTPUT:-}" rc="${REVDIFF_STUB_RC:-0}"
 for c in ${REVDIFF_STUB_CHOOSE-accept}; do
   label=$(printf '%s' "${c:0:1}" | tr '[:lower:]' '[:upper:]')${c:1}
-  n=$(grep -n -F -- "- **$label**:" "(context).md" 2>/dev/null | head -1 | cut -d: -f1)
+  n=$(grep -n -F -- "- **$label" "(context).md" 2>/dev/null | head -1 | cut -d: -f1)
   [ -n "$n" ] || continue
   body="${body:+$body$'\n\n'}## (context).md:$n (+)"$'\n'"$c"
   [ "$rc" != 0 ] || rc=10
@@ -401,8 +405,51 @@ o=$(run --skill prepare-review --mode diff --files "$work/current.md" "$work/dra
 REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
 run --skill issue --mode diff --files "$work/none.md" "$work/draft.md" >/dev/null
 grep -qF '+██' "$cap.context" || fail "--files with no prior version draws the size: $(cat "$cap.context")"
-unset REVDIFF_TREE_CAPTURE REVDIFF_ARGS_FILE
 ok "revdiff: a --files review gets the context file and the keys, in a scratch repo"
+
+# --name gives the file the reviewed object's reference, and a note on it comes
+# back under that name.
+REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT=$'## acme#7.md:1 (+)\nsay why'
+o=$(run --skill issue --mode diff --files "$work/current.md" "$work/draft.md" --name 'acme#7'); j=$(json_of "$o")
+grep -qxF -- '--only=acme#7.md' "$work/files.args" || fail "--name should name the file: $(cat "$work/files.args")"
+[ "$(jq -r '.comments[0] | "\(.file):\(.startLine) \(.body)"' <<<"$j")" = "acme#7.md:1 say why" ] || fail "--name note: $j"
+rc=0; run --mode diff --files "$work/current.md" "$work/draft.md" --name 'group/acme#7' >/dev/null 2>&1 || rc=$?
+[ "$rc" = 64 ] || fail "--name holding a / should exit 64, got $rc"
+unset REVDIFF_TREE_CAPTURE REVDIFF_ARGS_FILE
+ok "revdiff: --name names a --files review's file for the object it edits"
+
+# `e` in revdiff edits the draft's copy in the scratch repo. The edit is written
+# over the draft, and accepting it brings it back for approval as edited.
+printf 'the draft\n' > "$work/edit-draft.md"
+REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
+o=$(REVDIFF_STUB_EDIT='the draft, edited' run --skill issue --mode diff --files "$work/current.md" "$work/edit-draft.md" 2>/dev/null); j=$(json_of "$o")
+[ "$(jq -r .verdict <<<"$j")" = changes-requested ] || fail "an edited draft should come back for approval: $j"
+[ "$(jq -r '.editedFields[0] | "\(.target) \(.edited)"' <<<"$j")" = "issue-body the draft, edited" ] || fail "the edit should ride in editedFields: $j"
+[ "$(cat "$work/edit-draft.md")" = "the draft, edited" ] || fail "the edit should be written over the draft: $(cat "$work/edit-draft.md")"
+o=$(run --skill issue --mode diff --files "$work/current.md" "$work/edit-draft.md"); j=$(json_of "$o")
+[ "$(jq -r '"\(.verdict) \(.editedFields | length)"' <<<"$j")" = "approved 0" ] || fail "an unedited accept is approved: $j"
+ok "revdiff: a draft edited with e is kept, and comes back for approval as edited"
+
+# A draft review offers to start over in the editor, and choosing it does, with
+# the reviewer's other notes in the editor's context.
+cat > "$bin/stub-editor.sh" <<'STUB'
+#!/usr/bin/env bash
+cp "$1" "$EDITOR_BUFFER_CAPTURE"
+touch "$1"
+STUB
+chmod +x "$bin/stub-editor.sh"
+REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT=$'## acme#7.md:1 (+)\nsay why'
+o=$(GIT_EDITOR=hx ANCHOR_EDITOR_LAUNCHER="$bin/stub-editor.sh" EDITOR_BUFFER_CAPTURE="$work/relaunch.buffer" \
+    REVDIFF_TREE_CAPTURE="$work/relaunch" REVDIFF_STUB_CHOOSE=relaunch \
+    run --skill issue --mode diff --files "$work/current.md" "$work/edit-draft.md" --name 'acme#7'); j=$(json_of "$o")
+grep -qF -- '- **Relaunch in hx**: quit revdiff and start this review over in hx' "$work/relaunch.context" \
+  || fail "the Verdict section should offer the relaunch: $(cat "$work/relaunch.context")"
+[ "$(jq -r '"\(.mode) \(.verdict)"' <<<"$j")" = "edit approved" ] || fail "the relaunch should end as the editor review: $j"
+grep -qF 'acme#7.md:1: say why' "$work/relaunch.buffer" || fail "the note should ride into the editor: $(cat "$work/relaunch.buffer")"
+REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
+REVDIFF_TREE_CAPTURE="$work/plain" run --skill commit --previous >/dev/null
+! grep -qF 'Relaunch in' "$work/plain.context" || fail "a review with no draft offers no relaunch: $(cat "$work/plain.context")"
+ok "revdiff: a draft review relaunches in the editor, carrying the other notes"
 
 # The host is selected after the scratch repo is entered, so a dispatcher run by
 # a relative path still finds its hosts. A stub tmux runs the popup's script in

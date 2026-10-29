@@ -1,16 +1,22 @@
 ---
 name: review
-description: Review an open change request — examine it against the qualities you've set, make the clear-cut fixes, and annotate every change and proposal in revdiff, where you keep, change, or drop each one in place. On someone else's CR the kept findings post as suggestions and threads once the exact text is approved; on your own CR they land as one commit per round, and it ends by offering to mark the CR ready. Use when reviewing a PR/MR, when a teammate sends a CR number or URL, or when reviewing your own change before handing it over.
+description: Review an open change request — examine it against the qualities you've set, draft a fix for each finding, and open revdiff on those drafts alone so you keep, change, or drop each one, then on the whole change with the kept fixes in it. On someone else's CR the kept findings post as suggestions and threads once the exact text is approved; on your own CR they land as one commit per round, and it ends by offering to mark the CR ready. Use when reviewing a PR/MR, when a teammate sends a CR number or URL, or when reviewing your own change before handing it over.
 ---
 
 # Review
 
 Take a change request and drive it to feedback in rounds. Each round examines the
 diff against the qualities in `${CLAUDE_PLUGIN_ROOT}/templates/review-qualities.md`,
-makes the fixes the agent would stand behind, and puts the whole result in front
-of the user in revdiff: the CR's changes, the round's edits, and a note on every
-item, with a table of the items beside them. What the user leaves in revdiff
-decides what each item becomes.
+drafts a fix for each finding, and puts it in front of the user in revdiff twice:
+
+| Pass | Diff | What the user decides |
+|---|---|---|
+| **items** | the CR head → the round's tree: the drafts alone, a note on each | keep, change, or drop each item, without the CR's own change around it |
+| **whole** | the merge base → the round's tree: the CR with the kept fixes in it | whether the change, as it will land, is right |
+
+Deciding each item comes first, because a draft read inside a large CR's diff is
+hard to tell from the change it's commenting on. Each pass has a table of its
+items beside the diff.
 
 Authorship picks where the result goes:
 
@@ -50,18 +56,19 @@ agents' raw reports are inputs, never part of the reply.
 %%{ init: { 'look': 'handDrawn' } }%%
 flowchart TD
     Start(["/anchor:review"]) --> Fetch["Resolve the CR, read its description"]
-    Fetch --> Examine["One agent per quality"]
+    Fetch --> Range["Own CR: pick the range"]
+    Range --> Examine["One agent per quality"]
     Examine --> Any{Findings?}
     Any -->|None| Empty([Say so in one line])
-    Any -->|Some| Triage["Group into items, make the clear-cut fixes"]
-    Triage --> Seed["Seed a note per item, and the table"]
-    Seed --> Revdiff["Review the round in revdiff"]
-    Revdiff --> Read["Read back: keep, change, drop, new"]
-    Read --> Who{Whose CR?}
+    Any -->|Some| Triage["Group into items, draft each fix"]
+    Triage --> Items["Items pass: the drafts alone"]
+    Items --> Read["Read back: keep, change, drop, new"]
+    Read --> Whole["Whole pass: the CR with the kept fixes"]
+    Whole --> Who{Whose CR?}
     Who -->|Theirs| Gate{Approve the exact text?}
     Gate -->|Post| Post([Post suggestions and threads])
     Gate -->|Keep local| Local([Review stays local])
-    Who -->|Mine| Commit["Commit the round"]
+    Who -->|Mine| Commit["Record and commit the round"]
     Commit --> Again{Another round?}
     Again -->|Yes| Next([Examine the round commit])
     Again -->|No| Handoff([Offer to mark ready])
@@ -75,7 +82,8 @@ orchestrator, enumerate:
 
 - `Fetch the change request`
 - `Examine the diff against each quality`
-- `Review the round in revdiff`
+- `Decide each item in revdiff`
+- `Review the whole change in revdiff`
 - `Commit the round` *(own CR)* or `Post the approved findings` *(someone else's)*
 
 ## Step 1: Resolve and fetch the change request
@@ -110,6 +118,7 @@ what it surfaces:
 | `DESC_PATH` | the description, read before the diff |
 | `FINDINGS_PATH` | where Step 7 writes what will post; already seeded |
 | `OPEN_THREADS` / `OPEN_THREADS_MINE` / `OPEN_FEEDBACK_PATH` | review threads already open on the CR; see "Open feedback comes first" below |
+| `REVIEW_STATUS_*` | self-review only: which commits the CR's Review status section says no round has covered; see "Start where the last review stopped" below |
 
 A `REVIEW_ERROR=…` line means there is nothing to review: surface it and stop.
 On a 401/403 the same line carries the auth failure: ask the user to refresh
@@ -134,6 +143,28 @@ puts fresh findings on top of questions nobody has answered. When
   (`mine: true`) that the head addresses is worth resolving; offer to, and do it
   only on a yes, with the invocation in `${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`.
 
+**Start where the last review stopped** *(self-review)*. The CR's Review status
+section counts the review rounds each commit has been in (REVIEW-31), and
+`REVIEW_STATUS_*` is what it says now. Pick the range before examining anything:
+
+- **No commit reviewed** (`REVIEW_STATUS_UNREVIEWED` equals
+  `REVIEW_STATUS_COMMITS`): review the whole CR, without asking.
+- **Some reviewed, some not**: ask with `AskUserQuestion` (header `Range`),
+  naming the oldest and newest unreviewed commits by short sha and subject.
+  **Review the unreviewed commits** *(default)* runs from
+  `REVIEW_STATUS_OLDEST` to the head, so it takes in the newest unreviewed
+  commit and any reviewed one between them; **Review the whole CR** runs from
+  the merge base.
+- **Every commit reviewed** (`REVIEW_STATUS_UNREVIEWED=0`): ask (header
+  `Reviewed`), saying that every commit has had a round. **Re-review the whole CR**
+  *(default)*; **Hand it off**, which goes to Step 7, item 5 (mark it ready,
+  request reviewers); **Stop**.
+
+Call the range's base `REVIEW_BASE`: `REVIEW_STATUS_FROM` for the unreviewed
+commits, `CR_BASE_SHA` for the whole CR and on someone else's CR. On the
+unreviewed commits, `REVIEW_STATUS_DIFF_PATH` takes the place of `DIFF_PATH`
+everywhere below.
+
 **Check revdiff can open before spending anything on agents:**
 
 ```bash
@@ -157,6 +188,9 @@ better one than most line-level remarks.
 
 Then read `DIFF_PATH` against that. Where the diff does something the description
 doesn't account for, that gap is the highest-value thing you have.
+
+A `## Review status` section at the end of the description is anchor's record
+of the review rounds, not the author's prose; leave it out of the examination.
 
 ## Step 3: Examine the diff against each quality
 
@@ -201,8 +235,9 @@ There is no number to reach. Say in the manifest how many candidates came back
 and how many survived, so a short review reads as judged rather than shallow.
 
 **No findings is a finished review.** Say so in one line, with the risk score.
-On someone else's CR nothing posts. In self-review, go straight to the handoff
-(Step 7, item 5).
+On someone else's CR nothing posts. In self-review, record the round as
+`approved` (Step 9, "Record the round") and go straight to the handoff (Step 7,
+item 5).
 
 ## Step 4: Triage the findings into items, and act on the clear ones
 
@@ -213,14 +248,15 @@ quality raised them. Give each:
   **severity** the judge gave it: `critical` or `suggestion`, as the template
   defines them. An item resting on something you couldn't confirm says so in
   its reason, and is a suggestion.
-- a **status**: `applied` when you make the fix now, `proposed` when you'd ask
-  first, `issue` when it belongs in its own change, `leave` when you'd let it
-  land as is.
+- a **status**: `applied` when its fix is drafted in the tree, `proposed` when
+  it has no code to draft (a question, or a change too broad to write before
+  the author agrees to it), `issue` when it belongs in its own change, `leave`
+  when you'd let it land as is.
 
 **Start the round** before editing anything:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-round.sh" start --base <CR_BASE_SHA> --head <CR_HEAD_SHA> \
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-round.sh" start --base <REVIEW_BASE> --head <CR_HEAD_SHA> \
   (--worktree | --in-place) [--ledger <ROUND_LEDGER>] [--repo <path>]
 ```
 
@@ -238,11 +274,12 @@ refuses a checkout that isn't on the CR head or has uncommitted changes
 only changes in the tree. Keep `ROUND_DIR`, `ROUND_ROOT`, and `ROUND_BASE`; every
 edit below happens under `ROUND_ROOT`.
 
-**Apply a critical item's fix when it stays local** to the code it fixes and
-you'd stand behind it. A suggestion stays a proposal, and so does anything you
-would ask about or that reaches into callers and other files: every fix applied
-here is diff the next round reviews. Apply one item at a time
-and record it the moment it's done:
+**Draft every item's fix** that can be written as code, critical or
+suggestion. A draft is not a decision: the items pass shows each one on its own
+so the user keeps or drops it, and a dropped draft is reverted before anything
+lands. Write each draft as the fix you'd stand behind if it were kept, since a
+kept draft is diff the next round reviews. Draft one item at a time and record
+it the moment it's done:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-round.sh" record --dir <ROUND_DIR> --id <n>
@@ -250,17 +287,21 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-round.sh" record --dir <ROUND_DIR> --
 
 The recorded patch is what lets one item be reverted later without touching the
 others, and what turns a fix on someone else's CR into a suggestion. Run the
-project's tests over an in-place round's applied items before seeding.
+project's tests over the kept items before the whole pass (Step 7), not over
+every draft.
 
-## Step 5: Seed the notes and the table
+## Step 5: Seed the items pass
 
 Write the items to a file in the shape `scripts/review-round.sh` documents at its
-top, and seed the round:
+top, and seed the items pass:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-round.sh" seed --dir <ROUND_DIR> --items <items.json> \
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-round.sh" seed --dir <ROUND_DIR> --pass items --items <items.json> \
   --title 'Review of <CR_REF>: <CR_TITLE>' --cr-url <CR_URL>
 ```
+
+Keep `ROUND_FROM`: it is the base the pass's revdiff opens on (the CR head for
+this pass, the merge base for the whole pass).
 
 Each item's **sites** are the lines it touches, numbered in the tree as it now
 stands: the first line of each edit for an applied item, or the line the change
@@ -269,7 +310,9 @@ a whole; the rest of the placement rules are in
 `${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md` ("Put each note where the
 reader is already looking"). The script puts one note per item above its first
 site, names the item's other sites at the end of it, and writes `(context).md` at
-the root of the tree with a row per item.
+the root of the tree with a row per item. A note on a line no change in the pass
+is near, such as a `proposed` item in a file the round didn't edit, goes in
+`(context).md` with an excerpt of its line.
 
 The **reason** is what the user reads beside the code, and on someone else's CR
 it becomes what posts. Write it as the thing the reviewer would type:
@@ -284,27 +327,32 @@ it becomes what posts. Write it as the thing the reviewer would type:
 The register is `anchor`'s everywhere: plain words, no loaded framing
 (`${CLAUDE_PLUGIN_ROOT}/guides/loaded-framing.md`), no praise padding.
 
-`ROUND_ERROR` lines name sites revdiff would drop silently (a file the review
-doesn't change, a line past the end); fix those sites and seed again.
+`ROUND_ERROR` lines name sites revdiff would drop silently (a whole-file note on
+a file the pass doesn't change, a line past the end); fix those sites and seed
+again.
 
-## Step 6: Review the round in revdiff
+## Step 6: Decide each item in revdiff
 
 Launch it as `${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md` describes: in the
 background, with the manifest, and holding on chat feedback while it's open.
+Both passes launch the same way, each with the `ROUND_FROM` and `NOTES` its own
+seed printed:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill review --tool revdiff --mode diff \
-  --repo <ROUND_ROOT> <ROUND_BASE> --untracked --annotations <NOTES> \
+  --repo <ROUND_ROOT> <ROUND_FROM> --untracked --annotations <NOTES> \
   --title 'Review of <CR_REF>: <CR_TITLE>' --detail CR=<CR_URL> --detail author=<CR_AUTHOR> \
   [--detail 'earlier rounds=<ROUND_PREVIOUS> of the CR']
 ```
 
-The diff runs from the merge base to the round's tree, so it holds the CR's
-whole change and the round's edits together, with `(context).md` at the root of
-the file tree and `--untracked` adding any file the round creates.
+In the items pass the diff runs from the CR head to the round's tree, so it holds
+the drafts and nothing of the CR's own change, with `(context).md` at the root of
+the file tree and `--untracked` adding any file a draft creates.
 
 **The manifest** says what is in front of the user: the CR, the round number
-from round 2 on, its author, the items by status (`3 applied, 2 proposed`), and how to answer.
+from round 2 on, its author, the items by status (`3 drafted, 2 without code`),
+that this pass shows only the drafts and the whole change follows, and how to
+answer.
 From round 2 on, add the trend table `review-round.sh trend --ledger
 <ROUND_LEDGER>` prints, one row per finished round. Carry the answer
 key into the reply, since nobody should have to open the table to learn it:
@@ -318,10 +366,9 @@ key into the reply, since nobody should have to open the table to learn it:
 > the rows, does the same.
 
 When it closes, read `REVIEW_RETURNED` from its output. `approved` and
-`changes-requested` both mean the review ran; the returned notes are the answer.
-`approved` goes on to Step 7 as answered. `changes-requested` applies the
-answers too, then opens another round on the result rather than committing or
-posting (Step 7 still drops and reworks what the notes say). `rejected` is the
+`changes-requested` both mean the review ran; the returned notes are the answer,
+and both go on to Step 7, whose whole pass is where the user sees the result
+again. `rejected` is the
 user stopping the round: finish it (Step 9) so the tree is left as it was, with
 no error banner. `no-verdict` with `raw.exitCode` `undecided` means they quit
 without choosing: ask with `AskUserQuestion` whether to accept, reject, or
@@ -352,12 +399,35 @@ names a patch the user made from inside revdiff: it is their own fix, read per
 
 A changed item that changes its fix is reverted, re-edited, and recorded again.
 `revert` refuses when a later item edited the same lines; say which, and make the
-change by hand.
+change by hand. On your own CR, also implement the kept proposals now and record
+each; on someone else's, a kept proposal stays a note and posts as a thread. An
+added note that is a fix is drafted and recorded under a new id. Then run the
+project's tests over an in-place round.
+
+### Review the whole change
+
+Write the kept items (and the added ones) to a new items file, each site
+numbered in the tree as it now stands, and seed the whole pass:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-round.sh" seed --dir <ROUND_DIR> --pass whole --items <kept.json> \
+  --title 'Review of <CR_REF>: <CR_TITLE>' --cr-url <CR_URL>
+```
+
+`ROUND_FROM` is now `REVIEW_BASE`, so the diff holds the range under review with
+the kept fixes in it, as it will land. Launch it as in Step 6, with a manifest
+saying this is the whole change and how many items were kept and dropped. Read
+it back with `review-round.sh read` as above and act on what it says the same
+way: a note dropped here reverts its fix, and a changed one is reworked.
+`approved` goes on below. `changes-requested` applies the answers, then seeds
+and opens the whole pass again on the result. `rejected` and the undecided and
+failed cases are handled as in Step 6. With nothing kept, skip this pass: on
+someone else's CR nothing posts, and on your own the round has nothing to
+commit, so go to the handoff (item 5 below).
 
 ### Your own CR: commit the round
 
-1. Implement the kept proposals, then the changes the notes asked for. File each
-   `issue` item through `/anchor:issue`, seeded with its reason.
+1. File each `issue` item through `/anchor:issue`, seeded with its reason.
 2. List the round's files, then finish the round (Step 9), which takes
    `(context).md` out of the tree and records the round in the ledger:
    `review-round.sh files --dir <ROUND_DIR>` prints one `ROUND_FILE=` per path.
@@ -368,9 +438,9 @@ change by hand.
    text the item's reason. `/anchor:commit` seeds those as its review's notes, so
    the reasons you read in the round are back on their lines in the diff that
    lands. It runs the tests, opens one review of the round's exact diff with its
-   drafted message, and commits and pushes on approval. That review is not a
-   repeat: the tree changed after the annotated round, and this is the diff that
-   lands. Draft the message to name the items the round fixed; the notes carry
+   drafted message, and commits and pushes on approval. The whole pass approved
+   the code; this review approves the message that lands with it, over the
+   round's own diff. Draft the message to name the items the round fixed; the notes carry
    why each one is the way it is.
 4. **Offer another round** with `AskUserQuestion` (header `Round <ROUND_N + 1>`),
    scoped to the round commit's diff: the agents in Step 3 examine only what
@@ -387,7 +457,7 @@ change by hand.
    bars on one scale show at a glance whether the rounds are shrinking; that
    trend is the answer to whether another round is worth it. The
    same opening goes on the `Handoff` question below. Recommend another
-   round only when this one applied a `critical` fix, since a fix to a real bug
+   round only when this one kept a `critical` fix, since a fix to a real bug
    can carry one of its own; otherwise recommend stopping, and say so plainly
    when the percent didn't fall from the round before. The default is to stop:
    suggestions polish, and a round of polish is the next round's diff. Declining ends the
@@ -494,6 +564,24 @@ percent of the CR), prints `ROUND_PERCENT`, then removes `(context).md` and the
 round's state, and on someone else's CR the worktree. Run it once the round's edits are committed or posted, and on any
 stop after Step 4, so no review worktree or table outlives the review.
 
+**Record the round.** A round that reached its verdict gives every commit it
+reviewed another round in the CR's Review status section; a round you stopped
+records nothing. On your own CR, record it right after `finish`, before the
+round's commit. On someone else's, record it once the round's findings are
+posted or kept local; the script writes there only where the description already
+has the section and the CR is out of draft (REVIEW-32), and `STATUS_SKIPPED`
+says which of the two it lacked:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-status.sh" record --cr <CR_IID> \
+  --base <REVIEW_BASE> --head <CR_HEAD_SHA> --result <approved|changes-requested>
+```
+
+The result is `changes-requested` when the round kept an item and `approved`
+when it kept none. On your own CR, the round's commit gets its own round from
+`/anchor:commit`, whose review covers it. A `STATUS_ERROR` leaves the round's
+work as it is: say what it reported in one line and go on.
+
 ## Step 10: Report
 
 **After a post.** One line per finding: `#N <file:line> — suggestion posted` or
@@ -508,7 +596,8 @@ Comments posted. Recording a verdict is yours:
 ```
 
 **After a self-review.** The trend table, then one line per round: the commit
-and the items it fixed. Then the dropped items, the issues filed, the CR's state
+and the items it fixed. Then the Review status table as the last record wrote
+it (`STATUS_SECTION_PATH`, without its comment lines). Then the dropped items, the issues filed, the CR's state
 (still a draft, or ready with whoever was requested), and the CR URL.
 
 ## Related

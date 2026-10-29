@@ -43,6 +43,9 @@ REVDIFF_CONTEXT_FILE="(context).md"
 # review, the scratch repo and the directory the review was asked from.
 revdiff_keys=""
 revdiff_scratch=""
+# A --files review's draft, the copy of it revdiff shows (which `e` edits), and
+# the review request the scratch repo rewrote, put back when it closes.
+revdiff_draft="" revdiff_draft_copy="" revdiff_request=()
 revdiff_home=""
 
 # shellcheck source=../../lib/forge-url.sh
@@ -134,12 +137,14 @@ revdiff_sgit() {
 
 # A --files review as a scratch repo: the left side committed as the base, the
 # right side written over it and staged, so the review is the tree against
-# HEAD, and the file keeps the name compare mode gave it (the right side's).
-# The review then runs as a range review there, header included.
+# HEAD, and the file goes by the reviewed object's reference where the caller
+# named one, the right side's own name otherwise. The review then runs as a
+# range review there, header included.
 # shellcheck disable=SC2154
 revdiff_files_scratch() {
   local name stat
   name=$(basename "$files_right")
+  [[ -z "${files_name:-}" ]] || name="$files_name.${name##*.}"
   revdiff_scratch=$(anchor_tmpdir anchor-revdiff-files)
   git init --quiet "$revdiff_scratch"
   ! grep -q '[^[:space:]]' "$files_left" 2>/dev/null || cp "$files_left" "$revdiff_scratch/$name"
@@ -152,8 +157,38 @@ revdiff_files_scratch() {
     review_details_json=$(jq -c --arg s "$stat" '. + [{label:"summary", value:$s}]' <<<"$review_details_json")
   fi
   revdiff_home=$PWD
+  revdiff_draft="$files_right" revdiff_draft_copy="$revdiff_scratch/$name"
+  revdiff_request=("$review_subject" "${diff_range:-}" "${diff_paths:-}")
   cd "$revdiff_scratch" || return 1
   review_subject=range diff_range=HEAD diff_paths="$name"
+}
+
+# What the reviewer changed in the draft's copy with revdiff's `e`, as
+# editedFields, and that text written over the draft, so it is the draft the
+# flow goes on with. revdiff reloads the copy after the edit, so the reviewer
+# saw it.
+diff_tool_edited() {
+  local target
+  if [[ -z "$revdiff_draft_copy" || ! -f "$revdiff_draft_copy" ]] || cmp -s "$revdiff_draft_copy" "$revdiff_draft"; then
+    echo '[]'
+    return
+  fi
+  target=$(anchor_artifact_target)
+  jq -cn --arg t "${target:-description}" --rawfile o "$revdiff_draft" --rawfile e "$revdiff_draft_copy" \
+    '[{target:$t, original:$o, edited:$e}]'
+  cp "$revdiff_draft_copy" "$revdiff_draft"
+}
+
+# The editor a relaunch would open, by the name its command starts with; empty
+# where the review carries no draft or no editor would open.
+revdiff_relaunch_editor() {
+  local ed
+  [[ -n "$revdiff_draft" || -n "${message_file:-}" ]] || return 0
+  anchor_editor_available || return 0
+  ed=$(anchor_editor_resolve)
+  [[ -n "$ed" ]] || return 0
+  ed=${ed%% *}
+  printf '%s' "${ed##*/}"
 }
 
 # The header as markdown, written for what revdiff colors in a .md file: the
@@ -187,7 +222,7 @@ revdiff_header() {
       printf '%s\n' "$value"
     fi
     anchor_revdiff_box "$review_tool" ""
-    anchor_verdict_section "${next:-approve this review}" "stop, and nothing this review gates happens"
+    anchor_verdict_section "${next:-approve this review}" "stop, and nothing this review gates happens" "$(revdiff_relaunch_editor)"
     if [[ -n "$repo" ]]; then
       where="\`$repo\`"
       [[ -z "$repo_url" ]] || where="[$repo]($repo_url)"
@@ -228,6 +263,7 @@ diff_tool_cleanup() {
   if [[ -n "$revdiff_scratch" ]]; then
     cd "$revdiff_home" || return 1
     rm -rf "$revdiff_scratch"
+    review_subject=${revdiff_request[0]} diff_range=${revdiff_request[1]} diff_paths=${revdiff_request[2]}
     return 0
   fi
   path=$(revdiff_context_path) || return 0
@@ -396,8 +432,9 @@ diff_tool_verdict() {
   [[ "$rc" -eq 0 || "$rc" -eq 10 ]] || { printf 'no-verdict'; return; }   # 1 (error) or anything unexpected
   chosen=$(jq -r '[.[] | select(.target == "verdict") | .choice] | unique | join(",")' <<<"$comments")
   case "$chosen" in
-    accept) printf 'approved' ;;
-    reject) printf 'rejected' ;;
+    accept)   printf 'approved' ;;
+    reject)   printf 'rejected' ;;
+    relaunch) printf 'relaunch' ;;
     "")     if [[ "$(jq 'length' <<<"$comments")" -gt 0 ]]; then
               printf 'changes-requested'
             else

@@ -53,6 +53,8 @@ flowchart TD
         Block -->|mergeable / approvals| StopGate["Stop: what clears it"]
         Block -->|pipeline running| Watch["pipeline-status.sh --watch"] --> Gates
         Block -->|pipeline failed| StopPipe["Stop: report jobs"]
+        Block -->|reviews| AskReviews["Ask: merge or review first?"]
+        AskReviews -->|Merge anyway| AskThreads
         Block -->|threads| AskThreads["Ask: merge or resolve first?"]
     end
 
@@ -99,7 +101,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/merge-gates.sh" [--cr <n>] [--repo <checkout
 ```
 
 The block's header documents every key. It reads the CR, the checkout, then the
-gates in order — draft, mergeable, pipeline, approvals, threads — and stops at the
+gates in order — draft, mergeable, pipeline, approvals, reviews, threads — and stops at the
 first that isn't passing, naming it in `GATE_BLOCKING`. Only the **pipeline**
 resolves itself with time, so that's the one this skill waits on; the others need
 a person or a rebase, so they stop and report rather than spin.
@@ -117,6 +119,7 @@ gate the block reached, the `GATE_*_DETAIL` value as its state:
 | Mergeable | mergeable, clean |
 | Pipeline | `success` — 3/3 jobs on `<sha>` |
 | Approvals | 1 required, 0 left; approved by @ana |
+| Reviews | every commit reviewed |
 | Threads | none unresolved |
 
 Lead it with the one line naming the repo and the CR: `CR_REF` linked to `CR_URL`,
@@ -168,6 +171,15 @@ and `CR_TITLE`. Then act on `GATE_BLOCKING`:
     refresh the CLI's login rather than retrying (the fail-fast-on-auth rule).
 - **`approvals`** — `missing`: stop and report what `GATE_APPROVALS_DETAIL` says is
   outstanding. `changes-requested`: stop and point at `/anchor:resolve-feedback`.
+- **`reviews`** — on the user's own CR, a commit that no review round has
+  covered, by the CR's Review status section (MERGE-19). List each entry of
+  `UNREVIEWED` on one line (short sha, subject), then ask with
+  `AskUserQuestion` (header `Reviews`):
+  1. **Review them first** — hand off to `/anchor:review`, which offers those
+     commits as its range, and stop.
+  2. **Merge anyway** — the author may have reviewed them some other way. When
+     `GATE_THREADS=open`, go on to the threads question below; otherwise go to
+     Step 2.
 - **`threads`** — list each entry of `THREADS` on one line
   (`<path:line> — @author — <body>`), then ask with `AskUserQuestion` (header
   `Threads`):

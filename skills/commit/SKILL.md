@@ -284,6 +284,14 @@ Two more refusals come from `commit.sh` itself, and both stop the flow:
 
 Read the helper's stdout — `COMMIT_SHA`, `BRANCH`, `PUSH_MODE`, and `PUSHED=ok` on success. Report the outcome and nothing more — `Committed <COMMIT_SHA>, pushed to <BRANCH>` — followed by any comments an `approved` review left unaddressed. If the push is rejected (non-fast-forward, protected branch, auth), `commit.sh` leaves git's error on stderr and exits non-zero; surface that and stop rather than retrying or force-pushing without the lease.
 
+**Record the review on the CR** (COMMIT-25). When `CR_REF` names a CR and `PUSHED=ok` follows a new commit or a squash, the Step 5 review covered that commit, so it gets a round in the CR's Review status section:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-status.sh" record --cr <the number in CR_REF> --base '<COMMIT_SHA>^' --head <COMMIT_SHA> --result approved
+```
+
+On someone else's CR it writes only where the description already has the section and the CR is out of draft; `STATUS_SKIPPED` is a finished call. A `STATUS_ERROR` leaves the commit as it is: say what it reported in one line and go on.
+
 **The forge's own "create a pull request" link is not the handoff.** Pushing a new branch makes GitHub print a `Create a pull request for '<branch>'` URL, and GitLab prints its `merge_requests/new` equivalent; both are in the push output you just read. Don't relay either one. That URL opens the forge's web form, which lands the CR non-draft, with the project template's checklist intact and no Review guide — the shape `/anchor:prepare-review` exists to replace (`${CLAUDE_PLUGIN_ROOT}/rules/use-forge-clis.md`). Where the next step comes up, name the skill: **`/anchor:prepare-review` opens the CR against the branch this just pushed.**
 
 ## Step 7: Report the pipeline the push triggered

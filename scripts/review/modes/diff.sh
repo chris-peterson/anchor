@@ -55,6 +55,9 @@
 #                                  reads the reviewer's answer out of the working
 #                                  tree takes its baseline here
 #   diff_tool_cleanup           run after the result is emitted
+#   diff_tool_edited            the draft as the reviewer changed it in the tool,
+#                                  as editedFields, written over the draft
+#                                  (default: the tool doesn't change it, [])
 #   diff_tool_shared_note <comment_json>
 #                                whether a note sits on the review's shared
 #                                context, off its items, where a lone verdict
@@ -92,6 +95,21 @@ diff_tool_file() {
     tool_file="${tool_dir}/difftool.sh"
   fi
   [[ ! -r "$tool_file" ]] || printf '%s' "$tool_file"
+}
+
+# Start this review over in `edit` mode, on the draft as it now stands, and
+# relay that mode's result: the reviewer chose to finish it in their editor.
+# Notes they left besides the choice go into the editor's context, so none is
+# dropped on the way.
+# shellcheck disable=SC2034
+diff_relaunch() {
+  review_carried_notes=$(jq -r '.[] | "  \(.file // "the review")\(if .startLine then ":\(.startLine)" else "" end): \(.body)"' <<<"$1")
+  review_mode="edit"
+  review_tool=$(anchor_editor_resolve)
+  # edit.sh sources this file for its own switch, so shellcheck is not sent round the loop.
+  # shellcheck source=/dev/null
+  source "$(dirname "${BASH_SOURCE[0]}")/edit.sh"
+  emit_review
 }
 
 # Consumes the review-request variables the dispatcher exports before sourcing
@@ -271,6 +289,21 @@ emit_review() {
     returned=$(jq -c --argjson l "$lone" "$as_choice" <<<"$returned")
   fi
   verdict=$(diff_tool_verdict "$rc" "$answered")
+  # A draft the reviewer changed in the tool goes back for approval as changed,
+  # since approving it in the tool was approving the text before the edit was
+  # read back (CONFIRM-08).
+  local edited='[]'
+  ! declare -F diff_tool_edited >/dev/null || edited=$(diff_tool_edited)
+  if [[ "$edited" != '[]' && "$verdict" == approved ]]; then
+    echo "review-diff.sh: the draft was edited in $review_tool, so it comes back for approval as edited" >&2
+    verdict=changes-requested
+  fi
+  if [[ "$verdict" == relaunch ]]; then
+    rm -f "$out_file" "$err_file" "$desc_file"
+    ! declare -F diff_tool_cleanup >/dev/null || diff_tool_cleanup
+    diff_relaunch "$(jq -c 'map(select(.target != "verdict"))' <<<"$answered")"
+    return
+  fi
   if [[ "$verdict" == undecided ]]; then
     echo "review-diff.sh: the review closed with no verdict chosen; ask the reviewer whether to accept, reject, or reopen it" >&2
     verdict=no-verdict exit_name=undecided
@@ -287,7 +320,7 @@ emit_review() {
   out=$(jq -cn \
     --arg v "$verdict" --arg b "$review_tool" \
     --argjson caps "$diff_tool_caps" \
-    --argjson comments "$comments" \
+    --argjson comments "$comments" --argjson edited "$edited" \
     --argjson rc "$rc" --arg name "$exit_name" '
     {
       mode:"diff",
@@ -296,7 +329,7 @@ emit_review() {
       reviewCompleteness:null,
       reviewer:null,
       comments:$comments,
-      editedFields:[],
+      editedFields:$edited,
       capabilities:$caps,
       raw:{exitCode:(if $name == "" then $rc else $name end)}
     }')

@@ -48,6 +48,16 @@
 #                                file, line, body, replies}], body being the
 #                                opening comment and replies the count after it
 #
+#   On the user's own CR only, what its Review status section says has been
+#   reviewed (scripts/lib/review-status.sh):
+#   REVIEW_STATUS_COMMITS=<n>    commits on the CR
+#   REVIEW_STATUS_UNREVIEWED=<n> how many have had no review round
+#   REVIEW_STATUS_OLDEST=<sha>   the oldest of those; empty when there are none
+#   REVIEW_STATUS_LATEST=<sha>   the newest of those
+#   REVIEW_STATUS_FROM=<sha>     the oldest one's parent: the base of a review
+#                                that takes in every unreviewed commit
+#   REVIEW_STATUS_DIFF_PATH=<path>  the diff from REVIEW_STATUS_FROM to the head
+#
 # On a failure that leaves nothing to review it prints REVIEW_ERROR=<message>
 # and exits non-zero, rather than emitting a half-populated block the skill
 # would act on. An auth failure surfaces the same way (the fail-fast-on-auth
@@ -66,6 +76,8 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 # shellcheck source=lib/tmpfile.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/tmpfile.sh"
+# shellcheck source=lib/review-status.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/review-status.sh"
 
 CTX_REPO=""
 cr_ref=""
@@ -269,3 +281,23 @@ echo "IS_OWN_CR=$is_own"
 echo "OPEN_THREADS=$(jq length "$feedback_path")"
 echo "OPEN_THREADS_MINE=$(jq '[.[] | select(.mine)] | length' "$feedback_path")"
 echo "OPEN_FEEDBACK_PATH=$feedback_path"
+
+if [[ "$is_own" == 1 ]]; then
+  recorded=$(review_status_data "$desc_path") \
+    || die "the CR's Review status section holds data that isn't JSON; fix or delete its opening comment"
+  rows=$(review_status_rows "$recorded" "$cr_base" "$cr_head")
+  unreviewed=$(jq -c '[.[] | select(.rounds == 0) | .sha]' <<<"$rows")
+  oldest=$(jq -r '.[0] // empty' <<<"$unreviewed")
+  from="" status_diff=""
+  if [[ -n "$oldest" ]]; then
+    from=$(git rev-parse "$oldest^")
+    status_diff=$(anchor_tmpfile "cr-review-unreviewed" diff)
+    git diff "$from" "$cr_head" > "$status_diff"
+  fi
+  echo "REVIEW_STATUS_COMMITS=$(jq length <<<"$rows")"
+  echo "REVIEW_STATUS_UNREVIEWED=$(jq length <<<"$unreviewed")"
+  echo "REVIEW_STATUS_OLDEST=$oldest"
+  echo "REVIEW_STATUS_LATEST=$(jq -r '.[-1] // empty' <<<"$unreviewed")"
+  echo "REVIEW_STATUS_FROM=$from"
+  echo "REVIEW_STATUS_DIFF_PATH=$status_diff"
+fi

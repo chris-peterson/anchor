@@ -81,6 +81,9 @@
 #   CR_URL=<web url>             empty until a CR exists — on CR_PENDING as well
 #                                as on the skip-deep-links path
 #   CR_IID=<iid/number>          empty when no CR
+#   CR_REFERENCE=<repo>#<n> | <repo>!<iid>   the CR as its forge writes it, the
+#                                review's file name (`review-diff.sh --name`);
+#                                empty when no CR
 #   CR_DRAFT=<true|false|>       the CR's draft flag (empty when no CR)
 #   CR_HEAD_SHA=<sha>            the CR head the reviewer sees (empty when no CR)
 #   LOCAL_HEAD_SHA=<sha>         local HEAD
@@ -89,6 +92,11 @@
 #   CURRENT_DESC_PATH=<path>     temp file holding the CR's current description
 #                                (baseline for the Step 4 review). Always a path;
 #                                the file is empty where no CR holds one yet
+#   CR_REVIEW_STATUS_PATH=<path> the description's Review status section, taken
+#                                out of CURRENT_DESC_PATH so the review compares
+#                                prose with prose; the write puts it back
+#                                (scripts/review-status.sh carry). Always a path;
+#                                the file is empty where there is no section
 #   DESC_DRAFT_PATH=<path>       temp file the skill writes the drafted description
 #                                to (the review's right-hand side)
 #   TEMPLATE_PATH=<path>         the CR template to compose into, empty when the
@@ -156,6 +164,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/tmpfile.sh"
 # shellcheck source=lib/anchor-config.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/anchor-config.sh"
+# shellcheck source=lib/review-status.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/review-status.sh"
 
 will_open=1
 do_open=0
@@ -458,9 +468,13 @@ read_delete_branch_on_merge
 # paths, so an empty string here is a usage error rather than an empty left-hand
 # side, and the review the skill is about to open never launches.
 current_desc_path="$(anchor_tmpfile cr-desc-current)"
+review_status_path="$(anchor_tmpfile cr-review-status)"
 : > "$current_desc_path"
+: > "$review_status_path"
 if [[ -n "$cr_url" ]]; then
-  printf '%s' "$cr_desc" > "$current_desc_path"
+  printf '%s\n' "$cr_desc" > "$current_desc_path.full"
+  review_status_strip "$current_desc_path.full" "$review_status_path" > "$current_desc_path"
+  rm -f "$current_desc_path.full"
 fi
 
 # --- State check: local tree vs the CR head ----------------------------------
@@ -703,6 +717,14 @@ anchor_config_warnings >&2
 # costs no separate mktemp call.
 desc_draft_path="$(anchor_tmpfile cr-desc-draft)"
 
+cr_reference=""
+if [[ -n "$cr_iid" ]]; then
+  case "$forge" in
+    github) cr_reference="$(basename "${cr_url%/pull/*}")#$cr_iid" ;;
+    gitlab) cr_reference="$(basename "${cr_url%/-/merge_requests/*}")!$cr_iid" ;;
+  esac
+fi
+
 # --- Emit ---------------------------------------------------------------------
 
 echo "RESOLVED_VIA=$RESOLVED_VIA"
@@ -723,6 +745,7 @@ echo "PRIOR_CR_IID=$prior_cr_iid"
 echo "PRIOR_CR_STATE=$prior_cr_state"
 echo "CR_URL=$cr_url"
 echo "CR_IID=$cr_iid"
+echo "CR_REFERENCE=$cr_reference"
 echo "CR_DRAFT=$cr_draft"
 echo "CR_TITLE=$cr_title"
 echo "CR_HEAD_SHA=$cr_head"
@@ -730,6 +753,7 @@ echo "LOCAL_HEAD_SHA=$local_head"
 echo "WORKTREE_CLEAN=$worktree_clean"
 echo "STATE=$state"
 echo "CURRENT_DESC_PATH=$current_desc_path"
+echo "CR_REVIEW_STATUS_PATH=$review_status_path"
 echo "DESC_DRAFT_PATH=$desc_draft_path"
 echo "TEMPLATE_PATH=$template_path"
 echo "TEMPLATE_SOURCE=$template_source"

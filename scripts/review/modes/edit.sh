@@ -126,6 +126,7 @@ Quit without saving, and you're asked what to do."
   printf '%s\n' "$review_title"
   jq -r '.[] | select(.label != "body" and .label != "opened by" and .label != "next")
     | "  \(.label): \(.value)"' <<<"$review_details_json"
+  [[ -z "${review_carried_notes:-}" ]] || printf '\nYour notes from the review you relaunched:\n%s\n' "$review_carried_notes"
 }
 
 editor_emit() {
@@ -162,11 +163,16 @@ editor_buffer_ext() {
 }
 
 # The buffer's file name, which is what an editor's status line shows, so it
-# says which repo, branch, and artifact are under review. Two sessions can
+# says which object is under review: its reference where the caller passed one
+# (`--name`), else the repo, branch, and artifact. Two sessions can
 # review the same artifact at once; each buffer gets a directory of its own, so
 # the names never meet on disk.
 editor_buffer_name() {
   local name="$1" repo branch where=""
+  if [[ -n "${files_name:-}" ]]; then
+    printf '%s.%s' "$files_name" "$(editor_buffer_ext "$1")"
+    return
+  fi
   if repo=$(git rev-parse --show-toplevel 2>/dev/null); then
     branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
     where="${repo##*/}@${branch//\//-}"
@@ -302,13 +308,7 @@ emit_review() {
   # Which artifact is on the dial. The skill that asked for the review names it;
   # otherwise a seeded message is a commit message and the proposed side of a
   # two-path review is a description.
-  case "${review_skill:-}" in
-    commit)         artifact_target="commit-message" ;;
-    prepare-review) artifact_target="description" ;;
-    issue)          artifact_target="issue-body" ;;
-    release)        artifact_target="release-notes" ;;
-    *)              artifact_target="" ;;
-  esac
+  artifact_target=$(anchor_artifact_target)
 
   if [[ "$review_subject" == "files" ]]; then
     artifact_file="$files_right"

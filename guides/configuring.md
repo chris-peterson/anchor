@@ -152,8 +152,9 @@ opening something else.
 
 `/anchor:review` runs revdiff whatever this key names. Its review is a set of
 notes preloaded into the diff, one per finding, that you keep, edit, or delete
-in place, and revdiff is the viewer that takes them and hands back what you
-left. Without revdiff, `/anchor:review` says so and stops before examining
+in place: first on the drafted fixes alone, then on the whole change with the
+ones you kept in it. revdiff is the viewer that takes the notes and hands back
+what you left. Without revdiff, `/anchor:review` says so and stops before examining
 anything.
 
 These two are the *tool* half of a review, one key per mode, and they are the
@@ -358,6 +359,17 @@ text and a status, so you choose with a save or a chord.
 | **Reject**: nothing the review gates happens | A note on **Reject**, or one note saying only `stop`, then `q` | `ZX` | Quit with exit code 2, or save an empty buffer |
 | **Ask for changes** | Notes where they apply, with neither chosen, then `q` | `ZD`: saves and reopens the draft in revdiff to annotate | Save, then quit with exit code 3 |
 | **Leave without choosing** | `q` with no note of your own | Quit without saving | Quit without saving |
+| **Switch tools** | A note on **Relaunch in `<editor>`**, then `q`: the review starts over in your editor | `ZD`, as above | Exit code 3, as above |
+
+**Relaunch** is offered where the review carries a draft (a commit message, a
+CR description, an issue body, release notes) and your editor can open. Any
+notes you left beside it go into the editor's context, so none is lost.
+
+In revdiff, `e` opens the file under the cursor in `$EDITOR`. On a
+description, issue body, or release notes, what you save becomes the draft, and
+it comes back for approval as edited rather than going out on the Accept you
+chose before reading it back. revdiff won't open a file that carries a note,
+since an edit can detach the note from its line.
 
 Leaving without choosing is never read as approval. The agent asks Accept,
 Reject, or Reopen, and anything you type instead is taken as the change you
