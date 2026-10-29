@@ -47,7 +47,10 @@
 #
 # Files mode — review two arbitrary paths (no git range required), e.g. an old
 # vs. proposed CR description. Domain-agnostic: pass the header text yourself.
-#   bash review-diff.sh --files <left> <right> [--title <t>] [--detail label=value]...
+#   bash review-diff.sh --files <left> <right> [--name <ref>] [--title <t>] [--detail label=value]...
+# --name is the reviewed object's own reference (`<repo>#<number>`, `<repo>!<iid>`,
+# `<repo>@<version>`), which names the file in the viewer and the editor in place
+# of the right side's temp name, so the review says which object it edits.
 
 set -euo pipefail
 
@@ -448,6 +451,7 @@ determine_commit_range() {
 review_subject="range"
 files_left=""
 files_right=""
+files_name=""
 diff_range=""
 diff_staged=0
 diff_paths=""
@@ -468,6 +472,13 @@ if [[ "${1:-}" == "--files" ]]; then
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --title)  review_title="${2:?--title needs a value}"; shift 2 ;;
+      --name)
+        files_name="${2:?--name needs a value}"; shift 2
+        if [[ "$files_name" == */* ]]; then
+          echo "review-diff.sh: --name is a file name, and '$files_name' holds a '/'; pass the repo's last path segment" >&2
+          exit 64
+        fi
+        ;;
       --detail)
         pair="${2:?--detail needs label=value}"; shift 2
         review_details_json=$(jq -c --arg l "${pair%%=*}" --arg v "${pair#*=}" \
@@ -771,7 +782,7 @@ fi
 # The review-request contract the sourced adapter reads. Exported so the
 # adapter (sourced below) counts as a consumer — it runs in this same shell.
 export review_subject review_mode review_tool
-export diff_range diff_staged diff_paths files_left files_right review_title review_details_json
+export diff_range diff_staged diff_paths files_left files_right files_name review_title review_details_json
 export message_file review_skill review_annotations review_seeded review_reply review_untracked
 
 # Taken before the tool opens, so it names what the reviewer was shown.

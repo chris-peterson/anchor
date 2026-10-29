@@ -39,6 +39,7 @@ case "${1:-} ${2:-}" in
   "pr view")   cat "$FX/gh-pr.json" ;;
   "repo view") cat "$FX/gh-repo.json" ;;
   "api graphql") cat "$FX/gh-threads.json" ;;
+  "api user")  echo '{"login":"me"}' ;;
   "run view")  jq -c '{jobs: .}' "$FX/gh-jobs.json" ;;
   api\ *)      jq -c '{total_count: length, workflow_runs: .}' "$FX/gh-runs.json" ;;
   *) echo "stub gh: unhandled: $*" >&2; exit 1 ;;
@@ -59,6 +60,7 @@ case "$1" in
   */jobs*)        cat "$FX/gl-jobs.json" ;;
   *pipelines*)    cat "$FX/gl-pipes.json" ;;
   projects/:fullpath) cat "$FX/gl-project.json" ;;
+  user)           echo '{"username":"me"}' ;;
   *) echo "stub glab: unhandled api path: $1" >&2; exit 1 ;;
 esac
 EOF
@@ -228,6 +230,27 @@ expect MERGE_METHOD merge "method still read past open threads"
 ok "github: open human threads block but the method is still read"
 
 gh_threads
+
+# The user's own CR: a commit no review round has covered asks, like a thread,
+# and the rest of the gates are still read.
+base=$(git -C "$repo" rev-parse main)
+own_pr() { gh_pr; jq --arg b "$base" --arg body "$1" '.author = {login: "me"} | .baseRefOid = $b | .body = $body' "$fx/gh-pr.json" > "$fx/own.json"; mv "$fx/own.json" "$fx/gh-pr.json"; }
+own_pr "Why."
+
+run
+expect GATE_REVIEWS unreviewed "no Review status section"
+expect GATE_REVIEWS_DETAIL "1 of 1 commit never reviewed" "detail counts commits"
+expect GATE_BLOCKING reviews "unreviewed commits ask"
+expect MERGE_METHOD merge "method still read past unreviewed commits"
+[[ "$(val UNREVIEWED)" == "[{\"sha\":\"$head\",\"subject\":\"change\"}]" ]] || fail "unreviewed commits listed: $out"
+patch=$(git -C "$repo" show --format= "$head" | git patch-id --stable | cut -d' ' -f1)
+own_pr "Why.
+<!-- anchor:review-status {\"$patch\":{\"rounds\":1,\"result\":\"approved\"}} -->"
+run
+expect GATE_REVIEWS reviewed "the section covers the commit"
+expect GATE_BLOCKING "" "a reviewed CR doesn't ask"
+ok "github: an own CR's unreviewed commits ask before the merge, and reviewed ones pass"
+gh_pr
 printf '{"mergeCommitAllowed":false,"squashMergeAllowed":true,"rebaseMergeAllowed":true}' > "$fx/gh-repo.json"
 run
 expect MERGE_METHOD rebase "rebase ahead of squash"
@@ -297,6 +320,13 @@ expect GATE_APPROVALS missing "one left"
 expect GATE_BLOCKING approvals "missing blocks"
 printf '{"approvals_required":1,"approvals_left":0,"approved_by":[{"user":{"username":"ana"}}]}' > "$fx/gl-approvals.json"
 ok "gitlab: no rules passes, approvals left block"
+
+gl_mr "$(printf '.author = {username: "me"} | .diff_refs = {base_sha: "%s"} | .description = "Why."' "$(git -C "$repo" rev-parse main)")"
+run
+expect GATE_REVIEWS unreviewed "an own MR with no Review status section"
+expect GATE_BLOCKING reviews "unreviewed commits ask"
+gl_mr
+ok "gitlab: an own MR's unreviewed commits ask before the merge"
 
 gl_mr '.detailed_merge_status = "need_rebase"'
 run

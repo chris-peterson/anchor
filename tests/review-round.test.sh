@@ -96,7 +96,7 @@ cat > "$items" <<'EOF'
    "sites": [{"file": "a.txt", "line": 11}]}
 ]}
 EOF
-o=$(round_cmd seed --dir "$dir" --items "$items" --title "Review of #7: Tidy the list" --cr-url "https://example.com/pr/7")
+o=$(round_cmd seed --dir "$dir" --pass items --items "$items" --title "Review of #7: Tidy the list" --cr-url "https://example.com/pr/7")
 notes=$(val NOTES "$o")
 [[ "$(val NOTE_COUNT "$o")" == 3 ]] || fail "one note per item: $o"
 # Each note sits above its site; a note on an unchanged line within a few lines
@@ -117,9 +117,12 @@ ok "seed: notes sit above their lines with the right marker, and the table lists
 
 grep -qx '# Review of #7: Tidy the list' "$table" || fail "a first round is the review, not round 1: $(head -1 "$table")"
 ! grep -qi 'round 1' "$table" || fail "a first round is never numbered: $(cat "$table")"
-grep -q 'has 3 items for you: 2 already made' "$table" || fail "the table says what the review found: $(cat "$table")"
-grep -qF -- '- **Accept**: the agent makes the changes you kept or asked for, then opens the commit for you to approve' "$table" \
-  || fail "an in-place round says Accept leads to a commit: $(cat "$table")"
+grep -q 'has 3 items for you: 2 drafted' "$table" || fail "the table says what the review found: $(cat "$table")"
+grep -q "This diff holds only those drafts, from the change request's head" "$table" \
+  || fail "the items pass says it shows only the drafts: $(cat "$table")"
+grep -qF -- '- **Accept**: the agent takes out what you dropped and makes the changes you asked for, then opens the whole change with the fixes you kept' "$table" \
+  || fail "the items pass says Accept leads to the whole change: $(cat "$table")"
+[[ "$(val ROUND_FROM "$o")" == "$head" ]] || fail "the items pass diffs from the CR head: $o"
 [ "$(grep -n '^## Verdict' "$table" | cut -d: -f1)" -lt "$(grep -n '^## How to answer' "$table" | cut -d: -f1)" ] \
   || fail "the Verdict section comes before how to answer: $(cat "$table")"
 # shellcheck disable=SC2016
@@ -129,20 +132,24 @@ grep -q "on \`$(git -C "$root" branch --show-current)\` · \[change request\](ht
   || fail "the table names the branch and links the CR: $(cat "$table")"
 grep -qF "This file, \`(context).md\`, is the guide to the review" "$table" || fail "the table says what it is"
 # shellcheck disable=SC2016
-[ "$(sed -n '/^```diff$/,/^```$/{/^ /p;}' "$table")" = ' 2 files' ] \
-  || fail "a first round draws the CR alone, with no row for its own fixes: $(cat "$table")"
-grep -q '^+█' "$table" || fail "a first round colours the CR's bars: $(cat "$table")"
-! grep -q '░' "$table" || fail "a first round draws nothing muted: $(cat "$table")"
+[ "$(sed -n '/^```diff$/,/^```$/{/^ [a-z]/p;}' "$table")" = "$(printf '%s\n' ' this round · 1 file' ' original change · 2 files')" ] \
+  || fail "a first round draws its drafts over the CR: $(cat "$table")"
+grep -q '^+█' "$table" || fail "the round's drafts are coloured: $(cat "$table")"
+grep -q '░' "$table" || fail "the CR under them is muted: $(cat "$table")"
 ok "seed: the table opens by saying what the review is, what each verdict does, and where the change lives"
 
 bad="$work/bad.json"
-jq '.items[0].sites = [{"file": "b.txt", "line": 1}]' "$items" > "$bad"
-o=$(round_cmd seed --dir "$dir" --items "$bad" || true)
-[[ "$(val ROUND_ERROR "$o")" == *"b.txt: not changed in this review"* ]] || fail "a site on an unchanged file should be refused: $o"
+jq '.items[0].sites = [{"file": "b.txt"}]' "$items" > "$bad"
+o=$(round_cmd seed --dir "$dir" --pass items --items "$bad" || true)
+[[ "$(val ROUND_ERROR "$o")" == *"b.txt: not changed in this review"* ]] || fail "a whole-file note on an unchanged file should be refused: $o"
+jq '.items[2].sites = [{"file": "b.txt", "line": 1}]' "$items" > "$bad"
+o=$(round_cmd seed --dir "$dir" --pass items --items "$bad")
+grep -qF '### #3 rename-ten · important · proposed at `b.txt:' "$table" \
+  || fail "a proposal on a file the pass doesn't change goes to the table: $(cat "$table")"
 jq '.items[0].sites = [{"file": "a.txt", "line": 99}]' "$items" > "$bad"
-o=$(round_cmd seed --dir "$dir" --items "$bad" || true)
+o=$(round_cmd seed --dir "$dir" --pass items --items "$bad" || true)
 [[ "$(val ROUND_ERROR "$o")" == *"a.txt:99: not a line of the file"* ]] || fail "a site past the end should be refused: $o"
-round_cmd seed --dir "$dir" --items "$items" >/dev/null
+round_cmd seed --dir "$dir" --pass items --items "$items" >/dev/null
 ok "seed: a note revdiff would drop is refused before the review opens"
 
 # ============================ read =======================================
@@ -253,17 +260,17 @@ round_cmd record --dir "$dir" --id 2 >/dev/null
 wt_items="$work/wt-items.json"
 jq -n '{items:[{id:1, slug:"two-lines", severity:"nit", status:"applied", finding:"Adds x and y",
   reason:"The list needs them.", sites:[{file:"a.txt", line:4}]}]}' > "$wt_items"
-round_cmd seed --dir "$dir" --items "$wt_items" --title "Review of #9: Theirs" >/dev/null
+round_cmd seed --dir "$dir" --pass whole --items "$wt_items" --title "Review of #9: Theirs" >/dev/null
 grep -qF -- '- **Accept**: the agent drafts what you kept' "$root/(context).md" \
   || fail "a round on someone else's CR says Accept drafts posts: $(cat "$root/(context).md")"
 grep -q 'posts nothing until you approve' "$root/(context).md" \
   || fail "a round on someone else's CR posts nothing unapproved: $(cat "$root/(context).md")"
 grep -q '← prev' "$root/(context).md" || fail "the round names the keys: $(cat "$root/(context).md")"
 GIT_CONFIG_GLOBAL="$work/hints-off" git config --global anchor.hints false
-GIT_CONFIG_GLOBAL="$work/hints-off" round_cmd seed --dir "$dir" --items "$wt_items" --title "Review of #9: Theirs" >/dev/null
+GIT_CONFIG_GLOBAL="$work/hints-off" round_cmd seed --dir "$dir" --pass whole --items "$wt_items" --title "Review of #9: Theirs" >/dev/null
 ! grep -q '← prev\|hide hints' "$root/(context).md" || fail "anchor.hints=false drops the round's keys: $(cat "$root/(context).md")"
 grep -qxF '## Verdict' "$root/(context).md" || fail "the round keeps the Verdict section: $(cat "$root/(context).md")"
-grep -q 'has 1 item for you' "$root/(context).md" || fail "one item is singular"
+grep -q 'whole change request with the 1 item you kept' "$root/(context).md" || fail "the whole pass names the kept items, singular: $(cat "$root/(context).md")"
 ok "seed: a round on someone else's CR says what Accept drafts, and posts nothing unapproved"
 
 o=$(round_cmd suggest --dir "$dir" --id 2 --forge github)
@@ -293,7 +300,7 @@ cat > "$items" <<'EOF'
   {"id": 5, "slug": "q", "severity": "consider", "status": "proposed",
   "finding": "g", "reason": "s", "sites": [{"file": "a.txt", "line": 6}]}]}
 EOF
-round_cmd seed --dir "$dir" --items "$items" >/dev/null
+round_cmd seed --dir "$dir" --pass whole --items "$items" >/dev/null
 jq '[.[] | {body, target:"line", file, startLine:.line, endLine:.line, side}]' "$dir/notes.json" > "$returned"
 r=$(val ROUND_READ "$(round_cmd read --dir "$dir" --returned "$returned")")
 [[ "$(jq -r '[.items[].notes[] | "\(.line) \(.crLine)"] | join(",")' "$r")" == "7 5,5 null" ]] \
@@ -323,7 +330,7 @@ jq -n '{items:[
   {id:1, slug:"near", severity:"suggestion", status:"proposed", finding:"f", reason:"About line 7.", sites:[{file:"app.sh", line:7}]},
   {id:2, slug:"far", severity:"suggestion", status:"proposed", finding:"g", reason:"About line 18.", sites:[{file:"app.sh", line:18}]},
   {id:3, slug:"whole", severity:"suggestion", status:"proposed", finding:"h", reason:"About other.sh.", sites:[{file:"other.sh"}]}]}' > "$work/far-items.json"
-o=$(round_cmd seed --dir "$fdir" --items "$work/far-items.json")
+o=$(round_cmd seed --dir "$fdir" --pass whole --items "$work/far-items.json")
 fnotes=$(val NOTES "$o"); ftable="$far/(context).md"
 grep -qx '## app.sh:6 ( )' "$fnotes" || fail "a note near a change stays put: $(cat "$fnotes")"
 grep -qx '## other.sh:1 (+)' "$fnotes" || fail "a whole-file note moves onto its file's change: $(cat "$fnotes")"
@@ -357,7 +364,7 @@ git -C "$sp" commit --quiet -am change
 s1=$(git -C "$sp" rev-parse HEAD)
 o=$(round_cmd start --repo "$sp" --base "$s0" --head "$s1" --in-place); sdir=$(val ROUND_DIR "$o")
 jq -n '{items:[{id:1, slug:"case", severity:"nit", status:"applied", finding:"f", reason:"r", sites:[{file:"x y.txt", line:2}]}]}' > "$work/spaced-items.json"
-o=$(round_cmd seed --dir "$sdir" --items "$work/spaced-items.json")
+o=$(round_cmd seed --dir "$sdir" --pass whole --items "$work/spaced-items.json")
 grep -qx '## x y.txt:1 (+)' "$(val NOTES "$o")" || fail "a spaced path's changed line keeps its marker: $(cat "$(val NOTES "$o")")"
 round_cmd finish --dir "$sdir" >/dev/null
 ok "a path with a space: seed reads it without git's trailing tab"
@@ -375,9 +382,65 @@ git -C "$big" add -A; git -C "$big" commit --quiet -m change
 b1=$(git -C "$big" rev-parse HEAD)
 o=$(round_cmd start --repo "$big" --base "$b0" --head "$b1" --in-place); bdir=$(val ROUND_DIR "$o")
 jq -n '{items:[{id:1, slug:"first", severity:"nit", status:"proposed", finding:"f", reason:"r", sites:[{file:"a.txt", line:1}]}]}' > "$work/big-items.json"
-o=$(round_cmd seed --dir "$bdir" --items "$work/big-items.json") || fail "a large diff's first file is changed: $o"
+o=$(round_cmd seed --dir "$bdir" --pass whole --items "$work/big-items.json") || fail "a large diff's first file is changed: $o"
 [[ "$(val NOTE_COUNT "$o")" == 1 ]] || fail "a large diff seeds its note: $o"
 round_cmd finish --dir "$bdir" >/dev/null
 ok "seed: a large diff still finds the file its first rows name"
+
+# ============================ two passes =================================
+
+# The items pass shows only the round's drafts; the whole pass shows the CR with
+# the kept ones in it, and finish records what both passes decided.
+tp="$work/two-pass"
+git init --quiet -b main "$tp"
+git -C "$tp" config user.email t@example.com; git -C "$tp" config user.name T; git -C "$tp" config commit.gpgsign false
+seq 1 30 | sed 's/^/row /' > "$tp/m.txt"
+git -C "$tp" add -A; git -C "$tp" commit --quiet -m base
+t0=$(git -C "$tp" rev-parse HEAD)
+sed -i.bak 's/^row 20$/row twenty/' "$tp/m.txt"; rm -f "$tp/m.txt.bak"
+git -C "$tp" commit --quiet -am change
+t1=$(git -C "$tp" rev-parse HEAD)
+o=$(round_cmd start --repo "$tp" --base "$t0" --head "$t1" --in-place); tdir=$(val ROUND_DIR "$o")
+sed -i.bak 's/^row 3$/row three/' "$tp/m.txt"; rm -f "$tp/m.txt.bak"
+round_cmd record --dir "$tdir" --id 1 >/dev/null
+sed -i.bak 's/^row 10$/row ten/' "$tp/m.txt"; rm -f "$tp/m.txt.bak"
+round_cmd record --dir "$tdir" --id 2 >/dev/null
+jq -n '{items:[
+  {id:1, slug:"three", severity:"suggestion", status:"applied", finding:"f", reason:"Spell out 3.", sites:[{file:"m.txt", line:3}]},
+  {id:2, slug:"ten", severity:"suggestion", status:"applied", finding:"g", reason:"Spell out 10.", sites:[{file:"m.txt", line:10}]}]}' > "$work/tp-items.json"
+o=$(round_cmd seed --dir "$tdir" --pass items --items "$work/tp-items.json")
+[[ "$(val ROUND_FROM "$o")" == "$t1" ]] || fail "the items pass diffs from the CR head: $o"
+[[ "$(cut -f3 "$tdir/changed.tsv" | sort -nu | tr '\n' ' ')" == "3 10 " ]] \
+  || fail "the items pass holds only the drafts, not the CR's own row 20: $(cat "$tdir/changed.tsv")"
+# The reviewer drops item 2 and edits a line of their own in the review.
+jq '[.[] | {body, target:"line", file, startLine:.line, endLine:.line, side}] | map(select(.body | startswith("#2") | not))' \
+  "$tdir/notes.json" > "$work/tp-ret1.json"
+sed -i.bak 's/^row 1$/row one/' "$tp/m.txt"; rm -f "$tp/m.txt.bak"
+o=$(round_cmd read --dir "$tdir" --returned "$work/tp-ret1.json")
+[[ "$(val DROP "$o")" == 2 && "$(val USER_EDITS "$o")" == 1 ]] || fail "items pass read: $o"
+round_cmd revert --dir "$tdir" --id 2 >/dev/null
+grep -qx 'row 10' "$tp/m.txt" || fail "the dropped draft comes back out"
+ok "two passes: the items pass shows only the drafts, and a dropped draft comes back out"
+
+jq '{items:[.items[0]]}' "$work/tp-items.json" > "$work/tp-kept.json"
+o=$(round_cmd seed --dir "$tdir" --pass whole --items "$work/tp-kept.json") || fail "the whole pass seeds over the reviewer's own edit: $o"
+[[ "$(val ROUND_FROM "$o")" == "$t0" ]] || fail "the whole pass diffs from the merge base: $o"
+grep -q 'm.txt	+	20' "$tdir/changed.tsv" || fail "the whole pass holds the CR's own change: $(cat "$tdir/changed.tsv")"
+grep -q 'whole change request with the 1 item you kept' "$tp/(context).md" || fail "the whole pass says what it is: $(cat "$tp/(context).md")"
+grep -qF -- '- **Accept**: the agent makes the changes you kept or asked for, then opens the commit' "$tp/(context).md" \
+  || fail "the whole pass's Accept leads to the commit: $(cat "$tp/(context).md")"
+[[ -f "$tdir/read.items.json" ]] || fail "the items pass's answers are kept aside for finish"
+# The reviewer drops item 1 too, now that they see it in the whole change.
+jq '[.[] | {body, target:"line", file, startLine:.line, endLine:.line, side}] | map(.body = "drop")' \
+  "$tdir/notes.json" > "$work/tp-ret2.json"
+o=$(round_cmd read --dir "$tdir" --returned "$work/tp-ret2.json")
+[[ "$(val DROP "$o")" == 1 ]] || fail "whole pass read: $o"
+o=$(round_cmd finish --dir "$tdir")
+tledger=$(val ROUND_LEDGER "$o")
+[[ "$(jq -r '.rejected | map(.slug) | join(",")' "$tledger")" == "three,ten" ]] \
+  || fail "an item dropped in either pass is rejected: $(jq -c '.rejected' "$tledger")"
+[[ "$(jq -r '.rounds[0].notes | "\(.kept) \(.dropped)"' "$tledger")" == "0 2" ]] \
+  || fail "a drop in the whole pass overrides a keep in the items pass: $(jq -c '.rounds[0].notes' "$tledger")"
+ok "two passes: the whole pass shows the CR with the kept fixes, and finish records what both decided"
 
 echo "# all checks passed"

@@ -137,6 +137,12 @@ dir_name="${buffer_path%/*}"; dir_name="${dir_name##*/}"
 [ ! -e "${buffer_path%/*}" ] || fail "the buffer's directory outlived the review"
 ok "edit: the buffer is named repo@branch.artifact, in a directory of its own"
 
+EDITOR_BUFFER_CAPTURE="$work/named.txt" GIT_EDITOR=plain-editor \
+  run --skill issue --mode edit --files "$prior" "$draft" --name 'acme#7' >/dev/null
+buffer_path=$(cat "$work/named.txt.path")
+[ "${buffer_path##*/}" = 'acme#7.md' ] || fail "--name should name the buffer, got ${buffer_path##*/}"
+ok "edit: --name names the buffer for the object it edits"
+
 # The draft opens on the first line. Below the scissors, the flow that opened
 # the review and what approving hands it come first, and the diff names its
 # sides rather than their temp paths.

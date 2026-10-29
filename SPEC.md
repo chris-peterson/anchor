@@ -242,6 +242,9 @@ behavior, not an independent authority — review them against the source.
 - **[COMMIT-24]** Where the branch has no commit yet, the system shall review
   the pending changeset against the empty tree and shall offer no squash, since
   there is nothing to amend.
+- **[COMMIT-25]** When a commit the review covered is pushed to a branch with a
+  CR, the system shall give that commit a round in the CR's Review status
+  section (REVIEW-31), on someone else's CR under the conditions REVIEW-32 sets.
 
 ### PREPARE — Prepare review
 
@@ -369,6 +372,9 @@ check.
 - **[PREPARE-19]** Where the change request resolves an issue on its own forge, the
   system shall reference that issue in the description with the forge's closing
   keyword, so that merging the change request closes the issue.
+- **[PREPARE-20]** When the system redrafts the description of a CR that has a
+  Review status section (REVIEW-31), it shall leave the section out of the draft
+  and its review, and put it back unchanged when it writes the description.
 
 ### REVIEW — Review a change request
 
@@ -451,16 +457,24 @@ ready.
 - **[REVIEW-19]** When the findings are merged, the system shall group the
   findings one change resolves into one item, and give each item an id, a slug,
   a severity of critical or suggestion, and a status: applied, proposed, filed as
-  an issue, or left as is. The system shall apply only a critical item's fix, and
-  only where it is confident in the fix and the fix stays local to the code it
-  fixes, and shall record each applied item's change on its own, so that one item
-  can be reverted without the others.
+  an issue, or left as is. The system shall draft the fix of every item that can
+  be written as code, critical or suggestion, and shall record each drafted
+  item's change on its own, so that one item can be reverted without the others.
+  A draft is not kept until the user keeps it (REVIEW-20, REVIEW-21).
 - **[REVIEW-20]** Before the review opens, the system shall seed one note for
   every item, on its first site and naming its other sites, headed with the
   item's id, slug, and severity and,
   for an unapplied item, its status, and shall write a table of the items beside
   the diff that is never committed. It shall refuse to open a review over a note
   revdiff would drop, so that a missing note always means the user removed it.
+  The round shall be reviewed in two passes: first the items pass, a diff from
+  the CR head to the round's tree holding the drafts alone, where the user keeps,
+  changes, or drops each item; then, with the dropped drafts reverted and the
+  changes made, the whole pass, a diff from the merge base holding the CR with
+  the kept fixes in it, seeded with a note per kept item. A draft read inside a
+  large CR's diff is hard to tell from the change it comments on, so each item is
+  decided before the change is judged as it will land. A note on a line no change
+  in its pass is near goes in the table with an excerpt of that line.
 - **[REVIEW-21]** When the review closes, the system shall read each item's fate
   from its note: left as seeded or answered with a yes (`ok`, `yes`, `apply`,
   👍) keeps it, deleted or answered with a drop word (`drop`, `ignore`,
@@ -483,7 +497,7 @@ ready.
   the repository and the CR in full, say what the round fixed, and say what
   another round would do, so a user answering it after time away can decide
   without scrolling back. It shall recommend another round only when the round
-  applied a critical fix, and recommend stopping otherwise.
+  kept a critical fix, and recommend stopping otherwise.
 - **[REVIEW-25]** The system shall remove a round's table, its state, and any
   worktree it made when the round's edits are committed or posted, and when the
   review stops after the round began.
@@ -523,6 +537,29 @@ ready.
   name the fixes rather than explain them. The user read each reason on its line
   in the round; the commit review shows it there again, and the message stays a
   record of what changed.
+- **[REVIEW-31]** Where the CR is the user's own, the system shall keep a Review
+  status section in its description: a table of the CR's commits, how many
+  review rounds each has been in, who reviewed it, and the latest round's
+  result. It shall name a reviewer by login without an `@`, since a mention in
+  a description notifies the person named. It shall key
+  each commit by its patch-id, so a rebase that leaves a commit's change as it
+  was keeps its rounds and an amend that changes it starts at none. A session's
+  round ledger ends with the session; a review of one new commit on top of
+  several others leaves no trace there of which ones were never reviewed.
+- **[REVIEW-32]** When a review round reaches its verdict, the system shall
+  give every commit in the reviewed range another round, by the reviewer, with
+  the result `changes-requested` when the round kept an item and `approved` when
+  it kept none. A round the user stops records nothing. On someone else's CR it
+  shall record only where the description already has the section and the CR is
+  out of draft: keeping the section is the author opting in, and a draft is the
+  author saying the change isn't ready for review.
+- **[REVIEW-33]** When a self-review starts, the system shall read which commits
+  the Review status section has no round for. Where some commits have rounds and
+  some don't, it shall offer the range from the oldest unreviewed commit to the
+  head as the default, with the whole CR as the alternative. Where no commit has
+  a round, it shall review the whole CR. Where every commit has one, it shall
+  ask, re-reviewing the whole CR by default, with handing the CR off (marking it
+  ready, requesting reviewers) as the alternative.
 
 ### FEEDBACK — Resolve feedback
 
@@ -609,6 +646,10 @@ step after `prepare-review` opens the CR and `resolve-feedback` clears its threa
   merge method through one helper call, and shall land the merge, its read-back
   and announcement, and the local cleanup through another, rather than through
   per-field forge and git commands the skill composes on each run.
+- **[MERGE-19]** Where the CR is the user's own and its Review status section
+  (REVIEW-31) shows a commit with no review round, the system shall list those
+  commits and confirm before merging, offering to hand off to `/anchor:review`.
+  Reading the gates shall go on past it, as past open threads (MERGE-10).
 
 ### RELEASE — Release
 
@@ -942,8 +983,10 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   shape. The context below the scissors line shall be marked as a comment in that
   format: `#` lines under git's own `# ---- >8 ----` line for a commit message,
   an HTML comment for markdown.
-- **[DIFF-13a]** The system shall name the `edit` buffer for the repo, the
-  branch, and the artifact under review, in a directory of its own, and shall
+- **[DIFF-13a]** The system shall name the `edit` buffer for the object under
+  review, by the reference its caller passes (`--name`: `<repo>#<number>`,
+  `<repo>!<iid>`, `<repo>@<version>`) and otherwise by the repo, the branch, and
+  the artifact, in a directory of its own, and shall
   start an editor that shows paths relative to its working directory in that
   directory. The buffer's name is what an editor's title or status line shows,
   and a random temp path there says nothing about which review is open; a
@@ -1240,6 +1283,19 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   to end a review need keys as short as the save, and Vim's own `ZZ` sets the
   shape. The switch is D for `diff` rather than R, which a reviewer thinking
   "reject" reaches for.
+- **[DIFF-45]** Where the reviewer edits a `--files` review's draft with
+  revdiff's `e`, the system shall write the edit over the draft, return it as
+  `editedFields`, and read an Accept of it as `changes-requested` (CONFIRM-08).
+  revdiff shows that review in a scratch repo, whose copy of the draft is
+  removed when the review closes, so the edit has to be carried out before then.
+- **[DIFF-46]** Where a revdiff review carries a draft (a `--files` review, or a
+  commit message) and an `edit` review could open, the system shall offer a
+  third Verdict choice that relaunches the review in the user's editor, named by
+  its command, and when chosen shall start the review over in `edit` mode on the
+  draft as it stands, carrying the reviewer's other notes into the buffer's
+  context. The choice names a relaunch of the review rather than an edit, so it
+  doesn't read as editing the commit message, and it is the way back from the
+  viewer that `ZD` (DIFF-44) is the way into it.
 - **[DIFF-40]** Where a `diff` review's context file states what quitting does,
   the system shall put the change's size directly under the title, then, in a
   box drawn in solid lines, one key for each of the viewer's actions for the
@@ -1288,8 +1344,10 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
 - **[DIFF-43]** Where the review tool shows a context file only beside a git
   diff, the system shall run a review of two files (`--files`) as a git diff in a
   scratch repository outside the user's checkout: the left side committed, the
-  right side written over it under the right side's name, and the repository
-  removed when the review closes. The review then carries the same context file,
+  right side written over it under the reviewed object's reference where the
+  caller passes one (DIFF-13a) and the right side's name otherwise, and the
+  repository removed when the review closes. The right side is a temp file, and
+  its random name says nothing about which issue or CR the reviewer is editing. The review then carries the same context file,
   keys, and Verdict section as any other (DIFF-36, DIFF-40, DIFF-42). A single drafted
   description, issue body, or release notes is what the reviewer sends out under
   their name, so it needs what approving does stated as much as a changeset does.
@@ -1733,6 +1791,10 @@ govern what the user must have read before that happens.
   and CRs independently, so a path that names only the number reads the same for
   two different items, and the reviewer has to open the link to learn which
   repository an edit lands in.
+- **[CONFIRM-17]** The system shall write the Review status section (REVIEW-31)
+  without asking for approval of its text. It holds the counts and verdicts the
+  system records, not prose, and a prompt for it would come with every review
+  round and every commit.
 
 ### SANITIZE — Sanitizing what reaches a destination
 

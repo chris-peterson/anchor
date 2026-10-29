@@ -143,6 +143,7 @@ out=$(bash "$review_cr_sh" 7 --repo "$repo")
 [[ "$(key "$out" CR_STATE)" == open ]]  || fail "GitHub: CR_STATE=$(key "$out" CR_STATE)"
 [[ "$(key "$out" CR_HEAD_SHA)" == "$head" ]] || fail "GitHub: head not pinned"
 [[ "$(key "$out" IS_OWN_CR)" == 0 ]]    || fail "GitHub: IS_OWN_CR should be 0"
+! grep -q '^REVIEW_STATUS_' <<<"$out" || fail "GitHub: someone else's CR has no review status"
 ok "GitHub: resolves the CR and pins the head SHA"
 
 # The head was pushed to refs/pull/7/head and deleted locally, so its presence
@@ -238,6 +239,23 @@ gl_cr_json "$head" "$base" reviewer opened false
 out=$(bash "$review_cr_sh" 7 --repo "$repo")
 [[ "$(key "$out" IS_OWN_CR)" == 1 ]] || fail "own CR not detected"
 ok "reports IS_OWN_CR when the author is the authenticated user"
+
+# --- The own CR's Review status: what has had no round yet --------------------
+[[ "$(key "$out" REVIEW_STATUS_COMMITS)" == 1 ]] || fail "review status: commits counted: $out"
+[[ "$(key "$out" REVIEW_STATUS_UNREVIEWED)" == 1 ]] || fail "review status: no section means unreviewed: $out"
+[[ "$(key "$out" REVIEW_STATUS_OLDEST)" == "$head" ]] || fail "review status: oldest unreviewed"
+[[ "$(key "$out" REVIEW_STATUS_FROM)" == "$base" ]] || fail "review status: the range starts at the oldest one's parent"
+grep -q '^+one$' "$(key "$out" REVIEW_STATUS_DIFF_PATH)" || fail "review status: the diff holds the unreviewed commit"
+ok "an own CR with no Review status section has every commit unreviewed"
+
+patch=$(git -C "$repo" show --format= "$head" | git patch-id --stable | cut -d' ' -f1)
+jq --arg p "$patch" '.description = "Why this exists.\n\n<!-- anchor:review-status {\"\($p)\":{\"rounds\":2,\"result\":\"approved\"}} -->\n## Review status\n<!-- /anchor:review-status -->\n"' \
+  "$CR_JSON" > "$CR_JSON.new"
+mv "$CR_JSON.new" "$CR_JSON"
+out=$(bash "$review_cr_sh" 7 --repo "$repo")
+[[ "$(key "$out" REVIEW_STATUS_UNREVIEWED)" == 0 ]] || fail "review status: a recorded commit is reviewed: $out"
+[[ -z "$(key "$out" REVIEW_STATUS_FROM)" ]] || fail "review status: nothing to range over"
+ok "a commit the section records is reviewed"
 
 # --- GitLab: open discussions, skipping system notes and resolved threads ----
 export THREADS_JSON="$work/discussions.json"

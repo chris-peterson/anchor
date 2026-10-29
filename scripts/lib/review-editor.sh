@@ -19,6 +19,17 @@ source "$(dirname "${BASH_SOURCE[0]}")/review-host.sh"
 # shellcheck source=editor-flags.sh
 source "$(dirname "${BASH_SOURCE[0]}")/editor-flags.sh"
 
+# The artifact the invoking skill's review carries, by its editedFields target;
+# empty for a skill that names none.
+anchor_artifact_target() {
+  case "${review_skill:-}" in
+    commit)         printf 'commit-message' ;;
+    prepare-review) printf 'description' ;;
+    issue)          printf 'issue-body' ;;
+    release)        printf 'release-notes' ;;
+  esac
+}
+
 # A no-op editor is treated as unset (DIFF-16): an agent harness commonly exports
 # `GIT_EDITOR=true` to keep git from ever opening one, and honoring that would
 # open nothing, change nothing, and read as "saved unchanged" — an approval the
