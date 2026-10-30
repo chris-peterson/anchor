@@ -593,8 +593,29 @@ out=$(bash "$prepare_review_sh" --repo "$repo" --cr 7)
 [[ "$(key "$out" CR_PREEXISTING)" == 1 ]] \
   || fail "--cr must resolve a merged PR; got CR_PREEXISTING=$(key "$out" CR_PREEXISTING)"
 [[ "$(key "$out" CR_IID)" == 7 ]] || fail "--cr should resolve PR 7; got $(key "$out" CR_IID)"
+[[ "$(key "$out" CR_REFERENCE)" == 'repo#7' ]] || fail "a PR's reference is <repo>#<number>; got $(key "$out" CR_REFERENCE)"
 [[ "$(key "$out" CR_PENDING)" == 0 ]] || fail "--cr must not queue a second CR; got: $out"
 ok "--cr resolves a merged PR regardless of state"
+
+# The Review status section is anchor's record, not prose: the review baseline
+# leaves it out, and the write puts it back after the redrafted prose.
+section='<!-- anchor:review-status {"k":{"rounds":1,"result":"approved"}} -->'
+jq --arg s "$section" '.body = "seeded body\n\n" + $s + "\n"' "$CR_AFTER_CREATE" > "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo" --cr 7)
+[[ "$(cat "$(key "$out" CURRENT_DESC_PATH)")" == 'seeded body' ]] \
+  || fail "the baseline should hold the prose alone: $(cat "$(key "$out" CURRENT_DESC_PATH)")"
+[[ "$(cat "$(key "$out" CR_REVIEW_STATUS_PATH)")" == "$section" ]] \
+  || fail "the section should be set aside whole: $(cat "$(key "$out" CR_REVIEW_STATUS_PATH)")"
+draft="$work/redrafted.md"
+printf '## Context\n\nredrafted prose\n' > "$draft"
+carried=$(bash "$here/../scripts/review-status.sh" carry --section "$(key "$out" CR_REVIEW_STATUS_PATH)" --into "$draft")
+[[ "$carried" == STATUS_CARRIED=1 ]] || fail "carry should report the section: $carried"
+[[ "$(cat "$draft")" == "## Context
+
+redrafted prose
+
+$section" ]] || fail "the section should follow the redrafted prose: $(cat "$draft")"
+ok "an existing Review status section stays out of the review and goes back on write"
 
 repo="$(make_repo gitlab.com gl-state-explicit)"
 glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false merged
@@ -603,6 +624,7 @@ out=$(bash "$prepare_review_sh" --repo "$repo" --cr 7)
 [[ "$(key "$out" CR_PREEXISTING)" == 1 ]] \
   || fail "--cr must resolve a merged MR; got CR_PREEXISTING=$(key "$out" CR_PREEXISTING)"
 [[ "$(key "$out" CR_IID)" == 7 ]] || fail "--cr should resolve MR 7; got $(key "$out" CR_IID)"
+[[ "$(key "$out" CR_REFERENCE)" == 'repo!7' ]] || fail "an MR's reference is <repo>!<iid>; got $(key "$out" CR_REFERENCE)"
 ok "--cr resolves a merged MR regardless of state"
 # --- NOTHING_TO_REVIEW: the dead end exits, rather than reporting a state -----
 #
@@ -650,5 +672,22 @@ out=$(bash "$prepare_review_sh" --repo "$repo")
 [[ "$(key "$out" NOTHING_TO_REVIEW)" == 0 ]] \
   || fail "expected NOTHING_TO_REVIEW=0 on a feature branch; got: $out"
 ok "a feature branch with a CR reports NOTHING_TO_REVIEW=0"
+
+# A ready CR reports CR_DRAFT=false, which the post-rebase force-push gate
+# tells apart from the empty value of no CR.
+repo="$(make_repo gitlab.com gl-ready)"
+glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false
+sed 's/"draft":true/"draft":false/' "$CR_AFTER_CREATE" > "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo")
+[[ "$(key "$out" CR_DRAFT)" == false ]] || fail "a ready MR should report CR_DRAFT=false; got: $out"
+ok "a ready MR reports CR_DRAFT=false"
+
+repo="$(make_repo github.com gh-ready)"
+gh_pr_json "$(git -C "$repo" rev-parse HEAD)"
+sed 's/"isDraft":true/"isDraft":false/' "$CR_AFTER_CREATE" > "$CR_JSON"
+export DELETE_ON_MERGE=true
+out=$(bash "$prepare_review_sh" --repo "$repo")
+[[ "$(key "$out" CR_DRAFT)" == false ]] || fail "a ready PR should report CR_DRAFT=false; got: $out"
+ok "a ready PR reports CR_DRAFT=false"
 
 echo "all prepare-review tests passed"

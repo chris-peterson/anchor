@@ -93,6 +93,7 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 | `PRIOR_CR_IID` / `PRIOR_CR_STATE` | non-empty → the branch name already carries a CR that isn't open, which this run passed over; name it once (see "A reused branch name") |
 | `STATE` | `match` → proceed; anything else → surface and stop (see "Act on `STATE`") |
 | `CURRENT_DESC_PATH` | the review's left-hand side in Step 4 — an empty file until a CR holds a description |
+| `CR_REVIEW_STATUS_PATH` | the description's Review status section (REVIEW-31), set aside so the draft and its review hold prose alone; the write puts it back. Empty where there is none |
 | `DESC_DRAFT_PATH` | where to write the drafted description in Step 4 — already `mktemp`'d, so don't make your own |
 | `TEMPLATE_PATH` | the CR template to compose into (Step 3); empty when the hierarchy holds none, or when the pick needs the author |
 | `TEMPLATE_SOURCE` | which level answered — `local` / `project-settings` / `inherited` / `configured` / `ambiguous` / `none` |
@@ -368,7 +369,7 @@ The description gets pasted into a markdown renderer, so rendering bugs are user
     --base <DEFAULT_BRANCH> [--repo <path>]
   ```
 
-  It exits non-zero with one `UNRESOLVED <kind> <path> <token>` per problem, and each kind is an authoring fix: `ambiguous` (several changed lines match — the candidates are listed with their content, so copy a longer substring off the one you meant), `unchanged` (in the file but not on a changed line), `absent` (a typo), `unknown-file` (a path the range doesn't touch), `malformed` (an `anchor:` that isn't a link destination). Fix and re-run until it's clean — a placeholder that survives into Step 4's expansion stalls the write on a CR that already exists. It needs the clean tree Step 1's `STATE=match` already established: line content comes from the working tree and changed hunks from `<DEFAULT_BRANCH>...HEAD`, and it emits `DEEP_LINK_TREE=dirty` when those have diverged. Skip it on the `skip-deep-links` path, where the description carries no links at all.
+  It exits non-zero with one `UNRESOLVED <kind> <path> <token>` per problem, and each kind is an authoring fix: `ambiguous` (several changed lines match — the candidates are listed with their content, so copy a longer substring off the one you meant), `unchanged` (in the file but not on a changed line), `absent` (a typo), `unknown-file` (a path the range doesn't touch), `malformed` (an `anchor:` that isn't a link destination), `unbracketed` (a token with a parenthesis written without the angle brackets, which cut it at the `)`). Fix and re-run until it's clean — a placeholder that survives into Step 4's expansion stalls the write on a CR that already exists. It needs the clean tree Step 1's `STATE=match` already established: line content comes from the working tree and changed hunks from `<DEFAULT_BRANCH>...HEAD`, and it emits `DEEP_LINK_TREE=dirty` when those have diverged. Skip it on the `skip-deep-links` path, where the description carries no links at all.
 - **A description that predates this convention needs the backstop instead.** Re-running against a CR whose description came from elsewhere means hand-built anchors with hand-read line numbers, which `--check` doesn't see. Run `--verify <DESC_DRAFT_PATH> --forge <FORGE> --cr-url <CR_URL> --base <DEFAULT_BRANCH>` over those, and re-point each `SUSPECT`: `out-of-range`, `blank-line`, `unchanged-line`, `unknown-file`, `malformed` (a line part in a shape the forge won't resolve). A link that landed on the *wrong changed line* is the one case it can't see — which is what replacing it with a placeholder fixes.
 
 ### Open the review
@@ -385,20 +386,24 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --pro
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --mode <REVIEW_MODE> --files \
-  <CURRENT_DESC_PATH> <DESC_DRAFT_PATH> \
-  --title 'CR description' \
+  <CURRENT_DESC_PATH> <DESC_DRAFT_PATH> --name '<CR_REFERENCE>' \
+  --title '<CR_REFERENCE>: <CR_TITLE>' \
   --detail branch=<BRANCH> --detail CR=<CR_URL>
 ```
 
-`CURRENT_DESC_PATH` is the left-hand side — what the forge holds now, and an empty file where no CR holds anything yet. It's context for the draft, not the subject.
+The title is the review's heading, so it names the CR under review: its reference and title, and on `CR_PENDING` the repo and the Step 3 title (`<repo>: <title>`), since there is no reference yet.
+
+`CURRENT_DESC_PATH` is the left-hand side — what the forge holds now, and an empty file where no CR holds anything yet. It's context for the draft, not the subject. `--name` gives the reviewed file the CR's reference (`<repo>#<number>`, `<repo>!<iid>`) in place of the draft's temp name; drop it where `CR_REFERENCE` is empty, and the editor names the buffer for the repo and branch.
 
 **The manifest** names the CR (number and title), the repo and branch, the tool, the sections the draft carries, and any template checkbox items dropped as unverifiable — an editor window opens behind the terminal, and a review the user cannot see is one they never grade. After the table, the next thing you say is the verdict, the feedback echoed back, or the one-line write result.
 
 What each verdict leads to here:
 
-- **`approved`** — write the draft to the CR (see "Write it" below): the `editedFields` text with `target: "description"` where `edit` mode returned one, the draft otherwise. The reviewer read the description and signed off, so a second chat gate asking the same question is the ceremony this step exists to remove. Surface any comments an approving review still left after the write.
+- **`approved`** — write the draft to the CR (see "Write it" below): the `editedFields` text with `target: "description"` where the result carries one, the draft otherwise. The reviewer read the description and signed off, so a second chat gate asking the same question is the ceremony this step exists to remove. Surface any comments an approving review still left after the write.
 - **`changes-requested`** — fold in the comments and re-open on the revised draft, with the previous draft as the left-hand side rather than `CURRENT_DESC_PATH`: the description the forge holds is the comparison the first pass already answered.
-- **`incomplete`**, **`no-verdict`**, or no verdict line at all — nothing is written to the CR; take the fallback below.
+- **`rejected`** — nothing is written to the CR, and nothing falls back; say so and stop.
+- **`no-verdict`** with `raw.exitCode` `undecided` — ask Accept, Reject, or Reopen, and act on the answer as that verdict (`${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md`).
+- **`incomplete`**, any other **`no-verdict`**, or no verdict line at all — nothing is written to the CR; take the fallback below.
 
 ### When the review didn't grade it (or there's no CR yet)
 
@@ -437,6 +442,14 @@ It rewrites the draft in place and reports `EXPANDED=<n>`. All-or-nothing: an un
 **3. Write the expanded body to the CR.** The `--open` above already landed the approved text, so this is the same write in both cases: it replaces that body with the expanded one, or updates a pre-existing CR.
 
 **Screenshots referenced by local path (GitLab) upload first.** `glab api --method POST projects/<id>/uploads --form "file=@local.png"` returns a `markdown` field pointing at a hosted URL — swap each local reference for its upload result in `DESC_DRAFT_PATH` before the write below, so the description lands with working images on the first try. See the forge cookbook's binary-upload recipe; the `-F`/`--form` distinction there is the part that bites.
+
+**Put the Review status section back** first, so the write keeps the record of the CR's review rounds:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-status.sh" carry --section <CR_REVIEW_STATUS_PATH> --into <DESC_DRAFT_PATH>
+```
+
+`STATUS_CARRIED=0` means the CR had none, and the draft is unchanged.
 
 - **GitHub:** `gh pr edit --body-file <DESC_DRAFT_PATH>`.
 - **GitLab:** use the API form `glab api -X PUT projects/:fullpath/merge_requests/<CR_IID> -F "description=@<DESC_DRAFT_PATH>"` — `glab mr update -d` doesn't accept a file. See the bundled forge cookbook (`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`) for the full canonical invocation.

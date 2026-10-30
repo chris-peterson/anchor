@@ -46,6 +46,11 @@ guide's deep links**.
 - What problem or need drove this change? Use the author's *why* from Step 2.
 - Link any ticket, incident, or design doc. Mention a tracker URL or a bare id
   and `anchor` links it — expanding a bare id against `anchor.workTrackerBaseUri`.
+- Reference each forge issue the CR resolves as `Closes #<n>` (on GitLab,
+  `Closes <group>/<project>#<n>` for one in another project). `Closes` is a
+  closing keyword on both forges, so the merge to the default branch closes the
+  issue. Any other mention, such as `Refs #<n>`, links the CR and the issue: each forge
+  shows the CR on the issue, and the issue stays open.
 
 **Two short paragraphs, and the reviewer should know what this CR does by the end
 of the first.** Orientation earns its words only as much as the reviewer needs to
@@ -108,6 +113,23 @@ link. The reviewer is one click from the change; restating it is the "described
 the *what*" failure. Never expand a bullet into numbered prose steps that walk
 the edits ("remove the X block", "drop the Y key") — the deep-linked change
 already shows them.
+
+**Unrelated concerns get a group each.** Where the changeset carries changes
+that neither needs (a fix and an unrelated refactor, a feature and a dependency
+bump), the guide opens with one line naming them as unrelated, then gives each
+its own group, headed by the concern, with tiers inside a group where it has
+them. A reviewer can then judge, approve, or ask about one without reading the
+other. The line states what the CR holds; whether to split it is the author's
+call, and the guide doesn't argue for one.
+
+```markdown
+This CR carries two unrelated changes: the retry fix and the logger rename.
+
+**Retry fix**
+- [`src/upload.ext`](anchor:src/upload.ext#retryOn503) — the core change
+
+**Logger rename** — mechanical. Skim only.
+```
 
 The Review guide routes attention; it is not where author-homework lands. A
 "confirm the plan shows only the destroy of X, Y, Z" line is a check *you* run

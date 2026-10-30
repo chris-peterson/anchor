@@ -677,6 +677,17 @@ Known gaps:
 - **`gh` has no `milestone` command.** The list comes from the REST API
   (`gh api repos/{owner}/{repo}/milestones`); `--milestone` on `create`/`edit`
   still takes the title, not the number.
+- **`gh` resolves `--milestone` against open milestones only.** Assigning a
+  closed one, as when filing a shipped issue under the release it went out in,
+  fails with `'<title>' not found`. Set it by number through the API:
+
+  ```bash
+  gh api 'repos/{owner}/{repo}/milestones?state=closed&per_page=100' \
+    --jq '.[] | "\(.number)\t\(.title)"'
+  gh api -X PATCH repos/{owner}/{repo}/issues/<num> -F milestone=<number>
+  ```
+
+  `glab issue update -m <title>` accepts a closed milestone as it is.
 - **`gh issue edit` has no `--label`.** It's `--add-label` / `--remove-label`
   there, while `create` uses `--label` — the same word means different things on
   the two subcommands.
@@ -687,6 +698,53 @@ Known gaps:
   projects/:fullpath/issues` wants `milestone_id`, so `anchor` sets labels and
   milestone in the `glab issue update <iid>` call it already makes for the
   assignee.
+
+## Milestone create and edit
+
+A release plan creates the milestones it ships into and adjusts the ones already
+open: the title, the due date, the description.
+
+```bash
+# GitHub — create, then edit by number (from the list call above).
+gh api -X POST repos/{owner}/{repo}/milestones \
+  -f title='<title>' -f due_on=<YYYY-MM-DD>T12:00:00Z \
+  -F description=@/tmp/milestone-desc.aB3xKp.md
+gh api -X PATCH repos/{owner}/{repo}/milestones/<number> \
+  -f title='<title>' -f due_on=<YYYY-MM-DD>T12:00:00Z \
+  -F description=@/tmp/milestone-desc.aB3xKp.md
+
+# GitLab — create, then edit by the milestone's id.
+glab api -X POST projects/:fullpath/milestones \
+  -f title='<title>' -f due_date=<YYYY-MM-DD> \
+  -F description=@/tmp/milestone-desc.aB3xKp.md
+glab api -X PUT projects/:fullpath/milestones/<id> \
+  -f title='<title>' -f due_date=<YYYY-MM-DD> \
+  -F description=@/tmp/milestone-desc.aB3xKp.md
+```
+
+Send only the fields that change on an edit; both forges leave the rest alone.
+Closing is an edit too:
+
+```bash
+gh api -X PATCH repos/{owner}/{repo}/milestones/<number> -f state=closed    # open to reopen
+glab api -X PUT projects/:fullpath/milestones/<id> -f state_event=close     # activate to reopen
+```
+
+Known gaps:
+
+- **GitHub's create shifts a midnight-UTC due date back a day.** `POST` reads
+  `due_on` as UTC-8 and keeps that date, so `<date>T00:00:00Z` (anything before
+  08:00 UTC) stores the day before. `PATCH` keeps the UTC date. Send noon UTC on
+  both, so either path stores the date you meant; a bare date is a 422.
+- **GitLab's due date is a date.** `due_date` takes `YYYY-MM-DD` and stores it as
+  sent. The porcelain `glab milestone create` / `edit --due-date` takes the same
+  form; `create` rejects a timestamp, though its `--help` asks for one.
+- **GitLab edits by `id`, not `iid`.** The milestone's `id` is the global one in
+  the list and create responses; the `iid` in its web URL is not what
+  `PUT …/milestones/<id>` or `glab milestone edit <id>` takes.
+- **`glab milestone create` ignores the host in `-R`.** Outside a GitLab
+  checkout it posts to gitlab.com even when `-R` names another host. Use the `glab api` form
+  with `--hostname <host>`.
 
 ## Issue / CR comment from a file
 
