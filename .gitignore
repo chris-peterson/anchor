@@ -6,6 +6,5 @@ docs/*
 !docs/_sidebar.md
 !docs/ambient-rules.md
 !docs/guides.md
-!docs/favicon.svg
 __pycache__
 .DS_Store

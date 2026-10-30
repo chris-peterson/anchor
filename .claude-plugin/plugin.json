@@ -19,5 +19,6 @@
     "claude-code"
   ],
   "homepage": "https://chris-peterson.github.io/anchor/#/",
+  "icon": ".claude-plugin/icon.svg",
   "documentationUrl": "https://chris-peterson.github.io/anchor/#/"
 }

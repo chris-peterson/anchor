@@ -909,8 +909,7 @@ Build and release plumbing for the plugin — no skill behavior changes.
   Auth failures at create still fail fast (surface 401/403, ask to refresh — no
   silent URL-free fallback), and the URL-free (`skip-deep-links`) and open-in-web
   paths remain as non-default escapes the user can invoke rather than an up-front
-  prompt. This makes `prepare-review` the single home for CR creation now that
-  the ai-sdlc ship-it skill delegates all CR creation to it.
+  prompt. This makes `prepare-review` the single home for CR creation.
 
 ### Other
 
