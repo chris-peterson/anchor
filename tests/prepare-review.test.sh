@@ -599,10 +599,7 @@ ok "--cr resolves a merged PR regardless of state"
 
 # The Review status section is anchor's record, not prose: the review baseline
 # leaves it out, and the write puts it back after the redrafted prose.
-section='<!-- anchor:review-status {"k":{"rounds":1,"result":"approved"}} -->
-## Review status
-| Commit | Review rounds | Latest result |
-<!-- /anchor:review-status -->'
+section='<!-- anchor:review-status {"k":{"rounds":1,"result":"approved"}} -->'
 jq --arg s "$section" '.body = "seeded body\n\n" + $s + "\n"' "$CR_AFTER_CREATE" > "$CR_JSON"
 out=$(bash "$prepare_review_sh" --repo "$repo" --cr 7)
 [[ "$(cat "$(key "$out" CURRENT_DESC_PATH)")" == 'seeded body' ]] \

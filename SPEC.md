@@ -544,12 +544,12 @@ ready.
   in the round; the commit review shows it there again, and the message stays a
   record of what changed.
 - **[REVIEW-31]** Where the CR is the user's own, the system shall keep a Review
-  status section in its description: a table of the CR's commits, how many
-  review rounds each has been in, who reviewed it, and the latest round's
-  result, collapsed under a `Review status` summary rather than headed as a
-  section of the description, since it is anchor's record and the description's
-  headings are the author's. It shall name a reviewer by login without an `@`, since a mention in
-  a description notifies the person named. It shall key
+  status section in its description: one HTML comment the forge doesn't render,
+  carrying for each of the CR's commits how many review rounds it has been in,
+  who reviewed it, and the latest round's result. The section is anchor's
+  record, not the author's prose, and the skills that read it (`/anchor:review`,
+  `/anchor:merge`) are where a person sees it, so the description shows nothing
+  for it. It shall key
   each commit by its patch-id, so a rebase that leaves a commit's change as it
   was keeps its rounds and an amend that changes it starts at none. A session's
   round ledger ends with the session; a review of one new commit on top of
@@ -570,8 +570,7 @@ ready.
   ready, requesting reviewers) as the alternative.
 - **[REVIEW-34]** When a round that reached its verdict is recorded, the system
   shall record each item the user dropped as a decision in the Review status
-  section's data, on the newest commit the round reviewed, and show it in a
-  Notes column; and when a review starts on a CR with the section, it shall hold
+  section, on the newest commit the round reviewed; and when a review starts on a CR with the section, it shall hold
   every recorded decision as settled, raising one again only where the code has
   since changed in a way that makes it newly valid. A session's round ledger
   ends with the session, so without the record the next review raises what the

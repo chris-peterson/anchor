@@ -4,7 +4,7 @@
 #
 # Drives the real script against a scratch repo and stub `gh` / `glab` that serve
 # the CR from a fixture and capture the description written back, so what is
-# asserted is the table a reader would see: which commits a round counted, a
+# asserted is what that description records: which commits a round counted, a
 # rebase keeping a commit's rounds, an amend starting them over, and someone
 # else's CR left alone.
 set -euo pipefail
@@ -77,10 +77,16 @@ run() {
   out="$(bash "$status_sh" record --repo "$repo" "$@" 2>&1)" || status=$?
 }
 
-# The table's rows as "<short sha> <rounds> [<reviewed by>] <result>", oldest first.
-table() { sed -n 's/^| \([0-9a-f]\{8\}\) | \([0-9]*\) | \([^|]*\) | \([^|]*[^ |]\) | .*|$/\1 \2 [\3] \4/p' "$fx/body.md"; }
-# One commit's Notes cell.
-notes_of() { sed -n "s/^| $1 | .* | \(.*\) |\$/\1/p" "$fx/body.md"; }
+# shellcheck source=../scripts/lib/review-status.sh
+source "$here/../scripts/lib/review-status.sh"
+
+# The description's record of each commit in main..HEAD, oldest first.
+recorded() { (cd "$repo" && review_status_rows "$(review_status_data "$fx/body.md")" "$main" HEAD); }
+# Each commit as "<short sha> <rounds> [<reviewed by>] <result>".
+table() { recorded | jq -r '.[] | "\(.sha[0:8]) \(.rounds) [\(.by | join(", "))] \(if .rounds == 0 then "not reviewed" else .result end)"'; }
+# One commit's notes, joined.
+notes_of() { recorded | jq -r --arg s "$1" '.[] | select(.sha[0:8] == $s) | .notes | join("; ")'; }
+sections() { grep -c '^<!-- anchor:review-status {' "$fx/body.md"; }
 sha8() { git -C "$repo" rev-parse --short=8 "$1"; }
 
 # --- GitHub -----------------------------------------------------------------
@@ -99,9 +105,8 @@ run --cr 7 --base "$main" --head HEAD --result approved
 [[ "$(val STATUS_RECORDED)" == 3 ]] || fail "a whole-CR round counts every commit: $out"
 [[ "$(val STATUS_UNREVIEWED)" == 0 ]] || fail "nothing should be left unreviewed: $out"
 head -n 1 "$fx/body.md" | grep -qx 'Why this change exists.' || fail "the description above the section should survive: $(cat "$fx/body.md")"
-grep -qx '<summary>Review status</summary>' "$fx/body.md" || fail "the section should be appended: $(cat "$fx/body.md")"
-grep -qx '</details>' "$fx/body.md" || fail "the table should collapse under its summary: $(cat "$fx/body.md")"
-! grep -q '^#' "$fx/body.md" || fail "the section adds no heading to the description: $(cat "$fx/body.md")"
+[[ "$(sections)" == 1 && "$(tail -n 1 "$fx/body.md")" == '<!-- anchor:review-status {'* ]] \
+  || fail "the section should be appended as one comment line: $(cat "$fx/body.md")"
 [[ "$(table)" == "$(sha8 HEAD~2) 1 [me] approved
 $(sha8 HEAD~1) 1 [me] approved
 $(sha8 HEAD) 1 [me] approved" ]] || fail "first round table:"$'\n'"$(table)"
@@ -112,31 +117,29 @@ run --cr 7 --base HEAD~1 --head HEAD --result changes-requested
 [[ "$(table)" == "$(sha8 HEAD~2) 1 [me] approved
 $(sha8 HEAD~1) 1 [me] approved
 $(sha8 HEAD) 2 [me] changes-requested" ]] || fail "second round table:"$'\n'"$(table)"
-[[ "$(grep -c '<summary>Review status</summary>' "$fx/body.md")" == 1 ]] || fail "the section should be replaced, not repeated: $(cat "$fx/body.md")"
+[[ "$(sections)" == 1 ]] || fail "the section should be replaced, not repeated: $(cat "$fx/body.md")"
 ok "a round over one commit counts only that commit, and replaces the section"
 
 run --cr 7 --base HEAD~2 --head HEAD --result approved --note "declined to refactor the uploader" --note 'kept a|b --> as is'
 [[ "$status" == 0 ]] || fail "a round with notes exited $status: $out"
-[[ "$(notes_of "$(sha8 HEAD)")" == 'declined to refactor the uploader; kept a\|b --> as is' ]] \
+[[ "$(notes_of "$(sha8 HEAD)")" == 'declined to refactor the uploader; kept a|b --> as is' ]] \
   || fail "the notes ride on the newest commit the round reviewed: $(cat "$fx/body.md")"
 [[ -z "$(notes_of "$(sha8 HEAD~1)")" ]] || fail "an older commit in the round gets no note: $(cat "$fx/body.md")"
 data_line=$(grep '^<!-- anchor:review-status ' "$fx/body.md")
 [[ "$data_line" == *' -->' && "${data_line%' -->'}" != *'-->'* ]] \
   || fail "a note's --> can't close the data comment early: $(cat "$fx/body.md")"
-# shellcheck source=../scripts/lib/review-status.sh
-source "$here/../scripts/lib/review-status.sh"
 [[ "$(review_status_notes "$(review_status_data "$fx/body.md")")" == '["declined to refactor the uploader","kept a|b --> as is"]' ]] \
   || fail "the notes read back as written: $(review_status_data "$fx/body.md")"
 ok "a round's notes ride on its newest commit, and read back whole"
 
-# A new commit on top is in the table at no rounds until a review covers it.
+# A new commit on top is recorded at no rounds until a review covers it.
 printf 'd\n' > "$repo/d.txt"
 git -C "$repo" add d.txt
 git -C "$repo" commit --quiet -m "add d"
 printf 'after the section\n' >> "$fx/body.md"
 run --cr 7 --base HEAD~1 --head HEAD --result approved
 [[ "$(table | tail -n 1)" == "$(sha8 HEAD) 1 [me] approved" ]] || fail "the new commit should get its round:"$'\n'"$(table)"
-sed -n '/^<!-- \/anchor:review-status -->$/,$p' "$fx/body.md" | grep -qx 'after the section' || fail "text after the section should survive: $(cat "$fx/body.md")"
+sed -n '/^<!-- anchor:review-status {/,$p' "$fx/body.md" | grep -qx 'after the section' || fail "text after the section should survive: $(cat "$fx/body.md")"
 ok "a commit added later is recorded on its own, and text after the section survives"
 
 # Rebase onto a moved main: the shas change and the patches don't.
@@ -197,8 +200,6 @@ head -n 1 "$fx/body.md" | grep -q '^<!-- anchor:review-status {' || fail "an emp
 ok "gitlab: the section is written through the MR API"
 
 # A second reviewer joins the list once; the same reviewer again doesn't repeat.
-# shellcheck source=../scripts/lib/review-status.sh
-source "$here/../scripts/lib/review-status.sh"
 by=$(cd "$repo" && d=$(review_status_add '{}' "$main" HEAD approved me) \
   && d=$(review_status_add "$d" "$main" HEAD approved ana) \
   && d=$(review_status_add "$d" "$main" HEAD approved me) \
