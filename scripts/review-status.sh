@@ -23,7 +23,9 @@
 #   STATUS_SKIPPED=<reason>    nothing was written, on someone else's CR:
 #                              no-section (its description has none) or draft
 #   STATUS_UNREVIEWED=<n>      commits on the CR still at no rounds
-#   STATUS_SECTION_PATH=<path> the section as written, to show the user
+#   STATUS_ROWS_PATH=<path>    the CR's commits as recorded, oldest first, as
+#                              [{sha, key, rounds, by, result, notes}], to show
+#                              the user
 #
 # On a failure it prints STATUS_ERROR=<message> on stderr and exits non-zero; an
 # authentication failure is marked STATUS_AUTH=1 so the caller asks for fresh
@@ -177,9 +179,10 @@ fi
 recorded=$(review_status_data "$desc") \
   || { echo "STATUS_ERROR=the CR's Review status section holds data that isn't JSON; fix or delete its opening comment" >&2; exit 65; }
 data=$(review_status_add "$recorded" "$base" "$head" "$result" "$self" "${notes[@]+"${notes[@]}"}")
-rows=$(review_status_rows "$data" "$cr_base" "$tip")
+rows=$(anchor_tmpfile cr-review-status-rows json)
+review_status_rows "$data" "$cr_base" "$tip" > "$rows"
 section=$(anchor_tmpfile cr-review-status-section md)
-review_status_section "$data" "$rows" > "$section"
+review_status_section "$data" > "$section"
 updated=$(anchor_tmpfile cr-review-status-desc md)
 review_status_splice "$desc" "$section" > "$updated"
 
@@ -190,5 +193,5 @@ case "$forge" in
 esac
 
 echo "STATUS_RECORDED=$(git rev-list --count --no-merges "$base..$head")"
-echo "STATUS_UNREVIEWED=$(jq '[.[] | select(.rounds == 0)] | length' <<<"$rows")"
-echo "STATUS_SECTION_PATH=$section"
+echo "STATUS_UNREVIEWED=$(jq '[.[] | select(.rounds == 0)] | length' "$rows")"
+echo "STATUS_ROWS_PATH=$rows"

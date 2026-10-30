@@ -250,7 +250,7 @@ grep -q '^+one$' "$(key "$out" REVIEW_STATUS_DIFF_PATH)" || fail "review status:
 ok "an own CR with no Review status section has every commit unreviewed"
 
 patch=$(git -C "$repo" show --format= "$head" | git patch-id --stable | cut -d' ' -f1)
-jq --arg p "$patch" '.description = "Why this exists.\n\n<!-- anchor:review-status {\"\($p)\":{\"rounds\":2,\"result\":\"approved\",\"notes\":[\"declined to split the parser\"]}} -->\n## Review status\n<!-- /anchor:review-status -->\n"' \
+jq --arg p "$patch" '.description = "Why this exists.\n\n<!-- anchor:review-status {\"\($p)\":{\"rounds\":2,\"result\":\"approved\",\"notes\":[\"declined to split the parser\"]}} -->\n"' \
   "$CR_JSON" > "$CR_JSON.new"
 mv "$CR_JSON.new" "$CR_JSON"
 out=$(bash "$review_cr_sh" 7 --repo "$repo")

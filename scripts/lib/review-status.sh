@@ -7,11 +7,9 @@
 #
 # A commit is keyed by its patch-id, not its sha: a rebase that leaves its change
 # as it was keeps its rounds, and an amend that changes it starts again at none.
-# The keys live in a comment the forge doesn't render, on the line that opens
-# the section; the table below it is what a reader sees, collapsed under a
-# summary line, since it is a record the author's prose shouldn't sit beside as
-# an equal. Both forges render markdown inside <details> once blank lines set it
-# off from the tags.
+# The section is one HTML comment the forge doesn't render, so the record stays
+# out of the author's prose; /anchor:review and /anchor:merge are where it is
+# read.
 #
 # Sourced only. Every function reads the repo in the current directory.
 #
@@ -28,8 +26,8 @@
 #                         and each <note> added to the newest of them
 #   review_status_notes <data json>
 #                         every note recorded, on any commit, as a JSON array
-#   review_status_section <data json> <rows json>
-#                         the section, opening comment through closing comment
+#   review_status_section <data json>
+#                         the section: one comment line carrying the data
 #   review_status_splice <description file> <section file>
 #                         the description with its section replaced by the new
 #                         one, or the new one appended where it had none
@@ -88,26 +86,18 @@ review_status_notes() {
   jq -c '[.[] | .notes // [] | .[]]' <<<"$1"
 }
 
-# Commits drop off the table when the CR no longer has them, and their keys stay
-# in the data: a commit that comes back unchanged keeps what it had.
-# The data's `>` is written as its JSON escape, so a note holding `-->` can't
-# close the comment that carries it.
+# A commit the CR no longer has keeps its key in the data, so one that comes back
+# unchanged keeps what it had. The data's `>` is written as its JSON escape, so a
+# note holding `-->` can't close the comment that carries it.
 review_status_section() {
   printf '<!-- %s %s -->\n' "$REVIEW_STATUS_MARK" "$(jq -c . <<<"$1" | sed 's/>/\\u003e/g')"
-  printf '<details>\n<summary>Review status</summary>\n\n'
-  printf '| Commit | Review rounds | Reviewed by | Latest result | Notes |\n| --- | --- | --- | --- | --- |\n'
-  # A login goes in bare: an @ in a description notifies the person it names.
-  jq -r '.[] | "| \(.sha[0:8]) | \(.rounds) | \(.by | join(", ")) | \(if .rounds == 0 then "not reviewed" else .result end) | \(.notes | join("; ") | gsub("\\|"; "\\|") | gsub("\n"; " ")) |"' <<<"$2"
-  printf '\n</details>\n'
-  printf '<!-- /%s -->\n' "$REVIEW_STATUS_MARK"
 }
 
 review_status_splice() {
   if grep -q "<!-- $REVIEW_STATUS_MARK " "$1"; then
-    awk -v open="<!-- $REVIEW_STATUS_MARK " -v end="<!-- /$REVIEW_STATUS_MARK -->" -v section="$2" '
-      index($0, open) == 1 { while ((getline line < section) > 0) print line; skip = 1; next }
-      skip && $0 == end  { skip = 0; next }
-      !skip' "$1"
+    awk -v open="<!-- $REVIEW_STATUS_MARK " -v section="$2" '
+      index($0, open) == 1 { while ((getline line < section) > 0) print line; next }
+      1' "$1"
   elif grep -q '[^[:space:]]' "$1"; then
     cat "$1"
     [[ -z "$(tail -c 1 "$1")" ]] || printf '\n'
@@ -122,9 +112,8 @@ review_status_splice() {
 # to the section don't trail what is left.
 review_status_strip() {
   : > "$2"
-  awk -v open="<!-- $REVIEW_STATUS_MARK " -v end="<!-- /$REVIEW_STATUS_MARK -->" -v out="$2" '
-    index($0, open) == 1 { on = 1 }
-    on { print > out; if ($0 == end) on = 0; next }
+  awk -v open="<!-- $REVIEW_STATUS_MARK " -v out="$2" '
+    index($0, open) == 1 { print > out; next }
     /^[[:space:]]*$/ { held = held $0 "\n"; next }
     { printf "%s", held; held = ""; print }' "$1"
 }

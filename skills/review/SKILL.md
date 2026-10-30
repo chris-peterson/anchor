@@ -190,8 +190,8 @@ better one than most line-level remarks.
 Then read `DIFF_PATH` against that. Where the diff does something the description
 doesn't account for, that gap is the highest-value thing you have.
 
-A collapsed Review status section at the end of the description is anchor's record
-of the review rounds, not the author's prose; leave it out of the examination.
+The `<!-- anchor:review-status … -->` comment in the description is anchor's
+record of the review rounds, not the author's prose; leave it out of the examination.
 
 ## Step 3: Examine the diff against each quality
 
@@ -602,8 +602,9 @@ Comments posted. Recording a verdict is yours:
 ```
 
 **After a self-review.** The trend table, then one line per round: the commit
-and the items it fixed. Then the Review status table as the last record wrote
-it (`STATUS_SECTION_PATH`, without its comment lines). Then the dropped items, the issues filed, the CR's state
+and the items it fixed. Then the CR's review status as the last record wrote
+it, as a table of commit, rounds, reviewed by, and latest result (`STATUS_ROWS_PATH`;
+`not reviewed` where a commit has no rounds). Then the dropped items, the issues filed, the CR's state
 (still a draft, or ready with whoever was requested), and the CR URL.
 
 ## Related
