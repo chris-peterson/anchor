@@ -378,6 +378,19 @@ o=$(REVDIFF_STUB_CHOOSE="" run --skill commit --local --message-file "$xmsg" --p
 unset REVDIFF_ARGS_FILE
 ok "--explain: notes ride with the header, and only an edited note is feedback"
 
+# DIFF-47: a probe that can open a review announces it, naming what is under
+# review, and a launch announces its release on the way out.
+requested_of() { sed -n 's/^codes\.bridgeai\.anchor\/attention\.requested //p' <<<"$1"; }
+p=$(run --skill prepare-review --probe --files "$xmsg" "$xmsg" --title "acme#7: x" --detail CR=https://x.test/acme/widget/pull/7)
+[ "$(requested_of "$p" | jq -r .target)" = "https://x.test/acme/widget/pull/7" ] || fail "a CR review requested: $(requested_of "$p")"
+[ "$(requested_of "$p" | jq -r .skill)" = prepare-review ] || fail "the request names no skill: $(requested_of "$p")"
+p=$(run --skill issue --probe --files "$xmsg" "$xmsg" --title "acme-widget: Add a thing")
+[ "$(requested_of "$p" | jq -r .target)" = "acme-widget: Add a thing" ] || fail "a drafted document requested: $(requested_of "$p")"
+p=$(run --skill commit --probe --local)
+[ "$(requested_of "$p" | jq -r .target)" = "$(git -C "$repo" rev-parse --show-toplevel)" ] || fail "a range review requested: $(requested_of "$p")"
+grep -q '^codes\.bridgeai\.anchor/attention\.released ' <<<"$o" || fail "the launch announced no release: $o"
+ok "a probe requests the review it can open, and the launch releases it"
+
 # A viewer that can't show notes opens without them, and the probe says so first.
 export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
 git -C "$repo" config anchor.diff.tool stubtool

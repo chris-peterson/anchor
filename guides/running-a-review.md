@@ -15,10 +15,18 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill <skill> --probe <the
 ```
 
 Give the probe the **same `--skill` and the same subject** the launch will get
-(`--files <left> <right>`, a git range, `--local`). The mode follows the subject,
-so a bare probe answers for a review nobody is about to open and names a tool
-this one never will. Pass what it returned to the launch as `--mode
-<REVIEW_MODE>`, so the review opens in the tool the probe found.
+(`--files <left> <right>`, a git range, `--local`), and its `--title` and
+`--detail` too. The mode follows the subject, so a bare probe answers for a
+review nobody is about to open and names a tool this one never will. Pass what
+it returned to the launch as `--mode <REVIEW_MODE>`, so the review opens in the
+tool the probe found.
+
+A probe that finds a review it can open also announces `attention.requested`,
+naming what is under review from those arguments (a `--detail CR=<url>`, else a
+`--files` review's `--title`, else the repository), and the launch announces
+`attention.released` when it ends. beacon marks the tab between the two, so
+launch soon after the probe. Where the flow doesn't launch, the mark clears when
+the turn ends with nothing left running.
 
 | Key | What to do with it |
 | --- | --- |

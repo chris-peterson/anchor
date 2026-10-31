@@ -381,6 +381,27 @@ tool_preloads() {
   )
 }
 
+# What a review's announcements name as under review (DIFF-47): the CR a review
+# names, else a drafted document's title, else the repository the range is read
+# from. Read off the arguments the probe was given, the launch's own.
+review_span_target() {
+  local title="" cr=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --title)  title="${2:-}"; shift 2 ;;
+      --detail) [[ "${2:-}" != CR=* ]] || cr="${2#CR=}"; shift 2 ;;
+      *)        shift ;;
+    esac
+  done
+  if [[ -n "$cr" ]]; then
+    printf '%s' "$cr"
+  elif [[ "$subject_flag" == "--files" && -n "$title" ]]; then
+    printf '%s' "$title"
+  else
+    git rev-parse --show-toplevel 2>/dev/null || true
+  fi
+}
+
 if [[ "$probe_only" == "1" ]]; then
   report_superseded_key
   resolve_review
@@ -399,6 +420,12 @@ if [[ "$probe_only" == "1" ]]; then
   [[ -z "$preferred_mode" ]] || echo "REVIEW_MODE_CONFIGURED=$preferred_mode"
   if mode_available "$resolved_mode"; then
     echo "REVIEW_AVAILABLE=1"
+    # DIFF-47: the review is about to open, said from this foreground call
+    # because the launch runs in the background, where nothing it prints is seen
+    # until it is over. A subscriber marks the session before the next tool call
+    # opens the review.
+    bash "$(dirname "${BASH_SOURCE[0]}")/announce.sh" attention.requested \
+      "target=$(review_span_target "$@")" "skill=${review_skill}" || true
   else
     # A mode that is selected but cannot open is as unavailable as an absent
     # viewer; saying otherwise sends the caller to launch a review that reports a
@@ -414,6 +441,18 @@ if [[ "$probe_only" == "1" ]]; then
   fi
   exit 0
 fi
+
+# DIFF-47: the review is over on every way out of a launch, an early refusal or a
+# killed dispatcher included, so a subscriber's mark never outlives it. A fatal
+# signal skips the EXIT trap unless it is trapped too.
+# An EXIT trap's own status replaces the script's, so this one can't fail.
+announce_review_released() {
+  bash "$(dirname "${BASH_SOURCE[0]}")/announce.sh" attention.released || true
+}
+trap announce_review_released EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # Resolve "the whole branch vs the default branch" range. Tries the symbolic
 # origin/HEAD first, then the conventional origin/main and origin/master.

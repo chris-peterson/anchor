@@ -192,6 +192,7 @@ range="$(key "$out" DIFF_RANGE)"
 # picked by mode, so the stub is a mode named `dump`.
 mkdir -p "$work/fake-scripts/review/modes"
 cp "$review_diff_sh" "$work/fake-scripts/review-diff.sh"
+cp "$here/../scripts/announce.sh" "$work/fake-scripts/announce.sh"
 cp -R "$here/../scripts/lib" "$work/fake-scripts/lib"
 cat > "$work/fake-scripts/review/modes/dump.sh" <<'EOF'
 emit_review() {

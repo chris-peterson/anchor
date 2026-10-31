@@ -111,6 +111,29 @@ events:
       fields:
         uri: the issue's web address
         title: its title, as anchor filed it
+    - key: attention.requested
+      when: >-
+        the review probe found a review that can open. Announced from the probe
+        because the launch runs in the background, where nothing it prints is
+        seen until the review is over; a subscriber hears it before the next tool
+        call opens the review. A probe the skill doesn't follow with a launch
+        has no release to match it.
+      emitted_by: scripts/review-diff.sh
+      fields:
+        target: >-
+          what is under review: the CR's web address where the review names one,
+          a drafted document's title for a review of files, or the repository's
+          root
+        skill:
+          describe: the skill asking for the review, as passed to `--skill`
+          optional: true
+    - key: attention.released
+      when: >-
+        a review launch ended, on every way out of it: a verdict, a refusal, or
+        a killed dispatcher. Read with the verdict, by whichever tool the agent
+        reads it with.
+      emitted_by: scripts/review-diff.sh
+      fields: {}
     - key: release.created
       when: >-
         release published a release, once the forge reports it exists. A repo

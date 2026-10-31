@@ -1209,6 +1209,20 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   is open. The mark belongs in that label rather than in the pane's own
   appearance, which no escape sequence reaches and which would cost the split a
   profile of its own.
+- **[DIFF-47]** When the probe finds a review that can open, the system shall
+  announce `attention.requested`, naming what is under review (`target`) and
+  the skill asking (`skill`), and when a launch ends, on every way out of it, a
+  killed dispatcher included, it shall announce `attention.released`. The
+  target is the CR's URL where the review names one, a drafted document's title
+  where it reviews files, and the repository's root otherwise. Where the
+  calling session's label already carries the review's mark when the split
+  opens, the split shall copy it as it is rather than mark it again (DIFF-29).
+  The review's pane runs no Claude and its result is read after the turn ends,
+  so nothing a sibling observes says a review is open; anchor is the one party
+  that knows, and states it rather than painting it. The request comes from the
+  probe because the launch runs in the background, where nothing it prints is
+  seen until the review is over; announced from a foreground call, it reaches a
+  subscriber before the next tool call opens the split.
 - **[DIFF-30]** The system shall move the input focus to the split it opens. A
   split opened through the terminal's scripting interface is created without
   being selected, so the review draws in a pane the keyboard does not reach and
