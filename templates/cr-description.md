@@ -73,6 +73,12 @@ Three patterns that pad Context without informing it:
 
 Padding Context to feel substantive is a failure mode, not thoroughness.
 
+**A visual change puts its screenshots at the end of Context**, before the Review
+guide. When the change is to rendered output, the before/after is how the reviewer
+learns what changed, so it goes where they read first rather than after the
+sections they may stop before reaching. The capture and upload steps are in the
+[CR formatting guide](/guides/cr-formatting).
+
 **At lower verbosity.** The second paragraph folds into the first, then the first
 narrows to the problem and what the change does about it. Floor: the *why*
 sentence. Cutting past that leaves a description saying only *what*, which is the
