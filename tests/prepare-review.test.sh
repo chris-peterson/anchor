@@ -617,6 +617,29 @@ redrafted prose
 $section" ]] || fail "the section should follow the redrafted prose: $(cat "$draft")"
 ok "an existing Review status section stays out of the review and goes back on write"
 
+# Rounds the branch's commits had before the CR existed come from the local
+# record: a pending CR's section holds them, and an existing section gains the
+# commits it has no round for, keeping its own.
+repo="$(make_repo github.com gh-local-record)"
+: > "$CR_JSON"
+patch=$(git -C "$repo" show --format= HEAD | git patch-id --stable | cut -d' ' -f1)
+mkdir -p "$repo/.git/anchor"
+jq -n --arg p "$patch" '{($p): {rounds: 1, by: ["me"], result: "approved", kind: "agent-assisted"},
+  "elsewhere": {rounds: 2, by: ["me"], result: "approved"}}' > "$repo/.git/anchor/review-status.json"
+out=$(bash "$prepare_review_sh" --repo "$repo")
+[[ "$(key "$out" CR_PENDING)" == 1 ]] || fail "expected a pending CR: $out"
+section_file="$(key "$out" CR_REVIEW_STATUS_PATH)"
+grep -q "\"$patch\":{\"rounds\":1" "$section_file" || fail "a pending CR's section carries the branch's rounds: $(cat "$section_file")"
+! grep -q elsewhere "$section_file" || fail "another branch's commits stay out of the section: $(cat "$section_file")"
+
+gh_pr_json "$(git -C "$repo" rev-parse HEAD)" OPEN
+jq '.body = "prose\n\n<!-- anchor:review-status {\"k\":{\"rounds\":3,\"result\":\"approved\"}} -->\n"' "$CR_AFTER_CREATE" > "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo" --cr 7)
+section_file="$(key "$out" CR_REVIEW_STATUS_PATH)"
+grep -q '"k":{"rounds":3' "$section_file" || fail "an existing section keeps its rounds: $(cat "$section_file")"
+grep -q "\"$patch\":{\"rounds\":1" "$section_file" || fail "an existing section gains the local rounds: $(cat "$section_file")"
+ok "the local record's rounds for the branch's commits are carried into the section"
+
 repo="$(make_repo gitlab.com gl-state-explicit)"
 glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false merged
 cp "$CR_AFTER_CREATE" "$CR_JSON"

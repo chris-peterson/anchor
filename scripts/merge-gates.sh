@@ -370,8 +370,13 @@ if [[ -n "$self" && "$self" == "$author" ]]; then
     emit GATE_REVIEWS unreviewed
     emit GATE_REVIEWS_DETAIL "$never of $total commit$([[ "$total" == 1 ]] || echo s) never reviewed"
   else
+    read_only=$(jq '[.[] | select(.kind == "read-through")] | length' <<<"$rows")
     emit GATE_REVIEWS reviewed
-    emit GATE_REVIEWS_DETAIL "every commit reviewed"
+    if [[ "$read_only" -gt 0 ]]; then
+      emit GATE_REVIEWS_DETAIL "every commit reviewed, $read_only of $total last by read-through"
+    else
+      emit GATE_REVIEWS_DETAIL "every commit reviewed"
+    fi
   fi
 else
   emit GATE_REVIEWS none

@@ -177,7 +177,7 @@ suite:
       prepare-review: Open the PR/MR on an already-pushed branch, rebase on the default branch if behind, and draft a description that tells reviewers WHY the change exists.
       release: Cut a release for what has landed — recommend a semver bump, draft the notes, and drive the repo's own publish path.
       resolve-feedback: Fetch an open CR's review feedback and drive each thread to resolution — fix, reply, resolve.
-      review: Review an open change request — examine it against the qualities you've set, draft a fix for each finding, and open revdiff on those drafts alone so you keep, change, or drop each one, then on the whole change with the kept fixes in it.
+      review: Review an open change request, or a branch that has no CR yet — open revdiff on the commits you haven't reviewed so you read them and leave notes while agents examine them against the qualities you've set, draft a fix for each note and finding, then show those drafts alone so you keep, change, or drop each one, then the whole change with the kept fixes in it.
     rules:
       omit-attribution-trailers: Omit AI attribution trailers
       rewrite-history-through-anchor: Route history rewrites through `anchor`

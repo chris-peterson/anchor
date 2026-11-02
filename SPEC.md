@@ -244,7 +244,9 @@ behavior, not an independent authority — review them against the source.
   there is nothing to amend.
 - **[COMMIT-25]** When a commit the review covered is pushed to a branch with a
   CR, the system shall give that commit a round in the CR's Review status
-  section (REVIEW-31), on someone else's CR under the conditions REVIEW-32 sets.
+  section (REVIEW-31), on someone else's CR under the conditions REVIEW-32 sets;
+  pushed to a branch other than the default with no CR, it shall give the commit
+  a round in the local record (REVIEW-36).
 
 ### PREPARE — Prepare review
 
@@ -374,13 +376,20 @@ check.
   keyword, so that merging the change request closes the issue.
 - **[PREPARE-20]** When the system redrafts the description of a CR that has a
   Review status section (REVIEW-31), it shall leave the section out of the draft
-  and its review, and put it back unchanged when it writes the description.
+  and its review, and put it back when it writes the description, changed only
+  by what PREPARE-22 adds.
 - **[PREPARE-21]** Where the changeset carries changes that neither needs, the
   system shall open the Review guide with one line naming them as unrelated and
   give each its own group, headed by the concern, without arguing for a split.
   A reviewer reading a guide ranked by criticality alone can't tell two
   unrelated changes from one change and its supporting edits, and judges them
   as one.
+- **[PREPARE-22]** When the system writes a CR's description, it shall add to
+  its Review status section the rounds the local record (REVIEW-36) holds for
+  the branch's commits where the section has none, keeping the section's own,
+  and shall leave out the record's other commits. The rounds a branch had before
+  its CR existed are what let the CR's first review skip what was already
+  reviewed.
 
 ### REVIEW — Review a change request
 
@@ -400,7 +409,8 @@ ready.
 - **[REVIEW-02]** The system shall resolve the change request from a number, a
   URL, a source branch, or the current branch, on either forge, and shall take
   the forge from the resolved CR rather than from the working directory's
-  `origin`.
+  `origin`. Where the current branch has never had a CR, it shall review the
+  branch itself (REVIEW-36).
 - **[REVIEW-03]** Where the resolved CR is not open, the system shall name that
   state and confirm before continuing, rather than spending review attention on a
   change nobody is waiting on.
@@ -473,11 +483,13 @@ ready.
   for an unapplied item, its status, and shall write a table of the items beside
   the diff that is never committed. It shall refuse to open a review over a note
   revdiff would drop, so that a missing note always means the user removed it.
-  The round shall be reviewed in two passes: first the items pass, a diff from
+  The round shall be reviewed in up to three passes: on the first round, the
+  read pass (REVIEW-35); then the items pass, a diff from
   the CR head to the round's tree holding the drafts alone, where the user keeps,
   changes, or drops each item; then, with the dropped drafts reverted and the
-  changes made, the whole pass, a diff from the merge base holding the CR with
-  the kept fixes in it, seeded with a note per kept item. A draft read inside a
+  changes made, the whole pass, a diff from the range's base holding the CR with
+  the kept fixes in it, seeded with a note per kept item. An item drafted from a
+  note the user left in the read pass shall say so in its note. A draft read inside a
   large CR's diff is hard to tell from the change it comments on, so each item is
   decided before the change is judged as it will land. A note on a line no change
   in its pass is near goes in the table with an excerpt of that line.
@@ -494,8 +506,8 @@ ready.
   untouched, and shall post a kept applied item whose change is one run of lines
   as a suggestion and any other kept item as a thread, each anchored to the line
   it maps to in the CR head.
-- **[REVIEW-23]** When no finding clears the review-qualities template's bar, the
-  system shall say so in one line and treat the review as complete: nothing posts
+- **[REVIEW-23]** When no finding clears the review-qualities template's bar and
+  the user left no note in the read pass, the system shall say so in one line and treat the review as complete: nothing posts
   on someone else's CR, and a self-review goes straight to the handoff.
 - **[REVIEW-24]** When a self-review round is committed, the system shall offer
   another round scoped to that round's commit, showing how much each round so far
@@ -546,7 +558,9 @@ ready.
 - **[REVIEW-31]** Where the CR is the user's own, the system shall keep a Review
   status section in its description: one HTML comment the forge doesn't render,
   carrying for each of the CR's commits how many review rounds it has been in,
-  who reviewed it, and the latest round's result. The section is anchor's
+  who reviewed it, and the latest round's result and kind: `agent-assisted` when
+  quality agents examined the range, `read-through` when only the reviewer read
+  it. The section is anchor's
   record, not the author's prose, and the skills that read it (`/anchor:review`,
   `/anchor:merge`) are where a person sees it, so the description shows nothing
   for it. It shall key
@@ -557,17 +571,25 @@ ready.
 - **[REVIEW-32]** When a review round reaches its verdict, the system shall
   give every commit in the reviewed range another round, by the reviewer, with
   the result `changes-requested` when the round kept an item and `approved` when
-  it kept none. A round the user stops records nothing. On someone else's CR it
+  it kept none, and the kind `read-through` when the reviewer went on without
+  the quality agents' findings (REVIEW-35), `agent-assisted` otherwise. A
+  read-through counts as a review; its kind keeps it from passing for one the
+  agents examined. A round the user stops records nothing. On someone else's CR it
   shall record only where the description already has the section and the CR is
   out of draft: keeping the section is the author opting in, and a draft is the
   author saying the change isn't ready for review.
-- **[REVIEW-33]** When a self-review starts, the system shall read which commits
-  the Review status section has no round for. Where some commits have rounds and
-  some don't, it shall offer the range from the oldest unreviewed commit to the
-  head as the default, with the whole CR as the alternative. Where no commit has
-  a round, it shall review the whole CR. Where every commit has one, it shall
-  ask, re-reviewing the whole CR by default, with handing the CR off (marking it
-  ready, requesting reviewers) as the alternative.
+- **[REVIEW-33]** When a review starts, the system shall read which commits the
+  Review status section records as unreviewed: on the user's own CR, those no
+  round covered; on someone else's, those the user hasn't reviewed. It shall
+  review a reviewed commit again only where the user asked for the whole CR.
+  Where some commits are unreviewed, it shall review the range from the oldest
+  of them to the head without asking, and say how many it skipped. Where none is
+  reviewed, it shall review the whole CR. Where every commit is reviewed, it
+  shall ask: on the user's own CR handing it off (marking it ready, requesting
+  reviewers) by default, on someone else's stopping by default, with
+  re-reviewing the whole CR as the alternative on both. A review of what was
+  already reviewed spends the user's attention and the agents' minutes on a
+  question already answered.
 - **[REVIEW-34]** When a round that reached its verdict is recorded, the system
   shall record each item the user dropped as a decision in the Review status
   section, on the newest commit the round reviewed; and when a review starts on a CR with the section, it shall hold
@@ -575,6 +597,26 @@ ready.
   since changed in a way that makes it newly valid. A session's round ledger
   ends with the session, so without the record the next review raises what the
   user already declined.
+- **[REVIEW-35]** When the first round of a review starts, the system shall open
+  the range in revdiff as written, before anything is drafted, listing the CR's
+  open review threads beside it, and shall run the quality examination at the
+  same time. A note the user leaves there shall become an item with the user's
+  wording, exempt from the judgment of the agents' candidates (REVIEW-28). The
+  system shall draft nothing in the tree while that pass is open. If the pass
+  closes before the examination finishes, the system shall ask whether to wait
+  for it or go on with the user's notes alone. Reading the change is part of a
+  review whether or not the agents find anything, so the user reads while the
+  agents work instead of waiting on them, and decides afterwards whether their
+  findings are worth the wait.
+- **[REVIEW-36]** Where `/anchor:review` runs with no argument on a branch that
+  has never had a CR, the system shall review the branch's commits ahead of the
+  default branch as a self-review, reading their messages in place of a
+  description. It shall keep their Review status (REVIEW-31..34) in a local
+  record in the repository's git directory, in the section's shape and keyed the
+  same way, read and written where the section would be, and its handoff shall
+  offer to open the CR rather than to mark it ready. A review needs no CR to be
+  worth recording, and without the record every review before the CR opens
+  would cover the whole branch again.
 
 ### FEEDBACK — Resolve feedback
 
@@ -664,7 +706,9 @@ step after `prepare-review` opens the CR and `resolve-feedback` clears its threa
 - **[MERGE-19]** Where the CR is the user's own and its Review status section
   (REVIEW-31) shows a commit with no review round, the system shall list those
   commits and confirm before merging, offering to hand off to `/anchor:review`.
-  Reading the gates shall go on past it, as past open threads (MERGE-10).
+  Reading the gates shall go on past it, as past open threads (MERGE-10). Where
+  every commit is reviewed, it shall say how many were last reviewed by a
+  read-through (REVIEW-31).
 
 ### RELEASE — Release
 

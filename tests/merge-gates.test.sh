@@ -249,6 +249,12 @@ own_pr "Why.
 run
 expect GATE_REVIEWS reviewed "the section covers the commit"
 expect GATE_BLOCKING "" "a reviewed CR doesn't ask"
+expect GATE_REVIEWS_DETAIL "every commit reviewed" "a round recorded without a kind is agent-assisted"
+own_pr "Why.
+<!-- anchor:review-status {\"$patch\":{\"rounds\":1,\"result\":\"approved\",\"kind\":\"read-through\"}} -->"
+run
+expect GATE_REVIEWS reviewed "a read-through counts as reviewed"
+expect GATE_REVIEWS_DETAIL "every commit reviewed, 1 of 1 last by read-through" "the detail names read-through rounds"
 ok "github: an own CR's unreviewed commits ask before the merge, and reviewed ones pass"
 gh_pr
 printf '{"mergeCommitAllowed":false,"squashMergeAllowed":true,"rebaseMergeAllowed":true}' > "$fx/gh-repo.json"

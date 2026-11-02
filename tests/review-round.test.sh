@@ -112,7 +112,7 @@ grep -qx '#1 upper-two · nit' "$notes" || fail "an applied item's header carrie
 grep -qx 'Also: c.txt.' "$notes" || fail "an item's other sites are named in its one note: $(cat "$notes")"
 ! grep -q '^## c.txt' "$notes" || fail "a later site gets no note of its own: $(cat "$notes")"
 table="$root/(context).md"
-grep -qx '| 1 | upper-two | nit |  | Line 2 reads \\| better upper |' "$table" || fail "table row 1: $(cat "$table")"
+grep -qx '| 1 | upper-two | nit | in the diff | Line 2 reads \\| better upper |' "$table" || fail "table row 1: $(cat "$table")"
 grep -qx '| 3 | rename-ten | important | proposed | Line 10 should be renamed |' "$table" || fail "table row 3"
 [[ -z "$(git -C "$root" status --porcelain --untracked-files=all -- '(context).md')" ]] || fail "git leaves the table out of status"
 ok "seed: notes sit above their lines with the right marker, and the table lists every item, out of git's sight"
@@ -447,5 +447,49 @@ tledger=$(val ROUND_LEDGER "$o")
 [[ "$(jq -r '.rounds[0].notes | "\(.kept) \(.dropped)"' "$tledger")" == "0 2" ]] \
   || fail "a drop in the whole pass overrides a keep in the items pass: $(jq -c '.rounds[0].notes' "$tledger")"
 ok "two passes: the whole pass shows the CR with the kept fixes, and finish records what both decided"
+
+# ============================ the read pass ==============================
+
+rp="$work/read-pass"
+git init --quiet -b main "$rp"
+git -C "$rp" config user.email t@example.com; git -C "$rp" config user.name T; git -C "$rp" config commit.gpgsign false
+seq 1 30 | sed 's/^/row /' > "$rp/m.txt"
+git -C "$rp" add -A; git -C "$rp" commit --quiet -m base
+r0=$(git -C "$rp" rev-parse HEAD)
+sed -i.bak 's/^row 20$/row twenty/' "$rp/m.txt"; rm -f "$rp/m.txt.bak"
+git -C "$rp" commit --quiet -am change
+r1=$(git -C "$rp" rev-parse HEAD)
+o=$(round_cmd start --repo "$rp" --base "$r0" --head "$r1" --in-place); rdir=$(val ROUND_DIR "$o")
+jq -n '[{id:"T1", author:"ana", mine:false, file:"m.txt", line:20, body:"why spell it out?\nmore", replies:1}]' > "$work/rp-threads.json"
+o=$(round_cmd seed --dir "$rdir" --pass read --threads "$work/rp-threads.json" --title "Review of #9: Rows")
+[[ "$(val ROUND_FROM "$o")" == "$r0" && "$(val NOTE_COUNT "$o")" == 0 ]] || fail "the read pass diffs from the merge base, with no notes: $o"
+grep -q 'change request as written' "$rp/(context).md" || fail "the read pass says what it is: $(cat "$rp/(context).md")"
+# shellcheck disable=SC2016
+grep -qF -- '- `m.txt:20` · ana: why spell it out? (1 reply)' "$rp/(context).md" || fail "the read pass lists the open threads: $(cat "$rp/(context).md")"
+! grep -q 'this round' "$rp/(context).md" || fail "the read pass draws the CR's size alone: $(cat "$rp/(context).md")"
+! grep -q '^| # |' "$rp/(context).md" || fail "the read pass has no item table: $(cat "$rp/(context).md")"
+# The reviewer leaves one note of their own.
+jq -n '[{body:"twenty should stay a number", target:"line", file:"m.txt", startLine:20, endLine:20, side:"new"}]' > "$work/rp-ret0.json"
+o=$(round_cmd read --dir "$rdir" --returned "$work/rp-ret0.json")
+[[ "$(val ADDED "$o")" == 1 ]] || fail "a note in the read pass is the reviewer's own: $o"
+ok "read pass: the change as written, its open threads, and the reviewer's notes read back as new"
+
+sed -i.bak 's/^row twenty$/row 20/' "$rp/m.txt"; rm -f "$rp/m.txt.bak"
+round_cmd record --dir "$rdir" --id 1 >/dev/null
+o=$(round_cmd seed --dir "$rdir" --pass read || true)
+[[ "$(val ROUND_ERROR "$o")" == *"before any item is recorded"* ]] || fail "a read pass after a draft is refused: $o"
+jq -n '{items:[{id:1, slug:"keep-number", severity:"suggestion", status:"applied", from:"you",
+  finding:"Keep 20 a number", reason:"Twenty should stay a number.", sites:[{file:"m.txt", line:20, side:"old"}]}]}' > "$work/rp-items.json"
+o=$(round_cmd seed --dir "$rdir" --pass items --items "$work/rp-items.json") || fail "items pass after a read pass: $o"
+grep -q '^#1 keep-number · suggestion · your note$' "$rdir/notes.md" || fail "an item from a note says so: $(cat "$rdir/notes.md")"
+grep -q 'has 1 item for you (1 from your notes)' "$rp/(context).md" || fail "the items pass counts the reviewer's notes: $(cat "$rp/(context).md")"
+[[ -f "$rdir/read.read.json" ]] || fail "the read pass's answers are kept aside for finish"
+jq '[.[] | {body, target:"line", file, startLine:.line, endLine:.line, side}]' "$rdir/notes.json" > "$work/rp-ret1.json"
+o=$(round_cmd read --dir "$rdir" --returned "$work/rp-ret1.json")
+[[ "$(val KEEP "$o")" == 1 ]] || fail "items pass after a read pass: $o"
+o=$(round_cmd finish --dir "$rdir")
+[[ "$(jq -r '.rounds[0].notes | "\(.kept) \(.added)"' "$(val ROUND_LEDGER "$o")")" == "1 1" ]] \
+  || fail "finish counts the read pass's notes: $(jq -c '.rounds[0].notes' "$(val ROUND_LEDGER "$o")")"
+ok "read pass: a read pass after a draft is refused, its notes become marked items, and finish counts them"
 
 echo "# all checks passed"

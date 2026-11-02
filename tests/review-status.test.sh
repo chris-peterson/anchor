@@ -200,9 +200,26 @@ head -n 1 "$fx/body.md" | grep -q '^<!-- anchor:review-status {' || fail "an emp
 ok "gitlab: the section is written through the MR API"
 
 # A second reviewer joins the list once; the same reviewer again doesn't repeat.
-by=$(cd "$repo" && d=$(review_status_add '{}' "$main" HEAD approved me) \
-  && d=$(review_status_add "$d" "$main" HEAD approved ana) \
-  && d=$(review_status_add "$d" "$main" HEAD approved me) \
+by=$(cd "$repo" && d=$(review_status_add '{}' "$main" HEAD approved agent-assisted me) \
+  && d=$(review_status_add "$d" "$main" HEAD approved agent-assisted ana) \
+  && d=$(review_status_add "$d" "$main" HEAD approved agent-assisted me) \
   && review_status_rows "$d" "$main" HEAD | jq -c '[.[0].rounds, .[0].by]')
 [[ "$by" == '[3,["me","ana"]]' ]] || fail "reviewers should list each one once, in order: $by"
 ok "each reviewer is listed once, in the order they first reviewed"
+
+# A round's kind is the latest round's; data written before rounds had a kind
+# reads as agent-assisted, and a commit with no round has none.
+kinds=$(cd "$repo" && d=$(review_status_add '{}' "$main" HEAD~1 approved read-through me) \
+  && review_status_rows "$d" "$main" HEAD | jq -c '[.[].kind]')
+[[ "$kinds" == '["read-through","read-through",""]' ]] || fail "a read-through round is recorded as one: $kinds"
+legacy=$(cd "$repo" && review_status_rows "$(review_status_add '{}' "$main" HEAD approved agent-assisted me | jq -c 'map_values(del(.kind))')" "$main" HEAD | jq -c '[.[].kind] | unique')
+[[ "$legacy" == '["agent-assisted"]' ]] || fail "a round recorded without a kind reads as agent-assisted: $legacy"
+ok "each commit carries its latest round's kind"
+
+run --cr 12 --base "$main" --head HEAD --result approved --kind skimmed
+[[ "$status" == 64 ]] || fail "an unknown kind should exit 64, got $status: $out"
+run --cr 12 --base HEAD~1 --head HEAD --result approved --kind read-through
+[[ "$status" == 0 ]] || fail "a read-through record exited $status: $out"
+[[ "$(recorded | jq -r '.[-1].kind')" == read-through && "$(recorded | jq -r '.[0].kind')" == agent-assisted ]] \
+  || fail "--kind lands on the commits the round reviewed: $(recorded)"
+ok "record --kind marks a read-through round"

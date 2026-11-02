@@ -16,11 +16,14 @@
 # patches are what let one finding be reverted after the others have landed, and
 # what turns a single-hunk fix on someone else's CR into a suggestion.
 #
-# A round is reviewed in two passes, each seeded on its own. The items pass
-# diffs from the CR head, so the reviewer sees only the round's drafts and
-# decides each item without the CR's own change around it. The whole pass diffs
-# from the merge base, showing the CR as it will land with the kept fixes in it.
-# Each pass gets its own table and notes; `finish` reads both passes' answers.
+# A round is reviewed in up to three passes, each seeded on its own. The read
+# pass diffs from the merge base before anything is drafted, so the reviewer
+# reads the change as written and leaves notes of their own while the quality
+# agents examine it. The items pass diffs from the CR head, so the reviewer sees
+# only the round's drafts and decides each item without the CR's own change
+# around it. The whole pass diffs from the merge base, showing the CR as it will
+# land with the kept fixes in it. Each pass gets its own table and notes;
+# `finish` reads every pass's answers.
 #
 # Rounds are counted. The first `start` writes a ledger (ROUND_LEDGER) holding
 # the size of the CR's own diff; each later `start` given that ledger is the next
@@ -37,7 +40,8 @@
 #   review-round.sh start   --base <sha> --head <sha> (--worktree | --in-place) [--ledger <file>] [--repo <path>]
 #   review-round.sh record  --dir <round> --id <n>
 #   review-round.sh revert  --dir <round> --id <n>
-#   review-round.sh seed    --dir <round> --pass <items|whole> --items <items.json> [--title <heading, e.g. Review of <CR ref>: <CR title>>] [--cr-url <url>]
+#   review-round.sh seed    --dir <round> --pass <read|items|whole> --items <items.json> [--title <heading, e.g. Review of <CR ref>: <CR title>>] [--cr-url <url>]
+#                           (--pass read takes no --items, and lists the CR's open review threads given --threads <OPEN_FEEDBACK_PATH>)
 #   review-round.sh read    --dir <round> --returned <notes.returned.json>
 #   review-round.sh suggest --dir <round> --id <n> --forge <github|gitlab>
 #   review-round.sh files   --dir <round>
@@ -47,7 +51,7 @@
 #
 # The items file `seed` reads, written by the skill:
 #   {"items": [{"id": 1, "slug": "<kebab-case>", "severity": "critical|suggestion",
-#               "status": "applied|proposed|issue|leave",
+#               "status": "applied|proposed|issue|leave", "from": "you" (an item from a read-pass note),
 #               "finding": "<one line for the table>",
 #               "reason": "<the note: why, and for a proposal what it would touch>",
 #               "sites": [{"file": "<path>", "line": <n>, "side": "new|old"},
@@ -89,7 +93,7 @@ cmd="${1:-}"
 shift
 
 CTX_REPO=""
-dir="" base="" head="" place="" id="" items="" returned="" forge="" title="" ledger="" cr_url="" pass=""
+dir="" base="" head="" place="" id="" items="" returned="" forge="" title="" ledger="" cr_url="" pass="" threads=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)      CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
@@ -105,7 +109,8 @@ while [[ $# -gt 0 ]]; do
     --title)     title="${2:?--title needs text}"; shift 2 ;;
     --cr-url)    cr_url="${2:?--cr-url needs a URL}"; shift 2 ;;
     --ledger)    ledger="${2:?--ledger needs a file}"; shift 2 ;;
-    --pass)      pass="${2:?--pass needs items or whole}"; shift 2 ;;
+    --pass)      pass="${2:?--pass needs read, items, or whole}"; shift 2 ;;
+    --threads)   threads="${2:?--threads needs a file}"; shift 2 ;;
     *) echo "review-round.sh: unknown argument: $1" >&2; exit 64 ;;
   esac
 done
@@ -117,6 +122,18 @@ set_state() {
 }
 
 snapshot() { anchor_items_snapshot "$root" "$TABLE"; }
+
+# Each pass's answers are their own record: `finish` reads the read pass for the
+# notes the reviewer wrote unprompted, the items pass for the round's decisions,
+# and the whole pass for what it changed of them. Seeding the next pass, or
+# finishing, files the last pass's items and answers under its name.
+stash_pass() {
+  local last
+  last=$(jq -r '.pass // empty' "$dir/round.json")
+  [[ -n "$last" && -f "$dir/read.json" ]] || return 0
+  mv "$dir/read.json" "$dir/read.$last.json"
+  mv "$dir/items.json" "$dir/items.$last.json"
+}
 
 need_dir() {
   [[ -n "$dir" && -f "$dir/round.json" ]] || { echo "review-round.sh: --dir must name a round that start created" >&2; exit 64; }
@@ -244,20 +261,24 @@ revert)
 
 seed)
   need_dir
-  [[ -n "$items" && -r "$items" ]] || { echo "review-round.sh seed needs a readable --items file" >&2; exit 64; }
   case "$pass" in
+    read)  from=$(state diffBase) ;;
     items) from=$(state head) ;;
     whole) from=$(state diffBase) ;;
-    *) echo "review-round.sh seed needs --pass items or --pass whole" >&2; exit 64 ;;
+    *) echo "review-round.sh seed needs --pass read, items, or whole" >&2; exit 64 ;;
   esac
+  if [[ "$pass" == read && -z "$items" ]]; then
+    items="$dir/read-items.json"
+    echo '{"items":[]}' > "$items"
+  fi
+  [[ -n "$items" && -r "$items" ]] || { echo "review-round.sh seed needs a readable --items file" >&2; exit 64; }
+  [[ -z "$threads" || -r "$threads" ]] || { echo "review-round.sh seed: --threads file not readable: $threads" >&2; exit 64; }
   now=$(snapshot)
   [[ "$now" == "$(state lastTree)" ]] || die "the tree changed since the last record; record or revert that change before seeding the notes"
-  # The items pass's answers and items are what `finish` records as the round's
-  # decisions, so the whole pass keeps them aside rather than overwriting them.
-  if [[ "$pass" == whole && -f "$dir/read.json" && ! -f "$dir/read.items.json" ]]; then
-    mv "$dir/read.json" "$dir/read.items.json"
-    cp "$dir/items.json" "$dir/items.items.json"
-  fi
+  [[ "$pass" != read || "$now" == "$(state startTree)" ]] \
+    || die "the read pass shows the change as written; seed it before any item is recorded"
+  stash_pass
+  set_state pass "$pass"
   lines="$dir/changed.tsv"
   anchor_items_changed_lines "$root" "$from" "$now" > "$lines"
   rows=$(jq -r '.items[] | .id as $id | .sites | to_entries[]
@@ -296,7 +317,8 @@ seed)
     | [$it[0].items[] as $i
        | ($anchors | map(select(.id == $i.id)) | sort_by(.k) | first) as $s
        | select($s != null)
-       | ("#\($i.id) \($i.slug) · \($i.severity)" + ($i | status_tag)) as $head
+       | ("#\($i.id) \($i.slug) · \($i.severity)" + ($i | status_tag)
+          + (if $i.from == "you" then " · your note" else "" end)) as $head
        | ($i.sites[1:] | map("\(.file)\(if .line then ":\(.line)" else "" end)")) as $also
        | {id:$i.id, file:$s.file, line:$s.line,
           side:(if $s.marker == "-" then "old" else "new" end), marker:$s.marker,
@@ -324,22 +346,30 @@ seed)
   # saying what this review is, what quitting does, and where the change lives.
   n_items=$(jq '.items | length' "$items")
   n_applied=$(jq '[.items[] | select(.status == "applied")] | length' "$items")
+  n_yours=$(jq '[.items[] | select(.from == "you")] | length' "$items")
   plural=$([[ "$n_items" == 1 ]] || echo s)
-  if [[ "$pass" == items ]]; then
-    about="\`/anchor:review\` read this change request and has $n_items item$plural for you: $n_applied drafted in the
+  if [[ "$pass" == read ]]; then
+    about="This is the change request as written, before \`/anchor:review\` has drafted anything. Read it and
+leave a note on anything you'd change: each note becomes an item, and the agent drafts the fix.
+While you read, the quality agents examine the same diff; what they find joins your notes in
+the items pass, which shows only the drafted fixes."
+  elif [[ "$pass" == items ]]; then
+    yours=""
+    [[ "$n_yours" == 0 ]] || yours=" ($n_yours from your notes)"
+    about="\`/anchor:review\` read this change request and has $n_items item$plural for you$yours: $n_applied drafted in the
 tree, $(( n_items - n_applied )) without code. This diff holds only those drafts, from the change request's head,
 so each item is decided on its own; the whole change comes next, with what you kept in it.
 Each item is a note in the diff and a row in the table below."
-    made="drafted"
   else
     about="This is the whole change request with the $n_items item$plural you kept from \`/anchor:review\` in it,
 as it will land. Each kept item is a note in the diff and a row in the table below."
-    made="already made"
   fi
   n=$(state n)
   [[ "$n" == 1 ]] || about+="
 This is round $n: it looks only at what round $(( n - 1 ))'s commit changed."
-  if [[ "$pass" == items ]]; then
+  if [[ "$pass" == read ]]; then
+    accept="the agent drafts a fix for each of your notes and each finding the quality agents confirm, then opens those drafts for you to decide"
+  elif [[ "$pass" == items ]]; then
     accept="the agent takes out what you dropped and makes the changes you asked for, then opens the whole change with the fixes you kept"
   elif [[ "$(state place)" == in-place ]]; then
     accept="the agent makes the changes you kept or asked for, then opens the commit for you to approve"
@@ -354,14 +384,33 @@ This is round $n: it looks only at what round $(( n - 1 ))'s commit changed."
     [[ -z "$branch" ]] || where+=" on \`$branch\`"
   fi
   [[ -z "$cr_url" ]] || where+=" · [change request]($cr_url)"
-  sizes=$({ git -C "$root" diff --numstat --no-renames "$(state startTree)" "$now" | anchor_size_row "this round"
+  sizes=$({ [[ "$pass" == read ]] || git -C "$root" diff --numstat --no-renames "$(state startTree)" "$now" | anchor_size_row "this round"
     size_rows "$(state ledger)"
   } | anchor_size_stack current)
   where+="
 $sizes"
-  jq -r '.items[] | "| \(.id) | \(.slug) | \(.severity) | \({applied:"", proposed:"proposed", issue:"file an issue", leave:"leave it"}[.status]) | \(.finding | gsub("\\|"; "\\|") | gsub("\n"; " ")) |"' "$items" \
-    | anchor_items_table "${title:-Review of a change request}" "$about
-An item with no proposal is $made in the tree.
+  if [[ "$pass" == read ]]; then
+    anchor_items_intro "${title:-Review of a change request}" "$about
+This file, \`(context).md\`, is the guide to the review; it leaves the tree when
+the review closes.
+$where
+
+$(anchor_review_box --answer "Leave a note on any line you'd change, or anywhere in this file for the change
+as a whole. Say what you want; you don't need to write the fix. Closing with no
+notes means you found nothing to change." \
+  revdiff "$accept" "stop the review, and nothing is committed or posted")
+" > "$root/$TABLE"
+    if [[ -n "$threads" ]] && [[ "$(jq length "$threads")" -gt 0 ]]; then
+      jq -r '"## Open threads",
+        "Review threads on the change request nobody has resolved.",
+        "",
+        (.[] | "- `\(.file // "the change request")\(if .line then ":\(.line)" else "" end)` · \(.author): "
+               + (.body | split("\n")[0]) + (if .replies > 0 then " (\(.replies) repl\(if .replies == 1 then "y" else "ies" end))" else "" end))' \
+        "$threads" >> "$root/$TABLE"
+    fi
+  else
+    jq -r '.items[] | "| \(.id) | \(.slug) | \(.severity) | \({applied:"in the diff", proposed:"proposed", issue:"file an issue", leave:"leave it"}[.status]) | \(.finding | gsub("\\|"; "\\|") | gsub("\n"; " ")) |"' "$items" \
+      | anchor_items_table "${title:-Review of a change request}" "$about
 This file, \`(context).md\`, is the guide to the review; it leaves the tree when
 the review closes.
 $where
@@ -373,7 +422,8 @@ $(anchor_review_box --answer "Answer each item on its note in the diff, or on it
 - **Something new**: add a note of your own anywhere." \
   revdiff "$accept" "stop the round, and nothing is committed or posted")
 " \
-      "| # | slug | severity | proposal | finding |" > "$root/$TABLE"
+        "| # | slug | severity | proposal | finding |" > "$root/$TABLE"
+  fi
   if [[ -s "$dir/far.jsonl" ]]; then
     jq -rs '"## Notes away from the changes",
       "These concern lines no change is near, so they are here rather than in the diff. Answer each on its row above.",
@@ -527,26 +577,21 @@ finish)
   read -r files added removed < <(git -C "$root" diff --numstat --no-renames "$(state startTree)" "$now" \
     | awk '{ f++; a += $1; d += $2 } END { print f + 0, a + 0, d + 0 }')
   led=$(state ledger)
-  [[ -f "$dir/items.json" ]] || echo '{"items":[]}' > "$dir/items.json"
-  [[ -f "$dir/read.json" ]] || echo 'null' > "$dir/read.json"
+  stash_pass
   # The items pass decides each item; a whole pass after it can still drop or
-  # change one. With no whole pass, the one read is the items pass's.
-  if [[ -f "$dir/read.items.json" ]]; then
-    first_items="$dir/items.items.json" first_read="$dir/read.items.json"
-    whole_items="$dir/items.json" whole_read="$dir/read.json"
-  else
-    first_items="$dir/items.json" first_read="$dir/read.json"
-    whole_items=/dev/null whole_read=/dev/null
-  fi
+  # change one. A read pass contributes the notes the reviewer wrote unprompted.
+  pass_file() { if [[ -f "$dir/$1.$2.json" ]]; then echo "$dir/$1.$2.json"; else echo /dev/null; fi; }
   jq --argjson n "$(state n)" --argjson f "$files" --argjson a "$added" --argjson d "$removed" \
-    --slurpfile items "$first_items" --slurpfile read "$first_read" \
-    --slurpfile witems "$whole_items" --slurpfile wread "$whole_read" '
+    --slurpfile items "$(pass_file items items)" --slurpfile read "$(pass_file read items)" \
+    --slurpfile witems "$(pass_file items whole)" --slurpfile wread "$(pass_file read whole)" \
+    --slurpfile rread "$(pass_file read read)" '
     def count(s): [.[] | select(.status == s)] | length;
     def lines: if . == null then 0 else split("\n") | length end;
     def notelines: ([.items[].notes[] | select(.changed) | .returned | lines] | add // 0)
                    + ([.items[].rowNotes[] | lines] | add // 0)
                    + ([.added[].body | lines] | add // 0);
-    ($items[0].items) as $it | ($read[0]) as $r | ($wread[0] // null) as $w
+    ($items[0].items // []) as $it | ($wread[0] // null) as $w | ($rread[0] // null) as $rp
+    | ($read[0] // (if $rp == null then null else {items: [], added: []} end)) as $r
     | (($it + ($witems[0].items // [])) | unique_by(.id)) as $all
     | ([$w.items // [] | .[] | select(.decision == "drop") | .id]) as $wdrop
     | ([$w.items // [] | .[] | select(.decision == "change") | .id]) as $wchange
@@ -563,8 +608,9 @@ finish)
            changed:([$final[]|select(.decision=="change")]|length),
            dropped:([$final[]|select(.decision=="drop")]|length),
            asked:([$final[]|select(.decision=="ask")]|length),
-           added:(($r.added|length) + ($w.added // [] | length)),
-           lines:(($r | notelines) + (if $w == null then 0 else ($w | notelines) end))} end),
+           added:(($rp.added // [] | length) + ($r.added|length) + ($w.added // [] | length)),
+           lines:(($r | notelines) + (if $w == null then 0 else ($w | notelines) end)
+                  + (if $rp == null then 0 else ($rp | notelines) end))} end),
         edits:{files:$f, added:$a, removed:$d},
         percent:(if .crLines > 0 then ((($a + $d) * 1000 / .crLines) | round) / 10 else 0 end)}]
     | .rejected = ((.rejected // []) + (if $r == null then [] else

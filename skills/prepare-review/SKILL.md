@@ -93,7 +93,7 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 | `PRIOR_CR_IID` / `PRIOR_CR_STATE` | non-empty → the branch name already carries a CR that isn't open, which this run passed over; name it once (see "A reused branch name") |
 | `STATE` | `match` → proceed; anything else → surface and stop (see "Act on `STATE`") |
 | `CURRENT_DESC_PATH` | the review's left-hand side in Step 4 — an empty file until a CR holds a description |
-| `CR_REVIEW_STATUS_PATH` | the description's Review status section (REVIEW-31), set aside so the draft and its review hold prose alone; the write puts it back. Empty where there is none |
+| `CR_REVIEW_STATUS_PATH` | the description's Review status section (REVIEW-31), set aside so the draft and its review hold prose alone, with the rounds the branch's commits had before the CR existed added from the local record; the write puts it back. Empty where there is neither |
 | `DESC_DRAFT_PATH` | where to write the drafted description in Step 4 — already `mktemp`'d, so don't make your own |
 | `TEMPLATE_PATH` | the CR template to compose into (Step 3); empty when the hierarchy holds none, or when the pick needs the author |
 | `TEMPLATE_SOURCE` | which level answered — `local` / `project-settings` / `inherited` / `configured` / `ambiguous` / `none` |
@@ -101,7 +101,7 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 | `DELETE_BRANCH_ON_MERGE` | `false` on a CR this run opened → name it and offer the remediation (see "Branch deletion on merge"); `unknown` → say nothing |
 | `ANCHOR_CONFIG` | `anchor.*` keys to apply (Step 3), as JSON |
 
-If the block carries a `CR_CREATE_ERROR=…` line, the draft-open hit an auth or push failure — surface it and ask the user to refresh credentials; do **not** fall back to the URL-free path (the fail-fast-on-auth rule).
+If the block carries a `CR_CREATE_ERROR=…` line, the draft-open hit an auth or push failure — surface it and ask the user to refresh credentials; do **not** fall back to the URL-free path (the fail-fast-on-auth rule). A `PREPARE_ERROR=…` line names a review record (the CR's Review status section, or the local record) that isn't JSON: surface it and stop, since writing the description would carry the broken record forward or drop it.
 
 ### Operating against a non-cwd repo
 
@@ -449,7 +449,7 @@ It rewrites the draft in place and reports `EXPANDED=<n>`. All-or-nothing: an un
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-status.sh" carry --section <CR_REVIEW_STATUS_PATH> --into <DESC_DRAFT_PATH>
 ```
 
-`STATUS_CARRIED=0` means the CR had none, and the draft is unchanged.
+`STATUS_CARRIED=0` means there was no section and no local round to carry, and the draft is unchanged.
 
 - **GitHub:** `gh pr edit --body-file <DESC_DRAFT_PATH>`.
 - **GitLab:** use the API form `glab api -X PUT projects/:fullpath/merge_requests/<CR_IID> -F "description=@<DESC_DRAFT_PATH>"` — `glab mr update -d` doesn't accept a file. See the bundled forge cookbook (`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`) for the full canonical invocation.

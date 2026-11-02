@@ -94,9 +94,11 @@
 #                                the file is empty where no CR holds one yet
 #   CR_REVIEW_STATUS_PATH=<path> the description's Review status section, taken
 #                                out of CURRENT_DESC_PATH so the review compares
-#                                prose with prose; the write puts it back
-#                                (scripts/review-status.sh carry). Always a path;
-#                                the file is empty where there is no section
+#                                prose with prose, with the rounds the local
+#                                record holds for the branch's commits added
+#                                where the section has none; the write puts it
+#                                back (scripts/review-status.sh carry). Always a
+#                                path; the file is empty where there is neither
 #   DESC_DRAFT_PATH=<path>       temp file the skill writes the drafted description
 #                                to (the review's right-hand side)
 #   TEMPLATE_PATH=<path>         the CR template to compose into, empty when the
@@ -128,7 +130,9 @@
 # On an auth failure (or any failure) while opening the draft, it prints
 # CR_CREATE_ERROR=<message> and exits non-zero so the skill surfaces it and asks
 # the user to refresh credentials (the fail-fast-on-auth rule) rather than
-# silently dropping to the URL-free path.
+# silently dropping to the URL-free path. A review record it can't read (the
+# CR's Review status section, or the local record) prints PREPARE_ERROR=<message>
+# on stderr and exits 1.
 #
 # Exit codes:
 #   0   the block is a state the flow continues from
@@ -139,7 +143,7 @@
 #       past it means the CR step was silently dropped from whatever chain asked
 #       for it; the non-zero status is what makes that visible instead of leaving
 #       it to the reader of a KEY=value block.
-#   1   an operational failure (e.g. CR_CREATE_ERROR)
+#   1   an operational failure (CR_CREATE_ERROR, PREPARE_ERROR)
 #
 # Usage:
 #   prepare-review.sh                     # recon: resolve the CR, or report CR_PENDING
@@ -205,19 +209,7 @@ esac
 
 branch=$(git rev-parse --abbrev-ref HEAD)
 
-# Resolve the default branch: the symbolic origin/HEAD, then the conventional
-# main and master.
-default_branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null \
-  | sed 's@^origin/@@' || true)
-if [[ -z "$default_branch" ]]; then
-  if git rev-parse --verify --quiet origin/main >/dev/null; then
-    default_branch=main
-  elif git rev-parse --verify --quiet origin/master >/dev/null; then
-    default_branch=master
-  else
-    default_branch=main
-  fi
-fi
+default_branch=$(review_status_default_branch)
 
 on_default=0
 [[ "$branch" == "$default_branch" ]] && on_default=1
@@ -475,6 +467,21 @@ if [[ -n "$cr_url" ]]; then
   printf '%s\n' "$cr_desc" > "$current_desc_path.full"
   review_status_strip "$current_desc_path.full" "$review_status_path" > "$current_desc_path"
   rm -f "$current_desc_path.full"
+fi
+
+# Rounds the branch's commits had before the CR existed are in the local record
+# (scripts/lib/review-status.sh). They join the section where it has none for a
+# commit, so the CR's first review starts where those rounds stopped.
+if [[ "$on_default" -eq 0 ]] && git rev-parse --verify --quiet "origin/${default_branch}" >/dev/null; then
+  branch_base=$(git merge-base "origin/${default_branch}" HEAD)
+  local_data=$(review_status_local_data) \
+    || { echo "PREPARE_ERROR=the local review record at $(review_status_local_path) isn't JSON; fix or delete it" >&2; exit 1; }
+  local_rounds=$(review_status_pick "$local_data" "$branch_base" HEAD)
+  cr_rounds=$(review_status_data "$review_status_path") \
+    || { echo "PREPARE_ERROR=the CR's Review status section holds data that isn't JSON; fix or delete its opening comment" >&2; exit 1; }
+  if jq -e --argjson cr "$cr_rounds" 'keys - ($cr | keys) | length > 0' <<<"$local_rounds" >/dev/null; then
+    review_status_section "$(jq -c --argjson cr "$cr_rounds" '. + $cr' <<<"$local_rounds")" > "$review_status_path"
+  fi
 fi
 
 # --- State check: local tree vs the CR head ----------------------------------
