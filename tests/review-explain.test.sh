@@ -41,11 +41,11 @@ md=$(val EXPLAIN_NOTES "$o")
 [[ "$(val NOTE_COUNT "$o")" == 2 ]] || fail "one note per entry: $o"
 grep -qx '## a.txt:2 ( )' "$md" || fail "a note about line 3 sits under line 2, unchanged: $(cat "$md")"
 grep -qx 'Spelled out to match the heading.' "$md" || fail "the note's text is the note: $(cat "$md")"
-grep -qx '## c.txt:1 (+)' "$md" || fail "a whole-file note moves onto the file's first change: $(cat "$md")"
+grep -qx '## c.txt (file-level)' "$md" || fail "a whole-file note sits on its file: $(cat "$md")"
 grep -qx 'A new file for the fixture.' "$md" || fail "the note is trimmed: $(cat "$md")"
 [[ -s "${md%.md}.json" ]] || fail "the anchored JSON sits beside the markdown"
 [[ -z "$(git -C "$repo" diff --cached --name-only)" ]] || fail "anchoring stages nothing"
-ok "notes anchor on their lines, a whole-file note moves onto its change, and nothing is staged"
+ok "notes anchor on their lines, a whole-file note on its file, and nothing is staged"
 
 notes '{"notes": [
   {"file": "a.txt", "line": 25, "note": "far"},

@@ -491,8 +491,8 @@ ready.
   the kept fixes in it, seeded with a note per kept item. An item drafted from a
   note the user left in the read pass shall say so in its note. A draft read inside a
   large CR's diff is hard to tell from the change it comments on, so each item is
-  decided before the change is judged as it will land. A note on a line no change
-  in its pass is near goes in the table with an excerpt of that line.
+  decided before the change is judged as it will land. A note on a line of a file
+  its pass doesn't change goes in the table with an excerpt of that line (UX-10).
 - **[REVIEW-21]** When the review closes, the system shall read each item's fate
   from its note: left as seeded or answered with a yes (`ok`, `yes`, `apply`,
   👍) keeps it, deleted or answered with a drop word (`drop`, `ignore`,
@@ -1267,6 +1267,15 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   probe because the launch runs in the background, where nothing it prints is
   seen until the review is over; announced from a foreground call, it reaches a
   subscriber before the next tool call opens the split.
+- **[DIFF-48]** The system shall run revdiff with stop-at-annotations, so `]`
+  and `[` stop at a note on a whole file or on an unchanged line as they do at a
+  change. If the installed revdiff is older than 1.14.0, the first to have the
+  setting, or reports no version the system can read, then the system shall
+  refuse it as `no-verdict` with `raw.exitCode` `unusable`, naming the version
+  and the upgrade, and the probe shall report it unavailable with the same
+  reason. An older revdiff ignores the setting without an error, so a review run
+  on one would let the reviewer step past notes and finish believing they had
+  read them all.
 - **[DIFF-30]** The system shall move the input focus to the split it opens. A
   split opened through the terminal's scripting interface is created without
   being selected, so the review draws in a pane the keyboard does not reach and
@@ -1787,12 +1796,9 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   description, or the changeset as a whole. A note away from its code makes the
   reviewer leave the place they are reading to find what it means, where a note
   on the line reads like a comment in any other code review. So that a reviewer
-  stepping from hunk to hunk reaches every note, the system shall show a note on
-  a whole file on that file's first change, saying it concerns the whole file,
-  and shall put a note further than a few lines from every change in the
-  review's context file with the lines it concerns quoted, answered there on its
-  item's row, rather than on code it isn't about. Either still posts where it
-  concerns.
+  stepping from change to change with `]` reaches every note, a note on a whole
+  file or on a line no change is near among them, the system shall run revdiff
+  with stop-at-annotations (DIFF-48).
 - **[UX-10]** Where a note's line is in a file the review would otherwise leave
   out, because nothing in it changed, the system shall put the note in the
   review's context file, quoting the lines it concerns with three lines either

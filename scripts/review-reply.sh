@@ -210,16 +210,6 @@ jq -n --slurpfile r "$replies" --slurpfile c "$comments" --rawfile a "$anchors" 
                then "You asked: \($c[0][$x.comment - 1].body)\n\n\($x.reply)"
                else "Part of #\($x.comment); the reply is on its first note, at \($mine[0].where)." end))}]
 ' > "$state/notes.json"
-anchor_items_onto_hunks "$state/notes.json" "$lines"
-# A reply far from every change is quoted in the context file like one in an
-# unchanged file, since ] would step past it (revdiff#405).
-while IFS=$'\t' read -r cid f l w; do
-  [[ -n "$cid" ]] || continue
-  jq -nc --argjson id "$cid" --arg w "$w" --arg x "$(excerpt "$f" "$l" "$l")" \
-    '{id:$id, where:$w, excerpt:$x}' >> "$quoted"
-done < <(jq -r '.[] | select(.far) | "\(.id)\t\(.file)\t\(.line)\t\(.where // "\(.file):\(.line)")"' "$state/notes.json")
-jq '[.[] | select(.far | not)]' "$state/notes.json" > "$state/notes.json.tmp"
-mv "$state/notes.json.tmp" "$state/notes.json"
 anchor_items_notes_md "$state/notes.json" > "$state/notes.md"
 
 # The context file's half: every note in a table, then in full the replies the

@@ -5,9 +5,9 @@
 # functions answer to is documented at the top of ../diff.sh.
 #
 # Two parts of the invocation are not obvious and are worth keeping written down:
-#   * exit-code-on-annotations and no-tree go in as environment variables rather
-#     than flags, because an old revdiff ignores an unknown env var and
-#     hard-fails on an unknown flag.
+#   * exit-code-on-annotations, stop-at-annotations, and no-tree go in as
+#     environment variables rather than flags, because an old revdiff ignores an
+#     unknown env var and hard-fails on an unknown flag.
 #   * annotations come back through --output rather than stdout, since the pane's
 #     stdout belongs to the terminal.
 #   * a `--files` review runs in a scratch repo rather than revdiff's compare
@@ -29,6 +29,29 @@
 # shellcheck disable=SC2034
 diff_tool_caps='{"producesVerdict":true,"perHunkReview":false,"editableCommitMessage":false,"editableDescription":false,"sideMarkers":true,"preloadsAnnotations":true,"showsUntracked":true}'
 diff_tool_install_hint='brew install umputun/apps/revdiff'
+
+# 1.14 added stop-at-annotations, which makes `]` stop at a note outside a hunk.
+# An older revdiff ignores the variable and steps past those notes, so it is
+# refused rather than run.
+revdiff_min_version=1.14.0
+
+# Why <bin> can't run this review, printed, or nothing and status 1 when it can.
+diff_tool_unusable() {
+  local out version have need
+  out=$("$1" --version 2>&1) || true
+  if [[ ! "$out" =~ ([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
+    printf "revdiff's version is unreadable (%s); anchor needs %s or later (brew upgrade umputun/apps/revdiff)" \
+      "$(head -1 <<<"$out")" "$revdiff_min_version"
+    return 0
+  fi
+  version="${BASH_REMATCH[0]}"
+  have=$(printf '%d%04d%04d' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}")
+  [[ "$revdiff_min_version" =~ ([0-9]+)\.([0-9]+)\.([0-9]+) ]]
+  need=$(printf '%d%04d%04d' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}")
+  (( 10#$have < 10#$need )) || return 1
+  printf 'revdiff %s is older than %s, the first whose ] stops at every review note (brew upgrade umputun/apps/revdiff)' \
+    "$version" "$revdiff_min_version"
+}
 
 # The review's header also goes in the file tree, as a file at the root of the
 # repo, so it sits beside what is under review rather than only behind `i`.
@@ -326,7 +349,7 @@ diff_tool_command() {
     if [[ -d "$top/$p" ]]; then args+=("--include=${p%/}/"); else args+=("--only=$p"); fi
   done <<< "$paths"
 
-  cmd="REVDIFF_EXIT_CODE_ON_ANNOTATIONS=true"
+  cmd="REVDIFF_EXIT_CODE_ON_ANNOTATIONS=true REVDIFF_STOP_AT_ANNOTATIONS=true"
   # A lone unchanged markdown file turns revdiff's tree into an outline of its
   # headings, which reads as a list of files. A reply with nothing changed and
   # every answer in the context file is that case.

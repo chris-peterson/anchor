@@ -55,44 +55,6 @@ anchor_items_anchor() {
   fi
 }
 
-# TEMPORARY: works around https://github.com/umputun/revdiff/issues/405, where
-# revdiff's `]` steps from hunk to hunk and passes every note outside one.
-# Remove this and its callers' handling of `far` once `]` stops at annotations;
-# notes then stay on the lines they concern.
-#
-# Rewrites the notes JSON in place:
-#   - a note on a whole file moves onto that file's first changed line no other
-#     note holds, keeps `about: "file"`, and says so on its second line, after
-#     the header the readers match on;
-#   - a note within anchor_items_near lines of a change stays where it is, since
-#     it is on screen when `]` lands on that change;
-#   - a note further from every change than that is marked `far`, for the caller
-#     to show somewhere `]` can't skip, rather than on code it isn't about.
-anchor_items_near=3
-anchor_items_onto_hunks() {
-  local notes="$1" lines="$2" moved
-  moved=$(jq --rawfile l "$lines" --argjson near "$anchor_items_near" '
-    ($l | split("\n") | map(select(length > 0) | split("\t") | {file:.[0], side:.[1], line:(.[2] | tonumber)})) as $rows
-    | def slot: "\(.file)\t\(.marker)\t\(.line)";
-      def changes($f): [$rows[] | select(.file == $f)] | (map(select(.side == "+")) as $p | if ($p | length) > 0 then $p else . end);
-    reduce .[] as $n ({taken: (map(select(.marker != "file") | slot)), out: []};
-      if $n.marker == "file" then
-        . as $acc
-        | (changes($n.file) | sort_by(.line)
-           | map(select(("\($n.file)\t\(.side)\t\(.line)") as $k | $acc.taken | index($k) | not)) | first) as $h
-        | if $h == null then .out += [$n]
-          else .taken += ["\($n.file)\t\($h.side)\t\($h.line)"]
-            | .out += [$n + {line:$h.line, marker:$h.side, side:(if $h.side == "-" then "old" else "new" end), about:"file",
-                             body:($n.body | split("\n") | [.[0], "↪ about \($n.where // "the whole file")"] + .[1:] | join("\n"))}]
-          end
-      elif $n.marker == " " then
-        (changes($n.file) | map((.line - $n.line) | fabs) | min) as $d
-        | if $d != null and $d <= $near then .out += [$n] else .out += [$n + {far:true}] end
-      else .out += [$n] end)
-    | .out' "$notes")
-  printf '%s\n' "$moved" > "$notes"
-}
-
 # The notes JSON ({file, line, marker, body}) as the markdown revdiff preloads.
 anchor_items_notes_md() {
   jq -r '.[] | (if .marker == "file" then "## \(.file) (file-level)" else "## \(.file):\(.line) (\(.marker))" end)

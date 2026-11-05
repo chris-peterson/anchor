@@ -59,8 +59,8 @@
 # A site's line is the first line of the edit (applied) or the line the change
 # would go on (proposed), numbered in the tree as it now stands; an old-side line
 # is numbered in the pass's base (the CR head, or the merge base). A site with no
-# line is a note on the whole file. A line far from every change in the pass,
-# including one in a file the pass doesn't change, goes in the table instead.
+# line is a note on the whole file. A line in a file the pass doesn't change goes
+# in the table instead.
 #
 # Output is KEY=value lines on stdout. A failure prints ROUND_ERROR=<message>
 # and exits non-zero rather than leaving a half-written round.
@@ -325,10 +325,14 @@ seed)
           body:($head + "\n" + $i.reason
                 + (if ($also | length) > 0 then "\n\nAlso: " + ($also | join(", ")) + "." else "" end))}]
   ' > "$dir/notes.json"
-  anchor_items_onto_hunks "$dir/notes.json" "$lines"
-  # A note far from every change leaves the diff for the table (revdiff#405, see
-  # anchor_items_onto_hunks). It still posts on its own line, numbered now while
-  # the tree is the one the notes number.
+  # A note in a file the pass doesn't change leaves the diff for the table, since
+  # revdiff would open that file in full to show it (UX-10). It still posts on its
+  # own line, numbered now while the tree is the one the notes number.
+  jq --rawfile l "$lines" '
+    ($l | split("\n") | map(select(length > 0) | split("\t")[0]) | unique) as $changed
+    | map(.file as $f | if .marker == " " and ($changed | index($f)) == null then . + {far:true} else . end)
+  ' "$dir/notes.json" > "$dir/notes.json.tmp"
+  mv "$dir/notes.json.tmp" "$dir/notes.json"
   : > "$dir/far.jsonl"
   while IFS=$'\t' read -r iid f l; do
     [[ -n "$iid" ]] || continue
@@ -425,8 +429,8 @@ $(anchor_review_box --answer "Answer each item on its note in the diff, or on it
         "| # | slug | severity | proposal | finding |" > "$root/$TABLE"
   fi
   if [[ -s "$dir/far.jsonl" ]]; then
-    jq -rs '"## Notes away from the changes",
-      "These concern lines no change is near, so they are here rather than in the diff. Answer each on its row above.",
+    jq -rs '"## Notes on unchanged files",
+      "These concern files this pass doesn'"'"'t change, so they are here rather than in the diff, which would show each file in full. Answer each on its row above.",
       (.[] | "### \(.body | split("\n")[0]) at `\(.file):\(.line + 1)`", (.excerpt | rtrimstr("\n")),
              (.body | split("\n")[1:] | join("\n")))' "$dir/far.jsonl" >> "$root/$TABLE"
   fi
@@ -491,7 +495,7 @@ read)
                                       and (tag == $i.id or tag == null))) | first) as $b
            | {file:$m.file, line:$m.line, side:$m.side, seeded:$m.body,
               returned:($b.body // null),
-              crLine:(if $m.about == "file" then null else ($b.crLine // null) end),
+              crLine:($b.crLine // null),
               verdict:(if $b == null then "drop" else ($b.body | answer($m.body)) end)}
            | .changed = (.verdict == "change")] as $notes
         | ($far | map(select(.id == $i.id))

@@ -51,6 +51,9 @@
 #                                  only a review whose right side *is* the tree
 #                                  (default: 0, the tool reports for itself)
 #   diff_tool_available <name>  is the tool reachable (default: on PATH)
+#   diff_tool_unusable <bin>    print why the installed tool can't run this
+#                                  review, such as a version too old, or print
+#                                  nothing and return 1 (default: it can)
 #   diff_tool_before            run before the tool opens — a tool that
 #                                  reads the reviewer's answer out of the working
 #                                  tree takes its baseline here
@@ -176,6 +179,11 @@ emit_review() {
       diff_unavailable "$review_tool is not installed ($diff_tool_install_hint)" absent
       return
     fi
+  fi
+  local unusable
+  if declare -F diff_tool_unusable >/dev/null && unusable=$(diff_tool_unusable "$bin"); then
+    diff_unavailable "$unusable" unusable
+    return
   fi
   if ! anchor_host_available diff; then
     diff_unavailable "$review_tool needs a terminal to render, and this session has nowhere to open one (see $anchor_review_hosts_doc)" no-host

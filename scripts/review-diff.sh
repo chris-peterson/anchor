@@ -306,6 +306,7 @@ mode_available() {
     *)    [[ -n "$resolved_tool" ]] \
             && { command -v "$resolved_tool" >/dev/null 2>&1 \
                    || anchor_difftool_known "$resolved_tool"; } \
+            && [[ -z "$(tool_unusable)" ]] \
             && anchor_host_available diff ;;
   esac
 }
@@ -381,6 +382,22 @@ tool_preloads() {
   )
 }
 
+# Why the resolved diff tool, though installed, can't run the review (DIFF-48),
+# asked of its adapter as the launch asks it; empty when it can.
+tool_unusable() {
+  [[ -n "$resolved_tool" ]] || return 0
+  (
+    # shellcheck source=review/modes/diff.sh
+    source "$(dirname "${BASH_SOURCE[0]}")/review/modes/diff.sh"
+    f=$(diff_tool_file "$resolved_tool")
+    [[ -n "$f" ]] || exit 0
+    # shellcheck source=/dev/null
+    source "$f"
+    bin=$(command -v "$resolved_tool" 2>/dev/null) || exit 0
+    ! declare -F diff_tool_unusable >/dev/null || diff_tool_unusable "$bin" || true
+  )
+}
+
 # What a review's announcements name as under review (DIFF-47): the CR a review
 # names, else a drafted document's title, else the repository the range is read
 # from. Read off the arguments the probe was given, the launch's own.
@@ -431,6 +448,10 @@ if [[ "$probe_only" == "1" ]]; then
     # viewer; saying otherwise sends the caller to launch a review that reports a
     # host problem instead of showing anything.
     echo "REVIEW_AVAILABLE=0"
+    if [[ "$resolved_mode" == diff ]]; then
+      unusable=$(tool_unusable)
+      [[ -z "$unusable" ]] || echo "REVIEW_UNUSABLE=$unusable"
+    fi
   fi
   echo "REVIEW_EDIT_AVAILABLE=$edit_available"
   echo "REVIEW_PRELOADS=$(tool_preloads)"

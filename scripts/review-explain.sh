@@ -109,10 +109,17 @@ jq --rawfile a "$anchors" '
      | {file:$n.file, line:$s.line, marker:$s.marker,
         side:(if $s.marker == "-" then "old" else "new" end),
         body:($n.note | gsub("^\\s+|\\s+$"; ""))}]' "$notes" > "$dir/notes.json"
-anchor_items_onto_hunks "$dir/notes.json" "$lines"
+# A note on an unchanged line explains the change it sits beside, so one more
+# than this many lines from every change in its file is refused.
+near=3
 while IFS= read -r far; do
   errors+=("$far: not near a change; a note explains a change, so it goes on or beside one")
-done < <(jq -r '.[] | select(.far) | "\(.file):\(.line + 1)"' "$dir/notes.json")
+done < <(jq -r --rawfile l "$lines" --argjson near "$near" '
+  ($l | split("\n") | map(select(length > 0) | split("\t") | {file:.[0], side:.[1], line:(.[2] | tonumber)})) as $rows
+  | def changes($f): [$rows[] | select(.file == $f)] | (map(select(.side == "+")) as $p | if ($p | length) > 0 then $p else . end);
+  .[] | select(.marker == " ") | . as $n
+  | (changes($n.file) | map((.line - $n.line) | fabs) | min) as $d
+  | select($d == null or $d > $near) | "\(.file):\(.line + 1)"' "$dir/notes.json")
 if [[ ${#errors[@]} -gt 0 ]]; then
   for e in "${errors[@]}"; do echo "EXPLAIN_ERROR=$e"; done
   rm -rf "$dir"

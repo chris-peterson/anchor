@@ -249,7 +249,6 @@ start)
           | {id:($i.id|tostring), file:$i.file, line:$s.line, marker:$s.marker,
              side:(if $s.marker == "-" then "old" else "new" end), body:$n.value.body})]
   ' > "$dir/notes.json"
-  anchor_items_onto_hunks "$dir/notes.json" "$lines"
   anchor_items_notes_md "$dir/notes.json" > "$dir/notes.md"
 
   {

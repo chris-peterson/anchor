@@ -157,6 +157,11 @@ ones you kept in it. revdiff is the viewer that takes the notes and hands back
 what you left. Without revdiff, `/anchor:review` says so and stops before examining
 anything.
 
+`anchor` needs revdiff 1.14 or later, and opens no review on an older one. It
+runs revdiff with stop-at-annotations, so `]` stops at a note on a whole file or
+on an unchanged line as well as at each change, and reaching the last change
+means you have passed every note. Older versions ignore that setting.
+
 These two are the *tool* half of a review, one key per mode, and they are the
 only half you set: which mode a review runs in follows what it is reviewing
 ([A mode per subject](#a-mode-per-subject)). Whichever tool runs, it returns a

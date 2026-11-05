@@ -31,6 +31,7 @@ the turn ends with nothing left running.
 | Key | What to do with it |
 | --- | --- |
 | `REVIEW_AVAILABLE=0` | Nothing usable is installed: skip the launch and take the fallback ladder |
+| `REVIEW_UNUSABLE` present | The viewer is installed but can't run the review, such as a revdiff older than 1.14. Relay the line as it is: it names the version and the upgrade |
 | `REVIEW_MODE=edit` | Name where the editor will appear. A GUI editor opens a window behind the terminal, and a review waiting in another window looks the same as one that never opened |
 | `REVIEW_MODE_CONFIGURED` present | The run is opening a different shape than the preference named, because that one has nowhere to open. Name it |
 | `REVIEW_MODE_SOURCE=subject` / `REVIEW_TOOL_SOURCE=default` | anchor picked that half, not the user. Add the configuration hint from `execute-quietly.md` under "when anchor picked the tool"; `REVIEW_TOOL` names the tool about to open |
@@ -58,17 +59,15 @@ file, or a row in `(context).md`, sends them off to find the code it means.
 A file-level note on a file with changed lines is almost always a line note
 that lost its line. Find the line.
 
-Place each note where it belongs and let the scripts deliver it. A reviewer
-stepping through revdiff with `]` goes hunk to hunk, so while that holds the
-scripts adjust: a note within a few lines of a change stays put, since it is on
-screen when `]` lands there; a note on a whole file moves onto that file's first
-change, opening with *↪ about the whole file*; and a note far from every change
-goes into `(context).md` with the lines it concerns quoted, rather than onto
-code it isn't about.
+Place each note where it belongs and let the scripts deliver it. revdiff runs
+with stop-at-annotations, so `]` stops at a note on a whole file or on an
+unchanged line as it does at a change, and a reviewer stepping through reaches
+every note.
 
 A line in a file the review leaves out, because nothing in it changed, has
 nowhere in the diff to sit: revdiff would open that file in full. A reply round
-handles this itself, answering in `(context).md` with the lines quoted.
+and a review round handle this themselves, putting the note in `(context).md`
+with the lines quoted.
 
 ## Launch in the background
 

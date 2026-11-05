@@ -94,6 +94,7 @@ export ANCHOR_HOST_RUNNER="$bin/stub-host-runner.sh"
 # Its one direct call is --dump-keys, answered with a remapped next-change key.
 cat > "$bin/revdiff" <<'EOF'
 #!/usr/bin/env bash
+[ "${1:-}" != --version ] || { echo "version: ${REVDIFF_STUB_VERSION:-v1.14.0}"; exit 0; }
 [ "${1:-}" = --dump-keys ] && [ -z "${REVDIFF_STUB_NO_KEYS:-}" ] \
   && printf '%s\n' '# File/Hunk' 'map n next_item' 'map > next_hunk' 'map [ prev_hunk' \
        '# Annotations' 'map a confirm' 'map enter confirm' 'map A annotate_file' \
@@ -524,6 +525,33 @@ o=$( cd "$repo" && PATH="/usr/bin:/bin" bash "$dispatch" --previous ); j=$(json_
 [ "$(verdict_of "$o")" = no-verdict ]           || fail "absent-revdiff verdict"
 [ "$(jq -r .raw.exitCode <<<"$j")" = absent ]   || fail "absent-revdiff raw.exitCode"
 ok "revdiff: not installed -> no-verdict, producesVerdict false"
+
+# revdiff older than 1.14 steps past notes outside a hunk, so it is refused
+# (DIFF-48): the launch reports `unusable` and opens nothing, and the probe says
+# the same before it, naming the version and the upgrade.
+export REVDIFF_ARGS_FILE="$work/old-args.txt"; rm -f "$REVDIFF_ARGS_FILE"
+o=$( cd "$repo" && REVDIFF_STUB_VERSION=v1.13.2 bash "$dispatch" --previous 2>"$work/err.txt" ); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = no-verdict ]            || fail "an old revdiff -> no-verdict, got: $o"
+[ "$(jq -r .raw.exitCode <<<"$j")" = unusable ]  || fail "an old revdiff -> raw.exitCode unusable, got $(jq -c .raw <<<"$j")"
+[ ! -e "$REVDIFF_ARGS_FILE" ]                    || fail "an old revdiff should not be launched"
+grep -q 'revdiff 1.13.2 is older than 1.14.0' "$work/err.txt" || fail "the refusal names both versions: $(cat "$work/err.txt")"
+o=$( cd "$repo" && REVDIFF_STUB_VERSION=v1.13.2 bash "$dispatch" --skill review --tool revdiff --probe )
+grep -qx 'REVIEW_AVAILABLE=0' <<<"$o"            || fail "the probe reports an old revdiff unavailable: $o"
+grep -q '^REVIEW_UNUSABLE=revdiff 1.13.2 is older than 1.14.0.*brew upgrade' <<<"$o" || fail "the probe says why: $o"
+o=$( cd "$repo" && REVDIFF_STUB_VERSION=dev bash "$dispatch" --skill review --tool revdiff --probe )
+grep -q "^REVIEW_UNUSABLE=revdiff's version is unreadable (version: dev)" <<<"$o" || fail "an unreadable version is refused, not guessed: $o"
+o=$( cd "$repo" && REVDIFF_STUB_VERSION=v1.14.0-005f319 bash "$dispatch" --skill review --tool revdiff --probe )
+grep -qx 'REVIEW_AVAILABLE=1' <<<"$o"            || fail "1.14 is available: $o"
+! grep -q '^REVIEW_UNUSABLE=' <<<"$o"            || fail "an available revdiff carries no refusal: $o"
+unset REVDIFF_ARGS_FILE
+ok "revdiff: older than 1.14, or no readable version -> unusable, from the probe and the launch alike"
+
+# ] stops at every preloaded note, outside a hunk too.
+export REVDIFF_ENV_FILE="$work/env.txt" REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
+o=$(run --previous)
+grep -qx 'REVDIFF_STOP_AT_ANNOTATIONS=true' "$REVDIFF_ENV_FILE" || fail "revdiff runs with stop-at-annotations: $(cat "$REVDIFF_ENV_FILE")"
+unset REVDIFF_ENV_FILE
+ok "revdiff: launched with stop-at-annotations"
 
 # ref translation: --previous (HEAD~1...HEAD) -> revdiff base HEAD~1 against HEAD
 export REVDIFF_ARGS_FILE="$work/args.txt"

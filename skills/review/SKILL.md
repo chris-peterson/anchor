@@ -189,9 +189,11 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill review --tool revdif
 ```
 
 `REVIEW_AVAILABLE=0` stops the review here. Say that `/anchor:review` needs
-revdiff (`brew install umputun/apps/revdiff`, or https://revdiff.com) and, when
-`revdiff` is on `PATH`, that there is nowhere in this session to open it (see
-the configuring guide's "Where a review opens"). Nothing has been examined or
+revdiff 1.14 or later (`brew install umputun/apps/revdiff`, or
+https://revdiff.com). When the probe printed `REVIEW_UNUSABLE`, relay that line,
+which names the installed version and the upgrade. Otherwise, when `revdiff` is
+on `PATH`, say that there is nowhere in this session to open it (see the
+configuring guide's "Where a review opens"). Nothing has been examined or
 written yet, so there is nothing to clean up.
 
 ## Step 2: Read the description before the diff
@@ -431,8 +433,9 @@ key into the reply, since nobody should have to open the table to learn it:
 
 > Answer on each item's note. Leave it, or answer `ok` / 👍, to keep it.
 > Delete it, or answer `drop` / `no`, to drop it. Write anything else to change
-> it, and add a note of your own for anything new. A note far from the changes
-> is in `(context).md` instead; answer it on its row the same way. Then leave a
+> it, and add a note of your own for anything new. A note on a file this pass
+> doesn't change is in `(context).md` instead; answer it on its row the same
+> way. Then leave a
 > single note in `(context).md`, off the rows, saying `approve` to go ahead or
 > `reject` to stop the round, and quit with `q`.
 

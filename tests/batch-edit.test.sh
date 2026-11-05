@@ -23,6 +23,7 @@ trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin"
 cat > "$work/bin/revdiff" <<'EOF'
 #!/usr/bin/env bash
+[ "${1:-}" != --version ] || { echo "version: ${REVDIFF_STUB_VERSION:-v1.14.0}"; exit 0; }
 [ "${1:-}" = --dump-keys ] && printf '%s\n' 'map ] next_hunk' 'map [ prev_hunk' 'map a confirm' 'map A annotate_file'
 exit 0
 EOF
@@ -125,10 +126,8 @@ ok "start: the current text is the base and the proposed text is the tree, with 
 notes=$(val NOTES "$o")
 # line 8 of issues/7.md ("Retry them with backoff.") is added, line 7 (blank) too
 grep -qx '## issues/7.md:7 (+)' "$notes" || fail "a note sits above its line, on the added side: $(cat "$notes")"
-# An item's opening note moves onto its first change, since revdiff's ] steps
-# only through hunks (revdiff#405); with no free change left, it stays on the file.
-grep -qx '## issues/7.md:1 (+)' "$notes" || fail "the opening note sits on the item's first change: $(cat "$notes")"
-grep -qx '## replies/1.md (file-level)' "$notes" || fail "with no free change, the opening note stays on the file: $(cat "$notes")"
+grep -qx '## issues/7.md (file-level)' "$notes" || fail "an item's opening note sits on its file: $(cat "$notes")"
+grep -qx '## replies/1.md (file-level)' "$notes" || fail "a new item's opening note sits on its file: $(cat "$notes")"
 grep -qxF '#7 · Retry uploads on 503' "$notes" || fail "an item opens with a note naming it by its title: $(cat "$notes")"
 grep -qxF 'https://example.com/issues/7' "$notes" || fail "the opening note links the item"
 grep -qxF "Labels follow the repo's set." "$notes" || fail "a file note folds in under the opening note"

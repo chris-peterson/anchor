@@ -47,7 +47,8 @@ exit "${REVDIFF_STUB_RC:-0}"
 EOF
 chmod +x "$bin/stub-host-runner.sh"
 export ANCHOR_HOST_RUNNER="$bin/stub-host-runner.sh"
-printf '#!/usr/bin/env bash\nexit 0\n' > "$bin/revdiff"
+# shellcheck disable=SC2016  # the stub's own $1, expanded when it runs
+printf '#!/usr/bin/env bash\n[ "${1:-}" != --version ] || echo "version: v1.14.0"\nexit 0\n' > "$bin/revdiff"
 chmod +x "$bin/revdiff"
 export PATH="$bin:$PATH"
 
@@ -128,16 +129,15 @@ grep -qxF 'It closes the list.' "$state/reply.md" || fail "the quoted reply is w
 ok "review-reply.sh answers a note in an unchanged file in the context file, quoting the lines it is about"
 
 # The same question, with c.txt now changed 15 lines below it: the file is in the
-# review, but the reply is far from its change, so ] would step past it
-# (revdiff#405). It is quoted in the context file instead.
+# review, so the reply sits on its line there, however far from the change.
 cp "$repo/c.txt" "$work/c.keep"
 sed -i.bak 's/^c20$/c-twenty/' "$repo/c.txt"; rm -f "$repo/c.txt.bak"
 s=$( cd "$repo" && bash "$seed" --state "$state" --replies "$work/replies.json" --path a.txt --path b.txt --path c.txt )
-! grep -q '^## c.txt' "$state/notes.md" || fail "a reply far from its file's change is not in the diff: $(cat "$state/notes.md")"
-grep -qxF '>    5  c5' "$state/reply.md" || fail "a far reply is quoted in the context file: $(cat "$state/reply.md")"
+grep -qxF '## c.txt:5 ( )' "$state/notes.md" || fail "a reply far from its file's change sits on its line: $(cat "$state/notes.md")"
+! grep -qxF '>    5  c5' "$state/reply.md" || fail "a reply in a changed file is not quoted: $(cat "$state/reply.md")"
 cp "$work/c.keep" "$repo/c.txt"
 s=$( cd "$repo" && bash "$seed" --state "$state" --replies "$work/replies.json" --path a.txt --path b.txt --path c.txt )
-ok "review-reply.sh quotes a reply far from every change in its file, as it does one in an unchanged file"
+ok "review-reply.sh puts a reply on its line in a changed file, however far from the change"
 
 # --- the reply review ------------------------------------------------------
 export REVDIFF_ARGS_FILE="$work/args" REVDIFF_ENV_FILE="$work/env" REVDIFF_CONTEXT_CAPTURE="$work/context"

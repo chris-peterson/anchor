@@ -82,7 +82,8 @@ printf 'one\ntwo\n' > "$repo/a.txt"; git -C "$repo" add -A; git -C "$repo" commi
 # $bin: the probe cases below run against $bin precisely to assert what happens
 # when no viewer is installed.
 viewerbin="$work/viewerbin"; mkdir -p "$viewerbin"
-printf '#!/usr/bin/env bash\nexit 0\n' > "$viewerbin/revdiff"; chmod +x "$viewerbin/revdiff"
+# shellcheck disable=SC2016  # the stub's own $1, expanded when it runs
+printf '#!/usr/bin/env bash\n[ "${1:-}" != --version ] || echo "version: v1.14.0"\nexit 0\n' > "$viewerbin/revdiff"; chmod +x "$viewerbin/revdiff"
 run() { ( cd "$repo" && PATH="$viewerbin:$PATH" bash "$dispatch" "$@" ); }
 verdict_of() { sed -n 's/^REVIEW_VERDICT=//p' <<<"$1"; }
 json_of()    { sed -n 's/^REVIEW_OUTPUT=//p' <<<"$1"; }
@@ -512,6 +513,7 @@ ok "probe: with no diff viewer installed at all, the probe reports unavailable"
 # moves is only whether it can open.
 cat > "$bin/revdiff" <<'EOF'
 #!/usr/bin/env bash
+[ "${1:-}" != --version ] || { echo "version: ${REVDIFF_STUB_VERSION:-v1.14.0}"; exit 0; }
 exit 0
 EOF
 chmod +x "$bin/revdiff"
@@ -577,6 +579,7 @@ unset EDITOR_BUFFER_CAPTURE
 # otherwise — only whether the shape it picked can actually open.
 cat > "$bin/revdiff" <<'EOF'
 #!/usr/bin/env bash
+[ "${1:-}" != --version ] || { echo "version: ${REVDIFF_STUB_VERSION:-v1.14.0}"; exit 0; }
 exit 0
 EOF
 chmod +x "$bin/revdiff"
@@ -794,6 +797,7 @@ EOF
 chmod +x "$bin/run-host.sh"
 cat > "$viewerbin/revdiff" <<'EOF'
 #!/usr/bin/env bash
+[ "${1:-}" != --version ] || { echo "version: ${REVDIFF_STUB_VERSION:-v1.14.0}"; exit 0; }
 [ "${1:-}" != --dump-keys ] || exit 0
 for a in "$@"; do
   case "$a" in

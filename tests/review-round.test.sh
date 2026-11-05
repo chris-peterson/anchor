@@ -23,6 +23,7 @@ trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/bin"
 cat > "$work/bin/revdiff" <<'EOF'
 #!/usr/bin/env bash
+[ "${1:-}" != --version ] || { echo "version: ${REVDIFF_STUB_VERSION:-v1.14.0}"; exit 0; }
 [ "${1:-}" = --dump-keys ] && printf '%s\n' 'map ] next_hunk' 'map [ prev_hunk' 'map a confirm' 'map A annotate_file'
 exit 0
 EOF
@@ -101,12 +102,10 @@ EOF
 o=$(round_cmd seed --dir "$dir" --pass items --items "$items" --title "Review of #7: Tidy the list" --cr-url "https://example.com/pr/7")
 notes=$(val NOTES "$o")
 [[ "$(val NOTE_COUNT "$o")" == 3 ]] || fail "one note per item: $o"
-# Each note sits above its site; a note on an unchanged line within a few lines
-# of a change stays there, since ] brings it on screen (revdiff#405).
+# Each note sits above its site, an unchanged line included.
 grep -qx '## a.txt:1 ( )' "$notes" || fail "item 1 sits above line 2, on unchanged line 1: $(cat "$notes")"
 grep -qx '## a.txt:8 ( )' "$notes" || fail "item 2 sits above its insertion: $(cat "$notes")"
 grep -qx '## a.txt:10 ( )' "$notes" || fail "item 3 sits above line 11, near the insertion: $(cat "$notes")"
-! grep -q '^↪' "$notes" || fail "a note near a change is not moved: $(cat "$notes")"
 grep -qx '#3 rename-ten · important · proposed' "$notes" || fail "a proposal's header names its status"
 grep -qx '#1 upper-two · nit' "$notes" || fail "an applied item's header carries no status"
 grep -qx 'Also: c.txt.' "$notes" || fail "an item's other sites are named in its one note: $(cat "$notes")"
@@ -316,13 +315,14 @@ round_cmd finish --dir "$dir" >/dev/null
 git -C "$repo" worktree list | grep -q anchor-review-tree && fail "the worktree is still registered"
 ok "finish: the worktree is removed and unregistered"
 
-# revdiff#405: ] steps hunk to hunk. A whole-file note moves onto its file's
-# change; a note far from every change goes to the table with an excerpt, is
-# answered on its row, and still posts on its own line.
+# A note stays on the line it concerns, near a change or not, and a whole-file
+# note stays on its file: revdiff's ] stops at each (stop-at-annotations). A
+# note in a file the pass doesn't change goes to the table with an excerpt, is
+# answered on its row, and still posts on its own line (UX-10).
 far="$work/far"
 git init --quiet -b main "$far"
 git -C "$far" config user.email t@example.com; git -C "$far" config user.name T; git -C "$far" config commit.gpgsign false
-seq 1 40 | sed 's/^/fn_/' > "$far/app.sh"; printf 'unchanged\n' > "$far/other.sh"
+seq 1 40 | sed 's/^/fn_/' > "$far/app.sh"; printf 'unchanged\n' > "$far/other.sh"; printf 'u1\nu2\nu3\n' > "$far/untouched.sh"
 git -C "$far" add -A; git -C "$far" commit --quiet -m base
 f0=$(git -C "$far" rev-parse HEAD)
 sed -i.bak -e 's/^fn_5$/fn_5_renamed/' -e 's/^fn_30$/fn_30_renamed/' "$far/app.sh"; rm -f "$far/app.sh.bak"
@@ -333,27 +333,28 @@ o=$(round_cmd start --repo "$far" --base "$f0" --head "$f1" --in-place); fdir=$(
 jq -n '{items:[
   {id:1, slug:"near", severity:"suggestion", status:"proposed", finding:"f", reason:"About line 7.", sites:[{file:"app.sh", line:7}]},
   {id:2, slug:"far", severity:"suggestion", status:"proposed", finding:"g", reason:"About line 18.", sites:[{file:"app.sh", line:18}]},
-  {id:3, slug:"whole", severity:"suggestion", status:"proposed", finding:"h", reason:"About other.sh.", sites:[{file:"other.sh"}]}]}' > "$work/far-items.json"
+  {id:3, slug:"whole", severity:"suggestion", status:"proposed", finding:"h", reason:"About other.sh.", sites:[{file:"other.sh"}]},
+  {id:4, slug:"elsewhere", severity:"suggestion", status:"proposed", finding:"i", reason:"About untouched.sh.", sites:[{file:"untouched.sh", line:2}]}]}' > "$work/far-items.json"
 o=$(round_cmd seed --dir "$fdir" --pass whole --items "$work/far-items.json")
 fnotes=$(val NOTES "$o"); ftable="$far/(context).md"
 grep -qx '## app.sh:6 ( )' "$fnotes" || fail "a note near a change stays put: $(cat "$fnotes")"
-grep -qx '## other.sh:1 (+)' "$fnotes" || fail "a whole-file note moves onto its file's change: $(cat "$fnotes")"
-grep -qx '↪ about the whole file' "$fnotes" || fail "the moved note says what it concerns"
-! grep -q '^#2 ' "$fnotes" || fail "a note far from every change is not in the diff: $(cat "$fnotes")"
-grep -qF "### #2 far · suggestion · proposed at \`app.sh:18\`" "$ftable" || fail "the far note is in the table: $(cat "$ftable")"
-grep -qx '>   18  fn_18' "$ftable" || fail "the far note quotes the line it concerns: $(cat "$ftable")"
-row2=$(grep -n '^| 2 ' "$ftable" | cut -d: -f1)
-jq --argjson n "$row2" '[.[] | {body, target:"line", file, startLine:.line, endLine:.line, side}]
+grep -qx '## app.sh:17 ( )' "$fnotes" || fail "a note far from every change stays on its line: $(cat "$fnotes")"
+grep -qx '## other.sh (file-level)' "$fnotes" || fail "a whole-file note stays on its file: $(cat "$fnotes")"
+! grep -q '^#4 ' "$fnotes" || fail "a note in an unchanged file is not in the diff: $(cat "$fnotes")"
+grep -qF "### #4 elsewhere · suggestion · proposed at \`untouched.sh:2\`" "$ftable" || fail "the unchanged file's note is in the table: $(cat "$ftable")"
+grep -qx '>    2  u2' "$ftable" || fail "the table quotes the line the note concerns: $(cat "$ftable")"
+row4=$(grep -n '^| 4 ' "$ftable" | cut -d: -f1)
+jq --argjson n "$row4" '[.[] | {body, target:(if .line == null then "file" else "line" end), file, startLine:.line, endLine:.line, side}]
     + [{body:"drop", target:"line", file:"(context).md", startLine:$n, endLine:$n, side:"new"}]' "$fdir/notes.json" > "$work/far-returned.json"
 o=$(round_cmd read --dir "$fdir" --returned "$work/far-returned.json")
-[[ "$(val DROP "$o")" == 2 && "$(val KEEP "$o")" == "1,3" ]] || fail "a far item is answered on its row: $o"
-jq '[.[] | {body, target:"line", file, startLine:.line, endLine:.line, side}]' "$fdir/notes.json" > "$work/far-kept.json"
+[[ "$(val DROP "$o")" == 4 && "$(val KEEP "$o")" == "1,2,3" ]] || fail "an unchanged file's item is answered on its row: $o"
+jq '[.[] | {body, target:(if .line == null then "file" else "line" end), file, startLine:.line, endLine:.line, side}]' "$fdir/notes.json" > "$work/far-kept.json"
 o=$(round_cmd read --dir "$fdir" --returned "$work/far-kept.json")
-[[ "$(val KEEP "$o")" == "1,2,3" ]] || fail "a far item left alone is kept, not read as a deleted note: $o"
-[[ "$(jq '.items[] | select(.id == 2) | .notes[0].crLine' "$(val ROUND_READ "$o")")" == 17 ]] \
-  || fail "a far item still posts on its own line: $(jq -c '.items[1].notes' "$(val ROUND_READ "$o")")"
+[[ "$(val KEEP "$o")" == "1,2,3,4" ]] || fail "an item in the table left alone is kept, not read as a deleted note: $o"
+[[ "$(jq '.items[] | select(.id == 4) | .notes[0].crLine' "$(val ROUND_READ "$o")")" == 1 ]] \
+  || fail "an unchanged file's item still posts on its own line: $(jq -c '.items[3].notes' "$(val ROUND_READ "$o")")"
 round_cmd finish --dir "$fdir" >/dev/null
-ok "revdiff#405: a whole-file note moves onto its change, a far note goes to the table and is answered on its row"
+ok "a note stays on its line or its file, and one in an unchanged file goes to the table and is answered on its row"
 
 # git ends a diff header with a tab when the path has a space; the tab is not
 # part of the path.
