@@ -131,7 +131,7 @@ esac
 # (scripts/lib/review-status.sh) until /anchor:prepare-review opens the CR.
 resolve_branch() {
   local default count
-  default=$(review_status_default_branch)
+  default=$(anchor_default_branch) || default=main
   [[ "$branch" != "$default" ]] || die "$branch is the default branch and has no CR — nothing to review"
   git fetch --quiet origin "$default" 2>/dev/null || true
   git rev-parse --verify --quiet "origin/$default^{commit}" >/dev/null 2>&1 \
@@ -143,10 +143,7 @@ resolve_branch() {
   [[ "$count" -gt 0 ]] || die "$branch has no CR and no commits ahead of $default — nothing to review"
   cr_title="$count commit$([[ "$count" -eq 1 ]] || echo s) ahead of $default"
   cr_desc=$(git log --reverse --no-merges --format='## %s%n%n%b' "$cr_base..$cr_head")
-  case "$forge" in
-    github) self=$(gh api user --jq .login 2>/dev/null || true) ;;
-    gitlab) self=$(glab api user 2>/dev/null | jq -r '.username // empty' 2>/dev/null || true) ;;
-  esac
+  self=$(anchor_forge_self "$forge" 2>/dev/null) || self=""
   cr_author="$self"
   is_own=1
   local web
@@ -198,7 +195,6 @@ resolve_cr() {
       cr_base=$(jq -r '.baseRefOid // empty' <<<"$json")
       cr_start="$cr_base"
       cr_desc=$(jq -r '.body // ""' <<<"$json")
-      self=$(gh api user --jq .login 2>/dev/null || true)
       ;;
     gitlab)
       args=(--output json)
@@ -219,9 +215,9 @@ resolve_cr() {
       cr_base=$(jq -r '.diff_refs.base_sha // empty' <<<"$json")
       cr_start=$(jq -r '.diff_refs.start_sha // empty' <<<"$json")
       [[ -n "$cr_head" ]] || cr_head=$(jq -r '.sha // empty' <<<"$json")
-      self=$(glab api user 2>/dev/null | jq -r '.username // empty' 2>/dev/null || true)
       ;;
   esac
+  self=$(anchor_forge_self "$forge" 2>/dev/null) || self=""
 
   [[ -n "$cr_head" ]] || die "the forge reported no head SHA for CR $cr_iid — nothing to anchor a review to"
 
@@ -298,11 +294,8 @@ resolve_cr() {
   # every ref and let the three-dot range find the merge base — but only once the
   # base has turned out to be missing, since an up-to-date checkout is the common
   # case and that fetch walks the whole remote.
-  if ! git rev-parse --verify --quiet "$cr_base^{commit}" >/dev/null 2>&1; then
-    git fetch --quiet origin 2>/dev/null || true
-    git rev-parse --verify --quiet "$cr_base^{commit}" >/dev/null 2>&1 \
-      || die "the CR's base commit ${cr_base} is not in this checkout — fetch the target branch and re-run"
-  fi
+  anchor_fetch_commit "$cr_base" \
+    || die "the CR's base commit ${cr_base} is not in this checkout — fetch the target branch and re-run"
 
   diff_range="${cr_base}...${cr_head}"
 }
@@ -340,7 +333,7 @@ echo "CR_IID=$cr_iid"
 # How a reader names the CR: the repo, then the number with the forge's own
 # marker, so a round title can't read the number as a count.
 if [[ "$has_cr" -eq 0 ]]; then repo_name=${origin_url%.git}; echo "CR_REF=${repo_name##*[/:]} $branch"
-elif [[ "$forge" == gitlab ]]; then echo "CR_REF=${project##*/} !$cr_iid"; else echo "CR_REF=${project##*/} #$cr_iid"; fi
+else echo "CR_REF=$(anchor_cr_reference "$cr_url" "$cr_iid" ' ')"; fi
 echo "CR_URL=$cr_url"
 echo "CR_TITLE=$cr_title"
 echo "CR_AUTHOR=$cr_author"

@@ -92,11 +92,10 @@ revdiff_context_slot() {
   printf '%s' "$top/$REVDIFF_CONTEXT_FILE"
 }
 
-# The context file this adapter writes: every review but one whose caller
-# preloads notes of its own and writes its own context file (a review round, a
-# batch). A reply and the agent's notes on its changes ride with this header.
+# The context file this adapter writes: every review but one of items, whose
+# caller writes its own.
 revdiff_context_path() {
-  [[ -z "${review_annotations:-}" || -n "${review_reply:-}" || -n "${review_seeded:-}" ]] || return 1
+  [[ -z "${review_items:-}" ]] || return 1
   revdiff_context_slot
 }
 

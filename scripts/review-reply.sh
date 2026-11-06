@@ -91,32 +91,8 @@ for p in "${paths[@]+"${paths[@]}"}"; do specs+=(":/$p"); done
 lines="$state/changed.tsv"
 anchor_items_changed_lines "$root" "$reviewed" "$now" "${specs[@]+"${specs[@]}"}" > "$lines"
 
-# Where line <n> of <file> as the reviewer saw it stands now: shifted past the
-# lines changed above it, or the first line of the change that replaced it.
-follow_line() {
-  git -C "$root" -c core.quotePath=false diff -U0 --no-color --no-renames "$reviewed" "$now" -- ":/$1" \
-    | awk -v L="$2" '
-      /^@@ / {
-        split($2, o, ","); split($3, n, ",")
-        a = substr(o[1], 2) + 0; b = (o[2] == "" ? 1 : o[2] + 0)
-        c = substr(n[1], 2) + 0; d = (n[2] == "" ? 1 : n[2] + 0)
-        if (b == 0) { if (L <= a) exit; delta += d; next }
-        if (L < a) exit
-        if (L <= a + b - 1) { hit = (c > 0 ? c : 1); exit }
-        delta += d - b
-      }
-      END { print (hit ? hit : L + delta) }'
-}
-
-in_scope() {
-  local f="$1" p
-  [[ ${#paths[@]} -gt 0 ]] || return 0
-  for p in "${paths[@]}"; do
-    p="${p%/}"
-    [[ "$f" == "$p" || "$f" == "$p"/* ]] && return 0
-  done
-  return 1
-}
+# Where line <n> of <file> as the reviewer saw it stands now.
+follow_line() { anchor_items_follow_line "$root" "$reviewed" "$now" "$1" "$2"; }
 
 rows=$(jq -r --slurpfile c "$comments" '
   .replies[] as $r | ($c[0][$r.comment - 1]) as $cm
@@ -129,19 +105,6 @@ rows=$(jq -r --slurpfile c "$comments" '
     else empty end
   | map(tostring) | join("\u001f")' "$replies")
 
-# Whether <file> has a line changed since the last review.
-changed_file() {
-  awk -F'\t' -v f="$1" '$1 == f { found = 1; exit } END { exit !found }' "$lines"
-}
-
-# Lines <from>..<to> of <file> in the tree, three either side, numbered, with
-# the lines the reply is about marked.
-excerpt() {
-  local file="$1" from="$2" to="$3"
-  git cat-file -p "$now:$file" | awk -v a="$from" -v b="$to" '
-    NR >= a - 3 && NR <= b + 3 { printf "%s %4d  %s\n", (NR >= a && NR <= b ? ">" : " "), NR, $0 }'
-}
-
 # Each placed site as `<comment>\t<k>\t<file>\t<marker>\t<line>\t<where>`, where
 # <where> is the line the reply is about, for the context file's table. A reply
 # kept out of the diff is one `{id, where, excerpt}` per line of $quoted.
@@ -150,13 +113,13 @@ quoted="$state/quoted.jsonl"; : > "$quoted"
 errors=()
 while IFS=$'\x1f' read -r cid k file line side kind start; do
   [[ -n "$cid" ]] || continue
-  if ! in_scope "$file"; then
+  if ! anchor_items_in_scope "$file" "${paths[@]+"${paths[@]}"}"; then
     errors+=("comment $cid: $file is not one of the paths under review"); continue
   fi
   if [[ "$side" != old ]] && ! git cat-file -e "$now:$file" 2>/dev/null; then
     errors+=("comment $cid: $file is not in the tree any more, so revdiff has nowhere to show the reply"); continue
   fi
-  if ! changed_file "$file"; then
+  if ! anchor_items_file_changed "$lines" "$file"; then
     if [[ -z "$line" ]]; then
       jq -nc --argjson id "$cid" --arg w "$file" '{id:$id, where:$w, excerpt:null}' >> "$quoted"
       continue
@@ -167,7 +130,7 @@ while IFS=$'\x1f' read -r cid k file line side kind start; do
       from=$line to=$line
     fi
     where="$file:$from"; [[ "$from" == "$to" ]] || where+="-$to"
-    jq -nc --argjson id "$cid" --arg w "$where" --arg x "$(excerpt "$file" "$from" "$to")" \
+    jq -nc --argjson id "$cid" --arg w "$where" --arg x "$(anchor_items_excerpt "$root" "$now" "$file" "$from" "$to")" \
       '{id:$id, where:$w, excerpt:$x}' >> "$quoted"
     continue
   fi

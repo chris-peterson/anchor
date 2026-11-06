@@ -91,15 +91,7 @@ stat=""
 
 branch=$(git branch --show-current 2>/dev/null || true)
 
-default_branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null \
-  | sed 's@^origin/@@' || true)
-if [[ -z "$default_branch" ]]; then
-  if git rev-parse --verify --quiet origin/main >/dev/null; then
-    default_branch=main
-  elif git rev-parse --verify --quiet origin/master >/dev/null; then
-    default_branch=master
-  fi
-fi
+default_branch=$(anchor_default_branch || true)
 
 on_default=0
 [[ -n "$branch" && "$branch" == "$default_branch" ]] && on_default=1

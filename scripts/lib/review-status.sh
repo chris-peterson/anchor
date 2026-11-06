@@ -40,8 +40,6 @@
 #                         <section file>; that file is empty where it had none
 #   review_status_pick <data json> <base> <head>
 #                         the data for the commits in <base>..<head> alone
-#   review_status_default_branch
-#                         the default branch: origin/HEAD, else main, else master
 #   review_status_local_path
 #                         the branch-less record kept in the repo's git directory
 #   review_status_local_data
@@ -61,11 +59,9 @@ REVIEW_STATUS_MARK="anchor:review-status"
 # One "<sha> <key>" line per commit, oldest first. A commit with no diff has no
 # patch-id, so its sha is its key.
 review_status_keys() {
-  local sha key
-  git rev-list --reverse --no-merges "$1..$2" | while read -r sha; do
-    key=$(git show --format= "$sha" | git patch-id --stable | cut -d' ' -f1)
-    printf '%s %s\n' "$sha" "${key:-$sha}"
-  done
+  awk 'FILENAME == ARGV[1] { key[$2] = $1; next } { print $0, ($0 in key ? key[$0] : $0) }' \
+    <(git log -p --no-merges --format='commit %H' "$1..$2" | git patch-id --stable) \
+    <(git rev-list --reverse --no-merges "$1..$2")
 }
 
 review_status_data() {
@@ -142,22 +138,9 @@ review_status_strip() {
 
 
 review_status_pick() {
+  [[ "$1" != '{}' ]] || { echo '{}'; return; }
   review_status_keys "$2" "$3" | jq -Rnc --argjson d "$1" \
     '[inputs | split(" ")[1]] as $keys | $d | with_entries(select(.key as $k | $keys | index([$k])))'
-}
-
-review_status_default_branch() {
-  local default
-  default=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true)
-  default=${default#origin/}
-  if [[ -z "$default" ]]; then
-    if git rev-parse --verify --quiet origin/master >/dev/null && ! git rev-parse --verify --quiet origin/main >/dev/null; then
-      default=master
-    else
-      default=main
-    fi
-  fi
-  printf '%s\n' "$default"
 }
 
 review_status_local_path() {

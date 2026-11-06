@@ -235,43 +235,27 @@ emit_review() {
     return
   fi
 
-  local comments returned verdict
-  comments=$(diff_tool_comments "$out_file" "$desc_file")
-  returned="$comments"
-  # The agent's own notes (a reply, or what it said about its changes) come back
-  # among the reviewer's. One returned as it was seeded was read, and one deleted
-  # was read and set aside; only an edited or a new note is the reviewer
-  # answering.
-  local seeded="${review_seeded:-}"
-  [[ -z "${review_reply:-}" ]] || seeded="$review_reply/notes.json"
-  if [[ -n "$seeded" ]]; then
-    comments=$(jq -c --slurpfile seeded "$seeded" '
-      def norm: gsub("\\s+"; " ") | sub("^ "; "") | sub(" $"; "");
-      [.[] | . as $c
-        | select(any($seeded[0][];
-            .file == $c.file
-            and (if .marker == "file" then $c.target == "file" else .line == $c.startLine end)
-            and (.body | norm) == ($c.body | norm)) | not)]' <<<"$comments")
-  fi
+  local returned verdict
+  returned=$(diff_tool_comments "$out_file" "$desc_file")
   # revdiff returns every preloaded note it still holds, so a note returned as
   # it was preloaded is not the reviewer answering, and a review that returns
   # only those has said nothing.
-  local answered="$comments" preloaded="[]" exit_name="" lone
+  local answered="$returned" preloaded="[]" exit_name="" lone
   if [[ -n "${review_annotations:-}" ]]; then
     preloaded=$(diff_tool_comments "$review_annotations" "$desc_file")
     answered=$(jq -c --argjson pre "$preloaded" '
       def norm: gsub("\\s+"; " ") | sub("^ "; "") | sub(" $"; "");
       def key: [.file, .target, .startLine, (.body | norm)];
-      ($pre | map(key)) as $k | [.[] | select(key as $c | $k | index([$c]) | not)]' <<<"$comments")
+      ($pre | map(key)) as $k | [.[] | select(key as $c | $k | index([$c]) | not)]' <<<"$returned")
   fi
   # A review whose one note says only a verdict word chooses as a note on the
   # Review box does, wherever it sits, except where a preloaded note sat:
-  # there it answers that note. In a review of items (a batch, a round, which
-  # preload notes and write their own context), answers on the items' notes
-  # don't count against it, and only a note on the shared file decides, since a
-  # word on an item (a batch's `reject`) is about that item.
+  # there it answers that note. In a review of items (a batch, a round),
+  # answers on the items' notes don't count against it, and only a note on the
+  # shared file decides, since a word on an item (a batch's `reject`) is about
+  # that item.
   local items=false
-  [[ -z "${review_annotations:-}" || -n "${review_seeded:-}" || -n "${review_reply:-}" ]] || items=true
+  [[ -z "${review_items:-}" ]] || items=true
   lone=$(jq -c --argjson pre "$preloaded" --argjson items "$items" '
     def word: ascii_downcase | gsub("^\\s+"; "") | gsub("[\\s.!]+$"; "");
     def choice: (.body | word) as $w
@@ -293,9 +277,13 @@ emit_review() {
     local as_choice='map(if [.file, .target, .startLine, .body] == ($l.note | [.file, .target, .startLine, .body])
                          then . + {target: "verdict", choice: $l.choice} else . end)'
     answered=$(jq -c --argjson l "$lone" "$as_choice" <<<"$answered")
-    comments=$(jq -c --argjson l "$lone" "$as_choice" <<<"$comments")
     returned=$(jq -c --argjson l "$lone" "$as_choice" <<<"$returned")
   fi
+  # The agent's own notes (a reply, or what it said about its changes) come back
+  # among the reviewer's, as the notes preloaded: only an edited or a new one is
+  # the reviewer answering. A review of items reads every returned note itself.
+  local comments="$returned"
+  [[ -z "${review_seeded:-}" && -z "${review_reply:-}" ]] || comments="$answered"
   verdict=$(diff_tool_verdict "$rc" "$answered")
   # A draft the reviewer changed in the tool goes back for approval as changed,
   # since approving it in the tool was approving the text before the edit was

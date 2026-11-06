@@ -174,6 +174,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/tmpfile.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/anchor-config.sh"
 # shellcheck source=lib/review-status.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/review-status.sh"
+# shellcheck source=lib/forge-url.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/forge-url.sh"
 
 will_open=1
 do_open=0
@@ -223,7 +225,7 @@ esac
 
 branch=$(git rev-parse --abbrev-ref HEAD)
 
-default_branch=$(review_status_default_branch)
+default_branch=$(anchor_default_branch) || default_branch=main
 
 on_default=0
 [[ "$branch" == "$default_branch" ]] && on_default=1
@@ -447,14 +449,8 @@ if [[ "$do_write" -eq 1 ]]; then
   else
     cp "$open_body" "$write_body"
   fi
-  case "$forge" in
-    github)
-      write_err=$(gh pr edit "$cr_iid" --body-file "$write_body" 2>&1) \
-        || { echo "CR_WRITE_ERROR=gh pr edit failed: $write_err"; exit 1; } ;;
-    gitlab)
-      write_err=$(glab api -X PUT "projects/:fullpath/merge_requests/$cr_iid" -F "description=@$write_body" 2>&1) \
-        || { echo "CR_WRITE_ERROR=glab api PUT failed: $write_err"; exit 1; } ;;
-  esac
+  write_err=$(anchor_cr_write_description "$forge" "$cr_iid" "$write_body") \
+    || { echo "CR_WRITE_ERROR=the description write failed: $write_err"; exit 1; }
   echo "RESOLVED_VIA=$RESOLVED_VIA"
   echo "FORGE=$forge"
   echo "CR_URL=$cr_url"
@@ -793,12 +789,7 @@ anchor_config_warnings >&2
 desc_draft_path="$(anchor_tmpfile cr-desc-draft)"
 
 cr_reference=""
-if [[ -n "$cr_iid" ]]; then
-  case "$forge" in
-    github) cr_reference="$(basename "${cr_url%/pull/*}")#$cr_iid" ;;
-    gitlab) cr_reference="$(basename "${cr_url%/-/merge_requests/*}")!$cr_iid" ;;
-  esac
-fi
+[[ -z "$cr_iid" ]] || cr_reference=$(anchor_cr_reference "$cr_url" "$cr_iid")
 
 # --- Emit ---------------------------------------------------------------------
 

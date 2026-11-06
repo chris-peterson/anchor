@@ -32,11 +32,5 @@ if git rev-parse --verify --quiet '@{u}' >/dev/null 2>&1; then
   exit
 fi
 
-default_ref=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true)
-for ref in "$default_ref" origin/main origin/master; do
-  if [[ -n "$ref" ]] && git rev-parse --verify --quiet "$ref" >/dev/null; then
-    git rev-list --count "$ref..HEAD"
-    exit
-  fi
-done
-exit 1
+default_branch=$(anchor_default_branch) || exit 1
+git rev-list --count "origin/$default_branch..HEAD"

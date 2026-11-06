@@ -356,28 +356,39 @@ git -C "$repo" checkout --quiet -- a.txt
 git -C "$repo" config anchor.diff.tool revdiff
 ok "--annotations: a viewer that can't preload notes refuses the review"
 
-# --explain: the agent's notes on its own change ride with the message header,
+# --notes: the agent's notes on its own change ride with the message header,
 # and a note the reviewer only read, or deleted, is no feedback (UX-12, DIFF-41)
 printf 'one\ntwo\nthree\n' > "$repo/a.txt"
-printf '{"notes":[{"file":"a.txt","line":3,"note":"three closes the list"}]}\n' > "$work/explain-in.json"
-e=$( cd "$repo" && bash "$here/../scripts/review-explain.sh" --notes "$work/explain-in.json" --path a.txt )
-xnotes=$(sed -n 's/^EXPLAIN_NOTES=//p' <<<"$e")
+xin="$work/notes-in.json"
+printf '{"notes":[{"file":"a.txt","line":3,"note":"three closes the list"}]}\n' > "$xin"
 xmsg="$work/xmsg.txt"; printf 'Add three\n' > "$xmsg"
 [ "$(sed -n 's/^REVIEW_PRELOADS=//p' <<<"$(run --skill commit --probe --local)")" = 1 ] || fail "revdiff preloads notes"
-export REVDIFF_ARGS_FILE="$work/x.args" REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT; REVDIFF_STUB_OUTPUT=$(cat "$xnotes")
-o=$(REVDIFF_TREE_CAPTURE="$work/x" run --skill commit --local --message-file "$xmsg" --path a.txt --explain "$xnotes")
-grep -qx -- "--annotations=$xnotes" "$REVDIFF_ARGS_FILE" || fail "--explain notes not preloaded: $(cat "$REVDIFF_ARGS_FILE")"
+export REVDIFF_ARGS_FILE="$work/x.args" REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT
+REVDIFF_STUB_OUTPUT=$(printf '## a.txt:2 ( )\nthree closes the list\n')
+o=$(REVDIFF_TREE_CAPTURE="$work/x" run --skill commit --local --message-file "$xmsg" --path a.txt --notes "$xin")
+xnotes=$(sed -n 's/^--annotations=//p' "$REVDIFF_ARGS_FILE")
+[ -n "$xnotes" ] || fail "--notes not preloaded: $(cat "$REVDIFF_ARGS_FILE")"
+[ "$(cat "$xnotes")" = "$REVDIFF_STUB_OUTPUT" ] || fail "a note about line 3 is preloaded under line 2: $(cat "$xnotes")"
 grep -qx '# Add three' "$work/x.context" || fail "the message header rides with the notes: $(cat "$work/x.context" 2>&1)"
 [ "$(verdict_of "$o")" = approved ] || fail "a note returned as seeded was read, not feedback: $o"
 REVDIFF_STUB_OUTPUT=""
-o=$(run --skill commit --local --message-file "$xmsg" --path a.txt --explain "$xnotes")
+o=$(run --skill commit --local --message-file "$xmsg" --path a.txt --notes "$xin")
 [ "$(verdict_of "$o")" = approved ] || fail "a deleted note was read and set aside: $o"
 REVDIFF_STUB_OUTPUT=$(sed 's/three closes the list/why not four?/' "$xnotes")
-o=$(REVDIFF_STUB_CHOOSE="" run --skill commit --local --message-file "$xmsg" --path a.txt --explain "$xnotes"); j=$(json_of "$o")
+o=$(REVDIFF_STUB_CHOOSE="" run --skill commit --local --message-file "$xmsg" --path a.txt --notes "$xin"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = changes-requested ] || fail "an edited note is feedback: $o"
 [ "$(jq -r '.comments[0].body' <<<"$j")" = 'why not four?' ] || fail "the edited note comes back: $j"
 unset REVDIFF_ARGS_FILE
-ok "--explain: notes ride with the header, and only an edited note is feedback"
+ok "--notes: notes ride with the header, and only an edited note is feedback"
+
+printf '{"notes":[{"file":"a.txt","line":1,"note":"far"},{"file":"b.txt","note":"not under review"}]}\n' > "$work/bad-notes.json"
+rc=0; o=$(run --skill commit --local --message-file "$xmsg" --path a.txt --notes "$work/bad-notes.json") || rc=$?
+[ "$rc" = 65 ] || fail "a note with nowhere to show stops the review before it opens, got $rc: $o"
+grep -q '^NOTES_ERROR=b.txt: not in this review' <<<"$o" || fail "each unplaced note names itself: $o"
+! grep -q '^REVIEW_VERDICT=' <<<"$o" || fail "nothing opened: $o"
+rc=0; o=$(run --skill commit --previous --notes "$xin" 2>&1) || rc=$?
+[ "$rc" = 64 ] || fail "--notes belongs to a --local review, got $rc: $o"
+ok "--notes: a note with nowhere to show is refused before anything opens"
 
 # DIFF-47: a probe that can open a review announces it, naming what is under
 # review, and a launch announces its release on the way out.
@@ -396,13 +407,13 @@ ok "a probe requests the review it can open, and the launch releases it"
 export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
 git -C "$repo" config anchor.diff.tool stubtool
 [ "$(sed -n 's/^REVIEW_PRELOADS=//p' <<<"$(run --skill commit --probe --local)")" = 0 ] || fail "a difftool doesn't preload notes"
-o=$(run --skill commit --local --message-file "$xmsg" --path a.txt --explain "$xnotes" 2>/dev/null); j=$(json_of "$o")
-[ "$(jq -r .raw.exitCode <<<"$j")" != annotations-unsupported ] || fail "--explain should open without the notes: $j"
-[ "$(verdict_of "$o")" = approved ] || fail "a difftool review with --explain still grades: $o"
+o=$(run --skill commit --local --message-file "$xmsg" --path a.txt --notes "$xin" 2>/dev/null); j=$(json_of "$o")
+[ "$(jq -r .raw.exitCode <<<"$j")" != annotations-unsupported ] || fail "--notes should open without the notes: $j"
+[ "$(verdict_of "$o")" = approved ] || fail "a difftool review with --notes still grades: $o"
 git -C "$repo" config anchor.diff.tool revdiff
 git -C "$repo" reset --quiet
 git -C "$repo" checkout --quiet -- a.txt
-ok "--explain: a viewer that can't show notes opens without them, and the probe reports it"
+ok "--notes: a viewer that can't show notes opens without them, and the probe reports it"
 
 
 
@@ -891,12 +902,10 @@ git -C "$first" config user.email t@example.com; git -C "$first" config user.nam
 git -C "$first" config anchor.diff.tool revdiff
 printf 'one\ntwo\n' > "$first/a.txt"
 printf '{"notes":[{"file":"a.txt","line":2,"note":"two"}]}\n' > "$work/first-in.json"
-e=$( cd "$first" && bash "$here/../scripts/review-explain.sh" --notes "$work/first-in.json" --path a.txt ) \
-  || fail "notes anchor on a first commit: $e"
 printf 'First\n' > "$work/first-msg.txt"
 export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
 o=$( cd "$first" && bash "$dispatch" --skill commit --local --message-file "$work/first-msg.txt" --path a.txt \
-       --explain "$(sed -n 's/^EXPLAIN_NOTES=//p' <<<"$e")" ) || fail "a first commit's review fails: $o"
+       --notes "$work/first-in.json" ) || fail "a first commit's review fails: $o"
 [ "$(verdict_of "$o")" = approved ] || fail "a first commit's review grades: $o"
 [ "$(git -C "$first" rev-list --all | wc -l | tr -d ' ')" = 0 ] || fail "the review leaves the branch with no commit"
 ok "--local: a first commit is reviewed against the empty tree"

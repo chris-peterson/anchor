@@ -34,6 +34,50 @@ anchor_items_changed_lines() {
   '
 }
 
+# Whether <file> sits under one of the <path>s that follow; no paths is the whole
+# repo.
+anchor_items_in_scope() {
+  local f="$1" p
+  shift
+  [[ $# -gt 0 ]] || return 0
+  for p in "$@"; do
+    p="${p%/}"
+    [[ "$f" == "$p" || "$f" == "$p"/* ]] && return 0
+  done
+  return 1
+}
+
+# Whether <file> has a row in the changed-lines file anchor_items_changed_lines
+# wrote.
+anchor_items_file_changed() {
+  awk -F'\t' -v f="$2" '$1 == f { found = 1; exit } END { exit !found }' "$1"
+}
+
+# Where line <line> of <file> in <from> stands in <to>: shifted past the lines
+# changed above it. A line a change rewrote follows to the first line of what
+# replaced it, or prints `null` when <rewritten> is `null`.
+anchor_items_follow_line() {
+  git -C "$1" -c core.quotePath=false diff -U0 --no-color --no-renames "$2" "$3" -- ":/$4" \
+    | awk -v L="$5" -v rewritten="${6:-first}" '
+      /^@@ / {
+        split($2, o, ","); split($3, n, ",")
+        a = substr(o[1], 2) + 0; b = (o[2] == "" ? 1 : o[2] + 0)
+        c = substr(n[1], 2) + 0; d = (n[2] == "" ? 1 : n[2] + 0)
+        if (b == 0) { if (L <= a) exit; delta += d; next }
+        if (L < a) exit
+        if (L <= a + b - 1) { hit = 1; at = (rewritten == "null" ? "null" : (c > 0 ? c : 1)); exit }
+        delta += d - b
+      }
+      END { print (hit ? at : L + delta) }'
+}
+
+# Lines <from>..<to> of <file> in <rev>, three either side, numbered, with the
+# lines from..to marked.
+anchor_items_excerpt() {
+  git -C "$1" cat-file -p "$2:$3" | awk -v a="$4" -v b="$5" '
+    NR >= a - 3 && NR <= b + 3 { printf "%s %4d  %s\n", (NR >= a && NR <= b ? ">" : " "), NR, $0 }'
+}
+
 # Where revdiff shows a note about <line> of <file> in <tree>, printed as
 # `<marker>\t<line>`. revdiff draws a note under its line, so a note about line N
 # sits on line N-1, and the marker has to match that line's side of the diff or

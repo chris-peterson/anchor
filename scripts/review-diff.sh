@@ -88,11 +88,14 @@ set -euo pipefail
 #     what a caller passes back after probing, so the review opens in the shape
 #     the probe said was reachable.
 #   --tool <name>  run this tool within the mode, ignoring the config key.
-#   --explain <notes.md>  the notes review-explain.sh wrote about the agent's own
-#     changes (UX-12): preloaded where the tool can show notes, and left out
-#     where it can't, so the review opens either way (the probe's
-#     REVIEW_PRELOADS says which). A note returned as seeded, or deleted, was
-#     read; only an edited or a new one is the reviewer answering.
+#   --notes <notes.json>  the agent's notes on its own changes in a --local
+#     review (UX-12), in the shape scripts/lib/change-notes.sh documents. Each is
+#     placed on the line it is about before anything opens; a note with nowhere
+#     to show prints NOTES_ERROR=<message>, and the review exits 65 without
+#     opening. Preloaded where the tool can show notes, and left out where it
+#     can't, so the review opens either way (the probe's REVIEW_PRELOADS says
+#     which). A note returned as placed, or deleted, was read; only an edited or
+#     a new one is the reviewer answering.
 #   --annotations <file>  preload these notes into the review, in revdiff's
 #     own markdown (`## <path>:<line> (+|-| )` then the body). The reviewer
 #     reads, edits, and deletes them in place, and the set they leave comes back
@@ -157,12 +160,16 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/stage-paths.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/size-stack.sh"
 # shellcheck source=lib/tmpfile.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/tmpfile.sh"
+# shellcheck source=lib/item-review.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/item-review.sh"
+# shellcheck source=lib/change-notes.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/change-notes.sh"
 CTX_REPO=""
 review_skill=""
 mode_override=""
 tool_override=""
 review_annotations=""
-review_explain=""
+review_notes=""
 review_seeded=""
 review_reply=""
 review_untracked=0
@@ -187,7 +194,7 @@ while [[ $# -gt 0 ]]; do
     --path)     stage_paths+=("${2:?--path needs a path}"); shift 2 ;;
     --staged-path) staged_paths+=("${2:?--staged-path needs a path}"); shift 2 ;;
     --annotations) review_annotations="${2:?--annotations needs a file}"; shift 2 ;;
-    --explain)  review_explain="${2:?--explain needs the notes review-explain.sh wrote}"; shift 2 ;;
+    --notes)    review_notes="${2:?--notes needs a notes file}"; shift 2 ;;
     --reply)    review_reply="${2:?--reply needs the state dir review-reply.sh seeded}"; shift 2 ;;
     --untracked) review_untracked=1; shift ;;
     --probe)    probe_only=1; shift ;;
@@ -480,17 +487,9 @@ trap 'exit 143' TERM
 # Pure git plumbing — kept in a script so the brace tokens don't trip Claude
 # Code's bash safety analyzer from skill prose.
 determine_default_branch_range() {
-  local origin_head
-  origin_head=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true)
-  if [[ -n "$origin_head" ]] && git rev-parse --verify --quiet "$origin_head" >/dev/null; then
-    echo "${origin_head}...HEAD"
-  elif git rev-parse --verify --quiet origin/main >/dev/null; then
-    echo "origin/main...HEAD"
-  elif git rev-parse --verify --quiet origin/master >/dev/null; then
-    echo "origin/master...HEAD"
-  else
-    return 1
-  fi
+  local default
+  default=$(anchor_default_branch) || return 1
+  echo "origin/${default}...HEAD"
 }
 
 # Determine the diff range for a commit review from the unpushed commit count.
@@ -596,7 +595,7 @@ else
     if [[ -n "$review_reply" ]]; then
       [[ -s "$review_reply/reviewed" && -f "$review_reply/notes.json" && -f "$review_reply/reply.md" ]] || {
         echo "review-diff.sh: --reply needs a state dir review-reply.sh has seeded: $review_reply" >&2; exit 66; }
-      [[ -z "$review_annotations$review_explain" ]] || { echo "review-diff.sh: --reply brings its own notes; drop --annotations and --explain" >&2; exit 64; }
+      [[ -z "$review_annotations$review_notes" ]] || { echo "review-diff.sh: --reply brings its own notes; drop --annotations and --notes" >&2; exit 64; }
       [[ ${#staged_paths[@]} -eq 0 ]] || {
         echo "review-diff.sh: --reply diffs the working tree against the last review, and a --staged-path review shows the index" >&2; exit 64; }
       diff_range=$(cat "$review_reply/reviewed")
@@ -736,10 +735,13 @@ if [[ -n "$review_annotations" && ! -r "$review_annotations" ]]; then
   echo "review-diff.sh: annotations file not readable: $review_annotations" >&2
   exit 66
 fi
-if [[ -n "$review_explain" ]]; then
-  [[ -z "$review_annotations" ]] || { echo "review-diff.sh: --explain and --annotations are two sets of notes; pass one" >&2; exit 64; }
-  [[ -r "$review_explain" && -r "${review_explain%.md}.json" ]] \
-    || { echo "review-diff.sh: --explain needs the notes review-explain.sh wrote: $review_explain" >&2; exit 66; }
+review_notes_md=""
+if [[ -n "$review_notes" ]]; then
+  [[ -z "$review_annotations" ]] || { echo "review-diff.sh: --notes and --annotations are two sets of notes; pass one" >&2; exit 64; }
+  [[ "$header_mode" == local ]] || { echo "review-diff.sh: --notes annotates a --local review" >&2; exit 64; }
+  [[ -r "$review_notes" ]] || { echo "review-diff.sh: --notes file not readable: $review_notes" >&2; exit 66; }
+  placed=$(anchor_change_notes_place "$review_notes" "${stage_paths[@]+"${stage_paths[@]}"}") || { printf '%s\n' "$placed"; exit 65; }
+  review_notes_md="$placed"
 fi
 if [[ "$review_untracked" -eq 1 && ( "$review_subject" != "range" || "$diff_range" == *..* ) ]]; then
   echo "review-diff.sh: --untracked shows files beside a working-tree diff; $([[ "$review_subject" == range ]] && echo "$diff_range compares two commits" || echo "a --files review has no tree")" >&2
@@ -784,14 +786,19 @@ report_superseded_key
 resolve_review
 review_mode="$resolved_mode"
 review_tool="$resolved_tool"
-if [[ -n "$review_explain" && "$(tool_preloads)" == 1 ]]; then
-  review_annotations="$review_explain"
-  review_seeded="${review_explain%.md}.json"
+if [[ -n "$review_notes_md" && "$(tool_preloads)" == 1 ]]; then
+  review_annotations="$review_notes_md"
+  review_seeded="${review_notes_md%.md}.json"
 fi
 if [[ "$review_mode" != diff ]] && [[ -n "$review_annotations" || "$review_untracked" -eq 1 ]]; then
   echo "review-diff.sh: --annotations and --untracked belong to a diff review, and this one resolved to $review_mode mode" >&2
   exit 64
 fi
+# A review of items (a batch, a round) preloads notes of its own and writes its
+# own context file; a reply and the agent's notes on its changes preload notes
+# but ride with the tool's context file.
+review_items=""
+[[ -z "$review_annotations" || -n "$review_seeded" || -n "$review_reply" ]] || review_items=1
 
 # One adapter per mode. Within `diff`, the tool's own half lives in
 # review/tools/<tool>.sh, which that adapter sources — so a second viewer is a
@@ -843,7 +850,7 @@ fi
 # adapter (sourced below) counts as a consumer — it runs in this same shell.
 export review_subject review_mode review_tool
 export diff_range diff_staged diff_paths files_left files_right files_name review_title review_details_json
-export message_file review_skill review_annotations review_seeded review_reply review_untracked
+export message_file review_skill review_annotations review_seeded review_reply review_items review_untracked
 
 # Taken before the tool opens, so it names what the reviewer was shown.
 [[ -z "$review_index" ]] || echo "REVIEW_INDEX=$review_index"

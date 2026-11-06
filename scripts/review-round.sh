@@ -140,21 +140,9 @@ need_dir() {
   root=$(state root)
 }
 
-# Where a new-side line of the round's tree sits in the CR head: the same line
-# shifted past the round's own edits above it, or nothing for a line a round
-# edit added.
-map_line() {
-  local file="$1" line="$2"
-  git -C "$root" -c core.quotePath=false diff -U0 --no-color --no-renames "$(state head)" "$(state lastTree)" -- "$file" \
-    | awk -v L="$line" '
-      /^@@ / {
-        split($2, o, ","); split($3, n, ",")
-        b = (o[2] == "" ? 1 : o[2] + 0); c = substr(n[1], 2) + 0; d = (n[2] == "" ? 1 : n[2] + 0)
-        if (d > 0) { if (L < c) { done = 1; exit } if (L <= c + d - 1) { gone = 1; exit } delta += d - b }
-        else { if (L <= c) { done = 1; exit } delta += -b }
-      }
-      END { if (gone) print "null"; else print L - delta }'
-}
+# Where a line of the round's tree sits in the CR head, or `null` for a line a
+# round edit wrote.
+map_line() { anchor_items_follow_line "$root" "$(state lastTree)" "$(state head)" "$1" "$2" null; }
 
 # The ledger's rounds as a markdown table, one row per round.
 trend_table() {
@@ -208,9 +196,8 @@ start)
     ledger=$(anchor_tmpfile anchor-review-ledger json)
     IFS=$'\t' read -r _ cr_files cr_added cr_removed \
       < <(git diff --numstat --no-renames "$diff_base" "$head" | anchor_size_row cr)
-    jq -n --arg h "$(git rev-parse "$head")" \
-      --argjson f "$cr_files" --argjson a "$cr_added" --argjson d "$cr_removed" \
-      '{firstHead:$h, cr:{files:$f, added:$a, removed:$d}, crLines:($a + $d), rounds:[]}' > "$ledger"
+    jq -n --argjson f "$cr_files" --argjson a "$cr_added" --argjson d "$cr_removed" \
+      '{cr:{files:$f, added:$a, removed:$d}, rounds:[]}' > "$ledger"
   fi
   [[ -f "$ledger" ]] || die "no ledger at $ledger; start the first round without --ledger"
   round_n=$(( $(jq '.rounds | length' "$ledger") + 1 ))
@@ -228,7 +215,6 @@ start)
   echo "ROUND_BASE=$diff_base"
   echo "ROUND_N=$round_n"
   echo "ROUND_LEDGER=$ledger"
-  echo "ROUND_CR_LINES=$(jq .crLines "$ledger")"
   echo "ROUND_REJECTED=$(jq '.rejected // [] | length' "$ledger")"
   if [[ "$round_n" -gt 1 ]]; then
     echo "ROUND_PREVIOUS=$(jq -r '[.rounds[] | "\(.percent)%"] | join(", ")' "$ledger")"
@@ -290,7 +276,7 @@ seed)
   while IFS=$'\x1f' read -r iid k file line side; do
     [[ -n "$iid" ]] || continue
     # Only an item's first site gets a note; the rest are named in it.
-    if [[ -z "$line" && "$k" == 0 ]] && ! cut -f1 "$lines" | grep -xF -- "$file" >/dev/null; then
+    if [[ -z "$line" && "$k" == 0 ]] && ! anchor_items_file_changed "$lines" "$file"; then
       errors+=("#$iid $file: not changed in this review, so a note on the whole file has nowhere to show; give it a line")
       continue
     fi
@@ -336,8 +322,7 @@ seed)
   : > "$dir/far.jsonl"
   while IFS=$'\t' read -r iid f l; do
     [[ -n "$iid" ]] || continue
-    jq -c --argjson cr "$(map_line "$f" "$l")" --arg x "$(git -C "$root" cat-file -p "$now:$f" \
-          | awk -v n="$((l + 1))" 'NR >= n - 3 && NR <= n + 3 { printf "%s %4d  %s\n", (NR == n ? ">" : " "), NR, $0 }')" \
+    jq -c --argjson cr "$(map_line "$f" "$l")" --arg x "$(anchor_items_excerpt "$root" "$now" "$f" "$((l + 1))" "$((l + 1))")" \
       --argjson id "$iid" --argjson l "$l" \
       '.[] | select(.far and .id == $id and .line == $l) | . + {crLine:$cr, excerpt:$x}' "$dir/notes.json" >> "$dir/far.jsonl"
   done < <(jq -r '.[] | select(.far) | "\(.id)\t\(.file)\t\(.line)"' "$dir/notes.json")
@@ -578,8 +563,8 @@ finish)
   need_dir
   # What this round did, appended to the ledger before its state goes.
   now=$(snapshot)
-  read -r files added removed < <(git -C "$root" diff --numstat --no-renames "$(state startTree)" "$now" \
-    | awk '{ f++; a += $1; d += $2 } END { print f + 0, a + 0, d + 0 }')
+  IFS=$'\t' read -r _ files added removed < <(git -C "$root" diff --numstat --no-renames "$(state startTree)" "$now" \
+    | anchor_size_row round)
   led=$(state ledger)
   stash_pass
   # The items pass decides each item; a whole pass after it can still drop or
@@ -611,12 +596,12 @@ finish)
           {kept:([$final[]|select(.decision=="keep")]|length),
            changed:([$final[]|select(.decision=="change")]|length),
            dropped:([$final[]|select(.decision=="drop")]|length),
-           asked:([$final[]|select(.decision=="ask")]|length),
            added:(($rp.added // [] | length) + ($r.added|length) + ($w.added // [] | length)),
            lines:(($r | notelines) + (if $w == null then 0 else ($w | notelines) end)
                   + (if $rp == null then 0 else ($rp | notelines) end))} end),
         edits:{files:$f, added:$a, removed:$d},
-        percent:(if .crLines > 0 then ((($a + $d) * 1000 / .crLines) | round) / 10 else 0 end)}]
+        percent:((.cr.added + .cr.removed) as $crl
+                 | if $crl > 0 then ((($a + $d) * 1000 / $crl) | round) / 10 else 0 end)}]
     | .rejected = ((.rejected // []) + (if $r == null then [] else
         [($final[] | select(.decision == "drop") | .id), $wdrop[]] | unique
         | map(. as $id | $all[] | select(.id == $id) | {slug, severity, finding, round:$n}) end))

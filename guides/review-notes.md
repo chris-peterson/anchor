@@ -26,7 +26,7 @@ to the one reader it is for, so the permanent text can stay short.
 
 On the changed line it explains, usually the first line of its hunk. A note
 about a file as a whole goes on the file.
-`scripts/review-explain.sh` anchors each note where revdiff draws it and refuses
+`review-diff.sh --notes` anchors each note where revdiff draws it and refuses
 one on a file the review doesn't show or a line far from every change: a note
 explains a change, so it sits on one.
 

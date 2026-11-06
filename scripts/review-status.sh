@@ -109,16 +109,11 @@ git merge-base --is-ancestor "$base" "$head" \
   || { echo "STATUS_ERROR=--base $base is not an ancestor of --head $head" >&2; exit 65; }
 
 forge=$(anchor_forge_of_origin)
+[[ "$forge" != none ]] || { echo "STATUS_ERROR=origin is neither GitHub nor GitLab" >&2; exit 69; }
+self=$(anchor_forge_self "$forge") || die "could not read the signed-in user" "$self"
 
 if [[ "$local" -eq 1 ]]; then
-  case "$forge" in
-    github) self=$(gh api user 2>&1) || die "could not read the signed-in user" "$self"
-            self=$(jq -r '.login // empty' <<<"$self") ;;
-    gitlab) self=$(glab api user 2>&1) || die "could not read the signed-in user" "$self"
-            self=$(jq -r '.username // empty' <<<"$self") ;;
-    *) echo "STATUS_ERROR=origin is neither GitHub nor GitLab" >&2; exit 69 ;;
-  esac
-  default=$(review_status_default_branch)
+  default=$(anchor_default_branch) || default=main
   git rev-parse --verify --quiet "origin/$default^{commit}" >/dev/null \
     || { echo "STATUS_ERROR=origin/$default is not in this checkout; fetch it and re-run" >&2; exit 65; }
   recorded=$(review_status_local_data) \
@@ -144,8 +139,6 @@ case "$forge" in
     cr_base=$(jq -r '.baseRefOid' <<<"$view")
     cr_head=$(jq -r '.headRefOid' <<<"$view")
     jq -r '.body // ""' <<<"$view" > "$desc"
-    self=$(gh api user 2>&1) || die "could not read the signed-in user" "$self"
-    self=$(jq -r '.login // empty' <<<"$self")
     ;;
   gitlab)
     view=$(glab mr view "$cr" --output json 2>&1) || die "could not read the CR" "$view"
@@ -154,10 +147,7 @@ case "$forge" in
     cr_head=$(jq -r '.sha' <<<"$view")
     draft=$(jq -r '.draft // .work_in_progress // false' <<<"$view")
     jq -r '.description // ""' <<<"$view" > "$desc"
-    self=$(glab api user 2>&1) || die "could not read the signed-in user" "$self"
-    self=$(jq -r '.username // empty' <<<"$self")
     ;;
-  *) echo "STATUS_ERROR=origin is neither GitHub nor GitLab" >&2; exit 69 ;;
 esac
 
 if [[ -z "$self" || "$self" != "$author" ]]; then
@@ -175,11 +165,8 @@ if [[ -z "$self" || "$self" != "$author" ]]; then
 fi
 
 # The CR's base is on the target branch, which a stale checkout may not have.
-if ! git rev-parse --verify --quiet "$cr_base^{commit}" >/dev/null; then
-  git fetch --quiet origin 2>/dev/null || true
-  git rev-parse --verify --quiet "$cr_base^{commit}" >/dev/null \
-    || { echo "STATUS_ERROR=the CR's base commit $cr_base is not in this checkout; fetch the target branch and re-run" >&2; exit 65; }
-fi
+anchor_fetch_commit "$cr_base" \
+  || { echo "STATUS_ERROR=the CR's base commit $cr_base is not in this checkout; fetch the target branch and re-run" >&2; exit 65; }
 
 # The table runs to the CR's head when it is past the reviewed one. Just after a
 # push the forge can still report the head before it, so the reviewed head is
@@ -199,11 +186,7 @@ review_status_section "$data" > "$section"
 updated=$(anchor_tmpfile cr-review-status-desc md)
 review_status_splice "$desc" "$section" > "$updated"
 
-case "$forge" in
-  github) out=$(gh pr edit "$cr" --body-file "$updated" 2>&1) || die "could not write the CR description" "$out" ;;
-  gitlab) out=$(glab api -X PUT "projects/:fullpath/merge_requests/$cr" -F "description=@$updated" 2>&1) \
-            || die "could not write the CR description" "$out" ;;
-esac
+out=$(anchor_cr_write_description "$forge" "$cr" "$updated") || die "could not write the CR description" "$out"
 
 echo "STATUS_RECORDED=$(git rev-list --count --no-merges "$base..$head")"
 echo "STATUS_UNREVIEWED=$(jq '[.[] | select(.rounds == 0)] | length' "$rows")"

@@ -61,6 +61,8 @@ set -euo pipefail
 
 # shellcheck source=lib/resolve-context.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
+# shellcheck source=lib/forge-url.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/forge-url.sh"
 CTX_REPO=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -93,15 +95,7 @@ fi
 # --- Default branch (for the push probe and the default-branch guard) --------
 # Resolved once so both the push probe below and the decision block can reuse it.
 
-default_branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null \
-  | sed 's@^origin/@@' || true)
-if [[ -z "$default_branch" ]]; then
-  if git rev-parse --verify --quiet origin/main >/dev/null; then
-    default_branch=main
-  elif git rev-parse --verify --quiet origin/master >/dev/null; then
-    default_branch=master
-  fi
-fi
+default_branch=$(anchor_default_branch || true)
 
 # --- Is HEAD pushed? ----------------------------------------------------------
 # Prefer the configured upstream; fall back to origin/<default> for local-only
@@ -131,12 +125,10 @@ case "$forge" in
   gitlab)
     cr=$(glab mr view --output json 2>/dev/null \
       | jq -r '(.draft | values | tostring) // "", (.iid // "" | tostring), (.web_url // "")' || true)
-    sep='!'
     ;;
   github)
     cr=$(gh pr view --json isDraft,number,url \
       --jq '(.isDraft | values | tostring) // "", (.number // "" | tostring), (.url // "")' 2>/dev/null || true)
-    sep='#'
     ;;
   *)
     cr=""
@@ -145,11 +137,9 @@ esac
 draft="" cr_number="" cr_url=""
 { IFS= read -r draft; IFS= read -r cr_number; IFS= read -r cr_url; } <<<"$cr" || true
 
-# The manifest names a CR the way its forge writes one: the project's own name,
-# then # or ! and the number.
 cr_ref=""
 if [[ -n "$cr_number" && -n "$cr_url" ]]; then
-  cr_ref="$(sed -E 's#(/-)?/(pull|merge_requests)/[0-9]+$##; s#.*/##' <<<"$cr_url")${sep}${cr_number}"
+  cr_ref=$(anchor_cr_reference "$cr_url" "$cr_number")
 fi
 if [[ "$draft" == "true" ]]; then
   cr_state=draft

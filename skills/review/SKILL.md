@@ -507,7 +507,7 @@ commit, so go to the handoff (item 5 below).
    `review-round.sh files --dir <ROUND_DIR>` prints one `ROUND_FILE=` per path.
 3. Hand those paths to `/anchor:commit` as `--path` arguments, with each kept
    item's reason as its note (REVIEW-30): a notes file in the shape
-   `review-explain.sh` reads, one note per item on its first site, numbered in
+   `review-diff.sh --notes` reads, one note per item on its first site, numbered in
    the tree as it now stands (the edits since the round may have moved it), its
    text the item's reason. `/anchor:commit` seeds those as its review's notes, so
    the reasons you read in the round are back on their lines in the diff that

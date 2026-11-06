@@ -36,7 +36,7 @@ the turn ends with nothing left running.
 | `REVIEW_MODE_CONFIGURED` present | The run is opening a different shape than the preference named, because that one has nowhere to open. Name it |
 | `REVIEW_MODE_SOURCE=subject` / `REVIEW_TOOL_SOURCE=default` | anchor picked that half, not the user. Add the configuration hint from `execute-quietly.md` under "when anchor picked the tool"; `REVIEW_TOOL` names the tool about to open |
 | `REVIEW_EDIT_AVAILABLE=0\|1` | Whether the fallback ladder may offer the editor rung. Carry it forward |
-| `REVIEW_PRELOADS=0` | The tool can't show preloaded notes. A review given `--explain` opens without them, so put them in the manifest, one line each with its `file:line` |
+| `REVIEW_PRELOADS=0` | The tool can't show preloaded notes. A review given `--notes` opens without them, so put them in the manifest, one line each with its `file:line` |
 | `REVIEW_HOST` | Open the manifest with one line saying where the review is, so a user who comes back to this pane later knows where to look: 👀 *the review is open in an iTerm2 split of this pane* (`iterm2`), *in a tmux popup over this pane* (`tmux`), *in an agterm overlay over this session* (`agterm`), *in an editor window, possibly behind this one* (`gui`), *wherever your `ANCHOR_HOST_RUNNER` puts it* (`launcher`) |
 
 ## Put each note where the reader is already looking

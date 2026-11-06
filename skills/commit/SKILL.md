@@ -228,17 +228,13 @@ Before committing, open the pending changeset — the exact changes Step 6 will 
 
 Run it as the review loop in `${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md` describes — background launch, manifest, chat feedback while it's open, reading the verdict. What's particular to a commit:
 
-**Notes on your changes** (COMMIT-23). Before the launch, write a note for each hunk a reader would stop and ask about, by the bar in `${CLAUDE_PLUGIN_ROOT}/guides/review-notes.md`: one per hunk at most, none on a mechanical change, and none at all for a changeset with nothing to ask about. When the caller handed you notes (`/anchor:review` hands each kept item's reason), seed those and add your own only for hunks they leave unexplained. Write them to a unique temp file as `{"notes": [{"file": "<path>", "line": <n>, "note": "<text>"}]}` (a line numbered in the working tree; no `line` for a note on the whole file) and anchor them with the same path list:
+**Notes on your changes** (COMMIT-23). Before the launch, write a note for each hunk a reader would stop and ask about, by the bar in `${CLAUDE_PLUGIN_ROOT}/guides/review-notes.md`: one per hunk at most, none on a mechanical change, and none at all for a changeset with nothing to ask about. When the caller handed you notes (`/anchor:review` hands each kept item's reason), seed those and add your own only for hunks they leave unexplained. Write them to a unique temp file as `{"notes": [{"file": "<path>", "line": <n>, "note": "<text>"}]}` (a line numbered in the working tree; no `line` for a note on the whole file) and pass it to the launch as `--notes`. With no notes, leave `--notes` off.
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-explain.sh" --notes <notes.json> --path <p> [--path <p>...]
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill commit --local --message-file <commit-msg-path> --path <p> [--path <p>...] [--staged-path <p>...] [--notes <notes.json>]
 ```
 
-Each `EXPLAIN_ERROR` names a note the review has nowhere to show: move it onto the change it explains, or drop it. Pass `EXPLAIN_NOTES` to the launch as `--explain`. With no notes, leave `--explain` off.
-
-```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill commit --local --message-file <commit-msg-path> --path <p> [--path <p>...] [--staged-path <p>...] [--explain <EXPLAIN_NOTES>]
-```
+The notes are context the review carries, not a step of their own: write the file without comment. When the launch exits 65 with `NOTES_ERROR` lines instead of a verdict, nothing opened. Each names a note the review has nowhere to show: move it onto the change it explains, or drop it, and launch again.
 
 - **The manifest** is the table in `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`: **Repo** is `CR_REF` linked to `CR_URL` (the repo and branch when there's no CR), **Size** is Step 1's `STAT`, and **What's next** is the commit and push, or the amend and force-push with lease a squash takes. When the probe reports `REVIEW_MODE=diff`, print the message itself verbatim under the table in a fenced block (`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`): revdiff shows it in a `(context).md` file the reviewer has to open, a difftool not at all, and quitting either one approves it.
 - **Notes the tool can't show.** When the probe reports `REVIEW_PRELOADS=0`, the review opens without them: list them in the manifest, one line each, `file:line` and the note.

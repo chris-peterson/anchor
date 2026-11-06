@@ -342,22 +342,16 @@ if [[ "$forge" == github ]]; then
   author=$(jq -r '.author.login // empty' <<<"$view")
   base_sha=$(jq -r '.baseRefOid' <<<"$view")
   jq -r '.body // ""' <<<"$view" > "$desc"
-  self=$(gh api user 2>&1) || die "could not read the signed-in user" "$self"
-  self=$(jq -r '.login // empty' <<<"$self")
 else
   author=$(jq -r '.author.username // empty' <<<"$view")
   base_sha=$(jq -r '.diff_refs.base_sha' <<<"$view")
   jq -r '.description // ""' <<<"$view" > "$desc"
-  self=$(glab api user 2>&1) || die "could not read the signed-in user" "$self"
-  self=$(jq -r '.username // empty' <<<"$self")
 fi
+self=$(anchor_forge_self "$forge") || die "could not read the signed-in user" "$self"
 unreviewed='[]'
 if [[ -n "$self" && "$self" == "$author" ]]; then
-  if ! git rev-parse --verify --quiet "$base_sha^{commit}" >/dev/null; then
-    git fetch --quiet origin 2>/dev/null || true
-    git rev-parse --verify --quiet "$base_sha^{commit}" >/dev/null \
-      || die "the CR's base commit is not in this checkout" "fetch $target_branch and re-run"
-  fi
+  anchor_fetch_commit "$base_sha" \
+    || die "the CR's base commit is not in this checkout" "fetch $target_branch and re-run"
   recorded=$(review_status_data "$desc") \
     || die "could not read the CR's Review status section" "its opening comment holds data that isn't JSON"
   rows=$(review_status_rows "$recorded" "$base_sha" "$head_sha")

@@ -1408,6 +1408,9 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   before the launch, keep the review's context file, and read a note returned as
   seeded, or deleted, as read. Notes that explain a change add to the review
   rather than define it, so a tool that can't show them still grades the change.
+  The launch shall place the notes itself and refuse, before anything opens, a
+  note with nowhere to show, so carrying them adds no step of its own beside
+  the review's.
 - **[DIFF-42]** Where a `diff` review's tool quits with the same status for a
   reviewer with nothing to say as for one who discarded what they said, the
   system shall put a Review box in the review's context file, or in the
