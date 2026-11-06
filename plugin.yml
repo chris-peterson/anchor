@@ -111,6 +111,29 @@ events:
       fields:
         uri: the issue's web address
         title: its title, as anchor filed it
+    - key: attention.requested
+      when: >-
+        the review probe found a review that can open. Announced from the probe
+        because the launch runs in the background, where nothing it prints is
+        seen until the review is over; a subscriber hears it before the next tool
+        call opens the review. A probe the skill doesn't follow with a launch
+        has no release to match it.
+      emitted_by: scripts/review-diff.sh
+      fields:
+        target: >-
+          what is under review: the CR's web address where the review names one,
+          a drafted document's title for a review of files, or the repository's
+          root
+        skill:
+          describe: the skill asking for the review, as passed to `--skill`
+          optional: true
+    - key: attention.released
+      when: >-
+        a review launch ended, on every way out of it: a verdict, a refusal, or
+        a killed dispatcher. Read with the verdict, by whichever tool the agent
+        reads it with.
+      emitted_by: scripts/review-diff.sh
+      fields: {}
     - key: release.created
       when: >-
         release published a release, once the forge reports it exists. A repo
@@ -135,7 +158,7 @@ suite:
   cmds:
     - ["/anchor:commit", "Review the changeset, then commit with a why-first message and push"]
     - ["/anchor:prepare-review", "Rebase on the default branch and open a draft change request"]
-    - ["/anchor:review", "Read every change in a CR, weigh it against your qualities, post findings inline"]
+    - ["/anchor:review", "Weigh a CR against your qualities, make the clear fixes, and decide each finding in revdiff"]
     - ["/anchor:resolve-feedback", "Work a CR's review threads to done, one by one"]
     - ["/anchor:merge", "Check the merge gates, wait on the pipeline, then land the CR and clean up"]
     - ["/anchor:release", "Work out what's shipping, recommend a version, draft the notes, publish"]
@@ -148,13 +171,13 @@ suite:
     skills:
       backlog: List and rank the forge issues assigned to you so you can pick what to work on next — ranked by soonest due date, then most recently updated.
       commit: Stage changes, run tests, review the diff and drafted commit message with the user, then commit and push once they approve.
-      issue: File a new forge issue (or update an existing one) that leads with WHY the work is needed.
+      issue: File a new forge issue (or update an existing one) that leads with WHY the work is needed, or review edits to several issues as one batch.
       merge: Merge an approved change request once its gates are green — waiting on the pipeline if needed — then clean up the branch.
       pipeline: Report a commit's forge pipeline state, or watch until it settles.
       prepare-review: Open the PR/MR on an already-pushed branch, rebase on the default branch if behind, and draft a description that tells reviewers WHY the change exists.
       release: Cut a release for what has landed — recommend a semver bump, draft the notes, and drive the repo's own publish path.
       resolve-feedback: Fetch an open CR's review feedback and drive each thread to resolution — fix, reply, resolve.
-      review: Review an open change request — read every change in the diff viewer, examine it against the qualities you've set, then post the findings as inline threads once the exact text is approved.
+      review: Review an open change request, or a branch that has no CR yet — open revdiff on the commits you haven't reviewed so you read them and leave notes while agents examine them against the qualities you've set, draft a fix for each note and finding, then show those drafts alone so you keep, change, or drop each one, then the whole change with the kept fixes in it.
     rules:
       omit-attribution-trailers: Omit AI attribution trailers
       rewrite-history-through-anchor: Route history rewrites through `anchor`

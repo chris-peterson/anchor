@@ -34,11 +34,18 @@ cat > "$bin/gh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 case "${1:-}" in
-  pr)   [[ "${2:-}" == view ]] || { echo "stub gh: unhandled pr $2" >&2; exit 1; }
-        [[ -s "$CR_JSON" ]] || { echo "no pull requests found" >&2; exit 1; }
-        cat "$CR_JSON" ;;
-  api)  [[ "${2:-}" == user ]] || { echo "stub gh: unhandled api $2" >&2; exit 1; }
-        echo "$FORGE_SELF" ;;
+  pr)   case "${2:-}" in
+          view) [[ -s "$CR_JSON" ]] || { echo "no pull requests found" >&2; exit 1; }
+                cat "$CR_JSON" ;;
+          list) if [[ -s "$CR_JSON" ]]; then echo '[{"number":7}]'; else echo '[]'; fi ;;
+          *) echo "stub gh: unhandled pr $2" >&2; exit 1 ;;
+        esac ;;
+  api)  case "${2:-}" in
+          user)    if [[ "$*" == *--jq* ]]; then echo "$FORGE_SELF"; else printf '{"login":"%s"}\n' "$FORGE_SELF"; fi ;;
+          graphql) if [[ -s "${THREADS_JSON:-}" ]]; then cat "$THREADS_JSON"
+                   else echo '{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[]}}}}}'; fi ;;
+          *) echo "stub gh: unhandled api $2" >&2; exit 1 ;;
+        esac ;;
   *) echo "stub gh: unhandled command: ${1:-}" >&2; exit 1 ;;
 esac
 EOF
@@ -48,11 +55,17 @@ cat > "$bin/glab" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 case "${1:-}" in
-  mr)   [[ "${2:-}" == view ]] || { echo "stub glab: unhandled mr $2" >&2; exit 1; }
-        [[ -s "$CR_JSON" ]] || { echo "no open merge request" >&2; exit 1; }
-        cat "$CR_JSON" ;;
-  api)  [[ "${2:-}" == user ]] || { echo "stub glab: unhandled api $2" >&2; exit 1; }
-        printf '{"username":"%s"}\n' "$FORGE_SELF" ;;
+  mr)   case "${2:-}" in
+          view) [[ -s "$CR_JSON" ]] || { echo "no open merge request" >&2; exit 1; }
+                cat "$CR_JSON" ;;
+          list) if [[ -s "$CR_JSON" ]]; then echo '[{"iid":7}]'; else echo '[]'; fi ;;
+          *) echo "stub glab: unhandled mr $2" >&2; exit 1 ;;
+        esac ;;
+  api)  case "$*" in
+          "api user") printf '{"username":"%s"}\n' "$FORGE_SELF" ;;
+          *discussions*) if [[ -s "${THREADS_JSON:-}" ]]; then cat "$THREADS_JSON"; else echo '[]'; fi ;;
+          *) echo "stub glab: unhandled $*" >&2; exit 1 ;;
+        esac ;;
   *) echo "stub glab: unhandled command: ${1:-}" >&2; exit 1 ;;
 esac
 EOF
@@ -131,10 +144,13 @@ out=$(bash "$review_cr_sh" 7 --repo "$repo")
 [[ "$(key "$out" HOST)" == github.com ]] || fail "GitHub: HOST=$(key "$out" HOST)"
 [[ "$(key "$out" PROJECT)" == example/repo ]] || fail "GitHub: PROJECT=$(key "$out" PROJECT)"
 [[ "$(key "$out" CR_IID)" == 7 ]]       || fail "GitHub: CR_IID=$(key "$out" CR_IID)"
+[[ "$(key "$out" CR_REF)" == "repo #7" ]] || fail "GitHub: CR_REF names the repo and the PR number: $(key "$out" CR_REF)"
 [[ "$(key "$out" CR_AUTHOR)" == contributor ]] || fail "GitHub: CR_AUTHOR"
 [[ "$(key "$out" CR_STATE)" == open ]]  || fail "GitHub: CR_STATE=$(key "$out" CR_STATE)"
 [[ "$(key "$out" CR_HEAD_SHA)" == "$head" ]] || fail "GitHub: head not pinned"
 [[ "$(key "$out" IS_OWN_CR)" == 0 ]]    || fail "GitHub: IS_OWN_CR should be 0"
+[[ "$(key "$out" REVIEW_STATUS_UNREVIEWED)" == 1 ]] || fail "GitHub: someone else's CR without the section is unreviewed: $out"
+[[ "$(cat "$(key "$out" REVIEW_DECISIONS_PATH)")" == '[]' ]] || fail "GitHub: a CR without the section has no decisions: $out"
 ok "GitHub: resolves the CR and pins the head SHA"
 
 # The head was pushed to refs/pull/7/head and deleted locally, so its presence
@@ -142,6 +158,24 @@ ok "GitHub: resolves the CR and pins the head SHA"
 git -C "$repo" rev-parse --verify --quiet "${head}^{commit}" >/dev/null \
   || fail "GitHub: CR head was not fetched into the checkout"
 ok "GitHub: fetches the head through refs/pull/<n>/head with no branch checkout"
+
+[[ "$(key "$out" OPEN_THREADS)" == 0 ]] || fail "GitHub: no threads -> OPEN_THREADS=0, got $(key "$out" OPEN_THREADS)"
+export THREADS_JSON="$work/threads.json"
+jq -n '{data:{repository:{pullRequest:{reviewThreads:{nodes:[
+  {id:"T1", isResolved:false, path:"feature.txt", line:2,
+   comments:{nodes:[{author:{login:"contributor"}, body:"why two?"}, {author:{login:"reviewer"}, body:"see above"}]}},
+  {id:"T2", isResolved:false, path:"feature.txt", line:3,
+   comments:{nodes:[{author:{login:"reviewer"}, body:"rename three"}]}},
+  {id:"T3", isResolved:true, path:"feature.txt", line:1,
+   comments:{nodes:[{author:{login:"contributor"}, body:"done"}]}}]}}}}}' > "$THREADS_JSON"
+out=$(bash "$review_cr_sh" 7 --repo "$repo")
+[[ "$(key "$out" OPEN_THREADS)" == 2 && "$(key "$out" OPEN_THREADS_MINE)" == 1 ]] \
+  || fail "GitHub: 2 open threads, 1 mine: $(grep OPEN_ <<<"$out")"
+fb="$(key "$out" OPEN_FEEDBACK_PATH)"
+[[ "$(jq -r '.[0] | "\(.author) \(.file):\(.line) \(.replies) \(.mine)"' "$fb")" == "contributor feature.txt:2 1 false" ]] \
+  || fail "GitHub: open feedback shape: $(cat "$fb")"
+unset THREADS_JSON
+ok "GitHub: reports the open review threads, and which the user started"
 
 diff_path="$(key "$out" DIFF_PATH)"
 desc_path="$(key "$out" DESC_PATH)"
@@ -164,6 +198,7 @@ range="$(key "$out" DIFF_RANGE)"
 # picked by mode, so the stub is a mode named `dump`.
 mkdir -p "$work/fake-scripts/review/modes"
 cp "$review_diff_sh" "$work/fake-scripts/review-diff.sh"
+cp "$here/../scripts/announce.sh" "$work/fake-scripts/announce.sh"
 cp -R "$here/../scripts/lib" "$work/fake-scripts/lib"
 cat > "$work/fake-scripts/review/modes/dump.sh" <<'EOF'
 emit_review() {
@@ -199,6 +234,7 @@ out=$(bash "$review_cr_sh" 7 --repo "$repo")
 
 [[ "$(key "$out" FORGE)" == gitlab ]] || fail "GitLab: FORGE=$(key "$out" FORGE)"
 [[ "$(key "$out" PROJECT)" == example/repo ]] || fail "GitLab: PROJECT=$(key "$out" PROJECT)"
+[[ "$(key "$out" CR_REF)" == "repo !7" ]] || fail "GitLab: CR_REF names the repo and the MR number: $(key "$out" CR_REF)"
 [[ "$(key "$out" CR_HEAD_SHA)" == "$head" ]]  || fail "GitLab: head not pinned"
 [[ "$(key "$out" CR_BASE_SHA)" == "$base" ]]  || fail "GitLab: base not pinned"
 [[ "$(key "$out" CR_START_SHA)" == "$base" ]] || fail "GitLab: start_sha not pinned"
@@ -211,6 +247,53 @@ gl_cr_json "$head" "$base" reviewer opened false
 out=$(bash "$review_cr_sh" 7 --repo "$repo")
 [[ "$(key "$out" IS_OWN_CR)" == 1 ]] || fail "own CR not detected"
 ok "reports IS_OWN_CR when the author is the authenticated user"
+
+# --- The own CR's Review status: what has had no round yet --------------------
+[[ "$(key "$out" REVIEW_STATUS_COMMITS)" == 1 ]] || fail "review status: commits counted: $out"
+[[ "$(key "$out" REVIEW_STATUS_UNREVIEWED)" == 1 ]] || fail "review status: no section means unreviewed: $out"
+[[ "$(key "$out" REVIEW_STATUS_OLDEST)" == "$head" ]] || fail "review status: oldest unreviewed"
+[[ "$(key "$out" REVIEW_STATUS_FROM)" == "$base" ]] || fail "review status: the range starts at the oldest one's parent"
+grep -q '^+one$' "$(key "$out" REVIEW_STATUS_DIFF_PATH)" || fail "review status: the diff holds the unreviewed commit"
+ok "an own CR with no Review status section has every commit unreviewed"
+
+patch=$(git -C "$repo" show --format= "$head" | git patch-id --stable | cut -d' ' -f1)
+jq --arg p "$patch" '.description = "Why this exists.\n\n<!-- anchor:review-status {\"\($p)\":{\"rounds\":2,\"result\":\"approved\",\"notes\":[\"declined to split the parser\"]}} -->\n"' \
+  "$CR_JSON" > "$CR_JSON.new"
+mv "$CR_JSON.new" "$CR_JSON"
+out=$(bash "$review_cr_sh" 7 --repo "$repo")
+[[ "$(key "$out" REVIEW_STATUS_UNREVIEWED)" == 0 ]] || fail "review status: a recorded commit is reviewed: $out"
+[[ -z "$(key "$out" REVIEW_STATUS_FROM)" ]] || fail "review status: nothing to range over"
+[[ "$(cat "$(key "$out" REVIEW_DECISIONS_PATH)")" == '["declined to split the parser"]' ]] \
+  || fail "review status: the recorded decisions reach the review: $out"
+ok "a commit the section records is reviewed, and its decisions reach the review"
+
+# --- Someone else's CR: a commit is reviewed once you reviewed it -------------
+for by in '["ana"]' '["ana","reviewer"]'; do
+  gl_cr_json "$head" "$base" contributor opened false
+  jq --arg p "$patch" --argjson by "$by" '.description = "Why.\n\n<!-- anchor:review-status \({($p): {rounds: 1, by: $by, result: "approved"}} | tojson) -->\n"' \
+    "$CR_JSON" > "$CR_JSON.new"
+  mv "$CR_JSON.new" "$CR_JSON"
+  out=$(bash "$review_cr_sh" 7 --repo "$repo")
+  want=$([[ "$by" == *reviewer* ]] && echo 0 || echo 1)
+  [[ "$(key "$out" REVIEW_STATUS_UNREVIEWED)" == "$want" ]] \
+    || fail "someone else's CR reviewed by $by: want $want unreviewed: $out"
+done
+ok "on someone else's CR, only your own rounds count as reviewed"
+
+# --- GitLab: open discussions, skipping system notes and resolved threads ----
+export THREADS_JSON="$work/discussions.json"
+jq -n '[
+  {id:"D1", notes:[{system:false, resolvable:true, resolved:false, author:{username:"contributor"},
+                    body:"is this right?", position:{new_path:"feature.txt", new_line:1}}]},
+  {id:"D2", notes:[{system:false, resolvable:true, resolved:true, author:{username:"contributor"}, body:"fixed"}]},
+  {id:"D3", notes:[{system:true, resolvable:false, resolved:false, author:{username:"bot"}, body:"added 1 commit"}]}]' > "$THREADS_JSON"
+out=$(bash "$review_cr_sh" 7 --repo "$repo")
+[[ "$(key "$out" OPEN_THREADS)" == 1 && "$(key "$out" OPEN_THREADS_MINE)" == 0 ]] \
+  || fail "GitLab: 1 open thread: $(grep OPEN_ <<<"$out")"
+[[ "$(jq -r '.[0] | "\(.id) \(.file):\(.line)"' "$(key "$out" OPEN_FEEDBACK_PATH)")" == "D1 feature.txt:1" ]] \
+  || fail "GitLab: open feedback shape"
+unset THREADS_JSON
+ok "GitLab: reports open discussions, skipping system notes and resolved ones"
 
 # --- A merged CR still resolves, with its state reported ---------------------
 gl_cr_json "$head" "$base" contributor merged false
@@ -244,5 +327,64 @@ set -e
 [[ $rc -ne 0 ]] || fail "expected a non-zero exit when the pinned head is unreachable"
 [[ "$(key "$out" REVIEW_ERROR)" == *"head"* ]] || fail "expected a head-related REVIEW_ERROR, got: $out"
 ok "a head the checkout cannot reach stops rather than reviewing the wrong range"
+
+# --- A branch with no CR: the branch's own commits, and the local record -----
+review_status_sh="$here/../scripts/review-status.sh"
+add_commit() {
+  printf '%s\n' "$2" > "$1/$2.txt"
+  git -C "$1" add -A
+  git -C "$1" commit --quiet -m "Add $2" ${3:+-m "$3"}
+  git -C "$1" rev-parse HEAD
+}
+for host in github.com gitlab.com; do
+  read -r repo base _ <<<"$(make_repo "$host" "local-$host" pull 7)"
+  : > "$CR_JSON"
+  git -C "$repo" checkout --quiet -b local-work
+  first=$(add_commit "$repo" a "Because a.")
+  second=$(add_commit "$repo" b)
+
+  out=$(bash "$review_cr_sh" --repo "$repo")
+  [[ "$(key "$out" HAS_CR)" == 0 ]] || fail "$host: a branch with no CR -> HAS_CR=0: $out"
+  [[ -z "$(key "$out" CR_IID)" && -z "$(key "$out" CR_URL)" ]] || fail "$host: no CR, no CR_IID or CR_URL: $out"
+  [[ "$(key "$out" CR_REF)" == "repo local-work" ]] || fail "$host: CR_REF names the repo and the branch: $(key "$out" CR_REF)"
+  [[ "$(key "$out" CR_TITLE)" == "2 commits ahead of main" ]] || fail "$host: CR_TITLE=$(key "$out" CR_TITLE)"
+  [[ "$(key "$out" IS_OWN_CR)" == 1 && "$(key "$out" OPEN_THREADS)" == 0 ]] || fail "$host: own, no threads: $out"
+  [[ "$(key "$out" CR_HEAD_SHA)" == "$second" && "$(key "$out" CR_BASE_SHA)" == "$base" ]] || fail "$host: the range is the branch's commits: $out"
+  grep -q '^## Add a$' "$(key "$out" DESC_PATH)" || fail "$host: DESC_PATH holds the subjects: $(cat "$(key "$out" DESC_PATH)")"
+  grep -q '^Because a\.$' "$(key "$out" DESC_PATH)" || fail "$host: DESC_PATH holds the bodies: $(cat "$(key "$out" DESC_PATH)")"
+  [[ "$(key "$out" REVIEW_STATUS_UNREVIEWED)" == 2 ]] || fail "$host: nothing recorded -> 2 unreviewed: $out"
+
+  rec=$(bash "$review_status_sh" record --local --base "$base" --head "$first" --result approved --note "kept a" --repo "$repo")
+  [[ "$(key "$rec" STATUS_RECORDED)" == 1 && "$(key "$rec" STATUS_UNREVIEWED)" == 1 ]] || fail "$host: record --local: $rec"
+  [[ -s "$repo/.git/anchor/review-status.json" ]] || fail "$host: the local record is in the git directory"
+  [[ "$(jq -r '.[0].by[0]' "$(key "$rec" STATUS_ROWS_PATH)")" == reviewer ]] || fail "$host: the round is by the signed-in user"
+
+  out=$(bash "$review_cr_sh" --repo "$repo")
+  [[ "$(key "$out" REVIEW_STATUS_UNREVIEWED)" == 1 && "$(key "$out" REVIEW_STATUS_OLDEST)" == "$second" ]] \
+    || fail "$host: the recorded commit is skipped: $out"
+  [[ "$(jq -c . "$(key "$out" REVIEW_DECISIONS_PATH)")" == '["kept a"]' ]] || fail "$host: the local decisions are read"
+
+  git -C "$repo" checkout --quiet main
+  set +e
+  out=$(bash "$review_cr_sh" --repo "$repo" 2>/dev/null); rc=$?
+  set -e
+  [[ $rc -ne 0 && "$(key "$out" REVIEW_ERROR)" == *"default branch"* ]] || fail "$host: the default branch is nothing to review: $out"
+done
+ok "a branch with no CR reviews its own commits and skips those the local record covers"
+
+# Another branch's commits in the same record don't count toward this one.
+git -C "$repo" checkout --quiet -b other-work
+add_commit "$repo" c >/dev/null
+out=$(bash "$review_cr_sh" --repo "$repo")
+[[ "$(key "$out" REVIEW_STATUS_COMMITS)" == 1 && "$(jq -c . "$(key "$out" REVIEW_DECISIONS_PATH)")" == '[]' ]] \
+  || fail "another branch reads only its own commits from the record: $out"
+ok "the local record is read for the branch's own commits"
+
+# The branch's CR, once there is one, is what a review reads.
+gl_cr_json "$(git -C "$repo" rev-parse HEAD)" "$base" reviewer opened true
+git -C "$repo" push --quiet origin "HEAD:refs/merge-requests/7/head"
+out=$(bash "$review_cr_sh" --repo "$repo")
+[[ "$(key "$out" HAS_CR)" == 1 && "$(key "$out" CR_IID)" == 7 ]] || fail "a branch with a CR resolves the CR: $out"
+ok "a branch with a CR reviews the CR"
 
 echo "# all checks passed"

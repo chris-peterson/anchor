@@ -124,18 +124,8 @@ if [[ -z "$branch" ]]; then
 fi
 
 # --- Default-branch guard -----------------------------------------------------
-# Same resolution ladder as squash-check.sh: symbolic origin/HEAD, then main,
-# then master.
 
-default_branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null \
-  | sed 's@^origin/@@' || true)
-if [[ -z "$default_branch" ]]; then
-  if git rev-parse --verify --quiet origin/main >/dev/null; then
-    default_branch=main
-  elif git rev-parse --verify --quiet origin/master >/dev/null; then
-    default_branch=master
-  fi
-fi
+default_branch=$(anchor_default_branch || true)
 
 if [[ -n "$default_branch" && "$branch" == "$default_branch" && "$allow_default_branch" -eq 0 ]]; then
   echo "commit.sh: refusing to commit/push onto the default branch ($default_branch);" >&2

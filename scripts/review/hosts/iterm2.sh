@@ -89,10 +89,12 @@ review_host_run() {
   # rendered name onto the pane keeps the label the user was reading, and the 👀
   # leading it says which of their windows is waiting on them to read something.
   # The mark lives in the name because that is a session's own string: a pane
-  # background would need a profile to carry it, where this needs nothing. The
-  # copy is attempted, not required: the pane is already running the review by
-  # the time it happens, and an error there would be reported as a split that
-  # never opened.
+  # background would need a profile to carry it, where this needs nothing. A name
+  # that already carries 👀 is copied as it is: a subscriber to the review's
+  # `attention.requested` (DIFF-47) drew it there before the split opened, in the
+  # place its own label format puts it. The copy is attempted, not required: the
+  # pane is already running the review by the time it happens, and an error
+  # there would be reported as a split that never opened.
   pane=$(osascript - "${ITERM_SESSION_ID##*:}" "$launch" "$sentinel" <<'APPLESCRIPT' 2>&1
 on run argv
     set targetId to item 1 of argv
@@ -111,7 +113,11 @@ on run argv
                             end if
                         end tell
                         try
-                            set name of newSession to "👀 " & paneName
+                            if paneName contains "👀" then
+                                set name of newSession to paneName
+                            else
+                                set name of newSession to "👀 " & paneName
+                            end if
                         end try
                         select newSession
                         return id of newSession

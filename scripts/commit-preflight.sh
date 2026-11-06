@@ -91,15 +91,7 @@ stat=""
 
 branch=$(git branch --show-current 2>/dev/null || true)
 
-default_branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null \
-  | sed 's@^origin/@@' || true)
-if [[ -z "$default_branch" ]]; then
-  if git rev-parse --verify --quiet origin/main >/dev/null; then
-    default_branch=main
-  elif git rev-parse --verify --quiet origin/master >/dev/null; then
-    default_branch=master
-  fi
-fi
+default_branch=$(anchor_default_branch || true)
 
 on_default=0
 [[ -n "$branch" && "$branch" == "$default_branch" ]] && on_default=1
@@ -118,7 +110,7 @@ echo "BRANCH=$branch"
 echo "DEFAULT_BRANCH=$default_branch"
 echo "ON_DEFAULT_BRANCH=$on_default"
 echo "AHEAD=$ahead"
-# squash-check emits SQUASH / SQUASH_FORCE_PUSH / ALLOW_MESSAGE_AMEND / PRIOR_SUBJECT.
+# squash-check emits SQUASH / SQUASH_FORCE_PUSH / ALLOW_MESSAGE_AMEND / PRIOR_SUBJECT / CR_REF / CR_URL.
 # Runs in this script's cwd (already the target repo), so it needs no --repo.
 bash "$here/squash-check.sh"
 echo "ANCHOR_CONFIG=$config_json"

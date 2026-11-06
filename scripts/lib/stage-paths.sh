@@ -151,6 +151,52 @@ anchor_index_digest() {
     | git hash-object --stdin
 }
 
+# anchor_review_snapshot [<path>...]
+# A commit holding the index with <path>... taken as they stand in the working
+# tree, so a later review can show only what changed after this point. Written
+# through a private index, so nothing is staged; with no paths, every tracked
+# path. A commit rather than a tree, since a viewer takes a commit as its base
+# where it may not take a tree. Needs lib/tmpfile.sh.
+#
+# A path is added only where it differs from that index, for the reason
+# anchor_stage_paths gives: a fully staged deletion is fatal to `git add`.
+anchor_review_snapshot() {
+  local idx index tree p line
+  idx=$(anchor_tmpfile anchor-review-snapshot idx)
+  index=$(git rev-parse --path-format=absolute --git-path index)
+  [[ ! -f "$index" ]] || cp "$index" "$idx"
+  if [[ $# -eq 0 ]]; then
+    GIT_INDEX_FILE="$idx" git add -u
+  else
+    for p in "$@"; do
+      while IFS= read -r line; do
+        if [[ -n "$line" && "${line:1:1}" != " " ]]; then
+          GIT_INDEX_FILE="$idx" git add -A -- ":/$p"
+          break
+        fi
+      done < <(GIT_INDEX_FILE="$idx" git status --porcelain -- ":/$p")
+    done
+  fi
+  tree=$(GIT_INDEX_FILE="$idx" git write-tree)
+  rm -f "$idx"
+  local -a parent=()
+  ! git rev-parse --verify --quiet HEAD >/dev/null || parent=(-p HEAD)
+  GIT_AUTHOR_NAME=anchor GIT_AUTHOR_EMAIL=anchor@localhost \
+  GIT_COMMITTER_NAME=anchor GIT_COMMITTER_EMAIL=anchor@localhost \
+    git commit-tree "$tree" "${parent[@]+"${parent[@]}"}" -m "anchor: a reviewed changeset as its review closed"
+}
+
+# anchor_local_base
+# What a working-tree review diffs against: HEAD, or on a branch with no commit
+# yet, a commit of the empty tree, since a viewer takes a commit as its base
+# where it may not take a tree.
+anchor_local_base() {
+  if git rev-parse --verify --quiet HEAD >/dev/null; then echo HEAD; return; fi
+  GIT_AUTHOR_NAME=anchor GIT_AUTHOR_EMAIL=anchor@localhost \
+  GIT_COMMITTER_NAME=anchor GIT_COMMITTER_EMAIL=anchor@localhost \
+    git commit-tree "$(git hash-object -t tree /dev/null)" -m "anchor: the empty tree a first commit is reviewed against"
+}
+
 # anchor_other_staged_count [<path>...]
 # How many staged paths this call did not stage — another session's in-flight work
 # in a shared checkout. With no paths every staged path counts, which is the

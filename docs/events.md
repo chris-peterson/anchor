@@ -18,6 +18,8 @@ The events, each linkable on its own:
 - [`cr.merged`](#cr-merged)
 - [`commit.pushed`](#commit-pushed)
 - [`issue.created`](#issue-created)
+- [`attention.requested`](#attention-requested)
+- [`attention.released`](#attention-released)
 - [`release.created`](#release-created)
 
 ## `cr.created` :id=cr-created
@@ -111,6 +113,31 @@ issue filed a new issue. A run that adds to an issue that already existed announ
 | `title` | always set | its title, as anchor filed it |
 
 Emitted by `skills/issue`.
+
+## `attention.requested` :id=attention-requested
+
+```text
+codes.bridgeai.anchor/attention.requested
+```
+
+the review probe found a review that can open. Announced from the probe because the launch runs in the background, where nothing it prints is seen until the review is over; a subscriber hears it before the next tool call opens the review. A probe the skill doesn't follow with a launch has no release to match it.
+
+| Field | Value | Meaning |
+|---|---|---|
+| `target` | always set | what is under review: the CR's web address where the review names one, a drafted document's title for a review of files, or the repository's root |
+| `skill` | may be empty | the skill asking for the review, as passed to `--skill` |
+
+Emitted by `scripts/review-diff.sh`.
+
+## `attention.released` :id=attention-released
+
+```text
+codes.bridgeai.anchor/attention.released
+```
+
+a review launch ended, on every way out of it: a verdict, a refusal, or a killed dispatcher. Read with the verdict, by whichever tool the agent reads it with.
+
+Emitted by `scripts/review-diff.sh`.
 
 ## `release.created` :id=release-created
 

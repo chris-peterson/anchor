@@ -93,6 +93,7 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 | `PRIOR_CR_IID` / `PRIOR_CR_STATE` | non-empty → the branch name already carries a CR that isn't open, which this run passed over; name it once (see "A reused branch name") |
 | `STATE` | `match` → proceed; anything else → surface and stop (see "Act on `STATE`") |
 | `CURRENT_DESC_PATH` | the review's left-hand side in Step 4 — an empty file until a CR holds a description |
+| `CR_REVIEW_STATUS_PATH` | the description's Review status section (REVIEW-31), set aside so the draft and its review hold prose alone, with the rounds the branch's commits had before the CR existed added from the local record; `--write` puts it back. Empty where there is neither |
 | `DESC_DRAFT_PATH` | where to write the drafted description in Step 4 — already `mktemp`'d, so don't make your own |
 | `TEMPLATE_PATH` | the CR template to compose into (Step 3); empty when the hierarchy holds none, or when the pick needs the author |
 | `TEMPLATE_SOURCE` | which level answered — `local` / `project-settings` / `inherited` / `configured` / `ambiguous` / `none` |
@@ -100,7 +101,7 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 | `DELETE_BRANCH_ON_MERGE` | `false` on a CR this run opened → name it and offer the remediation (see "Branch deletion on merge"); `unknown` → say nothing |
 | `ANCHOR_CONFIG` | `anchor.*` keys to apply (Step 3), as JSON |
 
-If the block carries a `CR_CREATE_ERROR=…` line, the draft-open hit an auth or push failure — surface it and ask the user to refresh credentials; do **not** fall back to the URL-free path (the fail-fast-on-auth rule).
+If the block carries a `CR_CREATE_ERROR=…` line, the draft-open hit an auth or push failure — surface it and ask the user to refresh credentials; do **not** fall back to the URL-free path (the fail-fast-on-auth rule). A `PREPARE_ERROR=…` line names a review record (the CR's Review status section, or the local record) that isn't JSON: surface it and stop, since writing the description would carry the broken record forward or drop it.
 
 ### Operating against a non-cwd repo
 
@@ -114,7 +115,7 @@ When the CR lives in a repo other than the session's cwd (you're in repo A, the 
 
 Either way, thread the checkout through every later command — the harness resets cwd between Bash calls, so each one needs it again: `prepare-review.sh --repo <path>`, `deep-links.sh --repo <path>`, `git -C <path>`, `-R <owner/name>` on `gh`/`glab` subcommands, and the URL-encoded project for `:fullpath` (plus `--hostname <host>`) on `glab api`, which has no `-R`. The full threading rules are in `${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`.
 
-`--cr <iid|url>` resolves a CR that isn't the checkout's branch — updating an MR while the checkout sits on a WIP branch. The deep-link and diff steps still read the checkout's branch, so point `--repo` at a checkout on the CR's branch when you need those.
+`--cr <iid|url>` resolves a CR that isn't the checkout's branch — updating an MR while the checkout sits on a WIP branch. The deep-link and diff steps still read the checkout's branch, and `--write` refuses a CR whose source branch isn't the checkout's, so point `--repo` at a checkout on the CR's branch to write its description.
 
 When the target is just the session cwd (no non-cwd repo in play), skip all of this — everything below is plain `git` / `gh` / `glab` against the working directory.
 
@@ -368,7 +369,7 @@ The description gets pasted into a markdown renderer, so rendering bugs are user
     --base <DEFAULT_BRANCH> [--repo <path>]
   ```
 
-  It exits non-zero with one `UNRESOLVED <kind> <path> <token>` per problem, and each kind is an authoring fix: `ambiguous` (several changed lines match — the candidates are listed with their content, so copy a longer substring off the one you meant), `unchanged` (in the file but not on a changed line), `absent` (a typo), `unknown-file` (a path the range doesn't touch), `malformed` (an `anchor:` that isn't a link destination). Fix and re-run until it's clean — a placeholder that survives into Step 4's expansion stalls the write on a CR that already exists. It needs the clean tree Step 1's `STATE=match` already established: line content comes from the working tree and changed hunks from `<DEFAULT_BRANCH>...HEAD`, and it emits `DEEP_LINK_TREE=dirty` when those have diverged. Skip it on the `skip-deep-links` path, where the description carries no links at all.
+  It exits non-zero with one `UNRESOLVED <kind> <path> <token>` per problem, and each kind is an authoring fix: `ambiguous` (several changed lines match — the candidates are listed with their content, so copy a longer substring off the one you meant), `unchanged` (in the file but not on a changed line), `absent` (a typo), `unknown-file` (a path the range doesn't touch), `malformed` (an `anchor:` that isn't a link destination), `unbracketed` (a token with a parenthesis written without the angle brackets, which cut it at the `)`). Fix and re-run until it's clean — a placeholder that survives into Step 4's expansion stalls the write on a CR that already exists. It needs the clean tree Step 1's `STATE=match` already established: line content comes from the working tree and changed hunks from `<DEFAULT_BRANCH>...HEAD`, and it emits `DEEP_LINK_TREE=dirty` when those have diverged. Skip it on the `skip-deep-links` path, where the description carries no links at all.
 - **A description that predates this convention needs the backstop instead.** Re-running against a CR whose description came from elsewhere means hand-built anchors with hand-read line numbers, which `--check` doesn't see. Run `--verify <DESC_DRAFT_PATH> --forge <FORGE> --cr-url <CR_URL> --base <DEFAULT_BRANCH>` over those, and re-point each `SUSPECT`: `out-of-range`, `blank-line`, `unchanged-line`, `unknown-file`, `malformed` (a line part in a shape the forge won't resolve). A link that landed on the *wrong changed line* is the one case it can't see — which is what replacing it with a placeholder fixes.
 
 ### Open the review
@@ -385,20 +386,24 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --pro
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --mode <REVIEW_MODE> --files \
-  <CURRENT_DESC_PATH> <DESC_DRAFT_PATH> \
-  --title 'CR description' \
+  <CURRENT_DESC_PATH> <DESC_DRAFT_PATH> --name '<CR_REFERENCE>' \
+  --title '<CR_REFERENCE>: <CR_TITLE>' \
   --detail branch=<BRANCH> --detail CR=<CR_URL>
 ```
 
-`CURRENT_DESC_PATH` is the left-hand side — what the forge holds now, and an empty file where no CR holds anything yet. It's context for the draft, not the subject.
+The title is the review's heading, so it names the CR under review: its reference and title, and on `CR_PENDING` the repo and the Step 3 title (`<repo>: <title>`), since there is no reference yet.
+
+`CURRENT_DESC_PATH` is the left-hand side — what the forge holds now, and an empty file where no CR holds anything yet. It's context for the draft, not the subject. `--name` gives the reviewed file the CR's reference (`<repo>#<number>`, `<repo>!<iid>`) in place of the draft's temp name; drop it where `CR_REFERENCE` is empty, and the editor names the buffer for the repo and branch.
 
 **The manifest** names the CR (number and title), the repo and branch, the tool, the sections the draft carries, and any template checkbox items dropped as unverifiable — an editor window opens behind the terminal, and a review the user cannot see is one they never grade. After the table, the next thing you say is the verdict, the feedback echoed back, or the one-line write result.
 
 What each verdict leads to here:
 
-- **`approved`** — write the draft to the CR (see "Write it" below): the `editedFields` text with `target: "description"` where `edit` mode returned one, the draft otherwise. The reviewer read the description and signed off, so a second chat gate asking the same question is the ceremony this step exists to remove. Surface any comments an approving review still left after the write.
+- **`approved`** — write the draft to the CR (see "Write it" below): the `editedFields` text with `target: "description"` where the result carries one, the draft otherwise. The reviewer read the description and signed off, so a second chat gate asking the same question is the ceremony this step exists to remove. Surface any comments an approving review still left after the write.
 - **`changes-requested`** — fold in the comments and re-open on the revised draft, with the previous draft as the left-hand side rather than `CURRENT_DESC_PATH`: the description the forge holds is the comparison the first pass already answered.
-- **`incomplete`**, **`no-verdict`**, or no verdict line at all — nothing is written to the CR; take the fallback below.
+- **`rejected`** — nothing is written to the CR, and nothing falls back; say so and stop.
+- **`no-verdict`** with `raw.exitCode` `undecided` — ask Accept, Reject, or Reopen, and act on the answer as that verdict (`${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md`).
+- **`incomplete`**, any other **`no-verdict`**, or no verdict line at all — nothing is written to the CR; take the fallback below.
 
 ### When the review didn't grade it (or there's no CR yet)
 
@@ -415,6 +420,8 @@ Then ask how to proceed with the `AskUserQuestion` tool, header `Disposition`, o
 ### Open the CR and write it
 
 Reached on an `approved` review, or on **Yes (write)** from the no-tool fallback. Editing a description is reversible, which is why the review's sign-off is enough to write on. On 401/403 or similar auth failure, surface the error and ask the user to refresh credentials — do not silently fall back to copy-only. The draft is `DESC_DRAFT_PATH`.
+
+**Run the three steps below one at a time, each after the last one's output is in hand.** Each takes what the one before printed: `CR_URL` and `CR_IID` come from the `--open` block, or from Step 1's on a pre-existing CR. Never work a number out from another CR's: numbers are shared across the project, so the next one may already be someone else's.
 
 **1. Open the CR, if Step 1 said one is pending.** On `CR_PENDING=1`, this is where the CR first exists, and it exists carrying the text the author just approved:
 
@@ -438,10 +445,14 @@ It rewrites the draft in place and reports `EXPANDED=<n>`. All-or-nothing: an un
 
 **Screenshots referenced by local path (GitLab) upload first.** `glab api --method POST projects/<id>/uploads --form "file=@local.png"` returns a `markdown` field pointing at a hosted URL — swap each local reference for its upload result in `DESC_DRAFT_PATH` before the write below, so the description lands with working images on the first try. See the forge cookbook's binary-upload recipe; the `-F`/`--form` distinction there is the part that bites.
 
-- **GitHub:** `gh pr edit --body-file <DESC_DRAFT_PATH>`.
-- **GitLab:** use the API form `glab api -X PUT projects/:fullpath/merge_requests/<CR_IID> -F "description=@<DESC_DRAFT_PATH>"` — `glab mr update -d` doesn't accept a file. See the bundled forge cookbook (`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`) for the full canonical invocation.
+Then write it:
 
-When operating against a non-cwd repo these are the write path, so retarget them per "Operating against a non-cwd repo": add `-R <owner/name>` to `gh pr edit`, and substitute the URL-encoded project for `:fullpath` in the `glab api` PUT (plus `--hostname` for self-hosted).
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh" --write --body-file <DESC_DRAFT_PATH> \
+  --status-section <CR_REVIEW_STATUS_PATH> --cr <CR_IID> [--repo <path>]
+```
+
+The script puts the Review status section back on a copy of the draft, joined with whatever the CR holds now, and writes that copy, so `DESC_DRAFT_PATH` stays the text the author approved. Don't splice the section into the draft or write the description with `gh pr edit` / `glab api` yourself: the section is anchor's record, written without a prompt (CONFIRM-17), and this one call is what an allow rule names. It emits `CR_WRITTEN=1`, `STATUS_CARRIED=<0|1>`, and `CR_BACKUP_PATH`, the description the CR held before the write, saved under the repo's `.git/anchor/backups/`. A `CR_WRITE_ERROR=` line is either a refusal or a failure; surface it and stop. A refusal names a CR whose source branch isn't this checkout's, so its number didn't come from this branch's CR. A failure is an auth or forge error, surfaced the same way as `CR_CREATE_ERROR`.
 
 Report the write as one line once **Label it and set the milestone** below has run — the CR URL, that the description landed, and what the metadata came out as. **No CR to write to** (`skip-deep-links`, or the user picked copy-only): print the body for them to paste into the web UI themselves.
 
@@ -467,11 +478,11 @@ gh pr edit <CR_NUMBER> --add-label "<label>" --milestone "<milestone title>"
 glab mr update <CR_IID> --label "<a,b>" --milestone "<milestone title>"
 ```
 
-Retarget the listing and these calls per "Operating against a non-cwd repo" the same way the write path does (`-R`, `TARGET_PROJECT` for `{owner}/{repo}` in the `gh api` milestones path, `--hostname` for self-hosted GitLab). The full flag set and the CLI gaps — `gh` has no `milestone` command, and `gh pr edit` has no plain `--label` — are in the cookbook's "Labels and milestones".
+Retarget the listing and these calls per "Operating against a non-cwd repo" (`-R`, `TARGET_PROJECT` for `{owner}/{repo}` in the `gh api` milestones path, `--hostname` for self-hosted GitLab). The full flag set and the CLI gaps — `gh` has no `milestone` command, and `gh pr edit` has no plain `--label` — are in the cookbook's "Labels and milestones".
 
 ### Report the branch's pipeline
 
-Run this once the description has landed, as `${CLAUDE_PLUGIN_ROOT}/guides/watching-a-pipeline.md` describes, retargeted the same way as the write path:
+Run this once the description has landed, as `${CLAUDE_PLUGIN_ROOT}/guides/watching-a-pipeline.md` describes, with `--repo <path>` when operating against a non-cwd repo:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill prepare-review

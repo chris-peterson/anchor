@@ -407,9 +407,8 @@ if [[ -n "$changelog" ]]; then
 fi
 
 branch=$(git rev-parse --abbrev-ref HEAD)
-default_branch=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null \
-                 | sed 's@^refs/remotes/origin/@@' || true)
-if [[ -z "$default_branch" ]]; then
+# A repo with no remote yet still has a default branch to release from.
+if ! default_branch=$(anchor_default_branch); then
   for c in main master; do
     git show-ref --verify --quiet "refs/heads/$c" && { default_branch="$c"; break; }
   done

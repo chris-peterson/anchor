@@ -15,7 +15,9 @@
 # create uses the cwd repo as the source project → a 422 fork-mismatch); running
 # *inside* the target checkout has no such gap.
 #
-# This library only ever `cd`s — it does not create anything.
+# ctx_resolve_repo only ever `cd`s — it does not create anything. The other helpers
+# read facts off the resolved checkout: the default branch, and whether a commit
+# is in it (fetching origin once when it isn't).
 #
 #   CTX_REPO       (in)  a checkout to operate on directly (--repo)
 #   RESOLVED_VIA   (out) `cwd` (inferred) or `repo` (--repo); the caller emits it
@@ -41,4 +43,25 @@ ctx_resolve_repo() {
   fi
   cd "$target" || { echo "CTX_ERROR=could not cd into repo target: $target" >&2; exit 66; }
   RESOLVED_VIA=repo
+}
+
+# origin's default branch, by name: what origin/HEAD points at, else main, else
+# master, whichever this checkout has. Prints nothing and returns 1 when it has
+# none of them.
+anchor_default_branch() {
+  local ref
+  for ref in "$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true)" origin/main origin/master; do
+    if [[ -n "$ref" ]] && git rev-parse --verify --quiet "$ref^{commit}" >/dev/null; then
+      printf '%s\n' "${ref#origin/}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Whether <sha> is a commit in this checkout, fetching origin once when it isn't.
+anchor_fetch_commit() {
+  git rev-parse --verify --quiet "$1^{commit}" >/dev/null 2>&1 && return 0
+  git fetch --quiet origin 2>/dev/null || true
+  git rev-parse --verify --quiet "$1^{commit}" >/dev/null 2>&1
 }

@@ -190,7 +190,9 @@ isn't load-bearing (e.g. `salt = env|app` instead of three separate nodes for
 
 When the diff touches rendered output, prose can't show the reviewer what
 changed. Capture screenshots *before* drafting Context — for UX-driven CRs
-they're usually the centerpiece, not a footnote.
+they're usually the centerpiece, not a footnote, so the
+[CR description template](/templates/cr-description) places them at the end of
+Context.
 
 - **Detect.** The changeset is UX-related when the diff touches `.css`/`.scss`, component files (`.tsx`/`.jsx`/`.vue`/`.svelte`), templates (`.html`/`.erb`/`.razor`), design tokens, or asset files (icons, images, fonts).
 - **Capture After.** Drive the running app with the Playwright MCP browser tools (`browser_navigate`, `browser_take_screenshot`). For an isolated component the app can't easily mount, a frontend-design skill can compose a representative view to screenshot.

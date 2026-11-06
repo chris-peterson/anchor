@@ -132,6 +132,10 @@ first commit.
   sign-off.
 - **No editor set?** It uses `core.editor` and git's own chain, the same editor
   `git commit` would have opened.
+- **Want the setup the reviews are built around?** revdiff for diffs and helix
+  for drafts take two `git config` lines:
+  [Recommended setup](/guides/configuring?id=recommended-setup), and how each
+  ends a review in [Ending a review](/guides/configuring?id=ending-a-review).
 - **Nothing lands in your repo.** Every knob is a `git config anchor.*` value in
   `.git/config`, which is never tracked. `anchor` adds no file to your project.
 
