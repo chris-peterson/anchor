@@ -233,6 +233,8 @@ When a target resolved (see **Target repo**), retarget these off the cwd repo: a
 
 Repeat `--label` per label; drop a metadata flag entirely where Step 5 settled on none.
 
+**On an update, back up the issue first.** Run `scripts/forge-backup.sh --kind issue --id <num>` as the cookbook's "Back up before an overwrite" describes, with the same retargeting. Write only when its `BACKUP_URL` is the issue you linked when presenting the draft; on a mismatch or a `BACKUP_ERROR=` line, say so and stop. Name `BACKUP_PATH` in the result line.
+
 ```bash
 # GitHub — create
 gh issue create --title "<title>" --body-file <draft-path> --assignee @me \

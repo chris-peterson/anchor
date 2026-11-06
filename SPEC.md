@@ -392,6 +392,12 @@ check.
   and shall leave out the record's other commits. The rounds a branch had before
   its CR existed are what let the CR's first review skip what was already
   reviewed.
+- **[PREPARE-23]** If the CR the system is about to write a description to has a
+  source branch other than the checkout's branch, then the system shall refuse
+  the write and name that branch. CR numbers are shared across a project, so a
+  number taken from anywhere but this branch's own CR (a guess made before the
+  create call returned, a value from an earlier run) names someone else's CR,
+  and the forge accepts the write whenever the user can edit it.
 
 ### REVIEW — Review a change request
 
@@ -1641,6 +1647,12 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
 - **[FORGE-12]** When a CR description is drafted or updated, the system shall
   re-derive every checkbox state from evidence and shall not carry over the state
   a box holds in the template or in the CR's existing description.
+- **[FORGE-13]** Before the system edits an existing CR, issue, or milestone on
+  the forge, it shall save the item as the forge holds it to a file under the
+  repository's git directory, confirm the item is the one presented for
+  approval, and report the file's path, so a
+  write that lands on the wrong target, or that the user regrets, can be put
+  back without depending on the forge keeping an edit history.
 
 ### EVENTS — Announcements to sibling plugins
 

@@ -307,9 +307,26 @@ A level that 403s is a miss, not an error: permissions on an ancestor or the
 instance are routinely tighter than on the project, so fall through to the next
 level rather than failing the run.
 
+## Back up before an overwrite
+
+Any call below that edits an existing issue, CR, or milestone replaces what the
+forge held, so save it first (FORGE-13):
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/forge-backup.sh" --kind <issue|cr|milestone> --id <n> \
+  [--repo <path>] [--project <TARGET_PROJECT>] [--hostname <host>]
+```
+
+It saves the whole object as JSON under `.git/anchor/backups/` and prints
+`BACKUP_PATH`, `BACKUP_URL`, and `BACKUP_TITLE`. Write only when `BACKUP_URL` is
+the item you presented for approval. A `BACKUP_ERROR=` line means the read
+failed, so stop rather than write. A GitLab milestone goes by its `id`, every
+other kind by the number the forge shows. `/anchor:prepare-review` saves a CR
+description inside `prepare-review.sh --write`, so it doesn't call this.
+
 ## CR description update from a file
 
-Editing the body of an existing CR.
+Editing the body of an existing CR. Back it up first (see above).
 
 ```bash
 # GitHub
@@ -632,7 +649,8 @@ glab issue update <iid> --assignee <username>
 
 ## Issue description update from a file
 
-Editing the body of an existing issue. To diff a new draft against what's live,
+Editing the body of an existing issue, backed up first ("Back up before an
+overwrite"). To diff a new draft against what's live,
 fetch the current body first (`gh issue view <num> --json body --jq '.body'`;
 `glab issue view <iid> --output json | jq -r '.description'`).
 
@@ -723,6 +741,7 @@ glab api -X PUT projects/:fullpath/milestones/<id> \
 ```
 
 Send only the fields that change on an edit; both forges leave the rest alone.
+Back up a milestone before editing it ("Back up before an overwrite").
 Closing is an edit too:
 
 ```bash

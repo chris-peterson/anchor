@@ -78,6 +78,15 @@ approve?"*. That question converts a tooling failure into your sign-off.
 
 Requirements: DIFF-12 and DIFF-20 in [SPEC](/spec).
 
+### Anything anchor replaces can be put back :id=tenet-backup
+
+Before `anchor` overwrites text on the forge, it saves what was there to
+`.git/anchor/backups/` in your checkout and tells you the path. A write that
+lands on the wrong change request, or one you change your mind about, is a
+paste away from undone, whatever edit history the forge keeps.
+
+Requirement: FORGE-13 in [SPEC](/spec).
+
 ### Feedback sits beside the code it is about :id=tenet-in-place
 
 A finding, an answer to your question, or a note on a change goes on the line it

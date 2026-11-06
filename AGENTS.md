@@ -91,6 +91,10 @@ what picks the level.
 - **Nothing publishes under the user's name without their approval of the exact
   text** (CONFIRM-01..06). A plan describing what the message will say is not the
   message; the artifact itself has to reach the user before it lands.
+- **Back up before overwriting** (FORGE-13). An edit to an existing CR, issue,
+  or milestone saves the item under `.git/anchor/backups/` first, through
+  `scripts/forge-backup.sh` (or inside `prepare-review.sh --write`), and goes
+  ahead only when the saved item is the one presented for approval.
 - **No AI attribution trailers** in anything the plugin authors — the commit
   author and CR author fields already record it.
 

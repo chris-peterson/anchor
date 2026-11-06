@@ -115,7 +115,7 @@ When the CR lives in a repo other than the session's cwd (you're in repo A, the 
 
 Either way, thread the checkout through every later command — the harness resets cwd between Bash calls, so each one needs it again: `prepare-review.sh --repo <path>`, `deep-links.sh --repo <path>`, `git -C <path>`, `-R <owner/name>` on `gh`/`glab` subcommands, and the URL-encoded project for `:fullpath` (plus `--hostname <host>`) on `glab api`, which has no `-R`. The full threading rules are in `${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`.
 
-`--cr <iid|url>` resolves a CR that isn't the checkout's branch — updating an MR while the checkout sits on a WIP branch. The deep-link and diff steps still read the checkout's branch, so point `--repo` at a checkout on the CR's branch when you need those.
+`--cr <iid|url>` resolves a CR that isn't the checkout's branch — updating an MR while the checkout sits on a WIP branch. The deep-link and diff steps still read the checkout's branch, and `--write` refuses a CR whose source branch isn't the checkout's, so point `--repo` at a checkout on the CR's branch to write its description.
 
 When the target is just the session cwd (no non-cwd repo in play), skip all of this — everything below is plain `git` / `gh` / `glab` against the working directory.
 
@@ -421,6 +421,8 @@ Then ask how to proceed with the `AskUserQuestion` tool, header `Disposition`, o
 
 Reached on an `approved` review, or on **Yes (write)** from the no-tool fallback. Editing a description is reversible, which is why the review's sign-off is enough to write on. On 401/403 or similar auth failure, surface the error and ask the user to refresh credentials — do not silently fall back to copy-only. The draft is `DESC_DRAFT_PATH`.
 
+**Run the three steps below one at a time, each after the last one's output is in hand.** Each takes what the one before printed: `CR_URL` and `CR_IID` come from the `--open` block, or from Step 1's on a pre-existing CR. Never work a number out from another CR's: numbers are shared across the project, so the next one may already be someone else's.
+
 **1. Open the CR, if Step 1 said one is pending.** On `CR_PENDING=1`, this is where the CR first exists, and it exists carrying the text the author just approved:
 
 ```bash
@@ -450,7 +452,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh" --write --body-file <DESC
   --status-section <CR_REVIEW_STATUS_PATH> --cr <CR_IID> [--repo <path>]
 ```
 
-The script puts the Review status section back on a copy of the draft, joined with whatever the CR holds now, and writes that copy, so `DESC_DRAFT_PATH` stays the text the author approved. Don't splice the section into the draft or write the description with `gh pr edit` / `glab api` yourself: the section is anchor's record, written without a prompt (CONFIRM-17), and this one call is what an allow rule names. It emits `CR_WRITTEN=1` and `STATUS_CARRIED=<0|1>`; a `CR_WRITE_ERROR=` line is an auth or forge failure, surfaced the same way as `CR_CREATE_ERROR`.
+The script puts the Review status section back on a copy of the draft, joined with whatever the CR holds now, and writes that copy, so `DESC_DRAFT_PATH` stays the text the author approved. Don't splice the section into the draft or write the description with `gh pr edit` / `glab api` yourself: the section is anchor's record, written without a prompt (CONFIRM-17), and this one call is what an allow rule names. It emits `CR_WRITTEN=1`, `STATUS_CARRIED=<0|1>`, and `CR_BACKUP_PATH`, the description the CR held before the write, saved under the repo's `.git/anchor/backups/`. A `CR_WRITE_ERROR=` line is either a refusal or a failure; surface it and stop. A refusal names a CR whose source branch isn't this checkout's, so its number didn't come from this branch's CR. A failure is an auth or forge error, surfaced the same way as `CR_CREATE_ERROR`.
 
 Report the write as one line once **Label it and set the milestone** below has run — the CR URL, that the description landed, and what the metadata came out as. **No CR to write to** (`skip-deep-links`, or the user picked copy-only): print the body for them to paste into the web UI themselves.
 

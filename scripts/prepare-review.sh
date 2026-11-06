@@ -156,7 +156,10 @@
 #   prepare-review.sh --write --body-file <path> [--status-section <path>] [--cr <iid>]
 #                                         # write the approved description to the
 #                                         # CR with its Review status section put
-#                                         # back; emits CR_WRITTEN, STATUS_CARRIED
+#                                         # back, after saving the one it replaces;
+#                                         # refuses a CR whose source branch isn't
+#                                         # the checkout's. Emits CR_WRITTEN,
+#                                         # CR_BACKUP_PATH, STATUS_CARRIED
 #
 # --repo cds into the target checkout so every git/gh/glab call below targets it
 # (see scripts/lib/resolve-context.sh); the emitted RESOLVED_VIA reports whether
@@ -176,6 +179,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/anchor-config.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/review-status.sh"
 # shellcheck source=lib/forge-url.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/forge-url.sh"
+# shellcheck source=lib/backup.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/backup.sh"
 
 will_open=1
 do_open=0
@@ -248,7 +253,7 @@ fi
 
 # --- Resolve (or open) the CR ------------------------------------------------
 
-cr_url=""; cr_iid=""; cr_draft=""; cr_head=""; cr_desc=""; cr_delete_branch=""; cr_title=""
+cr_url=""; cr_iid=""; cr_draft=""; cr_head=""; cr_branch=""; cr_desc=""; cr_delete_branch=""; cr_title=""
 cr_preexisting=0; cr_created=0; cr_pending=0
 prior_cr_iid=""; prior_cr_state=""
 
@@ -284,6 +289,7 @@ resolve_cr() {
       cr_iid=$(jq -r '.iid // empty' <<<"$json")
       cr_draft=$(jq -r '.draft | values' <<<"$json")
       cr_head=$(jq -r '.sha // empty' <<<"$json")
+      cr_branch=$(jq -r '.source_branch // empty' <<<"$json")
       cr_desc=$(jq -r '.description // ""' <<<"$json")
       cr_title=$(jq -r '.title // ""' <<<"$json")
       # Per-MR on GitLab: the create call's --remove-source-branch, or the
@@ -294,7 +300,7 @@ resolve_cr() {
         then "true" else "false" end' <<<"$json")
       ;;
     github)
-      local json args=(--json "url,number,isDraft,headRefOid,body,state,title")
+      local json args=(--json "url,number,isDraft,headRefOid,headRefName,body,state,title")
       [[ -n "$cr_ref" ]] && args=("$cr_ref" "${args[@]}")
       json=$(gh pr view "${args[@]}" 2>/dev/null) || return 1
       [[ -z "$json" ]] && return 1
@@ -310,6 +316,7 @@ resolve_cr() {
       cr_iid=$(jq -r '.number // empty' <<<"$json")
       cr_draft=$(jq -r '.isDraft | values' <<<"$json")
       cr_head=$(jq -r '.headRefOid // empty' <<<"$json")
+      cr_branch=$(jq -r '.headRefName // empty' <<<"$json")
       cr_desc=$(jq -r '.body // ""' <<<"$json")
       cr_title=$(jq -r '.title // ""' <<<"$json")
       ;;
@@ -429,6 +436,15 @@ if [[ "$do_write" -eq 1 ]]; then
     echo "CR_WRITE_ERROR=no open CR resolved to write to; pass --cr <iid>"
     exit 1
   fi
+  # CR numbers are shared across a project, so a --cr taken from anywhere but
+  # this branch's own CR names someone else's, and the forge accepts the write
+  # whenever the user can edit it.
+  if [[ "$cr_branch" != "$branch" ]]; then
+    echo "CR_WRITE_ERROR=$cr_url is from branch '${cr_branch:-<unknown>}', not '$branch'; refusing to write another branch's CR"
+    exit 1
+  fi
+  backup_path=$(anchor_backup_path "cr-$cr_iid" md)
+  printf '%s' "$cr_desc" > "$backup_path"
   fresh_desc="$(anchor_tmpfile cr-desc-fresh md)"
   printf '%s\n' "$cr_desc" > "$fresh_desc"
   fresh_rounds=$(review_status_data "$fresh_desc") \
@@ -456,6 +472,7 @@ if [[ "$do_write" -eq 1 ]]; then
   echo "CR_URL=$cr_url"
   echo "CR_IID=$cr_iid"
   echo "CR_WRITTEN=1"
+  echo "CR_BACKUP_PATH=$backup_path"
   echo "STATUS_CARRIED=$status_carried"
   exit 0
 fi

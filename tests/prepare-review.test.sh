@@ -241,7 +241,7 @@ template_repo() {
 gh_pr_json() {
   cat > "$CR_AFTER_CREATE" <<JSON
 {"url":"https://github.com/example/repo/pull/7","number":7,"isDraft":true,
- "headRefOid":"$1","body":"seeded body","state":"${2:-OPEN}"}
+ "headRefOid":"$1","headRefName":"${CR_BRANCH:-feat}","body":"seeded body","state":"${2:-OPEN}"}
 JSON
 }
 
@@ -249,7 +249,7 @@ JSON
 glab_mr_json() {
   cat > "$CR_AFTER_CREATE" <<JSON
 {"web_url":"https://gitlab.com/example/repo/-/merge_requests/7","iid":7,"draft":true,
- "sha":"$1","description":"seeded body","state":"${4:-opened}",
+ "sha":"$1","source_branch":"${CR_BRANCH:-feat}","description":"seeded body","state":"${4:-opened}",
  "should_remove_source_branch":$2,"force_remove_source_branch":$3}
 JSON
 }
@@ -656,6 +656,48 @@ grep -qF 'glab api -X PUT projects/:fullpath/merge_requests/7 ' "$CALL_LOG" \
   || fail "GitLab writes through the API PUT: $(cat "$CALL_LOG")"
 [[ "$(tail -n 1 "$WRITTEN_BODY")" == "$section" ]] || fail "GitLab's write carries the section: $(cat "$WRITTEN_BODY")"
 ok "--write lands the description on GitLab through the API"
+
+# A write lands only on the CR the checkout's branch backs. CR numbers are shared
+# across a project, so a number taken from anywhere but this branch's own CR (a
+# guess made before `--open` returned, a stale value from an earlier run) names
+# someone else's CR, and the forge accepts the write whenever the user can edit it.
+for forge in github gitlab; do
+  case "$forge" in
+    github) repo="$(make_repo github.com gh-write-other)"; maker=gh_pr_json; write_cmd='gh pr edit' ;;
+    gitlab) repo="$(make_repo gitlab.com gl-write-other)"; maker=glab_mr_json; write_cmd='glab api -X PUT' ;;
+  esac
+  if [[ "$forge" == github ]]; then
+    CR_BRANCH=someone-else "$maker" "$(git -C "$repo" rev-parse HEAD)" OPEN
+  else
+    CR_BRANCH=someone-else "$maker" "$(git -C "$repo" rev-parse HEAD)" true false
+  fi
+  cp "$CR_AFTER_CREATE" "$CR_JSON"
+  : > "$CALL_LOG"
+  : > "$WRITTEN_BODY"
+  status=0
+  written=$(bash "$prepare_review_sh" --repo "$repo" --write --body-file "$draft" --cr 7) || status=$?
+  [[ "$status" -ne 0 ]] || fail "$forge: --write to a CR on another branch should fail: $written"
+  [[ "$(key "$written" CR_WRITE_ERROR)" == *someone-else* ]] \
+    || fail "$forge: the refusal should name the CR's branch: $written"
+  ! grep -qF "$write_cmd" "$CALL_LOG" || fail "$forge: nothing should be written: $(cat "$CALL_LOG")"
+  [[ ! -s "$WRITTEN_BODY" ]] || fail "$forge: no body should land: $(cat "$WRITTEN_BODY")"
+done
+ok "--write refuses a CR whose source branch isn't the checkout's"
+
+# Before replacing a description, the write saves the one the CR holds, so a
+# write that lands where it shouldn't can be put back from the copy.
+repo="$(make_repo gitlab.com gl-write-backup)"
+glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false
+jq --arg s "$section" '.description = "the prior text\n\n" + $s' "$CR_AFTER_CREATE" > "$CR_JSON"
+written=$(bash "$prepare_review_sh" --repo "$repo" --write --body-file "$draft" --cr 7)
+backup="$(key "$written" CR_BACKUP_PATH)"
+[[ -n "$backup" && -f "$backup" ]] || fail "--write should report where the prior description went: $written"
+[[ "$(cat "$backup")" == "the prior text
+
+$section" ]] || fail "the backup should hold the description as the CR had it: $(cat "$backup")"
+[[ "$backup" == */repos/gl-write-backup/.git/anchor/backups/* ]] \
+  || fail "the backup should outlive the temp dir, under the repo's git dir: $backup"
+ok "--write backs up the description it replaces"
 
 # Rounds the branch's commits had before the CR existed come from the local
 # record: a pending CR's section holds them, and an existing section gains the
