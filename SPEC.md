@@ -377,7 +377,9 @@ check.
 - **[PREPARE-20]** When the system redrafts the description of a CR that has a
   Review status section (REVIEW-31), it shall leave the section out of the draft
   and its review, and put it back when it writes the description, changed only
-  by what PREPARE-22 adds.
+  by what PREPARE-22 adds and by the rounds recorded on the CR since the draft
+  began. The section goes back on in the write itself, so the draft the author
+  approved is left as they approved it.
 - **[PREPARE-21]** Where the changeset carries changes that neither needs, the
   system shall open the Review guide with one line naming them as unrelated and
   give each its own group, headed by the concern, without arguing for a split.
@@ -1888,7 +1890,8 @@ govern what the user must have read before that happens.
 - **[CONFIRM-17]** The system shall write the Review status section (REVIEW-31)
   without asking for approval of its text. It holds the counts and verdicts the
   system records, not prose, and a prompt for it would come with every review
-  round and every commit.
+  round and every commit. Every write that carries the section shall go through
+  one of the system's own scripts, so that a permission allow rule can name it.
 
 ### SANITIZE — Sanitizing what reaches a destination
 

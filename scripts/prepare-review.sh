@@ -96,9 +96,9 @@
 #                                out of CURRENT_DESC_PATH so the review compares
 #                                prose with prose, with the rounds the local
 #                                record holds for the branch's commits added
-#                                where the section has none; the write puts it
-#                                back (scripts/review-status.sh carry). Always a
-#                                path; the file is empty where there is neither
+#                                where the section has none; `--write` puts it
+#                                back. Always a path; the file is empty where
+#                                there is neither
 #   DESC_DRAFT_PATH=<path>       temp file the skill writes the drafted description
 #                                to (the review's right-hand side)
 #   TEMPLATE_PATH=<path>         the CR template to compose into, empty when the
@@ -153,6 +153,10 @@
 #   prepare-review.sh --open --title <t> --body-file <path>
 #                                         # open the draft CR with the approved
 #                                         # description; emits the CR keys only
+#   prepare-review.sh --write --body-file <path> [--status-section <path>] [--cr <iid>]
+#                                         # write the approved description to the
+#                                         # CR with its Review status section put
+#                                         # back; emits CR_WRITTEN, STATUS_CARRIED
 #
 # --repo cds into the target checkout so every git/gh/glab call below targets it
 # (see scripts/lib/resolve-context.sh); the emitted RESOLVED_VIA reports whether
@@ -173,14 +177,18 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/review-status.sh"
 
 will_open=1
 do_open=0
+do_write=0
 open_title=""
 open_body=""
+status_section=""
 CTX_REPO=""
 cr_ref=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-open)   will_open=0; shift ;;
     --open)      do_open=1; shift ;;
+    --write)     do_write=1; shift ;;
+    --status-section) status_section="${2:?--status-section needs a path}"; shift 2 ;;
     --title)     open_title="${2:?--title needs a value}"; shift 2 ;;
     --body-file) open_body="${2:?--body-file needs a path}"; shift 2 ;;
     --repo)      CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
@@ -192,6 +200,12 @@ done
 if [[ "$do_open" -eq 1 ]]; then
   [[ -n "$open_title" ]] || { echo "prepare-review.sh: --open needs --title" >&2; exit 64; }
   [[ -r "$open_body" ]] || { echo "prepare-review.sh: --open needs a readable --body-file" >&2; exit 64; }
+fi
+if [[ "$do_write" -eq 1 ]]; then
+  [[ "$do_open" -eq 0 ]] || { echo "prepare-review.sh: --open and --write are separate calls" >&2; exit 64; }
+  [[ -r "$open_body" ]] || { echo "prepare-review.sh: --write needs a readable --body-file" >&2; exit 64; }
+  [[ -z "$status_section" || -r "$status_section" ]] \
+    || { echo "prepare-review.sh: --status-section must be a readable file" >&2; exit 64; }
 fi
 
 # Retarget onto an explicit --repo checkout when given; otherwise stay in cwd
@@ -393,6 +407,60 @@ if [[ "$do_open" -eq 1 ]]; then
   # `cr.updated` step reads `CR_CREATED` before firing.
   "$(dirname "${BASH_SOURCE[0]}")/announce.sh" cr.created \
     "uri=$cr_url" "title=$open_title"
+  exit 0
+fi
+
+# --- --write: land the approved description on the CR -------------------------
+#
+# The draft the author approved is prose alone; the Review status section goes
+# back on here, into a copy, so the reviewed file never changes after its review.
+# The section joins the one the CR holds now, read fresh, so a round recorded
+# since recon survives, and the CR's own rounds win where both have a commit.
+# The write runs in this script so one allow rule covers it: the section is
+# anchor's record, written without an approval of its text (CONFIRM-17).
+if [[ "$do_write" -eq 1 ]]; then
+  if [[ "$forge" == "none" ]]; then
+    echo "CR_WRITE_ERROR=origin is not a recognized forge, so there is no CR to write to"
+    exit 1
+  fi
+  if ! resolve_cr; then
+    echo "CR_WRITE_ERROR=no open CR resolved to write to; pass --cr <iid>"
+    exit 1
+  fi
+  fresh_desc="$(anchor_tmpfile cr-desc-fresh md)"
+  printf '%s\n' "$cr_desc" > "$fresh_desc"
+  fresh_rounds=$(review_status_data "$fresh_desc") \
+    || { echo "PREPARE_ERROR=the CR's Review status section holds data that isn't JSON; fix or delete its opening comment" >&2; exit 1; }
+  carried_rounds='{}'
+  if [[ -n "$status_section" ]]; then
+    carried_rounds=$(review_status_data "$status_section") \
+      || { echo "PREPARE_ERROR=--status-section holds data that isn't JSON" >&2; exit 1; }
+  fi
+  rounds=$(jq -c --argjson cr "$fresh_rounds" '. + $cr' <<<"$carried_rounds")
+  write_body="$(anchor_tmpfile cr-desc-write md)"
+  status_carried=0
+  if [[ "$rounds" != '{}' ]]; then
+    section_file="$(anchor_tmpfile cr-review-status-write md)"
+    review_status_section "$rounds" > "$section_file"
+    review_status_splice "$open_body" "$section_file" > "$write_body"
+    status_carried=1
+  else
+    cp "$open_body" "$write_body"
+  fi
+  case "$forge" in
+    github)
+      write_err=$(gh pr edit "$cr_iid" --body-file "$write_body" 2>&1) \
+        || { echo "CR_WRITE_ERROR=gh pr edit failed: $write_err"; exit 1; } ;;
+    gitlab)
+      write_err=$(glab api -X PUT "projects/:fullpath/merge_requests/$cr_iid" -F "description=@$write_body" 2>&1) \
+        || { echo "CR_WRITE_ERROR=glab api PUT failed: $write_err"; exit 1; } ;;
+  esac
+  echo "RESOLVED_VIA=$RESOLVED_VIA"
+  echo "FORGE=$forge"
+  echo "CR_URL=$cr_url"
+  echo "CR_IID=$cr_iid"
+  echo "CR_WRITTEN=1"
+  echo "STATUS_CARRIED=$status_carried"
   exit 0
 fi
 

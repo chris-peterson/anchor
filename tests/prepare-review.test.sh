@@ -62,6 +62,8 @@ case "${1:-}" in
       view)   [[ -s "$CR_JSON" ]] || exit 1; cat "$CR_JSON" ;;
       create) cp "$CR_AFTER_CREATE" "$CR_JSON"
               echo "https://github.com/example/repo/pull/7" ;;
+      edit)   while [[ $# -gt 0 && "$1" != --body-file ]]; do shift; done
+              cp "$2" "$WRITTEN_BODY" ;;
       *) echo "stub gh: unhandled pr subcommand: ${2:-}" >&2; exit 1 ;;
     esac ;;
   repo)
@@ -112,6 +114,9 @@ case "${1:-}" in
   api)
     case "${2:-}" in
       user) echo '{"username":"tester"}' ;;
+      -X) [[ "${3:-}" == PUT && "${4:-}" == projects/:fullpath/merge_requests/* ]] \
+            || { echo "stub glab: unhandled api write: $*" >&2; exit 1; }
+          cp "${6#description=@}" "$WRITTEN_BODY" ;;
       projects/:fullpath)
         printf '{"merge_requests_template":%s}\n' \
           "$([[ -n "${GL_MR_TEMPLATE_SETTING:-}" ]] && jq -Rs . <<<"$GL_MR_TEMPLATE_SETTING" || echo null)" ;;
@@ -177,6 +182,7 @@ key() { sed -n "s/^$2=//p" <<<"$1"; }
 export CALL_LOG="$work/calls.log"
 export CR_JSON="$work/cr.json"
 export CR_AFTER_CREATE="$work/cr-after-create.json"
+export WRITTEN_BODY="$work/written-body.md"
 export DELETE_ON_MERGE=false
 export GH_OWNER=example
 export GH_REMOTE="$work/gh-remote"
@@ -608,14 +614,48 @@ out=$(bash "$prepare_review_sh" --repo "$repo" --cr 7)
   || fail "the section should be set aside whole: $(cat "$(key "$out" CR_REVIEW_STATUS_PATH)")"
 draft="$work/redrafted.md"
 printf '## Context\n\nredrafted prose\n' > "$draft"
-carried=$(bash "$here/../scripts/review-status.sh" carry --section "$(key "$out" CR_REVIEW_STATUS_PATH)" --into "$draft")
-[[ "$carried" == STATUS_CARRIED=1 ]] || fail "carry should report the section: $carried"
-[[ "$(cat "$draft")" == "## Context
+: > "$WRITTEN_BODY"
+written=$(bash "$prepare_review_sh" --repo "$repo" --write --body-file "$draft" \
+  --status-section "$(key "$out" CR_REVIEW_STATUS_PATH)" --cr 7)
+[[ "$(key "$written" CR_WRITTEN)" == 1 && "$(key "$written" STATUS_CARRIED)" == 1 ]] \
+  || fail "--write should report the write and the section: $written"
+[[ "$(cat "$WRITTEN_BODY")" == "## Context
 
 redrafted prose
 
-$section" ]] || fail "the section should follow the redrafted prose: $(cat "$draft")"
+$section" ]] || fail "the section should follow the redrafted prose: $(cat "$WRITTEN_BODY")"
+[[ "$(cat "$draft")" == "## Context
+
+redrafted prose" ]] || fail "the reviewed draft should be left as approved: $(cat "$draft")"
 ok "an existing Review status section stays out of the review and goes back on write"
+
+# A round recorded on the CR after recon is still in the section the write lands,
+# and a CR with no section and no carried rounds gets the draft alone.
+jq '.body = "prose\n\n<!-- anchor:review-status {\"k\":{\"rounds\":2,\"result\":\"approved\"},\"late\":{\"rounds\":1,\"result\":\"approved\"}} -->\n"' \
+  "$CR_AFTER_CREATE" > "$CR_JSON"
+written=$(bash "$prepare_review_sh" --repo "$repo" --write --body-file "$draft" \
+  --status-section "$(key "$out" CR_REVIEW_STATUS_PATH)" --cr 7)
+grep -q '"late":{"rounds":1' "$WRITTEN_BODY" || fail "a round recorded since recon should survive: $(cat "$WRITTEN_BODY")"
+grep -q '"k":{"rounds":2' "$WRITTEN_BODY" || fail "the CR's own count wins over the carried one: $(cat "$WRITTEN_BODY")"
+jq '.body = "prose"' "$CR_AFTER_CREATE" > "$CR_JSON"
+empty_section="$work/empty-section.md"
+: > "$empty_section"
+written=$(bash "$prepare_review_sh" --repo "$repo" --write --body-file "$draft" --status-section "$empty_section" --cr 7)
+[[ "$(key "$written" STATUS_CARRIED)" == 0 ]] || fail "nothing to carry should report 0: $written"
+cmp -s "$draft" "$WRITTEN_BODY" || fail "with no rounds the draft lands as is: $(cat "$WRITTEN_BODY")"
+ok "--write joins the CR's current rounds and writes the draft alone when there are none"
+
+repo="$(make_repo gitlab.com gl-write)"
+glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false
+jq --arg s "$section" '.description = "seeded\n\n" + $s + "\n"' "$CR_AFTER_CREATE" > "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo")
+written=$(bash "$prepare_review_sh" --repo "$repo" --write --body-file "$draft" \
+  --status-section "$(key "$out" CR_REVIEW_STATUS_PATH)" --cr 7)
+[[ "$(key "$written" CR_WRITTEN)" == 1 ]] || fail "GitLab --write should report the write: $written"
+grep -qF 'glab api -X PUT projects/:fullpath/merge_requests/7 ' "$CALL_LOG" \
+  || fail "GitLab writes through the API PUT: $(cat "$CALL_LOG")"
+[[ "$(tail -n 1 "$WRITTEN_BODY")" == "$section" ]] || fail "GitLab's write carries the section: $(cat "$WRITTEN_BODY")"
+ok "--write lands the description on GitLab through the API"
 
 # Rounds the branch's commits had before the CR existed come from the local
 # record: a pending CR's section holds them, and an existing section gains the

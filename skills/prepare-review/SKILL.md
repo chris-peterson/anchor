@@ -93,7 +93,7 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 | `PRIOR_CR_IID` / `PRIOR_CR_STATE` | non-empty → the branch name already carries a CR that isn't open, which this run passed over; name it once (see "A reused branch name") |
 | `STATE` | `match` → proceed; anything else → surface and stop (see "Act on `STATE`") |
 | `CURRENT_DESC_PATH` | the review's left-hand side in Step 4 — an empty file until a CR holds a description |
-| `CR_REVIEW_STATUS_PATH` | the description's Review status section (REVIEW-31), set aside so the draft and its review hold prose alone, with the rounds the branch's commits had before the CR existed added from the local record; the write puts it back. Empty where there is neither |
+| `CR_REVIEW_STATUS_PATH` | the description's Review status section (REVIEW-31), set aside so the draft and its review hold prose alone, with the rounds the branch's commits had before the CR existed added from the local record; `--write` puts it back. Empty where there is neither |
 | `DESC_DRAFT_PATH` | where to write the drafted description in Step 4 — already `mktemp`'d, so don't make your own |
 | `TEMPLATE_PATH` | the CR template to compose into (Step 3); empty when the hierarchy holds none, or when the pick needs the author |
 | `TEMPLATE_SOURCE` | which level answered — `local` / `project-settings` / `inherited` / `configured` / `ambiguous` / `none` |
@@ -443,18 +443,14 @@ It rewrites the draft in place and reports `EXPANDED=<n>`. All-or-nothing: an un
 
 **Screenshots referenced by local path (GitLab) upload first.** `glab api --method POST projects/<id>/uploads --form "file=@local.png"` returns a `markdown` field pointing at a hosted URL — swap each local reference for its upload result in `DESC_DRAFT_PATH` before the write below, so the description lands with working images on the first try. See the forge cookbook's binary-upload recipe; the `-F`/`--form` distinction there is the part that bites.
 
-**Put the Review status section back** first, so the write keeps the record of the CR's review rounds:
+Then write it:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-status.sh" carry --section <CR_REVIEW_STATUS_PATH> --into <DESC_DRAFT_PATH>
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh" --write --body-file <DESC_DRAFT_PATH> \
+  --status-section <CR_REVIEW_STATUS_PATH> --cr <CR_IID> [--repo <path>]
 ```
 
-`STATUS_CARRIED=0` means there was no section and no local round to carry, and the draft is unchanged.
-
-- **GitHub:** `gh pr edit --body-file <DESC_DRAFT_PATH>`.
-- **GitLab:** use the API form `glab api -X PUT projects/:fullpath/merge_requests/<CR_IID> -F "description=@<DESC_DRAFT_PATH>"` — `glab mr update -d` doesn't accept a file. See the bundled forge cookbook (`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`) for the full canonical invocation.
-
-When operating against a non-cwd repo these are the write path, so retarget them per "Operating against a non-cwd repo": add `-R <owner/name>` to `gh pr edit`, and substitute the URL-encoded project for `:fullpath` in the `glab api` PUT (plus `--hostname` for self-hosted).
+The script puts the Review status section back on a copy of the draft, joined with whatever the CR holds now, and writes that copy, so `DESC_DRAFT_PATH` stays the text the author approved. Don't splice the section into the draft or write the description with `gh pr edit` / `glab api` yourself: the section is anchor's record, written without a prompt (CONFIRM-17), and this one call is what an allow rule names. It emits `CR_WRITTEN=1` and `STATUS_CARRIED=<0|1>`; a `CR_WRITE_ERROR=` line is an auth or forge failure, surfaced the same way as `CR_CREATE_ERROR`.
 
 Report the write as one line once **Label it and set the milestone** below has run — the CR URL, that the description landed, and what the metadata came out as. **No CR to write to** (`skip-deep-links`, or the user picked copy-only): print the body for them to paste into the web UI themselves.
 
@@ -480,11 +476,11 @@ gh pr edit <CR_NUMBER> --add-label "<label>" --milestone "<milestone title>"
 glab mr update <CR_IID> --label "<a,b>" --milestone "<milestone title>"
 ```
 
-Retarget the listing and these calls per "Operating against a non-cwd repo" the same way the write path does (`-R`, `TARGET_PROJECT` for `{owner}/{repo}` in the `gh api` milestones path, `--hostname` for self-hosted GitLab). The full flag set and the CLI gaps — `gh` has no `milestone` command, and `gh pr edit` has no plain `--label` — are in the cookbook's "Labels and milestones".
+Retarget the listing and these calls per "Operating against a non-cwd repo" (`-R`, `TARGET_PROJECT` for `{owner}/{repo}` in the `gh api` milestones path, `--hostname` for self-hosted GitLab). The full flag set and the CLI gaps — `gh` has no `milestone` command, and `gh pr edit` has no plain `--label` — are in the cookbook's "Labels and milestones".
 
 ### Report the branch's pipeline
 
-Run this once the description has landed, as `${CLAUDE_PLUGIN_ROOT}/guides/watching-a-pipeline.md` describes, retargeted the same way as the write path:
+Run this once the description has landed, as `${CLAUDE_PLUGIN_ROOT}/guides/watching-a-pipeline.md` describes, with `--repo <path>` when operating against a non-cwd repo:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill prepare-review

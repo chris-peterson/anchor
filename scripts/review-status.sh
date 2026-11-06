@@ -31,11 +31,6 @@
 # authentication failure is marked STATUS_AUTH=1 so the caller asks for fresh
 # credentials instead of retrying.
 #
-# `carry` puts a section back into a description drafted without it: the
-# drafting reviews the description with the section taken out
-# (scripts/prepare-review.sh, CR_REVIEW_STATUS_PATH), and the write puts it back.
-# It prints STATUS_CARRIED=<0|1>.
-#
 # --kind is `agent-assisted` (the default) when quality agents examined the
 # range, `read-through` when only the reviewer read it.
 #
@@ -49,7 +44,6 @@
 #
 # Usage:
 #   review-status.sh record (--cr <n> | --local) --base <sha> --head <sha> --result <approved|changes-requested> [--kind <agent-assisted|read-through>] [--note <text>]... [--repo <path>]
-#   review-status.sh carry  --section <file> --into <draft>
 
 set -euo pipefail
 
@@ -64,7 +58,6 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/review-status.sh"
 
 usage() {
   echo "usage: review-status.sh record (--cr <n> | --local) --base <sha> --head <sha> --result <approved|changes-requested> [--kind <agent-assisted|read-through>] [--note <text>]... [--repo <path>]" >&2
-  echo "       review-status.sh carry --section <file> --into <draft>" >&2
   exit 64
 }
 
@@ -76,27 +69,6 @@ die() {
   exit 70
 }
 
-if [[ "${1:-}" == carry ]]; then
-  shift
-  section="" into=""
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      --section) section="${2:?--section needs a file}"; shift 2 ;;
-      --into)    into="${2:?--into needs a file}"; shift 2 ;;
-      *) usage ;;
-    esac
-  done
-  [[ -f "$section" && -f "$into" ]] || usage
-  if [[ ! -s "$section" ]]; then
-    echo "STATUS_CARRIED=0"
-    exit 0
-  fi
-  carried=$(anchor_tmpfile cr-review-status-carried md)
-  review_status_splice "$into" "$section" > "$carried"
-  mv "$carried" "$into"
-  echo "STATUS_CARRIED=1"
-  exit 0
-fi
 [[ "${1:-}" == record ]] || usage
 shift
 
