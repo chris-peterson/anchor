@@ -52,7 +52,8 @@
 #
 # An editor carries one artifact, so a review with no drafted artifact (a
 # diff-only range review) is `no-verdict` with the cause on stderr rather than a
-# silent pass — set a visual tool for those skills.
+# silent pass. A subject with no artifact resolves to `diff` on its own, so
+# this follows only an explicit `--mode edit`.
 #
 # Editor resolution is in lib/review-editor.sh; host selection in
 # lib/review-host.sh. Both have a second caller — the dispatcher's --probe, and
@@ -62,7 +63,9 @@
 # `ZD`, after Vim's own `ZZ`), so ending the review is a deliberate key pair
 # rather than an exit code typed at a prompt: Helix through a workspace
 # `.helix/config.toml` in the buffer's directory, which it merges over the
-# user's own config, and Vim through buffer-local maps on the command line.
+# user's own config, and Vim through buffer-local maps on the command line. In
+# both, `ZZ` writes before it quits, changed or not, since the save is the
+# approval.
 # shellcheck source=../../lib/review-editor.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../../lib/review-editor.sh"
 # shellcheck source=../../lib/review-host.sh
@@ -153,8 +156,9 @@ editor_emit() {
 
 # The extension the buffer takes. An editor picks its syntax mode from the name,
 # not the content, so `.md` is what puts markdown preview a keystroke away for
-# the three artifacts that are markdown; a commit message is git's plain-text
-# shape and takes `.txt`.
+# the three artifacts that are markdown. A commit message's own buffer is named
+# `COMMIT_EDITMSG` (editor_buffer_name); `.txt` names its other copies, such as
+# the draft editor_annotate hands the viewer.
 editor_buffer_ext() {
   case "${1:-}" in
     commit-message) printf 'txt' ;;
@@ -210,7 +214,10 @@ editor_open_args() {
         "$editor_rc_reject" "$editor_rc_annotate" > "$dir/.helix/config.toml"
       printf -- '-w %s ' "$(anchor_host_sq "$dir")" ;;
     vi|vim|nvim)
-      printf -- '-c %s -c %s ' \
+      # Vim's own `ZZ` writes only a modified buffer, and a draft approved as
+      # drafted is unmodified, so without this it would read as never saved.
+      printf -- '-c %s -c %s -c %s ' \
+        "$(anchor_host_sq "nnoremap <buffer> ZZ :wq<CR>")" \
         "$(anchor_host_sq "nnoremap <buffer> ZX :cquit $editor_rc_reject<CR>")" \
         "$(anchor_host_sq "nnoremap <buffer> ZD :write<Bar>cquit $editor_rc_annotate<CR>")" ;;
   esac

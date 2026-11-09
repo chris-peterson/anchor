@@ -7,7 +7,8 @@
 #
 # The skill decides what each note says and where it goes
 # (guides/review-notes.md); this holds each one to a line the review shows and
-# anchors it where revdiff draws it.
+# anchors it where revdiff draws it. A note in a file the review leaves out,
+# because nothing in it changed, is quoted in the context file instead (UX-10).
 #
 # The notes file, written by the skill:
 #   {"notes": [{"file": "<path>", "line": <n>, "side": "new|old", "note": "<text>"},
@@ -20,11 +21,12 @@
 
 # anchor_change_notes_place <notes.json> [<path>...]
 # Places the notes in what a review of <path>s shows and prints the markdown
-# revdiff preloads; the anchored JSON the review reads back sits beside it. Every
-# note that can't be placed prints its own NOTES_ERROR=<message>, and it returns
-# 65 having written nothing.
+# revdiff preloads; the anchored JSON the review reads back sits beside it, and
+# so does notes-context.md, the notes on unchanged files with the lines they
+# concern, when there are any. Every note that can't be placed prints its own
+# NOTES_ERROR=<message>, and it returns 65 having written nothing.
 anchor_change_notes_place() {
-  local in="$1" root dir now lines anchors k file line side text where at p e
+  local in="$1" root dir now lines anchors quoted count k file line side text where at p e
   local -a specs=() errors=()
   shift
   jq -e '.notes | type == "array"' "$in" >/dev/null 2>&1 \
@@ -37,6 +39,7 @@ anchor_change_notes_place() {
   anchor_items_changed_lines "$root" "$(anchor_local_base)" "$now" "${specs[@]+"${specs[@]}"}" > "$lines"
 
   anchors="$dir/anchors.tsv"; : > "$anchors"
+  quoted="$dir/quoted.jsonl"; : > "$quoted"
   # A unit separator, not a tab: tabs are IFS whitespace, so an empty line field
   # would collapse into the next one.
   while IFS=$'\x1f' read -r k file line side text; do
@@ -52,7 +55,18 @@ anchor_change_notes_place() {
       errors+=("$where: not in this review's paths"); continue
     fi
     if ! anchor_items_file_changed "$lines" "$file"; then
-      errors+=("$where: not changed in this review, so the note has nowhere to sit"); continue
+      if ! git cat-file -e "$now:$file" 2>/dev/null; then
+        errors+=("$where: not a file in this review"); continue
+      fi
+      if [[ -n "$line" ]]; then
+        [[ "$side" == new ]] || { errors+=("$where: not a removed line"); continue; }
+        count=$(git cat-file -p "$now:$file" | awk 'END { print NR }')
+        (( line >= 1 && line <= count )) || { errors+=("$where: not a line of the file ($count lines)"); continue; }
+      fi
+      jq -nc --argjson k "$k" --arg w "$where" \
+        --arg x "${line:+$(anchor_items_excerpt "$root" "$now" "$file" "$line" "$line")}" \
+        '{k:$k, where:$w, excerpt:(if $x == "" then null else $x end)}' >> "$quoted"
+      continue
     fi
     if [[ -z "$line" ]]; then
       printf '%s\tfile\t\n' "$k" >> "$anchors"; continue
@@ -90,6 +104,13 @@ anchor_change_notes_place() {
   fi
 
   anchor_items_notes_md "$dir/notes.json" > "$dir/notes.md"
-  rm -f "$lines" "$anchors"
+  if [[ -s "$quoted" ]]; then
+    jq -rs --slurpfile n "$in" '
+      "## Notes on unchanged files",
+      "These are about files this change leaves alone, so they are here rather than in the diff, which would open each file in full.",
+      (sort_by(.k)[] | "### `\(.where)`", (if .excerpt then (.excerpt | rtrimstr("\n")) else empty end),
+         ($n[0].notes[.k].note | gsub("^\\s+|\\s+$"; "")))' "$quoted" > "$dir/notes-context.md"
+  fi
+  rm -f "$lines" "$anchors" "$quoted"
   printf '%s\n' "$dir/notes.md"
 }

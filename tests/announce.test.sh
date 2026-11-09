@@ -70,6 +70,44 @@ ok "every emitted event is declared in plugin.yml"
 # same `events:` block this reads, so there is no second copy to drift from —
 # which is the whole reason the page moved out of this repo's tracked sources.
 
+# --- attention.requested names what the launch names (DIFF-47) ----------------
+#
+# The dispatcher reads the target off the probe's arguments, so a skill whose
+# probe leaves out the launch's --title or --detail CR= announces the repository
+# root, and a skill that launches without probing announces a release with no
+# request before it. The skills' fenced commands are the call sites.
+
+review_commands() {
+  awk '
+    /^[[:space:]]*```/ { fenced = !fenced; cmd = ""; next }
+    fenced {
+      line = $0; sub(/^[[:space:]]+/, "", line)
+      cont = (line ~ /\\$/); sub(/[[:space:]]*\\$/, "", line)
+      cmd = (cmd == "" ? line : cmd " " line)
+      if (!cont) { if (cmd ~ /scripts\/review-diff\.sh/) print cmd; cmd = "" }
+    }' "$1"
+}
+
+launches_checked=0
+for skill_md in "$root"/skills/*/SKILL.md; do
+  skill=$(basename "$(dirname "$skill_md")")
+  commands=$(review_commands "$skill_md")
+  launches=$(grep -v -e '--probe' <<<"$commands" || true)
+  [[ -n "$launches" ]] || continue
+  probes=$(grep -e '--probe' <<<"$commands" || true)
+  [[ -n "$probes" ]] || fail "$skill launches a review it never probes"
+  grep -qF -e "--skill $skill " <<<"$probes" || fail "$skill probes under another skill: $probes"
+  while IFS= read -r launch; do
+    launches_checked=$((launches_checked + 1))
+    while IFS= read -r naming; do
+      [[ -n "$naming" ]] || continue
+      grep -qF -e "$naming" <<<"$probes" || fail "$skill's probe leaves out the launch's $naming"
+    done < <(grep -oE -e "--title '[^']*'|--detail CR=[^] ]+" <<<"$launch" || true)
+  done <<<"$launches"
+done
+[[ "$launches_checked" -gt 0 ]] || fail "no skill launches review-diff.sh in a fenced block — did the call sites move?"
+ok "every skill that launches a review probes it with the launch's --title and --detail CR="
+
 # --- the publisher ------------------------------------------------------------
 
 if ! command -v jq >/dev/null 2>&1; then

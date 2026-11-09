@@ -42,7 +42,8 @@ behavior, not an independent authority — review them against the source.
 - **Ambient rule** — standing guidance a `SessionStart` hook injects into every
   session's context.
 - **Review contract** — the tool-agnostic result `review-diff.sh` returns: a
-  `verdict` (`approved` · `changes-requested` · `incomplete` · `no-verdict`)
+  `verdict` (`approved` · `changes-requested` · `rejected` · `incomplete` ·
+  `no-verdict`)
   plus normalized comments and capabilities, produced from the tool's native
   output by an adapter. Defined under DIFF.
 - **Review mode** — the shape a review takes: `edit`, where the reviewer is handed
@@ -63,10 +64,11 @@ behavior, not an independent authority — review them against the source.
   (`codes.bridgeai.anchor/cr.merged {…}`), for a sibling plugin reading tool
   output to react to. Every key the plugin publishes is declared in `plugin.yml`.
   Defined under EVENTS.
-- **revdiff** — a terminal-native visual diff reviewer, and the `diff` mode tool
-  `anchor` reaches for when the user has named none. A binary on the machine,
-  driven directly and rendered in a terminal `anchor` hosts itself. Optional, and
-  the flow that uses it falls back when absent.
+- **revdiff** — a terminal-native visual diff reviewer: a binary on the machine,
+  driven directly and rendered in a terminal `anchor` hosts itself.
+  `/anchor:review` and batch reviews require it, since their notes and
+  `(context).md` exist only there; other `diff` reviews run it when it is the
+  named viewer (CONFIG-15a).
 
 ## Requirements
 
@@ -215,9 +217,9 @@ behavior, not an independent authority — review them against the source.
   than as separate agent-run `git commit` / `git push` commands, and shall select
   the push variant (set-upstream / plain / force-with-lease) within that helper.
 - **[COMMIT-19]** If HEAD is the default branch when committing, then the system
-  shall create a feature branch first rather than push to the default branch, and
-  the commit helper shall refuse to commit onto the default branch unless
-  explicitly told the direct-to-default case was chosen.
+  shall not commit or push to the default branch unless the user chose the
+  direct-to-default case (COMMIT-07), and the commit helper shall refuse to commit
+  onto the default branch unless explicitly told that case was chosen.
 - **[COMMIT-20]** The system shall decide the test gate from the runner's exit
   status, captured on its first invocation, rather than from its output, and shall
   not run the suite a second time to obtain that status.
@@ -252,7 +254,8 @@ behavior, not an independent authority — review them against the source.
 
 The `prepare-review` skill: open (or refresh) a draft CR on an already-pushed
 branch and draft its description. Push happens in
-`/anchor:commit`, so this flow never pushes and imposes no review gate — its
+`/anchor:commit`, so this flow pushes no new work (a rebase force-pushes,
+PREPARE-04) and imposes no review gate — its
 changeset analysis serves the description and Review guide, not a clean-verdict
 check.
 
@@ -347,8 +350,8 @@ check.
   usage error rather than an empty left-hand side, and the review never opens.
 - **[PREPARE-14]** If the description review returns no usable verdict, or no
   review tool can open, then the system shall offer the draft outside the tool (its
-  path, then an editor where one can open, then the text in its own reply) and offer
-  write / copy-only / edit, defaulting to write.
+  path, then an editor where one can open, then the text in its own reply) and take
+  approval to write only through the choice DIFF-20a defines, never as the default.
 - **[PREPARE-15]** Before opening the description review, the system shall resolve
   every placeholder against the changed hunks of the range (`deep-links.sh --check`)
   and correct each one reported unresolved, so a placeholder cannot survive into the
@@ -472,7 +475,8 @@ ready.
   set, dropping duplicates.
 - **[REVIEW-17]** Where the resolved CR was written by the invoking user, the
   system shall run a self-review: the round's edits are made in the user's
-  checkout, which shall be on the CR head with nothing uncommitted, the kept items
+  checkout, which shall be on the CR head with nothing uncommitted and no
+  untracked file, the kept items
   land as one commit per round through `/anchor:commit`, and nothing is posted to
   the forge.
 - **[REVIEW-18]** When a self-review ends, the system shall offer to mark the CR
@@ -523,7 +527,8 @@ ready.
   the repository and the CR in full, say what the round fixed, and say what
   another round would do, so a user answering it after time away can decide
   without scrolling back. It shall recommend another round only when the round
-  kept a critical fix, and recommend stopping otherwise.
+  kept a critical fix, and recommend stopping otherwise. The next round's range
+  shall run from the head the previous round reviewed to the new head.
 - **[REVIEW-25]** The system shall remove a round's table, its state, and any
   worktree it made when the round's edits are committed or posted, and when the
   review stops after the round began.
@@ -540,9 +545,10 @@ ready.
   in the offer of another round, the round's table colouring only that round, so
   that a review looping on polish is visible as bars that stop shrinking. The
   system shall name a round by its number from the second round on, and present
-  the first as the review itself. The first round's table shall draw the CR's
-  own size alone, coloured: its fixes are still proposals the user has not
-  answered, so a bar for them would report a round that has not happened.
+  the first as the review itself. The first round's read pass shall draw the
+  CR's own size alone, coloured: no fix exists yet, so a bar for one would report
+  a round that has not happened. Its items and whole passes draw the round's
+  drafts over the CR, coloured as the current round.
 - **[REVIEW-28]** Before any finding becomes an item, the system shall judge the
   examination's candidates once, as a whole: drop one it can't confirm or that
   the code already prevents, merge ones a single change resolves, classify each
@@ -597,7 +603,9 @@ ready.
   reviewers) by default, on someone else's stopping by default, with
   re-reviewing the whole CR as the alternative on both. A review of what was
   already reviewed spends the user's attention and the agents' minutes on a
-  question already answered.
+  question already answered. A round the system offered after committing the
+  previous one (REVIEW-24) is exempt: it shall review the round's commit, from
+  the head the previous round reviewed, without asking.
 - **[REVIEW-34]** When a round that reached its verdict is recorded, the system
   shall record each item the user dropped as a decision in the Review status
   section, on the newest commit the round reviewed; and when a review starts on a CR with the section, it shall hold
@@ -663,7 +671,8 @@ step after `prepare-review` opens the CR and `resolve-feedback` clears its threa
   surface the mismatch and stop rather than merge.
 - **[MERGE-03]** Before merging, the system shall check that the CR is marked ready,
   mergeable, pipeline-passing, and approved, plus that review threads are resolved,
-  stopping at the first blocking gate.
+  stopping at the first blocking gate except the reviews and threads gates, which
+  are read on past so their state is reported together (MERGE-10, MERGE-19).
 - **[MERGE-04]** If the CR is a draft, then the system shall not merge it silently and
   shall ask whether to mark it ready and proceed.
 - **[MERGE-05]** If the CR conflicts with or is behind its target branch, then the
@@ -696,7 +705,7 @@ step after `prepare-review` opens the CR and `resolve-feedback` clears its threa
 - **[MERGE-14]** If a forge write fails with an auth error, then the system shall
   surface it and ask the user to refresh credentials rather than retry or fall back.
 - **[MERGE-15]** After a successful merge, the system shall return the local checkout
-  to the default branch, pull the merged result, and delete the merged local branch.
+  to the CR's target branch, pull the merged result, and delete the merged local branch.
 - **[MERGE-16]** After a successful merge, the system shall watch the pipeline the
   merge triggered on the target branch and report it without the user asking,
   gated on the same keys as the push-side skills and scoped to the landed SHA the
@@ -777,7 +786,8 @@ established before anything is proposed or written.
   than as an inline string.
 - **[RELEASE-12]** Where the notes are published as a release body, the system shall
   present them in a visual review before publishing and shall not publish on a
-  verdict other than approved.
+  verdict other than approved, except through the ungraded-review choice DIFF-20a
+  defines.
 - **[RELEASE-13]** The system shall confirm the publish with the author even after an
   approved review, because a published release is immediately public and its tag
   may be immutable.
@@ -944,12 +954,14 @@ this" nullability from SARIF's `notApplicable`.
 {
   mode:               "edit" | "diff",
   tool:               string,       // the tool that ran it — an editor, or a diff tool
-  verdict:            "approved" | "changes-requested" | "incomplete" | "no-verdict",
+  verdict:            "approved" | "changes-requested" | "rejected" | "incomplete" | "no-verdict",
+  approveIntent?:     bool,         // the reviewer chose approve beside feedback (DIFF-42); absent reads as false
   reviewCompleteness: "complete" | "partial" | null,   // null = tool cannot say
   reviewer:           string | null,
   comments: [{
     body:        string,
-    target:      "line" | "file" | "changeset",
+    target:      "line" | "file" | "changeset" | "commit-message" | "verdict",
+    choice?:     "approve" | "reject", // present when target == verdict: the note that chose
     file?:       string,        // present when target != changeset
     startLine?:  number,        // 1-based, inclusive; present when target == line
     endLine?:    number,        // 1-based, inclusive; == startLine for a single line
@@ -962,9 +974,10 @@ this" nullability from SARIF's `notApplicable`.
                    original?: string, edited: string }],
   capabilities: {
     producesVerdict: bool, perHunkReview: bool,
-    editableCommitMessage: bool, editableDescription: bool, sideMarkers: bool
+    editableCommitMessage: bool, editableDescription: bool, sideMarkers: bool,
+    preloadsAnnotations: bool, showsUntracked: bool
   },
-  raw: { exitCode: number | "absent", output?: string }
+  raw: { exitCode: number | string, output?: string, range?: string }
 }
 ```
 
@@ -972,8 +985,8 @@ this" nullability from SARIF's `notApplicable`.
 
 | `verdict` | `diff` (revdiff) | `edit` | meaning |
 |---|---|---|---|
-| `approved` | a lone `approve` note, or a note on the Review box's `approve` line (DIFF-42) | saved, changed or not | clean — proceed |
-| `changes-requested` | a note of the reviewer's, and none on the Review box (exit 10) | — | blocking feedback to address |
+| `approved` | a lone `approve` note, or a note on the Review box's `approve` line (DIFF-42), with no other note of the reviewer's but a plain yes | saved, changed or not | clean — proceed |
+| `changes-requested` | a note of the reviewer's, and none on the Review box (exit 10); or an `approve` choice with any other note, or with the draft edited (`approveIntent: true`) | — | blocking feedback to address |
 | `rejected` | a lone `reject` note, or a note on the Review box's `reject` line | exited 2 (`ZX`), or saved empty | the reviewer declined — nothing the review gates happens, and nothing falls back |
 | `incomplete` | — | — | not every hunk was reviewed; for a tool that tracks per-hunk review (`capabilities.perHunkReview`) |
 | `no-verdict` | exit 1, or `q` with no note of the reviewer's, or notes on both the `approve` and `reject` lines (`raw.exitCode` `undecided`) | closed without saving (`undecided`), or any other non-zero exit | no usable verdict — the cause (closed early, tool error, an aborted edit, or no verdict chosen) is read from `raw.exitCode` and `capabilities.producesVerdict` |
@@ -1001,8 +1014,10 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   verdict. A second tool for a mode is then an adapter file beside the first rather
   than a second copy of the mode.
 - **[DIFF-04]** The system shall report the verdict as one of `approved`,
-  `changes-requested`, `incomplete`, or `no-verdict`, mapped from the tool's
-  native signal per the verdict table.
+  `changes-requested`, `rejected`, `incomplete`, or `no-verdict`, mapped from
+  the tool's native signal per the verdict table, and shall report, beside a
+  `changes-requested` verdict, whether the reviewer chose `approve`
+  (`approveIntent`).
 - **[DIFF-05]** If the verdict is anything other than `approved`, then the system
   shall not treat the review as approval.
 - **[DIFF-06]** Where the verdict is `no-verdict`, the system shall read its cause
@@ -1084,8 +1099,8 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   written in that case either and reporting it as the reviewer declining to save
   attributes to them a decision they were never offered.
 - **[DIFF-15]** Where `edit` is selected for a review that has no drafted
-  artifact, the system shall report `no-verdict` naming the configuration that
-  resolves it, rather than reporting a diff it cannot show as reviewed.
+  artifact, the system shall report `no-verdict` naming the invocation that
+  resolves it (`--mode diff`, or no `--mode`), rather than reporting a diff it cannot show as reviewed.
 - **[DIFF-16]** The system shall resolve the editor as git resolves it
   (`core.editor`, then `VISUAL`, then `EDITOR`), and shall treat a no-op editor
   supplied by the environment as unset, so a review that opened nothing is never
@@ -1182,11 +1197,13 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   than the artifact the forge holds. The second pass is asked to grade what the
   feedback changed, and re-showing the original comparison answers the question
   the first pass already answered.
-- **[DIFF-24]** Where a consumer probes for the mode (DIFF-17), it shall probe
-  under the same skill the launch will use, and shall name the tool it opens
-  whenever that tool renders outside the terminal the user is watching. The probe
-  resolves per skill (CONFIG-15), so one run without the skill answers for another
-  skill's default and reports a tool the review will never open; and a review
+- **[DIFF-24]** Every consumer that launches a review shall first probe for the
+  mode (DIFF-17), under the same skill and with the same subject, `--title`, and
+  `--detail` arguments the launch will use, and shall name the tool it opens
+  whenever that tool renders outside the terminal the user is watching. The
+  probe's announcement (DIFF-47) and the review's header (DIFF-34) both name the
+  skill, so a probe under another skill announces a review the user isn't in;
+  and a review
   waiting in a window behind the terminal is indistinguishable from nothing having
   opened, which reads as a step that was skipped rather than one blocking on the
   user.
@@ -1288,11 +1305,11 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   split opened through the terminal's scripting interface is created without
   being selected, so the review draws in a pane the keyboard does not reach and
   the reviewer types into the session that is waiting on them instead.
-- **[DIFF-31]** Where the verdict is `approved`, the system shall report the
-  comments it carries without gating the operation on them, and shall carry out
-  a comment that asks for follow-up work to be filed rather than fixed now. A
-  reviewer who approves and still comments has chosen not to block; leaving the
-  request unactioned makes blocking the only way to be heard.
+- **[DIFF-31]** Where a reviewer approves and also leaves notes, the system
+  shall carry out a note that asks for follow-up work to be filed (an issue) as
+  part of applying the notes, rather than fixing it now. A reviewer who approves
+  and still comments has chosen not to block; leaving the request unactioned
+  makes blocking the only way to be heard.
 - **[DIFF-32]** When the user gives feedback in chat while a review is open, the
   system shall acknowledge the feedback, state that the review is still open, and
   halt the flow, leaving the open review in place. When that review closes, the
@@ -1310,8 +1327,10 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   so a reviewer's edits there never reach a file and read as an untouched tree,
   which is approval.
 - **[DIFF-34]** Where the caller names the skill that opened a review, the
-  system shall lead the review's header with that skill and with what approving
-  the review hands it, ahead of the rows the caller supplied. A review opens
+  system shall lead the review's plain-text header with that skill and with what
+  approving the review hands it, ahead of the rows the caller supplied. A revdiff
+  review's `(context).md` follows DIFF-40's order instead, and carries what
+  approving hands the skill in its Review box. A review opens
   partway through a flow and can wait while the user works elsewhere, so the
   reviewer often returns to it without remembering which flow is waiting on
   them or what their answer sets off.
@@ -1367,7 +1386,8 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   wants made rather than makes is a note, and the mode the subject picked has
   nowhere to leave one.
 - **[DIFF-44]** Where an `edit` review opens in Helix or Vim, the system shall
-  bind three chords for that review alone: `ZZ` to save and approve, `ZX` to
+  bind three chords for that review alone: `ZZ` to save and approve, writing the
+  buffer whether or not it changed, `ZX` to
   exit 2 and reject, and `ZD` to save and exit 3 into `diff` mode (DIFF-39),
   keeping the reviewer's own configuration, and the buffer shall name each chord
   with the status it stands for while the editor's hints are on (CONFIG-21). An
@@ -1377,7 +1397,8 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   "reject" reaches for.
 - **[DIFF-45]** Where the reviewer edits a `--files` review's draft with
   revdiff's `e`, the system shall write the edit over the draft, return it as
-  `editedFields`, and read an Accept of it as `changes-requested` (CONFIRM-08).
+  `editedFields`, and read an approval of it as `changes-requested` with
+  `approveIntent` true (CONFIRM-08).
   revdiff shows that review in a scratch repo, whose copy of the draft is
   removed when the review closes, so the edit has to be carried out before then.
 - **[DIFF-46]** Where a revdiff review carries a draft (a `--files` review, or a
@@ -1422,9 +1443,13 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   system shall put a Review box in the review's context file, or in the
   caller's table where it writes its own: an `approve` line naming what
   approving does next, and a `reject` line saying nothing the review gates
-  happens. A note on the `approve` line shall read as `approved`, with the
-  reviewer's other notes carried as comments; a note on the `reject` line as
-  `rejected`; notes elsewhere
+  happens. A note on the `approve` line shall read as `approved` where the
+  reviewer's other notes are at most a plain yes (`ok`, `lgtm`, 👍), and
+  otherwise as `changes-requested` with `approveIntent` true and the choosing
+  note left out of `comments`, so the caller applies the notes and re-reviews
+  only what changed; in a review of items (a batch, a round) the other notes
+  ride with the approval, since the item-by-item read decides each one. A note
+  on the `reject` line shall read as `rejected`; notes elsewhere
   and none on either line as `changes-requested`; and a review that leaves no
   note of the reviewer's, or a note on both lines, as `no-verdict` with
   `raw.exitCode` `undecided`, which the caller asks about (Accept, Reject, or
@@ -1434,7 +1459,8 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   saying only `reject`, `stop`, `abort`, or `cancel` as a note on the `reject`
   line,
   wherever it sits except where a preloaded note sat, since there it answers
-  that note; among other notes the word is one more note. In a review of items
+  that note; among other notes, an approving word chooses `approve` as above,
+  and a rejecting word is one more note. In a review of items
   (a batch, a round), only a note on the shared table, off its rows, decides
   this way, and answers on the items' notes don't count as other notes, since a
   word on an item (a batch's `reject`) is about that item. A preloaded note
@@ -1543,7 +1569,9 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   The tool is the half that is a preference, where the mode is not. **No viewer
   shall be assumed past those keys**: where neither names one, the system shall
   report that and name the keys that would, rather than selecting a viewer on the
-  user's behalf. A recommended viewer is still only a recommendation — it reaches
+  user's behalf. `/anchor:review` and batch reviews are the exception: their
+  preloaded notes and `(context).md` exist only in revdiff, so they run revdiff
+  whatever the keys name and stop when it can't open (REVIEW-05). A recommended viewer is still only a recommendation — it reaches
   a review by being named, the same as any other — and a tool the user did not
   choose returns a verdict recorded as theirs, which is the one thing a review
   must not manufacture. A single key naming a mode and
@@ -1650,7 +1678,9 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
 - **[FORGE-13]** Before the system edits an existing CR, issue, or milestone on
   the forge, it shall save the item as the forge holds it to a file under the
   repository's git directory, confirm the item is the one presented for
-  approval, and report the file's path, so a
+  approval, or, for an edit made without one (the Review status section,
+  CONFIRM-17; clearing a draft flag), the one the system read and is about to
+  write, and report the file's path, so a
   write that lands on the wrong target, or that the user regrets, can be put
   back without depending on the forge keeping an edit history.
 
@@ -1671,10 +1701,13 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   manifest, with the condition that fires it, the source that emits it, and each
   field it carries.
 - **[EVENTS-06]** The system shall announce a fact only after the operation it
-  describes has landed.
+  describes has landed. `attention.requested` describes a review the probe found
+  able to open, so it lands with the probe (DIFF-47).
 - **[EVENTS-07]** Where a fact is caused by a script rather than by the model's
   judgment, the system shall announce it from that script, so a run whose skill
-  does not reach the end still announces what it did.
+  does not reach the end still announces what it did. `cr.updated` is the
+  exception: it describes a whole `/anchor:prepare-review` phase (the description
+  write, labels, milestone), so the skill announces it once that phase ends.
 - **[EVENTS-08]** A `/anchor:prepare-review` run shall announce `cr.created` or
   `cr.updated` and never both.
 - **[EVENTS-09]** The system shall announce `commit.pushed` after the push
@@ -1861,7 +1894,9 @@ govern what the user must have read before that happens.
   launches the review.
 - **[CONFIRM-08]** If the reviewer writes on the drafted text inside the review
   tool, then the system shall not read the review as approval of the text as
-  drafted.
+  drafted. An `approve` left with such notes shall return `changes-requested`
+  with `approveIntent`, and the system shall apply the notes and present only
+  what changed for re-approval.
 - **[CONFIRM-09]** When a flow other than `/anchor:commit` commits on the user's
   behalf, the system shall review the commit's message and changeset as
   `/anchor:commit` does before committing it, once per round of feedback rather
@@ -1955,5 +1990,5 @@ requirements govern what the system removes before the CONFIRM gate sees it.
   user has not approved.
 - **[SANITIZE-11]** The system shall carry a sanitization quality among the
   review qualities (REVIEW-15) so that a review weighs the same content again,
-  and shall not let that quality stand in for the gate: a review runs once the
-  commit message and the CR description have already published.
+  and shall not let that quality stand in for the gate: a review of a CR runs
+  once its commit messages have already published.

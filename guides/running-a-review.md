@@ -33,8 +33,8 @@ the turn ends with nothing left running.
 | `REVIEW_AVAILABLE=0` | Nothing usable is installed: skip the launch and take the fallback ladder |
 | `REVIEW_UNUSABLE` present | The viewer is installed but can't run the review, such as a revdiff older than 1.14. Relay the line as it is: it names the version and the upgrade |
 | `REVIEW_MODE=edit` | Name where the editor will appear. A GUI editor opens a window behind the terminal, and a review waiting in another window looks the same as one that never opened |
-| `REVIEW_MODE_CONFIGURED` present | The run is opening a different shape than the preference named, because that one has nowhere to open. Name it |
-| `REVIEW_MODE_SOURCE=subject` / `REVIEW_TOOL_SOURCE=default` | anchor picked that half, not the user. Add the configuration hint from `execute-quietly.md` under "when anchor picked the tool"; `REVIEW_TOOL` names the tool about to open |
+| `REVIEW_MODE_CONFIGURED` present | The run is opening a different shape than the subject picked, because that one has nowhere to open. Name it |
+| `REVIEW_TOOL_SOURCE=default` | anchor picked the tool, not the user. Add the configuration hint from `execute-quietly.md` under "when anchor picked the tool"; `REVIEW_TOOL` names the tool about to open |
 | `REVIEW_EDIT_AVAILABLE=0\|1` | Whether the fallback ladder may offer the editor rung. Carry it forward |
 | `REVIEW_PRELOADS=0` | The tool can't show preloaded notes. A review given `--notes` opens without them, so put them in the manifest, one line each with its `file:line` |
 | `REVIEW_HOST` | Open the manifest with one line saying where the review is, so a user who comes back to this pane later knows where to look: 👀 *the review is open in an iTerm2 split of this pane* (`iterm2`), *in a tmux popup over this pane* (`tmux`), *in an agterm overlay over this session* (`agterm`), *in an editor window, possibly behind this one* (`gui`), *wherever your `ANCHOR_HOST_RUNNER` puts it* (`launcher`) |
@@ -65,9 +65,9 @@ unchanged line as it does at a change, and a reviewer stepping through reaches
 every note.
 
 A line in a file the review leaves out, because nothing in it changed, has
-nowhere in the diff to sit: revdiff would open that file in full. A reply round
-and a review round handle this themselves, putting the note in `(context).md`
-with the lines quoted.
+nowhere in the diff to sit: revdiff would open that file in full. A reply round,
+a review round, and `--notes` handle this themselves, putting the note in
+`(context).md` with the lines quoted.
 
 ## Launch in the background
 
@@ -136,8 +136,8 @@ last lines carry:
 - `REVIEW_VERDICT`: `approved`, `changes-requested`, `rejected`,
   `incomplete`, or `no-verdict`.
 - `REVIEW_OUTPUT`: compact JSON carrying `verdict`, `mode`, `tool`,
-  `comments[]`, `editedFields[]`, `capabilities`, and `raw` (the DIFF contract in
-  `SPEC.md`). Each comment is `{body, target, file?, startLine?, endLine?,
+  `comments[]`, `editedFields[]`, `approveIntent`, `capabilities`, and `raw` (the
+  DIFF contract in `SPEC.md`). Each comment is `{body, target, file?, startLine?, endLine?,
   side?}`, with `target` one of `line`, `file`, `changeset`, or the artifact's
   own target.
 
@@ -146,11 +146,12 @@ address, and the verdict says whether it blocks.
 
 | Verdict | Act on it |
 | --- | --- |
-| `approved` | Proceed to the skill's next step. A comment with `target` `verdict` is the note the reviewer approved with (a lone `approve`, or a note on the `approve` line): relay it only where it says more than the choice. Where `editedFields` carries the artifact's target, that text *is* the artifact (`edit` mode's saved buffer, or the draft as saved before an edit review was switched to the viewer): use it verbatim, without re-drafting from it or re-presenting it for approval. Comments an approving review still left don't gate the step; surface them after it, and carry out one that asks for the follow-up itself (*file an issue for this*), through `/anchor:issue` where it asks for an issue |
+| `approved` | Proceed to the skill's next step. The reviewer chose `approve` and wrote nothing else but a plain yes (`ok`, `lgtm`, 👍); each of those comes back with `target` `verdict`: relay one only where it says more than the choice. Where `editedFields` carries the artifact's target, that text *is* the artifact (`edit` mode's saved buffer, or the draft as saved before an edit review was switched to the viewer): use it verbatim, without re-drafting from it or re-presenting it for approval. A review of items (a batch, a review round) is the exception: its other notes come back with the approval, and its own item-by-item read (`batch-review.md`, or the round's read in `/anchor:review`) says what each one does |
+| `changes-requested` with `approveIntent: true` | The reviewer chose `approve` and also left notes (or edited the draft in the viewer): they approved everything except what the notes ask. Nothing publishes as drafted. Act on it as `changes-requested` below: apply each note, and carry out one that asks for follow-up instead (*file an issue for this*), through `/anchor:issue` where it asks for an issue. The re-review then shows only what changed since they closed it, with each note answered, and the manifest says this is their approval coming back for those notes alone. Their `approve` is not among `comments`, so there is nothing to answer for it |
 | `changes-requested` | Nothing proceeds. Fold in every comment, into the `editedFields` text where it carries the artifact's target (the reviewer edited the draft before switching to the viewer, or with `e` in revdiff, which also writes it over the draft file) and into the draft otherwise, echo them back in the review-feedback table from `execute-quietly.md`, and re-review (a changeset as a reply, below). A comment whose `target` is `file` with a diff in its body is the reviewer's own edit rather than an annotation: read it per `reviewer-edits.md` |
 | `rejected` | The reviewer chose `reject`. Nothing the review gates happens, and nothing falls back: say it stopped, with no error banner, and relay any note they left (`comments` with `target` `verdict` carry the note they chose with). Don't redraft or reopen unless they ask |
 | `incomplete` | The reviewer closed with changes unreviewed, a partial pass. Ask what they want to change, then re-review |
-| `no-verdict` with `raw.exitCode` `undecided` | The reviewer quit without choosing: revdiff with no note on Accept or Reject (or one on both), or an editor without saving. Ask with `AskUserQuestion`: Accept, Reject, or Reopen the review, and act on the answer as that verdict (Reopen launches the same review again). An answer typed in place of the three is the change they want: fold it in as `changes-requested`. This is the one question a review's result is allowed to lead to, because the reviewer read it and closed it without saying which |
+| `no-verdict` with `raw.exitCode` `undecided` | The reviewer quit without choosing: revdiff with no `approve` or `reject` note (or both), or an editor without saving. Ask with `AskUserQuestion`: Accept, Reject, or Reopen the review, and act on the answer as that verdict (Reopen launches the same review again). An answer typed in place of the three is the change they want: fold it in as `changes-requested`. This is the one question a review's result is allowed to lead to, because the reviewer read it and closed it without saying which |
 | `no-verdict` | The review did not complete. `capabilities.producesVerdict: false` means the tool graded nothing; otherwise it closed early or errored (see `raw.exitCode`; `unsaved`, a GUI editor that returned without waiting, and `pane-closed` reopen rather than fall back, per `review-fallback.md`). Take the fallback ladder, opening and closing the reply with its error banner. Don't silently retry: the same failure recurs |
 | No verdict line at all | Empty stdout, stderr only, or no parseable `REVIEW_VERDICT`: the dispatcher exited before reporting. Treat it as `no-verdict`. Absent output looks like nothing went wrong, which is why it is never read as approval |
 

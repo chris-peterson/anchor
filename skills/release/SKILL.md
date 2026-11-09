@@ -253,8 +253,7 @@ Which mode takes the notes follows the subject. An empty
 `RELEASE_NOTES_BASELINE` — nothing accrued yet — makes the notes all new, so the
 `edit` mode takes them: they open in the user's editor and whatever they
 save *is* the notes. A baseline with sections already in it has real hunks, so
-`diff` takes it. A configured mode, or an editor with nowhere to open,
-overrides that.
+`diff` takes it. An editor with nowhere to open gives way to `diff`.
 
 Run it as the review loop in `${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md`
 describes — probe, background launch, manifest, chat feedback while it's open,
@@ -263,7 +262,9 @@ empty left-hand side the recon block created):
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill release --probe \
-  --files <RELEASE_NOTES_BASELINE> <RELEASE_NOTES_PATH>
+  --files <RELEASE_NOTES_BASELINE> <RELEASE_NOTES_PATH> \
+  --title '<repo> <NEW_VERSION> release notes' \
+  --detail version=<NEW_VERSION> --detail range=<RELEASE_RANGE>
 ```
 
 ```bash

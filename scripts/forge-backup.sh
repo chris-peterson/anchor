@@ -73,7 +73,7 @@ case "$forge" in
     [[ -z "$project" ]] || { repo_args=(-R "$project"); gh_repo=$project; }
     case "$kind" in
       issue) read_cmd=(gh issue view "$id" ${repo_args[@]+"${repo_args[@]}"} --json "number,title,body,labels,milestone,state,url") ;;
-      cr)    read_cmd=(gh pr view "$id" ${repo_args[@]+"${repo_args[@]}"} --json "number,title,body,labels,milestone,state,url,headRefName") ;;
+      cr)    read_cmd=(gh pr view "$id" ${repo_args[@]+"${repo_args[@]}"} --json "number,title,body,labels,milestone,state,isDraft,url,headRefName") ;;
       milestone) read_cmd=(gh api ${host_args[@]+"${host_args[@]}"} "repos/$gh_repo/milestones/$id") ;;
     esac ;;
   gitlab)

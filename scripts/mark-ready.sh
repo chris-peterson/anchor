@@ -19,6 +19,9 @@
 # Output lines (KEY=value, read from stdout):
 #   RESOLVED_VIA=<repo|cwd>   which checkout the run operated in
 #   CR_URL=<web url>          the CR, as the forge reports it
+#   CR_BACKUP_PATH=<path>     the CR as it was before the flag came off, saved
+#                             through scripts/forge-backup.sh (FORGE-13); a
+#                             backup of any CR but CR_URL stops the edit
 #   CR_READY=ok               the flag was set on this run
 #   ALREADY_READY=1           it was already clear, so nothing was changed
 #
@@ -33,6 +36,8 @@ set -euo pipefail
 
 # shellcheck source=lib/resolve-context.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
+# shellcheck source=lib/backup.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/backup.sh"
 
 CTX_REPO=""
 forge=""
@@ -81,6 +86,12 @@ if [[ "$draft" != "true" ]]; then
   echo "ALREADY_READY=1"
   exit 0
 fi
+
+if ! backup=$(anchor_backup_cr "$cr" "$cr_url"); then
+  echo "READY_ERROR=could not back up CR $cr before marking it ready: $backup" >&2
+  exit 70
+fi
+echo "CR_BACKUP_PATH=$backup"
 
 # Both forges name the target state rather than toggling it, so this is safe to
 # reach twice; the inverse is its own flag.

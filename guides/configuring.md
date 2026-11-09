@@ -82,9 +82,9 @@ setting applies to, the **setting** says what is being set, and dropping the
 qualifier gives you the base that applies wherever nothing more specific does.
 
 ```bash
-git config anchor.verbosity 25            # the base
-git config anchor.issue.verbosity 75      # issues
-git config anchor.github.verbosity 10     # anything published to GitHub
+git config anchor.hints false            # the base: every review
+git config anchor.edit.hints true        # editor reviews only
+git config anchor.issue.verbosity 75     # issues
 ```
 
 A qualifier is an artifact type (`cr`, `commit`, `issue`, `release`), a forge

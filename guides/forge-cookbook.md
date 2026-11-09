@@ -321,8 +321,9 @@ It saves the whole object as JSON under `.git/anchor/backups/` and prints
 `BACKUP_PATH`, `BACKUP_URL`, and `BACKUP_TITLE`. Write only when `BACKUP_URL` is
 the item you presented for approval. A `BACKUP_ERROR=` line means the read
 failed, so stop rather than write. A GitLab milestone goes by its `id`, every
-other kind by the number the forge shows. `/anchor:prepare-review` saves a CR
-description inside `prepare-review.sh --write`, so it doesn't call this.
+other kind by the number the forge shows. `prepare-review.sh --write`,
+`review-status.sh record`, and `mark-ready.sh` save the CR themselves and print
+`CR_BACKUP_PATH`, so their callers don't call this.
 
 ## CR description update from a file
 

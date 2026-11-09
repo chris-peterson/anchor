@@ -154,6 +154,7 @@ export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
 o=$(REVDIFF_STUB_CHOOSE=accept REVDIFF_KEYS_CAPTURE="$work/keys.txt" run --skill commit --previous); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = approved ] || fail "a note on Accept approves: $o"
 [ "$(jq -r '.comments[0] | "\(.target) \(.choice)"' <<<"$j")" = "verdict accept" ] || fail "the choice is a verdict comment: $j"
+[ "$(jq -r .approveIntent <<<"$j")" = false ] || fail "an approval with nothing else needs no second look: $j"
 grep -qxF 'unmap Q' "$work/keys.txt" || fail "Q should be unbound for the review: $(cat "$work/keys.txt")"
 ! grep -q 'discard_quit' "$work/keys.txt" || fail "revdiff applies unmaps first, so the binding itself is left out: $(cat "$work/keys.txt")"
 grep -qxF 'map a confirm' "$work/keys.txt" || fail "the review keeps the bindings revdiff has: $(cat "$work/keys.txt")"
@@ -162,9 +163,15 @@ o=$(REVDIFF_STUB_CHOOSE=reject run --skill commit --previous)
 o=$(REVDIFF_STUB_CHOOSE="accept reject" run --skill commit --previous 2>/dev/null); j=$(json_of "$o")
 if [ "$(verdict_of "$o")" != no-verdict ] || [ "$(jq -r .raw.exitCode <<<"$j")" != undecided ]; then fail "both choices are undecided: $o"; fi
 REVDIFF_STUB_OUTPUT=$'## a.txt:2 (+)\nrename this later'
+o=$(REVDIFF_STUB_CHOOSE=accept run --skill commit --previous 2>"$work/err.txt"); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = changes-requested ] || fail "Accept with a note sends the note back to be applied, not published as drafted: $o"
+[ "$(jq -r .approveIntent <<<"$j")" = true ] || fail "Accept with a note keeps the approval as approveIntent: $j"
+[ "$(jq -c '[.comments[].target]' <<<"$j")" = '["line"]' ] || fail "the note is the one comment left to answer: $j"
+grep -q 'approveIntent' "$work/err.txt" || fail "an approval sent back for its notes says so: $(cat "$work/err.txt")"
+REVDIFF_STUB_OUTPUT=$'## a.txt:2 (+)\nOK\n\n## a.txt (file-level)\n''👍'
 o=$(REVDIFF_STUB_CHOOSE=accept run --skill commit --previous); j=$(json_of "$o")
-[ "$(verdict_of "$o")" = approved ] || fail "Accept with a note approves: $o"
-[ "$(jq '[.comments[] | select(.target == "line")] | length' <<<"$j")" = 1 ] || fail "Accept keeps the other notes: $j"
+[ "$(verdict_of "$o")" = approved ] || fail "Accept with a plain ok and a thumbs-up approves: $o"
+[ "$(jq -r .approveIntent <<<"$j")" = false ] || fail "a plain yes is part of the approval: $j"
 o=$(REVDIFF_STUB_CHOOSE=reject run --skill commit --previous); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = rejected ] || fail "Reject with a note rejects: $o"
 REVDIFF_STUB_OUTPUT=""
@@ -187,9 +194,16 @@ REVDIFF_STUB_OUTPUT=$'## a.txt:2 (+)\ncancel'
 o=$(run --skill commit --previous)
 [ "$(verdict_of "$o")" = rejected ] || fail "a lone cancel rejects: $o"
 REVDIFF_STUB_OUTPUT=$'## a.txt:2 (+)\nlgtm\n\n## a.txt:1 (+)\nrename this'
+o=$(run --skill commit --previous 2>/dev/null); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = changes-requested ] || fail "lgtm among other notes is not approval of the text as drafted: $o"
+[ "$(jq -r .approveIntent <<<"$j")" = true ] || fail "lgtm among other notes is the approval they come back for: $j"
+[ "$(jq -c '[.comments[].body]' <<<"$j")" = '["rename this"]' ] || fail "only the other note is left to answer: $j"
+REVDIFF_STUB_OUTPUT=$'## a.txt:2 (+)\napprove\n\n## a.txt:1 (+)\nok'
 o=$(run --skill commit --previous); j=$(json_of "$o")
-[ "$(verdict_of "$o")" = changes-requested ] || fail "lgtm among other notes is not approval: $o"
-[ "$(jq '[.comments[] | select(.target == "verdict")] | length' <<<"$j")" = 0 ] || fail "lgtm among other notes stays a note: $j"
+[ "$(verdict_of "$o")" = approved ] || fail "approve on a line with an ok elsewhere approves: $o"
+REVDIFF_STUB_OUTPUT=$'## a.txt:2 (+)\nreject\n\n## a.txt:1 (+)\nrename this'
+o=$(run --skill commit --previous); j=$(json_of "$o")
+[ "$(jq -r '"\(.verdict) \(.approveIntent)"' <<<"$j")" = "changes-requested false" ] || fail "reject among other notes is one more note: $j"
 REVDIFF_STUB_OUTPUT=$'## a.txt:2 (+)\nlgtm, but rename it'
 o=$(run --skill commit --previous)
 [ "$(verdict_of "$o")" = changes-requested ] || fail "a note that says more than the word is a note: $o"
@@ -224,7 +238,7 @@ o=$(run --previous --annotations "$work/one-note.md")
 [ "$(verdict_of "$o")" = approved ] || fail "an item answered drop doesn't stop a lone lgtm on the table: $o"
 rm -f "$repo/(context).md"
 unset REVDIFF_STUB_CHOOSE; REVDIFF_STUB_OUTPUT=""
-ok "revdiff: a lone lgtm or stop anywhere chooses, but not among other notes or on a preloaded one, and in a review of items only on the shared table"
+ok "revdiff: a lone lgtm or stop anywhere chooses, an approving word among other notes sends them back with approveIntent, neither on a preloaded note, and in a review of items only on the shared table"
 
 # removed-side marker (-)
 md=$'## a.txt:2 (-)\nthis deletion looks wrong'
@@ -645,7 +659,15 @@ export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT="$md"; o=$(REVDIFF_STUB_CHOOSE="" 
 [ "$(jq -r '.comments[0].file' <<<"$j")" = null ]           || fail "a note on the context carries no file"
 [ "$(jq -r '.comments[0].startLine' <<<"$j")" = 3 ] || fail "a note on the context keeps its line: $j"
 [ "$(jq -r '.comments[0].quote' <<<"$j")" = "$(sed -n 3p "$work/emsg.context")" ] || fail "a note on the context quotes its line: $j"
-ok "revdiff: a note on (context).md comes back as feedback on the commit message"
+# An approval with a note on the message sends the note back, and the reply
+# review it saves has only that note to answer.
+o=$(REVDIFF_STUB_CHOOSE=accept run --local --message-file "$emsg" 2>/dev/null); j=$(json_of "$o")
+[ "$(jq -r '"\(.verdict) \(.approveIntent)"' <<<"$j")" = "changes-requested true" ] || fail "approve with a note on the message must not commit it as drafted: $j"
+[ "$(jq -c '[.comments[].target]' <<<"$j")" = '["commit-message"]' ] || fail "the note on the message is the comment: $j"
+state=$(sed -n 's/^REVIEW_STATE=//p' <<<"$o")
+[ -n "$state" ] || fail "approve with a note saves the state the reply review reads: $o"
+[ "$(jq -c '[.[].target]' "$state/comments.json")" = '["commit-message"]' ] || fail "the reply has only the note to answer, not the approval: $(cat "$state/comments.json")"
+ok "revdiff: a note on (context).md comes back as feedback on the commit message, with an approve too"
 export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
 
 # --skill leads the header with the flow that opened the review and what

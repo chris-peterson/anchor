@@ -199,8 +199,9 @@ not these words or these lines:
 
 1. Stage the files the round's fixes touched with `commit-preflight.sh --path <p>...`.
 2. Write the drafted message to `$(mktemp -u /tmp/commit-msg.XXXXXX).md`.
-3. Open the review: `review-diff.sh --skill resolve-feedback --local
-   --message-file <path> --path <p>...`, printing the manifest and, in `diff`
+3. Probe with `review-diff.sh --skill resolve-feedback --probe --local`, then
+   open the review: `review-diff.sh --skill resolve-feedback --mode <REVIEW_MODE>
+   --local --message-file <path> --path <p>...`, printing the manifest and, in `diff`
    mode, the message verbatim (`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`).
 4. Act on the verdict as the commit skill's "Review the pending changeset"
    section does: only `approved` commits; `rejected` stops with nothing

@@ -220,8 +220,9 @@ revdiff_relaunch_editor() {
 # that work the review, and what each way of ending it leads to. The details of
 # the change come
 # last, below every instruction: the commit, details anchor doesn't place (a
-# caller's own --detail) as `label: value`, the body, then a reply's table and
-# answers. The popup copy stays plain text.
+# caller's own --detail) as `label: value`, the body, then the agent's notes on
+# unchanged files, or a reply's table and answers. The popup copy stays plain
+# text.
 # shellcheck disable=SC2016,SC2154
 revdiff_header() {
   local repo="$1" repo_url="$2" path exclude body where line label value next sha url
@@ -273,6 +274,8 @@ revdiff_header() {
     done < <(jq -r '.[] | select(.label | IN("body","repo","branch","on top of","commit","author","base","commits","summary","range","next","opened by") | not)
       | "\(.label)\u001f\(.value | gsub("\n"; " "))"' <<<"$review_details_json")
     [[ -z "$body" ]] || printf '\n%s\n' "$body"
+    [[ -z "${review_notes_md:-}" || ! -s "${review_notes_md%.md}-context.md" ]] \
+      || cat "${review_notes_md%.md}-context.md"
   } > "$path"
   if [[ -n "${review_reply:-}" ]]; then
     revdiff_reply_from=$(awk 'END { print NR + 1 }' "$path")

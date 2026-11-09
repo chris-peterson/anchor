@@ -27,8 +27,10 @@ to the one reader it is for, so the permanent text can stay short.
 On the changed line it explains, usually the first line of its hunk. A note
 about a file as a whole goes on the file.
 `review-diff.sh --notes` anchors each note where revdiff draws it and refuses
-one on a file the review doesn't show or a line far from every change: a note
-explains a change, so it sits on one.
+one on a file outside the review or a line far from every change: a note
+explains a change, so it sits on one. A note on a file the review leaves out,
+because nothing in it changed, goes in `(context).md` with the lines it is
+about, since showing it in the diff would open the whole file.
 
 A note isn't a draft of anything permanent. When its reason stays true as long
 as the code does, it is a comment, and the comment is written into the change.

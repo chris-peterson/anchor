@@ -59,6 +59,18 @@ o=$(round_cmd start --repo "$repo" --base "$base" --head "$head" --in-place || t
 git -C "$repo" checkout --quiet -- b.txt
 ok "start: an in-place round refuses a checkout with uncommitted changes"
 
+printf 'stray\n' > "$repo/stray.txt"
+mkdir -p "$repo/scratch"; printf 'x\n' > "$repo/scratch/notes.txt"
+o=$(round_cmd start --repo "$repo" --base "$base" --head "$head" --in-place || true)
+[[ "$(val ROUND_ERROR "$o")" == *"untracked files (scratch/, stray.txt)"* ]] || fail "untracked files should be refused by name: $o"
+rm -rf "$repo/stray.txt" "$repo/scratch"
+printf 'stray.txt\n' >> "$repo/.git/info/exclude"
+printf 'stray\n' > "$repo/stray.txt"
+o=$(round_cmd start --repo "$repo" --base "$base" --head "$head" --in-place) || fail "an ignored file is not the round's: $o"
+round_cmd finish --dir "$(val ROUND_DIR "$o")" >/dev/null
+rm -f "$repo/stray.txt"
+ok "start: an in-place round refuses untracked files, naming them, and lets ignored ones be"
+
 git -C "$repo" switch --quiet main
 o=$(round_cmd start --repo "$repo" --base "$base" --head "$head" --in-place || true)
 [[ "$(val ROUND_ERROR "$o")" == *"not the CR head"* ]] || fail "a checkout off the head should be refused: $o"
@@ -209,8 +221,9 @@ ok "read: a file the reviewer edited in the review comes back as their edit"
 round_cmd revert --dir "$dir" --id 1 >/dev/null
 grep -qx 'line 2' "$root/a.txt" || fail "revert 1 should restore line 2"
 grep -qx 'inserted' "$root/a.txt" || fail "revert 1 should leave item 2"
-o=$(round_cmd files --dir "$dir")
+o=$(round_cmd files --dir "$dir" 2>"$work/files.err")
 [[ "$(val ROUND_FILE "$o")" == a.txt ]] || fail "files: $o"
+[[ ! -s "$work/files.err" ]] || fail "a snapshot with the table in info/exclude prints nothing on stderr: $(cat "$work/files.err")"
 ok "revert: one item comes back out and the others stay"
 
 o=$(round_cmd finish --dir "$dir")
@@ -492,5 +505,40 @@ o=$(round_cmd finish --dir "$rdir")
 [[ "$(jq -r '.rounds[0].notes | "\(.kept) \(.added)"' "$(val ROUND_LEDGER "$o")")" == "1 1" ]] \
   || fail "finish counts the read pass's notes: $(jq -c '.rounds[0].notes' "$(val ROUND_LEDGER "$o")")"
 ok "read pass: a read pass after a draft is refused, its notes become marked items, and finish counts them"
+
+# ============================ the next round =============================
+
+# A round offered after one is committed reviews only that round's commit, from
+# the head the round before it reviewed, whatever the Review status says.
+nr="$work/next-round"
+git init --quiet -b main "$nr"
+git -C "$nr" config user.email t@example.com; git -C "$nr" config user.name T; git -C "$nr" config commit.gpgsign false
+printf 'one\ntwo\n' > "$nr/x.txt"; printf 'a\n' > "$nr/y.txt"
+git -C "$nr" add -A; git -C "$nr" commit --quiet -m base
+n0=$(git -C "$nr" rev-parse HEAD)
+printf 'one\nTWO\n' > "$nr/x.txt"
+git -C "$nr" commit --quiet -am change
+n1=$(git -C "$nr" rev-parse HEAD)
+o=$(round_cmd start --repo "$nr" --base "$n0" --head "$n1" --in-place)
+[[ "$(val ROUND_HEAD "$o")" == "$n1" ]] || fail "start prints the head it pins: $o"
+o=$(round_cmd finish --dir "$(val ROUND_DIR "$o")"); nledger=$(val ROUND_LEDGER "$o")
+[[ "$(jq -r '.rounds[0].head' "$nledger")" == "$n1" ]] || fail "finish records the round's head: $(jq -c '.rounds[0]' "$nledger")"
+o=$(round_cmd start --repo "$nr" --next-round --ledger "$nledger" --head HEAD --in-place || true)
+[[ "$(val ROUND_ERROR "$o")" == *"nothing is committed on top of round 1's head"* ]] || fail "a next round with no new commit is refused: $o"
+rc=0; round_cmd start --repo "$nr" --next-round --base "$n0" --ledger "$nledger" --head HEAD --in-place >/dev/null 2>&1 || rc=$?
+[[ "$rc" == 64 ]] || fail "--next-round takes its base from the ledger, not --base: exit $rc"
+printf 'b\n' > "$nr/y.txt"
+git -C "$nr" commit --quiet -am "round fix"
+n2=$(git -C "$nr" rev-parse HEAD)
+o=$(round_cmd start --repo "$nr" --next-round --ledger "$nledger" --head HEAD --in-place)
+[[ "$(val ROUND_N "$o")" == 2 && "$(val ROUND_BASE "$o")" == "$n1" && "$(val ROUND_HEAD "$o")" == "$n2" ]] \
+  || fail "a next round runs from the last round's head to the new one: $o"
+ndir=$(val ROUND_DIR "$o")
+echo '{"items":[]}' > "$work/nr-items.json"
+round_cmd seed --dir "$ndir" --pass whole --items "$work/nr-items.json" >/dev/null
+[[ "$(cut -f1 "$ndir/changed.tsv" | sort -u)" == y.txt ]] || fail "a next round shows only the round's commit: $(cat "$ndir/changed.tsv")"
+round_cmd finish --dir "$ndir" >/dev/null
+[[ "$(jq -r '.rounds[1].head' "$nledger")" == "$n2" ]] || fail "round 2's head lands in the ledger: $(jq -c '.rounds[1]' "$nledger")"
+ok "next round: start --next-round reviews only the commit on top of the last round's head"
 
 echo "# all checks passed"

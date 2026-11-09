@@ -857,4 +857,28 @@ grep -q '`ZX` reject it (exit code 2)' "$EDITOR_BUFFER_CAPTURE" || fail "rejecti
 git -C "$repo" config --unset anchor.edit.tool
 ok "annotate: the switch is offered only where a viewer is named"
 
+# --- the real Vim and Neovim, driven headless through their chords -----------
+# The runner types $VIM_KEYS in normal mode after the maps load, so the chord
+# runs through the map edit.sh passes, not through the editor's built-in key.
+cat > "$bin/vim-keys.sh" <<'EOF'
+#!/usr/bin/env bash
+sh -c "$1 -c 'normal $VIM_KEYS'" </dev/null >/dev/null 2>&1
+EOF
+chmod +x "$bin/vim-keys.sh"
+for vimbin in vim nvim; do
+  if ! command -v "$vimbin" >/dev/null 2>&1; then
+    echo "ok - # SKIP $vimbin chords: $vimbin not installed"
+    continue
+  fi
+  vimed="$vimbin -u NONE -i NONE -N -n -es"
+  o=$(VIM_KEYS=ZZ GIT_EDITOR="$vimed" ANCHOR_EDITOR_LAUNCHER='' ANCHOR_HOST_RUNNER="$bin/vim-keys.sh" \
+      run --skill prepare-review --mode edit --files "$nothing" "$draft" 2>&1); j=$(json_of "$o")
+  [ "$(verdict_of "$o")" = approved ]            || fail "$vimbin: ZZ on an unchanged draft approves it: $o"
+  [ "$(jq '.editedFields|length' <<<"$j")" = 0 ] || fail "$vimbin: ZZ unchanged edits nothing: $j"
+  o=$(VIM_KEYS=ZX GIT_EDITOR="$vimed" ANCHOR_EDITOR_LAUNCHER='' ANCHOR_HOST_RUNNER="$bin/vim-keys.sh" \
+      run --skill prepare-review --mode edit --files "$nothing" "$draft" 2>&1)
+  [ "$(verdict_of "$o")" = rejected ]            || fail "$vimbin: ZX rejects: $o"
+  ok "$vimbin: ZZ approves a draft left unchanged, ZX rejects it"
+done
+
 echo "# all checks passed"

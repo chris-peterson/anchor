@@ -124,8 +124,10 @@ Each entry carries `body`, a file holding the final text below any header, and
 `fields`, the header parsed into an object. Publish from those. A seeded note
 the reviewer deleted is tidying and changes nothing. `general` holds notes left
 off the rows, or outside the items: they apply to the whole batch, so act on
-them before publishing anything. A note that asks to hold the batch holds all of
-it.
+them before publishing anything. An item a general note changes is redrafted
+into the next round with the `change` items rather than published as changed,
+since the reviewer approved the text they saw. A note that asks to hold the
+batch holds all of it.
 
 ## Publish, then go again for what changed
 

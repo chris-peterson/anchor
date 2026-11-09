@@ -22,8 +22,7 @@
 
 ANCHOR_REVIEW_BOX_TITLE="Review"
 
-# A note on a choice's line chooses it too, which is how an approval carries
-# other notes as comments; the box names the simpler way.
+# A note on a choice's line chooses it too; the box names the simpler way.
 # shellcheck disable=SC2016
 anchor_review_box() {
   local choices keys answer="" others='Notes of any other kind go back for a revision you review again.'

@@ -149,7 +149,7 @@ first attempt, not a retry.
 **`raw.exitCode: "unsaved"`, `"pane-closed"`, and `"undecided"` are neither
 this case nor a step here**: all three are re-openable, and DIFF-14 and DIFF-42
 treat them that way. The tool worked. On `undecided` the reviewer quit without
-choosing (revdiff with no note on Accept or Reject, or an editor without
+choosing (revdiff with no `approve` or `reject` note, or an editor without
 saving): without the error banner, ask with `AskUserQuestion` whether to accept,
 reject, or reopen the review, and act on the answer as that verdict; an answer
 typed in place of the three is feedback. On `unsaved` a GUI editor returned

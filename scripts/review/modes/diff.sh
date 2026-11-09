@@ -82,7 +82,7 @@ diff_unavailable() {
   echo "review-diff.sh: $1" >&2
   jq -cn --argjson caps "$diff_tool_caps" --arg b "${review_tool:-}" --arg rc "$2" '{
     mode:"diff", tool:$b, verdict:"no-verdict",
-    reviewCompleteness:null, reviewer:null, comments:[], editedFields:[],
+    reviewCompleteness:null, reviewer:null, comments:[], editedFields:[], approveIntent:false,
     capabilities:($caps + {producesVerdict:false}), raw:{exitCode:$rc}}' \
     | { read -r out; echo "REVIEW_VERDICT=no-verdict"; echo "REVIEW_OUTPUT=$out"; }
 }
@@ -240,7 +240,7 @@ emit_review() {
   # revdiff returns every preloaded note it still holds, so a note returned as
   # it was preloaded is not the reviewer answering, and a review that returns
   # only those has said nothing.
-  local answered="$returned" preloaded="[]" exit_name="" lone
+  local answered="$returned" preloaded="[]" exit_name=""
   if [[ -n "${review_annotations:-}" ]]; then
     preloaded=$(diff_tool_comments "$review_annotations" "$desc_file")
     answered=$(jq -c --argjson pre "$preloaded" '
@@ -248,43 +248,61 @@ emit_review() {
       def key: [.file, .target, .startLine, (.body | norm)];
       ($pre | map(key)) as $k | [.[] | select(key as $c | $k | index([$c]) | not)]' <<<"$returned")
   fi
-  # A review whose one note says only a verdict word chooses as a note on the
-  # Review box does, wherever it sits, except where a preloaded note sat:
-  # there it answers that note. In a review of items (a batch, a round),
-  # answers on the items' notes don't count against it, and only a note on the
-  # shared file decides, since a word on an item (a batch's `reject`) is about
-  # that item.
-  local items=false
+  # A note that says only a verdict word chooses as a note on the Review box
+  # does, except where a preloaded note sat: there it answers that note. An
+  # approving word chooses wherever it sits, among other notes too; a rejecting
+  # one only as the review's one note. In a review of items (a batch, a round),
+  # answers on the items' notes don't count against it, and only a lone note on
+  # the shared file decides, since a word on an item (a batch's `reject`) is
+  # about that item.
+  local items=false marks approve_intent=false feedback
   [[ -z "${review_items:-}" ]] || items=true
-  lone=$(jq -c --argjson pre "$preloaded" --argjson items "$items" '
+  # shellcheck disable=SC2016
+  local words='
     def word: ascii_downcase | gsub("^\\s+"; "") | gsub("[\\s.!]+$"; "");
     def choice: (.body | word) as $w
       | if ($w | IN("lgtm", "ship it", "approve", "accept")) then "accept"
         elif ($w | IN("reject", "stop", "abort", "cancel")) then "reject" else null end;
+    def yes: (.body | word) | IN("ok", "okay", "yes", "y", "sure", "fine", "+1", "👍",
+      ":thumbsup:", "✅", "lgtm", "ship it", "approve", "approved", "accept");
     def atpre($at): . as $n | $at | index([[$n.file, $n.target, $n.startLine]]) != null;
     ($pre | map([.file, .target, .startLine])) as $at
-    | (if $items then map(select(atpre($at) | not)) else . end) as $own
+    |'
+  # shellcheck disable=SC2016
+  local mark='map(. as $c
+    | (first($m[] | select(.note | [.file, .target, .startLine, .body] == ($c | [.file, .target, .startLine, .body])) | .choice) // null) as $ch
+    | if $ch then . + {target: "verdict", choice: $ch} else . end)'
+  marks=$(jq -c --argjson pre "$preloaded" --argjson items "$items" "$words"'
+    (if $items then map(select(atpre($at) | not)) else . end) as $own
     | if ($own | length) == 1 and $own[0].target != "verdict" and ($own[0] | choice) != null
          and ($own[0] | atpre($at) | not)
-      then {note: $own[0], choice: ($own[0] | choice)} else null end' <<<"$answered")
-  if [[ "$lone" != null && "$items" == true ]]; then
-    if ! declare -F diff_tool_shared_note >/dev/null || ! diff_tool_shared_note "$(jq -c .note <<<"$lone")"; then
-      lone=null
+      then [{note: $own[0], choice: ($own[0] | choice)}]
+      elif $items then []
+      else [$own[] | select(.target != "verdict" and choice == "accept" and (atpre($at) | not))
+            | {note: ., choice: "accept"}] end' <<<"$answered")
+  if [[ "$marks" != '[]' && "$items" == true ]]; then
+    if ! declare -F diff_tool_shared_note >/dev/null || ! diff_tool_shared_note "$(jq -c '.[0].note' <<<"$marks")"; then
+      marks='[]'
     fi
   fi
-  if [[ "$lone" != null ]]; then
-    # shellcheck disable=SC2016
-    local as_choice='map(if [.file, .target, .startLine, .body] == ($l.note | [.file, .target, .startLine, .body])
-                         then . + {target: "verdict", choice: $l.choice} else . end)'
-    answered=$(jq -c --argjson l "$lone" "$as_choice" <<<"$answered")
-    returned=$(jq -c --argjson l "$lone" "$as_choice" <<<"$returned")
-  fi
-  # The agent's own notes (a reply, or what it said about its changes) come back
-  # among the reviewer's, as the notes preloaded: only an edited or a new one is
-  # the reviewer answering. A review of items reads every returned note itself.
-  local comments="$returned"
-  [[ -z "${review_seeded:-}" && -z "${review_reply:-}" ]] || comments="$answered"
+  answered=$(jq -c --argjson m "$marks" "$mark" <<<"$answered")
+  returned=$(jq -c --argjson m "$marks" "$mark" <<<"$returned")
   verdict=$(diff_tool_verdict "$rc" "$answered")
+  # An approval covers the text as drafted only when nothing came with it but a
+  # plain yes: any other note is feedback the caller applies and shows again
+  # before anything publishes (CONFIRM-08). A review of items reads each item's
+  # answer itself, so its notes ride with the approval.
+  if [[ "$verdict" == approved && "$items" == false ]]; then
+    marks=$(jq -c --argjson pre "$preloaded" "$words"'
+      [.[] | select(.target != "verdict" and yes) | {note: ., choice: "accept"}]' <<<"$answered")
+    answered=$(jq -c --argjson m "$marks" "$mark" <<<"$answered")
+    returned=$(jq -c --argjson m "$marks" "$mark" <<<"$returned")
+    feedback=$(jq '[.[] | select(.target != "verdict")] | length' <<<"$answered")
+    if [[ "$feedback" -gt 0 ]]; then
+      echo "review-diff.sh: approved with $feedback other note(s), so it comes back as changes-requested with approveIntent: apply them and review only what changed" >&2
+      verdict=changes-requested approve_intent=true
+    fi
+  fi
   # A draft the reviewer changed in the tool goes back for approval as changed,
   # since approving it in the tool was approving the text before the edit was
   # read back (CONFIRM-08).
@@ -292,8 +310,16 @@ emit_review() {
   ! declare -F diff_tool_edited >/dev/null || edited=$(diff_tool_edited)
   if [[ "$edited" != '[]' && "$verdict" == approved ]]; then
     echo "review-diff.sh: the draft was edited in $review_tool, so it comes back for approval as edited" >&2
-    verdict=changes-requested
+    verdict=changes-requested approve_intent=true
   fi
+  # The agent's own notes (a reply, or what it said about its changes) come back
+  # among the reviewer's, as the notes preloaded: only an edited or a new one is
+  # the reviewer answering. A review of items reads every returned note itself.
+  # An approval sent back for its notes keeps only the notes, which a reply
+  # review answers one by one.
+  local comments="$returned"
+  [[ -z "${review_seeded:-}" && -z "${review_reply:-}" ]] || comments="$answered"
+  [[ "$approve_intent" == false ]] || comments=$(jq -c 'map(select(.target != "verdict"))' <<<"$comments")
   if [[ "$verdict" == relaunch ]]; then
     rm -f "$out_file" "$err_file" "$desc_file"
     ! declare -F diff_tool_cleanup >/dev/null || diff_tool_cleanup
@@ -317,7 +343,7 @@ emit_review() {
     --arg v "$verdict" --arg b "$review_tool" \
     --argjson caps "$diff_tool_caps" \
     --argjson comments "$comments" --argjson edited "$edited" \
-    --argjson rc "$rc" --arg name "$exit_name" '
+    --argjson rc "$rc" --arg name "$exit_name" --argjson intent "$approve_intent" '
     {
       mode:"diff",
       tool:$b,
@@ -326,6 +352,7 @@ emit_review() {
       reviewer:null,
       comments:$comments,
       editedFields:$edited,
+      approveIntent:$intent,
       capabilities:$caps,
       raw:{exitCode:(if $name == "" then $rc else $name end)}
     }')

@@ -30,12 +30,15 @@ mkdir -p "$bin" "$fx"
 export FX="$fx"
 
 # `pr edit --body-file` and the MR PUT both land in $FX/written.md, which the
-# next `pr view` / `mr view` then serves, as the forge would.
+# next `pr view` / `mr view` then serves, as the forge would. The backup's read
+# (the PR view that asks for headRefName, the MR API GET) serves the same CR, or
+# $BACKUP_SERVES where a test needs it to reach a different one.
 cat > "$bin/gh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 case "${1:-} ${2:-}" in
-  "pr view") jq --rawfile b "$FX/body.md" '.body = $b' "$FX/pr.json" ;;
+  "pr view") f="$FX/pr.json"; [[ "$*" != *headRefName* || -z "${BACKUP_SERVES:-}" ]] || f=$BACKUP_SERVES
+             jq --rawfile b "$FX/body.md" '.body = $b' "$f" ;;
   "pr edit") while [[ $# -gt 0 ]]; do [[ "$1" == --body-file ]] && cp "$2" "$FX/body.md"; shift; done ;;
   "api user") echo '{"login":"me"}' ;;
   *) echo "stub gh: unhandled: $*" >&2; exit 1 ;;
@@ -47,6 +50,7 @@ set -euo pipefail
 case "${1:-} ${2:-}" in
   "mr view")  jq --rawfile b "$FX/body.md" '.description = $b' "$FX/mr.json" ;;
   "api user") echo '{"username":"me"}' ;;
+  "api projects/"*) jq --rawfile b "$FX/body.md" '.description = $b' "$FX/mr.json" ;;
   "api -X")   for a in "$@"; do [[ "$a" == description=@* ]] && cp "${a#description=@}" "$FX/body.md"; done ;;
   *) echo "stub glab: unhandled: $*" >&2; exit 1 ;;
 esac
@@ -95,7 +99,7 @@ new_repo gh "https://github.com/acme/widget.git"
 main=$(git -C "$repo" rev-parse main)
 gh_pr() {
   jq -n --arg b "$main" --arg h "$(git -C "$repo" rev-parse HEAD)" --arg a "${1:-me}" --argjson d "${2:-false}" \
-    '{author: {login: $a}, baseRefOid: $b, headRefOid: $h, isDraft: $d}' > "$fx/pr.json"
+    '{author: {login: $a}, baseRefOid: $b, headRefOid: $h, isDraft: $d, url: "https://github.com/acme/widget/pull/7"}' > "$fx/pr.json"
 }
 gh_pr
 printf 'Why this change exists.\n' > "$fx/body.md"
@@ -110,7 +114,10 @@ head -n 1 "$fx/body.md" | grep -qx 'Why this change exists.' || fail "the descri
 [[ "$(table)" == "$(sha8 HEAD~2) 1 [me] approved
 $(sha8 HEAD~1) 1 [me] approved
 $(sha8 HEAD) 1 [me] approved" ]] || fail "first round table:"$'\n'"$(table)"
-ok "a round over the whole CR gives every commit its first round"
+backup=$(val CR_BACKUP_PATH)
+[[ "$backup" == */gh/.git/anchor/backups/* && -f "$backup" ]] || fail "the CR should be saved under .git/anchor/backups before the write: $out"
+[[ "$(jq -r .body "$backup")" == 'Why this change exists.' ]] || fail "the backup holds the description the write replaced: $(cat "$backup")"
+ok "a round over the whole CR gives every commit its first round, after saving the CR"
 
 run --cr 7 --base HEAD~1 --head HEAD --result changes-requested
 [[ "$status" == 0 ]] || fail "second record exited $status: $out"
@@ -170,6 +177,7 @@ run --cr 7 --base "$main" --head HEAD --result approved
 [[ "$status" == 0 && "$(val STATUS_SKIPPED)" == draft && "$(val STATUS_RECORDED)" == 0 ]] \
   || fail "someone else's draft should be skipped: $out"
 [[ "$(cat "$fx/body.md")" == "$before" ]] || fail "someone else's draft should be untouched"
+[[ -z "$(val CR_BACKUP_PATH)" ]] || fail "a skipped CR is not written, so not backed up: $out"
 gh_pr someone-else
 run --cr 7 --base HEAD~1 --head HEAD --result approved
 [[ "$status" == 0 && "$(val STATUS_RECORDED)" == 1 ]] || fail "someone else's ready CR with the section should be recorded: $out"
@@ -180,7 +188,19 @@ run --cr 7 --base "$main" --head HEAD --result approved
 [[ "$(cat "$fx/body.md")" == "Why." ]] || fail "a description without the section should be untouched"
 ok "someone else's CR is written to only where it has the section and is out of draft"
 
+# The backup reaching a CR other than the one read stops the write.
 gh_pr
+before=$(cat "$fx/body.md")
+jq '.url = "https://github.com/acme/widget/pull/8"' "$fx/pr.json" > "$fx/other.json"
+out=""; status=0
+out="$(BACKUP_SERVES="$fx/other.json" bash "$status_sh" record --repo "$repo" --cr 7 --base "$main" --head HEAD --result approved 2>&1)" || status=$?
+[[ "$status" -ne 0 ]] || fail "a backup of another CR should stop the write: $out"
+grep -q '^STATUS_ERROR=could not back up the CR.*pull/8, not .*pull/7.*refusing the write' <<<"$out" \
+  || fail "the refusal should name both CRs: $out"
+[[ -z "$(val CR_BACKUP_PATH)" && -z "$(val STATUS_RECORDED)" ]] || fail "a refused write reports no backup or round: $out"
+[[ "$(cat "$fx/body.md")" == "$before" ]] || fail "a refused write leaves the description untouched"
+ok "a backup of a CR other than the one read refuses the write"
+
 run --cr 7 --base "$main" --head HEAD --result lgtm
 [[ "$status" == 64 ]] || fail "an unknown result should exit 64, got $status: $out"
 run --cr 7 --base HEAD --head "$main" --result approved
@@ -191,13 +211,15 @@ ok "a bad result or range is refused"
 
 new_repo gl "https://gitlab.com/acme/widget.git"
 main=$(git -C "$repo" rev-parse main)
-jq -n --arg b "$main" '{author: {username: "me"}, diff_refs: {base_sha: $b}}' > "$fx/mr.json"
+jq -n --arg b "$main" '{author: {username: "me"}, diff_refs: {base_sha: $b}, web_url: "https://gitlab.com/acme/widget/-/merge_requests/12"}' > "$fx/mr.json"
 : > "$fx/body.md"
 run --cr 12 --base "$main" --head HEAD --result approved
 [[ "$status" == 0 ]] || fail "gitlab record exited $status: $out"
 head -n 1 "$fx/body.md" | grep -q '^<!-- anchor:review-status {' || fail "an empty description should get just the section: $(cat "$fx/body.md")"
 [[ "$(table | wc -l | tr -d ' ')" == 3 ]] || fail "gitlab table:"$'\n'"$(table)"
-ok "gitlab: the section is written through the MR API"
+[[ -f "$(val CR_BACKUP_PATH)" && "$(jq -r .web_url "$(val CR_BACKUP_PATH)")" == */merge_requests/12 ]] \
+  || fail "gitlab: the MR should be saved before the write: $out"
+ok "gitlab: the MR is saved, then the section is written through the MR API"
 
 # A second reviewer joins the list once; the same reviewer again doesn't repeat.
 by=$(cd "$repo" && d=$(review_status_add '{}' "$main" HEAD approved agent-assisted me) \

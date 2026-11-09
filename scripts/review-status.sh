@@ -17,8 +17,17 @@
 # is the author saying it isn't ready for review. The description is read fresh
 # just before it is written, so an edit made since the review began survives.
 #
+# Before the write, the CR is saved through scripts/forge-backup.sh (FORGE-13).
+# The section is written without an approval of its text (CONFIRM-17), so the
+# check is against the CR this script read: a backup of any other CR stops the
+# write.
+#
 # Output lines (KEY=value, read from stdout):
 #   RESOLVED_VIA=<repo|cwd>
+#   CR_BACKUP_PATH=<path>      the CR as it was before the write, saved as JSON
+#                              under <git-common-dir>/anchor/backups/; only
+#                              on a run that writes the CR (not --local, not
+#                              STATUS_SKIPPED)
 #   STATUS_RECORDED=<n>        commits given another round; 0 when skipped
 #   STATUS_SKIPPED=<reason>    nothing was written, on someone else's CR:
 #                              no-section (its description has none) or draft
@@ -55,6 +64,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/forge-url.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/tmpfile.sh"
 # shellcheck source=lib/review-status.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/review-status.sh"
+# shellcheck source=lib/backup.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/backup.sh"
 
 usage() {
   echo "usage: review-status.sh record (--cr <n> | --local) --base <sha> --head <sha> --result <approved|changes-requested> [--kind <agent-assisted|read-through>] [--note <text>]... [--repo <path>]" >&2
@@ -133,7 +144,8 @@ fi
 desc=$(anchor_tmpfile cr-review-status md)
 case "$forge" in
   github)
-    view=$(gh pr view "$cr" --json author,body,baseRefOid,headRefOid,isDraft 2>&1) || die "could not read the CR" "$view"
+    view=$(gh pr view "$cr" --json author,body,baseRefOid,headRefOid,isDraft,url 2>&1) || die "could not read the CR" "$view"
+    cr_url=$(jq -r '.url // empty' <<<"$view")
     draft=$(jq -r '.isDraft // false' <<<"$view")
     author=$(jq -r '.author.login // empty' <<<"$view")
     cr_base=$(jq -r '.baseRefOid' <<<"$view")
@@ -143,6 +155,7 @@ case "$forge" in
   gitlab)
     view=$(glab mr view "$cr" --output json 2>&1) || die "could not read the CR" "$view"
     author=$(jq -r '.author.username // empty' <<<"$view")
+    cr_url=$(jq -r '.web_url // empty' <<<"$view")
     cr_base=$(jq -r '.diff_refs.base_sha' <<<"$view")
     cr_head=$(jq -r '.sha' <<<"$view")
     draft=$(jq -r '.draft // .work_in_progress // false' <<<"$view")
@@ -186,6 +199,8 @@ review_status_section "$data" > "$section"
 updated=$(anchor_tmpfile cr-review-status-desc md)
 review_status_splice "$desc" "$section" > "$updated"
 
+backup=$(anchor_backup_cr "$cr" "$cr_url") || die "could not back up the CR before writing it" "$backup"
+echo "CR_BACKUP_PATH=$backup"
 out=$(anchor_cr_write_description "$forge" "$cr" "$updated") || die "could not write the CR description" "$out"
 
 echo "STATUS_RECORDED=$(git rev-list --count --no-merges "$base..$head")"

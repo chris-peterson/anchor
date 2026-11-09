@@ -272,13 +272,15 @@ landed into a tool call that failed.
 
 ### Edit
 
-The review is the preferred edit surface but **optional** — it runs when a review tool is available. Which one follows the subject: filing a new issue leaves `<current-path>` empty, so the body is all new and `edit` mode takes it — it opens in the user's editor and whatever they save *is* the body. Updating an existing issue has a current body to diff against, so [revdiff](https://revdiff.com) takes it and the user comments where you fold the comments in. A configured tool, or an editor with nowhere to open, overrides that.
+The review is the preferred edit surface but **optional** — it runs when a review tool is available. Which one follows the subject: filing a new issue leaves `<current-path>` empty, so the body is all new and `edit` mode takes it — it opens in the user's editor and whatever they save *is* the body. Updating an existing issue has a current body to diff against, so `diff` mode takes it, in the viewer `anchor.diff.tool` names ([revdiff](https://revdiff.com) is the one anchor recommends), and the user comments where you fold the comments in. A configured tool, or an editor with nowhere to open, overrides that.
 
 Run it as the review loop in `${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md` describes — probe, background launch, manifest, chat feedback while it's open, reading the verdict — opening the current body vs. the draft (when updating) or the draft alone:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill issue --probe \
-  --files <current-path> <draft-path>
+  --files <current-path> <draft-path> \
+  --title '<repo>#<number>: <issue title>' \
+  --detail repo=<repo>
 ```
 
 ```bash

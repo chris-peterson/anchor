@@ -185,7 +185,8 @@ commits, `CR_BASE_SHA` for the whole CR. On the unreviewed commits,
 **Check revdiff can open before spending anything on agents:**
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill review --tool revdiff --probe
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill review --tool revdiff --probe \
+  --title 'Review of <CR_REF>: <CR_TITLE>' [--detail CR=<CR_URL>] --detail author=<CR_AUTHOR>
 ```
 
 `REVIEW_AVAILABLE=0` stops the review here. Say that `/anchor:review` needs
@@ -222,10 +223,22 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-round.sh" start --base <REVIEW_BASE> 
 ```
 
 `--worktree` on someone else's CR; `--in-place` on your own. An in-place round
-refuses a checkout that isn't on the CR head or has uncommitted changes
-(`ROUND_ERROR`): say what it found and stop, since a round's edits have to be the
-only changes in the tree. Keep `ROUND_DIR`, `ROUND_ROOT`, and `ROUND_BASE`; every
-edit below happens under `ROUND_ROOT`.
+refuses a checkout that isn't on the CR head, has uncommitted changes, or has
+untracked files (`ROUND_ERROR`): say what it found and stop, since a round's
+edits have to be the only changes in the tree. Keep `ROUND_DIR`, `ROUND_ROOT`,
+`ROUND_BASE`, and `ROUND_HEAD`; every edit below happens under `ROUND_ROOT`.
+
+**A later round you offered** (Step 7, item 4) skips Steps 1 and 2 and starts
+here with `--next-round` in place of `--base`:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-round.sh" start --next-round --ledger <ROUND_LEDGER> \
+  --head HEAD --in-place [--repo <path>]
+```
+
+It takes the base from the ledger: the head the previous round reviewed, so the
+range is only the round's commit. From here on `ROUND_BASE` stands in for
+`REVIEW_BASE` and `ROUND_HEAD` for `CR_HEAD_SHA`.
 
 **Rounds are counted.** The first round's `start` prints `ROUND_LEDGER`; pass it
 to every later round's `start`, which makes that round `ROUND_N=2`, `3`, and so
@@ -264,8 +277,8 @@ scope, and its Output section is the bar a finding has to clear. Weigh every
 quality it lists and none it doesn't.
 
 **One agent per listed quality**, launched in the same message as the read
-pass so they run while the user reads. Each gets the diff (`DIFF_PATH` on the first round; the round
-commit's diff on a later one, see Step 7), what Step 2 established the change is
+pass so they run while the user reads. Each gets the diff (`DIFF_PATH` on the first round; on a later
+one, `git diff <ROUND_BASE> <ROUND_HEAD>`), what Step 2 established the change is
 for, one quality's name and wording verbatim, the template's Output section, and
 as settled both the decisions in `REVIEW_DECISIONS_PATH` and, from round 2 on,
 the ledger's `rejected` list: what the user dropped, in this session or an
@@ -410,7 +423,15 @@ again.
 Launch it as `${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md` describes: in the
 background, with the manifest, and holding on chat feedback while it's open.
 Every pass launches the same way, each with the `ROUND_FROM` and `NOTES` its own
-seed printed, leaving out `--annotations` where it printed `NOTE_COUNT=0`:
+seed printed, leaving out `--annotations` where it printed `NOTE_COUNT=0`. Probe
+each pass first with the launch's arguments, so each launch's release follows a
+request (DIFF-47):
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill review --tool revdiff --mode diff --probe \
+  --repo <ROUND_ROOT> <ROUND_FROM> --untracked \
+  --title 'Review of <CR_REF>: <CR_TITLE>' [--detail CR=<CR_URL>] --detail author=<CR_AUTHOR>
+```
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill review --tool revdiff --mode diff \
@@ -535,8 +556,10 @@ commit, so go to the handoff (item 5 below).
    can carry one of its own; otherwise recommend stopping, and say so plainly
    when the percent didn't fall from the round before. The default is to stop:
    suggestions polish, and a round of polish is the next round's diff. Declining ends the
-   review. A later round starts again at Step 3 against the new head (re-run
-   Step 1 to pin it), with the same ledger.
+   review. A later round starts at Step 3 with `start --next-round` and the
+   same ledger, without re-running Step 1: every commit now has a round, so
+   Step 1 would ask whether to re-review the whole CR, and the next round looks
+   only at this round's commit.
 5. **Hand it off.** Ask (header `Handoff`):
 
    - **Mark ready and request reviewers**: ask who, then do both.

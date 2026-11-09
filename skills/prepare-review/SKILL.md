@@ -40,7 +40,7 @@ flowchart TD
         Draft --> Resolve["Resolve the placeholder links"]
         Resolve --> Tool{Review mode?}
         Tool -->|Yes| InTool["Review the description in the tool"]
-        Tool -->|No| Chat["Paste the body in chat, then ask"]
+        Tool -->|No| Chat["Walk the fallback ladder, then ask"]
         InTool --> Verdict{Verdict?}
         Verdict -->|approved| Open["Open the draft CR with the approved body"]
         Verdict -->|changes requested| Draft
@@ -378,7 +378,9 @@ The description review runs when a review tool is available. Run it as the revie
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --probe \
-  --files <CURRENT_DESC_PATH> <DESC_DRAFT_PATH>
+  --files <CURRENT_DESC_PATH> <DESC_DRAFT_PATH> \
+  --title '<CR_REFERENCE>: <CR_TITLE>' \
+  --detail branch=<BRANCH> --detail CR=<CR_URL>
 ```
 
 - `REVIEW_MODE=edit` — what an empty `CURRENT_DESC_PATH` gets: no CR holds a description yet, so there is nothing to diff and the draft is all new. It opens in the user's editor and whatever they save *is* the description.
@@ -399,7 +401,7 @@ The title is the review's heading, so it names the CR under review: its referenc
 
 What each verdict leads to here:
 
-- **`approved`** — write the draft to the CR (see "Write it" below): the `editedFields` text with `target: "description"` where the result carries one, the draft otherwise. The reviewer read the description and signed off, so a second chat gate asking the same question is the ceremony this step exists to remove. Surface any comments an approving review still left after the write.
+- **`approved`** — write the draft to the CR (see "Write it" below): the `editedFields` text with `target: "description"` where the result carries one, the draft otherwise. The reviewer read the description and signed off, so a second chat gate asking the same question is the ceremony this step exists to remove.
 - **`changes-requested`** — fold in the comments and re-open on the revised draft, with the previous draft as the left-hand side rather than `CURRENT_DESC_PATH`: the description the forge holds is the comparison the first pass already answered.
 - **`rejected`** — nothing is written to the CR, and nothing falls back; say so and stop.
 - **`no-verdict`** with `raw.exitCode` `undecided` — ask Accept, Reject, or Reopen, and act on the answer as that verdict (`${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md`).
@@ -411,15 +413,18 @@ Three cases land here: no tool is installed, a review that came back without a u
 
 Walk the ladder in `${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md` with `DESC_DRAFT_PATH` as the artifact. This skill's artifact is a drafted document, so the changeset walk doesn't apply; the document rungs do.
 
-Then ask how to proceed with the `AskUserQuestion` tool, header `Disposition`, options in this order:
+Then ask the guide's question (`AskUserQuestion`, header `Unreviewed`), with this skill's options:
 
-- **Yes (write)** *(default)* — push the description to the open CR.
-- **No (copy only)** — leave it for the user to paste into the web UI themselves.
-- **Edit** — say what to change in chat; revise and re-present.
+- **Retry the review** — first, when the user can fix the cause.
+- **Copy only** — leave it for the user to paste into the web UI themselves. The only option on the `skip-deep-links` path, where no CR will exist to write to.
+- **⚠️ Write the description to `<CR_REF>` without a review** — never first.
+- **Stop** — first, when a retry can't reach a review. Nothing is written.
+
+An answer typed in place of these is the change the user wants: revise and present the draft again.
 
 ### Open the CR and write it
 
-Reached on an `approved` review, or on **Yes (write)** from the no-tool fallback. Editing a description is reversible, which is why the review's sign-off is enough to write on. On 401/403 or similar auth failure, surface the error and ask the user to refresh credentials — do not silently fall back to copy-only. The draft is `DESC_DRAFT_PATH`.
+Reached on an `approved` review, or on the ⚠️ write choice from the fallback. Editing a description is reversible, which is why the review's sign-off is enough to write on. On 401/403 or similar auth failure, surface the error and ask the user to refresh credentials — do not silently fall back to copy-only. The draft is `DESC_DRAFT_PATH`.
 
 **Run the three steps below one at a time, each after the last one's output is in hand.** Each takes what the one before printed: `CR_URL` and `CR_IID` come from the `--open` block, or from Step 1's on a pre-existing CR. Never work a number out from another CR's: numbers are shared across the project, so the next one may already be someone else's.
 
@@ -505,7 +510,7 @@ No predecessor captured (a single CR, or an independent one) → skip this entir
 
 The last step of the phase, once every mutation above has landed. Siblings in the suite react to what anchor says it did; nothing here reads the output, and a machine where nobody is listening pays nothing for it.
 
-**Exactly one announcement per run**, chosen by `CR_CREATED` from Step 1's block:
+**Exactly one announcement per run**, chosen by `CR_CREATED` from the `--open` block where this run opened the CR, and `0` where the CR existed before this run (Step 1's recon always reports `0`):
 
 - **`CR_CREATED=1`** — announce nothing. `prepare-review.sh` already announced `cr.created` when it opened the CR, and setting up a CR this run just opened is not an update to it.
 - **`CR_CREATED=0`** — the CR existed before this run and this run changed it:

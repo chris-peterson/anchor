@@ -89,11 +89,12 @@ header the user has no reason to look for.
 **In `diff` mode, print that artifact verbatim under the table, in a fenced
 block.** A diff viewer draws the changeset, not the prose that rides with it:
 revdiff puts it in a `(context).md` file the reviewer has to open, and a
-difftool has nowhere to put it at all. Quitting either one approves, so a message shown only there can be approved
-without being read, which CONFIRM-02 rules out. `edit` mode needs no copy: the
+difftool has nowhere to put it at all. A reviewer can approve without opening
+`(context).md`, so a message shown only there can be approved without being
+read, which CONFIRM-02 rules out. `edit` mode needs no copy: the
 buffer the reviewer saves *is* the artifact.
 
-> (the manifest above, then) Quitting approves both the diff and this message:
+> (the manifest above, then) Approving the review commits this message:
 >
 > ```text
 > Add retry to checkout
@@ -103,11 +104,10 @@ buffer the reviewer saves *is* the artifact.
 
 ### When anchor picked the tool, say which key would pick it instead
 
-The probe reports where each half of the choice came from —
-`REVIEW_MODE_SOURCE` for the shape and `REVIEW_TOOL_SOURCE` for the tool
-running it. `subject` on the first and `default` on the second both mean anchor
-picked it rather than the user, and the tool itself is the last place that would
-ever mention it. Add one line under the table naming the key, and the value that
+The probe reports where the tool came from in `REVIEW_TOOL_SOURCE`. `default`
+means anchor picked it rather than the user, and the tool itself is the last
+place that would ever mention it. The mode has no key (the subject picks it), so
+`REVIEW_MODE_SOURCE` never calls for this line. Add one line under the table naming the key, and the value that
 would have produced what they're looking at:
 
 > Editor picked by anchor — `git config anchor.edit.tool <editor>` chooses it

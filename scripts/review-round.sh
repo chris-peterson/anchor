@@ -36,8 +36,13 @@
 # as settled (ROUND_REJECTED counts it). The ledger lives in the temp dir for as
 # long as the session carries its path; nothing else reads it.
 #
+# A round offered after one is committed looks only at that round's commit:
+# `start --next-round` takes its base from the head the ledger's last round
+# reviewed, so the range is the commit(s) made on top of it (ROUND_BASE..ROUND_HEAD).
+#
 # Usage:
 #   review-round.sh start   --base <sha> --head <sha> (--worktree | --in-place) [--ledger <file>] [--repo <path>]
+#   review-round.sh start   --next-round --ledger <file> --head <sha> (--worktree | --in-place) [--repo <path>]
 #   review-round.sh record  --dir <round> --id <n>
 #   review-round.sh revert  --dir <round> --id <n>
 #   review-round.sh seed    --dir <round> --pass <read|items|whole> --items <items.json> [--title <heading, e.g. Review of <CR ref>: <CR title>>] [--cr-url <url>]
@@ -93,7 +98,7 @@ cmd="${1:-}"
 shift
 
 CTX_REPO=""
-dir="" base="" head="" place="" id="" items="" returned="" forge="" title="" ledger="" cr_url="" pass="" threads=""
+dir="" base="" head="" place="" next="" id="" items="" returned="" forge="" title="" ledger="" cr_url="" pass="" threads=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)      CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
@@ -102,6 +107,7 @@ while [[ $# -gt 0 ]]; do
     --head)      head="${2:?--head needs a sha}"; shift 2 ;;
     --worktree)  place=worktree; shift ;;
     --in-place)  place=in-place; shift ;;
+    --next-round) next=1; shift ;;
     --id)        id="${2:?--id needs a number}"; shift 2 ;;
     --items)     items="${2:?--items needs a file}"; shift 2 ;;
     --returned)  returned="${2:?--returned needs a file}"; shift 2 ;;
@@ -175,11 +181,22 @@ trend)
   ;;
 
 start)
-  [[ -n "$base" && -n "$head" && -n "$place" ]] \
-    || { echo "review-round.sh start needs --base, --head, and --worktree or --in-place" >&2; exit 64; }
+  [[ -z "$next" || ( -z "$base" && -n "$ledger" ) ]] \
+    || { echo "review-round.sh start --next-round takes the --ledger of the rounds before it, in place of --base" >&2; exit 64; }
+  [[ ( -n "$base" || -n "$next" ) && -n "$head" && -n "$place" ]] \
+    || { echo "review-round.sh start needs --base (or --next-round), --head, and --worktree or --in-place" >&2; exit 64; }
   ctx_resolve_repo
   repo=$(git rev-parse --show-toplevel)
   git rev-parse --verify --quiet "$head^{commit}" >/dev/null || die "the CR head $head is not in this checkout; run review-cr.sh first"
+  if [[ -n "$next" ]]; then
+    [[ -f "$ledger" ]] || die "no ledger at $ledger; a next round continues the ledger its first round's start printed"
+    read -r last_n base < <(jq -r '.rounds[-1] // {} | "\(.n // "") \(.head // "")"' "$ledger")
+    [[ -n "${base:-}" ]] || die "the ledger at $ledger has no finished round with a head; finish a round before starting the next"
+    [[ "$base" != "$(git rev-parse "$head")" ]] \
+      || die "nothing is committed on top of round $last_n's head ${base:0:7}; commit the round before starting the next"
+    git merge-base --is-ancestor "$base" "$head" 2>/dev/null \
+      || die "round $last_n's head ${base:0:7} is not an ancestor of $head; the branch was rewritten, so start over from review-cr.sh"
+  fi
   diff_base=$(git merge-base "$base" "$head") || die "no merge base between $base and $head"
   if [[ "$place" == worktree ]]; then
     root="$(anchor_tmpdir anchor-review-tree)/tree"
@@ -191,6 +208,8 @@ start)
       || die "this checkout is at $(git rev-parse --short HEAD), not the CR head $(git rev-parse --short "$head"); switch to the CR's branch and pull first"
     git diff --quiet HEAD -- || die "this checkout has uncommitted changes; commit or stash them first, so a round's edits are the only changes in it"
     [[ ! -e "$root/$TABLE" ]] || die "$TABLE already exists in $root; a previous round didn't finish (review-round.sh finish)"
+    untracked=$(git -C "$root" -c core.quotePath=false ls-files --others --exclude-standard --directory | paste -sd, - | sed 's/,/, /g')
+    [[ -z "$untracked" ]] || die "this checkout has untracked files ($untracked); commit, stash, or remove them first, so a round's edits are the only changes in it"
   fi
   if [[ -z "$ledger" ]]; then
     ledger=$(anchor_tmpfile anchor-review-ledger json)
@@ -213,6 +232,7 @@ start)
   echo "ROUND_DIR=$dir"
   echo "ROUND_ROOT=$root"
   echo "ROUND_BASE=$diff_base"
+  echo "ROUND_HEAD=$(git rev-parse "$head")"
   echo "ROUND_N=$round_n"
   echo "ROUND_LEDGER=$ledger"
   echo "ROUND_REJECTED=$(jq '.rejected // [] | length' "$ledger")"
@@ -386,7 +406,7 @@ $where
 
 $(anchor_review_box --answer "Leave a note on any line you'd change, or anywhere in this file for the change
 as a whole. Say what you want; you don't need to write the fix. Closing with no
-notes means you found nothing to change." \
+note besides \`approve\` means you found nothing to change." \
   revdiff "$accept" "stop the review, and nothing is committed or posted")
 " > "$root/$TABLE"
     if [[ -n "$threads" ]] && [[ "$(jq length "$threads")" -gt 0 ]]; then
@@ -570,7 +590,7 @@ finish)
   # The items pass decides each item; a whole pass after it can still drop or
   # change one. A read pass contributes the notes the reviewer wrote unprompted.
   pass_file() { if [[ -f "$dir/$1.$2.json" ]]; then echo "$dir/$1.$2.json"; else echo /dev/null; fi; }
-  jq --argjson n "$(state n)" --argjson f "$files" --argjson a "$added" --argjson d "$removed" \
+  jq --argjson n "$(state n)" --arg head "$(state head)" --argjson f "$files" --argjson a "$added" --argjson d "$removed" \
     --slurpfile items "$(pass_file items items)" --slurpfile read "$(pass_file read items)" \
     --slurpfile witems "$(pass_file items whole)" --slurpfile wread "$(pass_file read whole)" \
     --slurpfile rread "$(pass_file read read)" '
@@ -589,7 +609,7 @@ finish)
                                    elif .decision == "keep" and (.id | IN($wchange[])) then "change"
                                    else .decision end)] end) as $final
     | .rounds += [{
-        n:$n,
+        n:$n, head:$head,
         items:{applied:($it|count("applied")), proposed:($it|count("proposed")),
                issue:($it|count("issue")), leave:($it|count("leave"))},
         notes:(if $r == null then null else

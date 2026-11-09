@@ -9,12 +9,15 @@
 
 # The tree under <root> as it stands, as a tree object, without touching the
 # real index. The table is the reviewer's to edit and never part of an item.
+# It is reset to HEAD after the add rather than excluded from it: a pathspec
+# naming the table fails the add once the table is in info/exclude.
 anchor_items_snapshot() {
   local root="$1" table="$2" idx tree
   idx=$(anchor_tmpfile anchor-items-index idx)
-  GIT_INDEX_FILE="$idx" git -C "$root" read-tree HEAD
-  GIT_INDEX_FILE="$idx" git -C "$root" add -A -- . ":(exclude)$table"
-  tree=$(GIT_INDEX_FILE="$idx" git -C "$root" write-tree)
+  GIT_INDEX_FILE="$idx" git -C "$root" read-tree HEAD || return
+  GIT_INDEX_FILE="$idx" git -C "$root" add -A -- . || return
+  GIT_INDEX_FILE="$idx" git -C "$root" reset -q HEAD -- ":(literal)$table" || return
+  tree=$(GIT_INDEX_FILE="$idx" git -C "$root" write-tree) || return
   rm -f "$idx"
   printf '%s' "$tree"
 }

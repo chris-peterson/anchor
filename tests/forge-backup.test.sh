@@ -73,6 +73,7 @@ jq -e '.body == "issue text"' "$(key "$(bash "$backup_sh" --repo "$repo" --kind 
   || fail "the backup holds the object as the forge returned it"
 [[ "$(key "$(bash "$backup_sh" --repo "$repo" --kind cr --id 7)" BACKUP_TITLE)" == 'A PR' ]] \
   || fail "the title is reported so the skill can name what it is about to change"
+grep -q '^gh pr view 7 --json .*isDraft' "$CALL_LOG" || fail "a PR's backup should hold its draft flag: $(cat "$CALL_LOG")"
 ok "github: an issue, a PR, and a milestone are saved under .git/anchor/backups"
 
 # --- GitLab: every kind through the API on :fullpath --------------------------
