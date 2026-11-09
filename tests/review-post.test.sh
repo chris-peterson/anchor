@@ -86,7 +86,9 @@ if [[ "$*" == *"/notes"* ]]; then
   done
   echo '{"id":3}'; exit 0
 fi
-# The head re-read.
+# The head re-read. With $GL_HEAD_ERROR set it fails the way glab does on an
+# expired token: the forge's message on stderr and a non-zero exit.
+[[ -z "${GL_HEAD_ERROR:-}" ]] || { echo "$GL_HEAD_ERROR" >&2; exit 1; }
 printf '{"sha":"%s","diff_refs":{"head_sha":"%s"}}\n' "$CURRENT_HEAD" "$CURRENT_HEAD"
 EOF
 
@@ -232,6 +234,19 @@ CURRENT_HEAD="headsha1"
 [[ "$(grep -c 'reviews\|comments' "$CALL_LOG")" -eq 0 ]] \
   || fail "posted despite the head having moved"
 ok "a moved head refuses before anything is written (REVIEW-11)"
+
+# --- An auth failure on the GitLab head re-read carries the forge's text -------
+# The skill routes a 401/403 as an auth failure (fail-fast-on-auth), which it can
+# only do when the forge's message reaches POST_ERROR.
+reset_logs
+rc=0
+out=$(GL_HEAD_ERROR="glab: 401 Unauthorized" bash "$review_post_sh" --post --findings "$findings" --diff "$diffp" \
+        --forge gitlab --project example/repo --cr 7 --base-sha b --start-sha s 2>/dev/null) || rc=$?
+[[ $rc -ne 0 ]] || fail "expected a non-zero exit when the head re-read fails"
+[[ "$(key "$out" POST_ERROR)" == "could not re-read the CR head: glab: 401 Unauthorized" ]] \
+  || fail "GitLab: the head re-read's error should carry glab's message, got: $out"
+[[ "$(grep -c 'discussions\|notes' "$CALL_LOG")" -eq 0 ]] || fail "posted despite the head re-read failing"
+ok "GitLab: a failed head re-read reports the forge's error, so an auth failure is visible"
 
 # --- A findings file with no pinned head is refused --------------------------
 unpinned="$work/unpinned.json"

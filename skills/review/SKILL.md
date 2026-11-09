@@ -597,9 +597,10 @@ each at the line it maps to in the CR head:
   across hunks or files) posts as a thread carrying the reason and a sentence on
   what the fix changes.
 - **A proposal** posts as a thread carrying its reason, anchored at its first
-  note's `crLine`. A `crLine` of `null` sits on a line the round added; anchor
-  it as a file comment instead.
-- **An added note** posts verbatim at its `crLine`, `origin: "reviewer"`.
+  note's `crLine` with `side` set to its `crSide`. A `crLine` of `null` sits on
+  a line the round added; anchor it as a file comment instead.
+- **An added note** posts verbatim at its `crLine` with `side` set to its
+  `crSide`, `origin: "reviewer"`.
 - **`issue` and `leave` items** don't post. Offer `/anchor:issue` for each
   `issue` item, seeded with its reason.
 

@@ -16,7 +16,11 @@ relaying the state it surfaced.
 ## Show the finished artifact, keep the intermediates quiet
 
 Silence covers the *intermediate* objects: the `KEY=value` blocks, the gate
-outcomes, the diff you ran to check your own work. The finished artifact is the
+outcomes, the diff you ran to check your own work. A backup is one of them:
+`BACKUP_PATH` and `CR_BACKUP_PATH` name anchor's undo store under
+`.git/anchor/backups/`, which stays put after the session and is no leftover to
+report or clean up. Name a backup only when a write is refused or the user asks
+to undo one. The finished artifact is the
 opposite. The commit message, the CR description, the drafted issue are what the
 user is there to decide on, and they have to actually reach the user — as text
 in your reply, or through a review tool that shows them properly.

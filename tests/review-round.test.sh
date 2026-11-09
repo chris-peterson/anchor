@@ -506,6 +506,47 @@ o=$(round_cmd finish --dir "$rdir")
   || fail "finish counts the read pass's notes: $(jq -c '.rounds[0].notes' "$(val ROUND_LEDGER "$o")")"
 ok "read pass: a read pass after a draft is refused, its notes become marked items, and finish counts them"
 
+# ======================= old-side notes on the CR ========================
+
+# The items pass's old side is the CR head, so a note there anchors on the CR
+# head's line (the CR diff's new side). The whole pass's old side is the merge
+# base, so a note there stays on the CR diff's old side. The CR inserts three
+# lines at the top, so head and base number every later line differently.
+os="$work/old-side"
+git init --quiet -b main "$os"
+git -C "$os" config user.email t@example.com; git -C "$os" config user.name T; git -C "$os" config commit.gpgsign false
+seq 1 30 | sed 's/^/row /' > "$os/m.txt"
+git -C "$os" add -A; git -C "$os" commit --quiet -m base
+s0=$(git -C "$os" rev-parse HEAD)
+{ printf 'top 1\ntop 2\ntop 3\n'; seq 1 30 | sed 's/^/row /' | sed 's/^row 20$/row twenty/'; } > "$os/m.txt"
+git -C "$os" commit --quiet -am change
+s1=$(git -C "$os" rev-parse HEAD)
+o=$(round_cmd start --repo "$os" --base "$s0" --head "$s1" --in-place); odir=$(val ROUND_DIR "$o")
+sed -i.bak 's/^row 10$/row ten/' "$os/m.txt"; rm -f "$os/m.txt.bak"
+round_cmd record --dir "$odir" --id 1 >/dev/null
+jq -n '{items:[{id:1, slug:"ten", severity:"suggestion", status:"applied", finding:"f", reason:"Spell out 10.", sites:[{file:"m.txt", line:13}]}]}' > "$work/os-items.json"
+round_cmd seed --dir "$odir" --pass items --items "$work/os-items.json" >/dev/null
+jq '[.[] | {body, target:"line", file, startLine:.line, endLine:.line, side}]
+    + [{body:"keep the digits", target:"line", file:"m.txt", startLine:13, endLine:13, side:"old"}]' \
+  "$odir/notes.json" > "$work/os-ret1.json"
+r=$(val ROUND_READ "$(round_cmd read --dir "$odir" --returned "$work/os-ret1.json")")
+read -r cl cs < <(jq -r '.added[0] | "\(.crLine) \(.crSide)"' "$r")
+[[ "$cs" == new && "$(git -C "$os" show "$s1:m.txt" | sed -n "${cl}p")" == "row 10" ]] \
+  || fail "an items-pass old-side note anchors on the CR head's line it sits on: $(jq -c '.added' "$r")"
+[[ "$(jq -r '.items[0].notes[0].crSide' "$r")" == new ]] || fail "a seeded new-side note anchors on the CR's new side: $(jq -c '.items' "$r")"
+ok "items pass: an old-side note anchors on the CR head's line, on the CR diff's new side"
+
+round_cmd seed --dir "$odir" --pass whole --items "$work/os-items.json" >/dev/null
+jq '[.[] | {body, target:"line", file, startLine:.line, endLine:.line, side}]
+    + [{body:"twenty was fine", target:"line", file:"m.txt", startLine:20, endLine:20, side:"old"}]' \
+  "$odir/notes.json" > "$work/os-ret2.json"
+r=$(val ROUND_READ "$(round_cmd read --dir "$odir" --returned "$work/os-ret2.json")")
+read -r cl cs < <(jq -r '.added[0] | "\(.crLine) \(.crSide)"' "$r")
+[[ "$cs" == old && "$(git -C "$os" show "$s0:m.txt" | sed -n "${cl}p")" == "row 20" ]] \
+  || fail "a whole-pass old-side note stays on the CR base's line: $(jq -c '.added' "$r")"
+round_cmd finish --dir "$odir" >/dev/null
+ok "whole pass: an old-side note stays on the merge base's line, on the CR diff's old side"
+
 # ============================ the next round =============================
 
 # A round offered after one is committed reviews only that round's commit, from

@@ -465,14 +465,21 @@ read)
   table_lines=""
   [[ -f "$root/$TABLE" ]] && table_lines=$(cat "$root/$TABLE")
 
-  # Map each returned line note on the new side to the CR head's numbering.
+  # Each returned line note's anchor on the CR's diff (crLine on crSide). A
+  # new-side line maps to the CR head's numbering. An old-side line is numbered in
+  # the pass's base: in the items pass that is the CR head, so it anchors on the
+  # CR diff's new side; in the read and whole passes it is the merge base, the
+  # CR diff's old side.
+  base_side=old
+  [[ "$(state pass)" != items ]] || base_side=new
   mapped=$(jq -c '.[]' "$returned" | while IFS= read -r c; do
     f=$(jq -r '.file // ""' <<<"$c"); l=$(jq -r '.startLine // ""' <<<"$c"); sd=$(jq -r '.side // "new"' <<<"$c")
-    cr="null"
+    cr="null" crs="null"
     if [[ -n "$f" && -n "$l" && "$f" != "$TABLE" ]]; then
-      if [[ "$sd" == old ]]; then cr="$l"; else cr=$(map_line "$f" "$l"); fi
+      if [[ "$sd" == old ]]; then cr="$l" crs="\"$base_side\""; else cr=$(map_line "$f" "$l") crs='"new"'; fi
+      [[ "$cr" != null ]] || crs="null"
     fi
-    jq -c --argjson cr "$cr" '. + {crLine:$cr}' <<<"$c"
+    jq -c --argjson cr "$cr" --argjson crs "$crs" '. + {crLine:$cr, crSide:$crs}' <<<"$c"
   done | jq -s '.')
 
   # The table's ids are the item numbers, written with or without a leading #.
@@ -500,11 +507,12 @@ read)
                                       and (tag == $i.id or tag == null))) | first) as $b
            | {file:$m.file, line:$m.line, side:$m.side, seeded:$m.body,
               returned:($b.body // null),
-              crLine:($b.crLine // null),
+              crLine:($b.crLine // null), crSide:($b.crSide // null),
               verdict:(if $b == null then "drop" else ($b.body | answer($m.body)) end)}
            | .changed = (.verdict == "change")] as $notes
         | ($far | map(select(.id == $i.id))
-           | map({file, line, side, seeded:.body, returned:null, crLine, verdict:"same", changed:false, far:true})) as $farnotes
+           | map({file, line, side, seeded:.body, returned:null, crLine,
+                  crSide:(if .crLine == null then null else "new" end), verdict:"same", changed:false, far:true})) as $farnotes
         | ($tnotes | map(select(.rowId == $i.id)) | map(.body)) as $rownotes
         | ($rownotes | map(answer(""))) as $rowsaid
         | {id:$i.id, slug:$i.slug, severity:$i.severity, status:$i.status,
@@ -516,7 +524,7 @@ read)
        added: [$codenotes[] | . as $c
                | select(($s | any(.file == $c.file and .line == ($c.startLine // null))) | not)
                | select(tag as $t | $t == null or ([$items[0].items[].id] | index($t)) == null)
-               | {body, file, startLine, endLine, side, target, crLine}],
+               | {body, file, startLine, endLine, side, target, crLine, crSide}],
        tableNotes: [$tnotes[] | select(.rowId == null) | .body],
        userEdits: (if $hasedits == "1" then $edits else null end)}
   ' > "$dir/read.json"

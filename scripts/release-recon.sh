@@ -300,6 +300,80 @@ input_block() {
   ' "$1"
 }
 
+# Whether .gitlab-ci.yml gates a job on a tag. A rule is a list item carrying an
+# `if:` key, wherever the list sits, so a rule list shared through an anchor
+# counts; `only:` names `tags` as a ref or a `$CI_COMMIT_TAG` variable expression.
+# Each `if:` is read for polarity term by term: `$CI_COMMIT_TAG == null` and a
+# rule ending `when: never` keep tags out. `except:` only ever excludes. A
+# comment, a script line, or a variable naming the tag is not a gate.
+gitlab_tag_gated() {
+  awk '
+    function unquote(s) {
+      if (s ~ /^".*"$/ || s ~ /^'"'"'.*'"'"'$/) s = substr(s, 2, length(s) - 2)
+      return s
+    }
+    function tag_positive(expr,   n, terms, i, t, op, at, other, empty) {
+      n = split(unquote(expr), terms, /&&|\|\|/)
+      for (i = 1; i <= n; i++) {
+        t = terms[i]; gsub(/[()[:space:]]/, "", t)
+        if (t !~ /[$][{]?CI_COMMIT_TAG([^A-Za-z0-9_]|$)/) continue
+        if (t ~ /!~/) continue
+        if (t ~ /=~/) return 1
+        if (t !~ /==|!=/) return 1
+        op = (t ~ /==/) ? "==" : "!="
+        at = index(t, op)
+        other = substr(t, 1, at - 1)
+        if (other ~ /CI_COMMIT_TAG/) other = substr(t, at + 2)
+        empty = (other == "null" || other == "\"\"" || other == "'"'"''"'"'")
+        if ((op == "==" && !empty) || (op == "!=" && empty)) return 1
+      }
+      return 0
+    }
+    function names_tags(v,   n, el, i) {
+      gsub(/[][ \t"'"'"']/, "", v)
+      n = split(v, el, ",")
+      for (i = 1; i <= n; i++) if (el[i] == "tags") return 1
+      return 0
+    }
+    function pop() {
+      if (cond[sp] != "" && unquote(when[sp]) != "never" && tag_positive(cond[sp])) found = 1
+      sp--
+    }
+    function rule_key(kv) {
+      if (kv ~ /^if:/)   { sub(/^if:[[:space:]]*/, "", kv);   cond[sp] = kv }
+      if (kv ~ /^when:/) { sub(/^when:[[:space:]]*/, "", kv); when[sp] = kv }
+    }
+    /^[[:space:]]*(#|$)/ { next }
+    {
+      line = $0; sub(/[[:space:]]+#.*$/, "", line)
+      match(line, /^ */); ind = RLENGTH
+      body = substr(line, ind + 1)
+      dash = (body ~ /^-([[:space:]]|$)/)
+
+      if (only && (ind < only_ind || (ind == only_ind && !dash))) only = 0
+      if (only) {
+        v = body; sub(/^-[[:space:]]*/, "", v); sub(/^(refs|variables):[[:space:]]*/, "", v)
+        if (names_tags(v) || tag_positive(v)) found = 1
+      }
+      if (body ~ /^only:/) {
+        v = body; sub(/^only:[[:space:]]*/, "", v)
+        if (v == "") { only = 1; only_ind = ind } else if (names_tags(v)) found = 1
+      }
+
+      while (sp > 0 && ind <= dind[sp]) pop()
+      if (dash) {
+        rest = body; sub(/^-[[:space:]]*/, "", rest)
+        sp++; dind[sp] = ind; kind[sp] = ind + length(body) - length(rest)
+        cond[sp] = ""; when[sp] = ""
+        rule_key(rest)
+      } else if (sp > 0 && ind == kind[sp]) {
+        rule_key(body)
+      }
+    }
+    END { while (sp > 0) pop(); exit !found }
+  ' "$1"
+}
+
 detect_ci_model() {
   local f trigger tag_workflow="" dispatch_workflow=""
   for f in .github/workflows/*.yml .github/workflows/*.yaml; do
@@ -322,7 +396,7 @@ detect_ci_model() {
     return
   fi
   # GitLab has no release-published event; a tag-gated pipeline is the shape.
-  if [[ -f .gitlab-ci.yml ]] && grep -q 'CI_COMMIT_TAG' .gitlab-ci.yml; then
+  if [[ -f .gitlab-ci.yml ]] && gitlab_tag_gated .gitlab-ci.yml; then
     echo "tag-triggered .gitlab-ci.yml"
   fi
 }

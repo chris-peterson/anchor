@@ -98,7 +98,7 @@ Act only on the keys; don't re-run the folded-in probes (`git add`, `look-ahead.
 | Key | Use |
 |-----|-----|
 | `REPO_ROOT` | the resolved checkout — the target this run operates on (see "Target repo") |
-| `STAGED` | `1` → a change to commit (read its full diff below, then test in Step 2); `0` → see push-existing |
+| `STAGED` | `1` → a path you named has a change to commit (read its full diff below, then test in Step 2); `0` → see push-existing |
 | `OTHER_STAGED` | `>0` → someone else staged paths you didn't name. Say so, name the count, and carry the same `--path` list into Steps 5-6 so their work stays out of your commit. Don't unstage it — it isn't yours |
 | `RENAME_SOURCES` | the old names of renames whose new name you named. They are part of this commit, not someone else's work: the review and the commit carry them with the new names, so name only the new name |
 | `STAT` | the diffstat total — what's in scope |
@@ -114,7 +114,7 @@ When `STAGED=1`, read the staged diff of the paths you named so you can draft th
 git diff --cached -- <p> [<p>...]
 ```
 
-**Push-existing** — when `STAGED=0`: if `AHEAD` is `0` or empty, nothing is staged and nothing is unpushed — warn there are no local changes and stop. If `AHEAD` is `≥1`, the branch has unpushed commit(s) to push: **skip Steps 2-4**, review that range in Step 5 (`review-diff.sh --commit`, not `--local`), and push in Step 6. Read the range (substitute `DEFAULT_BRANCH`):
+**Push-existing** — when `STAGED=0`, whatever `OTHER_STAGED` says (a path someone else staged is never pushed by this route): if `AHEAD` is `0` or empty, nothing is staged and nothing is unpushed — warn there are no local changes and stop. If `AHEAD` is `≥1`, the branch has unpushed commit(s) to push: **skip Steps 2-4**, review that range in Step 5 (`review-diff.sh --commit`, not `--local`), and push in Step 6. Read the range (substitute `DEFAULT_BRANCH`):
 
 ```bash
 git diff "origin/main...HEAD"

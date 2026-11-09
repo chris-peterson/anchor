@@ -91,13 +91,19 @@ Resolve the open CR for the branch (when no URL was given):
 
 ```bash
 # GitLab
-glab mr view --output json 2>/dev/null | jq '{iid, web_url, draft, sha}'
+glab mr view --output json 2>/dev/null | jq '{iid, web_url, draft, sha, state}'
 
 # GitHub
-gh pr view --json number,url,isDraft,headRefOid 2>/dev/null
+gh pr view --json number,url,isDraft,headRefOid,state 2>/dev/null
 ```
 
-No open CR → say so and stop; there's nothing to address.
+Neither CLI filters a branch lookup by state, so a branch name that has been
+used before resolves to whatever CR used it last. Only `state` `opened`
+(GitLab) or `OPEN` (GitHub) is the branch's open CR; a merged, closed, or
+locked one is not, so don't take its number or head as the target.
+
+No open CR → say so and stop; there's nothing to address. When the lookup
+returned a CR in another state, name it and its state in that line.
 
 **Confirm local state matches the CR head** (same check as prepare-review):
 `git status --porcelain` clean, and local HEAD equals the CR head SHA. If

@@ -795,4 +795,20 @@ out=$(bash "$prepare_review_sh" --repo "$repo")
 [[ "$(key "$out" CR_DRAFT)" == false ]] || fail "a ready PR should report CR_DRAFT=false; got: $out"
 ok "a ready PR reports CR_DRAFT=false"
 
+# --- The label and milestone edit saves the whole CR first (FORGE-13) ---------
+# `--write` saves only the description, so the labels and milestone the CR held
+# are lost unless the skill backs up the CR itself before the edit.
+label_step=$(awk '/^### Label it and set the milestone/{on=1; next} on && /^### /{exit} on' \
+  "$here/../skills/prepare-review/SKILL.md")
+[[ -n "$label_step" ]] || fail "SKILL.md has no 'Label it and set the milestone' step"
+first_line() { awk -v re="$1" '$0 ~ re {print NR; exit}' <<<"$label_step"; }
+backup_line=$(first_line 'forge-backup[.]sh.*--kind cr')
+for edit_call in 'gh pr edit' 'glab mr update'; do
+  edit_line=$(first_line "^$edit_call ")
+  [[ -n "$edit_line" ]] || fail "the label step has no '$edit_call' call"
+  [[ -n "$backup_line" && "$backup_line" -lt "$edit_line" ]] \
+    || fail "the label step runs '$edit_call' without first running forge-backup.sh --kind cr"
+done
+ok "the label and milestone edit backs up the CR before editing it"
+
 echo "all prepare-review tests passed"

@@ -81,9 +81,10 @@ Requirements: DIFF-12 and DIFF-20 in [SPEC](/spec).
 ### Anything anchor replaces can be put back :id=tenet-backup
 
 Before `anchor` overwrites text on the forge, it saves what was there to
-`.git/anchor/backups/` in your checkout and tells you the path. A write that
-lands on the wrong change request, or one you change your mind about, is a
-paste away from undone, whatever edit history the forge keeps.
+`.git/anchor/backups/` in your checkout, quietly, and keeps it there. A write
+that lands on the wrong change request, or one you change your mind about, is
+a paste away from undone, whatever edit history the forge keeps: ask the agent
+to put it back.
 
 Requirement: FORGE-13 in [SPEC](/spec).
 

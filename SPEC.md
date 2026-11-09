@@ -169,9 +169,10 @@ behavior, not an independent authority — review them against the source.
   session staging the same file) would land content nobody reviewed. Where a git
   hook changes what the commit carries, the system shall not push it, and shall
   name the paths the hook changed.
-- **[COMMIT-05]** If nothing is staged, then the system shall describe the most
-  recent unpushed commit, and shall stop if HEAD is already pushed or there are
-  no local changes.
+- **[COMMIT-05]** If none of the paths the run names is staged, then the system
+  shall review every unpushed commit and push them once approved, and shall stop
+  if HEAD is already pushed or there are no local changes. A path another
+  session staged shall not change this route.
 - **[COMMIT-06]** The system shall write the commit message per the commit-message
   template, spending effort on the why rather than the how.
 - **[COMMIT-07]** While HEAD is the default branch, the system shall offer to
@@ -447,7 +448,10 @@ ready.
   that carries it — the line, else the method or hunk, else the changeset — and
   shall fold a finding it cannot anchor to a line, including a line outside every
   hunk of the diff, into the summary comment rather than dropping it. If the forge
-  refuses a write partway, then the system shall report what already posted.
+  refuses a write partway, then the system shall report what already posted. The
+  system shall anchor a reviewer's note to the side of the CR's diff its line
+  belongs to: a line of the CR head on the new side, a line of the CR base on the
+  old side, whichever pass the note was left in.
 - **[REVIEW-09]** The system shall obtain the user's approval of the exact text
   of every thread and of the summary comment before posting any of them, and
   shall present that text as the rendering the post is built from.
@@ -455,7 +459,9 @@ ready.
   review as complete and local, rather than as an abandoned flow.
 - **[REVIEW-11]** The system shall pin the CR head SHA when it fetches the diff,
   re-read it before posting, and refuse to post on a mismatch, so that no
-  comment anchors to a line the reviewed diff no longer has.
+  comment anchors to a line the reviewed diff no longer has. If the re-read
+  fails, then the system shall report the forge's error text, so that an
+  authentication failure can be routed as one.
 - **[REVIEW-12]** The system shall post either every approved finding at once or
   one named finding at a time, batching the whole-review case into a single
   forge submission where the forge provides one.
@@ -640,7 +646,9 @@ ready.
   unresolved human-authored review thread on the open CR, including
   non-line-anchored change requests.
 - **[FEEDBACK-02]** If there is no open CR or no unresolved feedback, then the system
-  shall report that and stop.
+  shall report that and stop. Where the CR is inferred from the branch, only an
+  open CR counts; a merged or closed CR the lookup returns is reported as no open
+  CR, naming it and its state.
 - **[FEEDBACK-03]** If local state does not match the CR head, then the system shall
   surface the mismatch and stop.
 - **[FEEDBACK-04]** When feedback exists, the system shall present all threads with
@@ -739,9 +747,12 @@ established before anything is proposed or written.
 - **[RELEASE-02]** The system shall establish the repo's release model —
   `release-triggered`, `tag-triggered`, `dispatch-triggered`, `bump-commit`, or
   `no-version-artifact` — before recommending a version or editing any file.
-- **[RELEASE-03]** The system shall detect a release-triggered model from the CI
-  workflow's trigger block rather than from a `release` key appearing anywhere in
-  the file, so a job named `release` is not read as a trigger.
+- **[RELEASE-03]** The system shall detect a release- or tag-triggered model from
+  the CI configuration's trigger structure rather than from a key or variable
+  appearing anywhere in the file: on GitHub, the workflow's `on:` block, so a job
+  named `release` is not read as a trigger; on GitLab, a job rule's `if:` or an
+  `only:` that admits a tag, so a comment, a script line, or a rule that excludes
+  tags is not read as one.
 - **[RELEASE-03a]** The system shall recognize a release workflow whose only
   trigger is `workflow_dispatch` as CI-owning the bump rather than as
   `bump-commit`, and shall name that workflow. Because a manual-run trigger is
@@ -908,7 +919,9 @@ and writing nothing.
   recent run alone, without folding the commit's other runs into the verdict.
 - **[CI-10]** The system shall report every run for the commit together with
   each run's jobs, whatever state the commit is in, so that the report says what
-  ran and not only whether it passed.
+  ran and not only whether it passed. If a run's jobs could not be read, then
+  the system shall report the forge as unreachable, with the forge's error,
+  rather than the run with no jobs.
 - **[CI-11]** The system shall present that breakdown as a table, one row per
   job, marking each row with an emoji for its normalized state that separates the
   states wanting attention (failed, canceled) from the expected ones (success,
@@ -1679,8 +1692,10 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   the forge, it shall save the item as the forge holds it to a file under the
   repository's git directory, confirm the item is the one presented for
   approval, or, for an edit made without one (the Review status section,
-  CONFIRM-17; clearing a draft flag), the one the system read and is about to
-  write, and report the file's path, so a
+  CONFIRM-17; clearing a draft flag; adding labels or a milestone), the one the
+  system read and is about to
+  write, and keep the file, naming its path only when the write is refused or
+  the user asks to undo it, so a
   write that lands on the wrong target, or that the user regrets, can be put
   back without depending on the forge keeping an edit history.
 

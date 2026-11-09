@@ -10,7 +10,7 @@
 # checkout can be shared by more than one agent session, and a whole-tree add
 # sweeps up whatever the others have in flight — their files then get reviewed
 # and committed under this session's message. With no `--path` this stages
-# nothing and reports the index as it found it.
+# nothing, reports STAGED=0, and counts whatever the index holds as OTHER_STAGED.
 #
 # It does NOT read the full staged diff: the model needs that verbatim to draft
 # the message, so the skill reads `git diff --cached` itself. Tests stay out too,
@@ -31,7 +31,7 @@
 # Output (KEY=value on stdout):
 #   REPO_ROOT=<path>        the resolved target checkout, so the skill needs no
 #                           separate `git rev-parse --show-toplevel` call
-#   STAGED=<0|1>            1 == something is staged
+#   STAGED=<0|1>            1 == a named path has something staged
 #   OTHER_STAGED=<n>        staged paths this call did not stage — someone else's
 #                           in-flight work sharing the checkout, which the skill
 #                           surfaces rather than committing
@@ -85,7 +85,7 @@ while IFS= read -r spec; do named_specs+=("$spec"); done \
   < <(anchor_commit_pathspecs "${named[@]+"${named[@]}"}")
 
 staged=0
-if ! git diff --cached --quiet; then staged=1; fi
+if [[ ${#named_specs[@]} -gt 0 ]] && ! git diff --cached --quiet -- "${named_specs[@]}"; then staged=1; fi
 stat=""
 [[ "$staged" -eq 1 ]] && stat=$(git diff --cached --stat -- "${named_specs[@]+"${named_specs[@]}"}" | tail -1 | sed 's/^[[:space:]]*//')
 

@@ -475,6 +475,14 @@ glab mr view <CR_IID> --output json
 
 Match the change against the descriptions the repo ships on its labels and apply the ones that plainly fit and the CR is missing. `--add-label` and `--label` add, so a CR the user already labelled keeps what it has; `--milestone` **replaces** on both forges, so attach one only where the CR has none and exactly one of the open ones fits. Where several labels are plausible and only one belongs, or several milestones fit, ask with `AskUserQuestion` — no label and no milestone are both legitimate answers, and where the project defines none, set nothing and don't raise it.
 
+When a label or a milestone is about to be set, save the whole CR first, since `--write` saved only its description. Skip this where nothing is set. The flags are in the cookbook's "Back up before an overwrite"; retarget it like the calls below:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/forge-backup.sh" --kind cr --id <CR_NUMBER|CR_IID> [--repo <path>]
+```
+
+Edit only when `BACKUP_URL` is `CR_URL`. On a mismatch, name the CR it saved and its `BACKUP_PATH`, and stop; on a `BACKUP_ERROR=` line, surface it and stop. Otherwise keep `BACKUP_PATH` for an undo and don't mention it.
+
 ```bash
 # GitHub
 gh pr edit <CR_NUMBER> --add-label "<label>" --milestone "<milestone title>"

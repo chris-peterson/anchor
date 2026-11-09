@@ -59,25 +59,34 @@ make_repo() {
 
 for forge in gitlab github; do
   repo=$(make_repo "$forge.com")
-  [[ "$forge" == gitlab ]] && key=draft || key=isDraft
+  if [[ "$forge" == gitlab ]]; then key=draft open=opened merged=merged
+  else key=isDraft open=OPEN merged=MERGED; fi
 
-  printf '{"%s":false}\n' "$key" > "$CR_JSON"
+  printf '{"%s":false,"state":"%s"}\n' "$key" "$open" > "$CR_JSON"
   o=$(bash "$squash_check" --repo "$repo")
   [[ "$(val SQUASH "$o")" == blocked ]] || fail "$forge: a ready CR must block the squash; got: $o"
   [[ "$(val ALLOW_MESSAGE_AMEND "$o")" == 1 ]] || fail "$forge: a ready CR allows a message amend; got: $o"
   ok "$forge: a ready CR (draft false) blocks the squash"
 
-  printf '{"%s":true}\n' "$key" > "$CR_JSON"
+  printf '{"%s":true,"state":"%s"}\n' "$key" "$open" > "$CR_JSON"
   o=$(bash "$squash_check" --repo "$repo")
   [[ "$(val SQUASH "$o")" == allowed && "$(val SQUASH_FORCE_PUSH "$o")" == 1 ]] \
     || fail "$forge: a draft CR allows the squash with a force-push; got: $o"
   ok "$forge: a draft CR allows the squash"
 
+  printf '{"%s":false,"state":"%s","number":9,"iid":9,"url":"https://%s.com/acme/widget/pull/9","web_url":"https://%s.com/acme/widget/-/merge_requests/9"}\n' \
+    "$key" "$merged" "$forge" "$forge" > "$CR_JSON"
+  o=$(bash "$squash_check" --repo "$repo")
+  if [[ "$(val SQUASH "$o")" != allowed ]] || ! grep -qx 'CR_REF=' <<<"$o"; then
+    fail "$forge: a merged CR on a reused branch name reads as no CR; got: $o"
+  fi
+  ok "$forge: a merged CR on a reused branch name reads as no CR"
+
   if [[ "$forge" == gitlab ]]; then
-    printf '{"draft":true,"iid":12,"web_url":"https://gitlab.com/acme/widget/-/merge_requests/12"}\n' > "$CR_JSON"
+    printf '{"draft":true,"state":"opened","iid":12,"web_url":"https://gitlab.com/acme/widget/-/merge_requests/12"}\n' > "$CR_JSON"
     want_ref='widget!12' want_url='https://gitlab.com/acme/widget/-/merge_requests/12'
   else
-    printf '{"isDraft":true,"number":12,"url":"https://github.com/acme/widget/pull/12"}\n' > "$CR_JSON"
+    printf '{"isDraft":true,"state":"OPEN","number":12,"url":"https://github.com/acme/widget/pull/12"}\n' > "$CR_JSON"
     want_ref='widget#12' want_url='https://github.com/acme/widget/pull/12'
   fi
   o=$(bash "$squash_check" --repo "$repo")

@@ -120,15 +120,19 @@ fi
 
 # One line each: the draft flag, the CR's number, its page. A field the forge
 # leaves out comes back as an empty line, so the reads below stay aligned.
+# Neither CLI filters a branch lookup by state, so a merged or closed CR on a
+# reused branch name reads as no CR.
 cr_state=none
 case "$forge" in
   gitlab)
     cr=$(glab mr view --output json 2>/dev/null \
-      | jq -r '(.draft | values | tostring) // "", (.iid // "" | tostring), (.web_url // "")' || true)
+      | jq -r 'select(.state == "opened")
+               | (.draft | values | tostring) // "", (.iid // "" | tostring), (.web_url // "")' || true)
     ;;
   github)
-    cr=$(gh pr view --json isDraft,number,url \
-      --jq '(.isDraft | values | tostring) // "", (.number // "" | tostring), (.url // "")' 2>/dev/null || true)
+    cr=$(gh pr view --json isDraft,number,url,state \
+      --jq 'select(.state == "OPEN")
+            | (.isDraft | values | tostring) // "", (.number // "" | tostring), (.url // "")' 2>/dev/null || true)
     ;;
   *)
     cr=""

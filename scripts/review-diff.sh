@@ -492,13 +492,14 @@ determine_default_branch_range() {
   echo "origin/${default}...HEAD"
 }
 
-# Determine the diff range for a commit review from the unpushed commit count.
+# Determine the diff range for a commit review from the unpushed commit count:
+# every unpushed commit, since the push that follows sends all of them.
 determine_commit_range() {
   local count
   count=$(git rev-list --count '@{u}..HEAD' 2>/dev/null || true)
   if [[ -z "$count" ]]; then
     determine_default_branch_range
-  elif [[ "$count" -eq 1 ]]; then
+  elif [[ "$count" -ge 1 ]]; then
     echo '@{upstream}...HEAD'
   else
     echo "HEAD~1...HEAD"

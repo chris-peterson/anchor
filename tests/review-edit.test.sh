@@ -704,6 +704,21 @@ r=$( cd "$repo" && PATH="$work/empty-bin:/usr/bin:/bin" TERM=xterm \
 [ -n "$r" ] || fail "a no-op EDITOR should not swallow git's compiled default"
 ok "resolve: a no-op EDITOR leaves the compiled default reachable"
 
+# A no-op core.editor is discounted the same way, and git's compiled default is
+# read past it: `git var GIT_EDITOR` reports a configured `true` as the editor,
+# and an empty one as no editor at all, so neither can be how the rung asks.
+git -C "$repo" config core.editor true
+for term in dumb xterm; do
+  r=$(resolve "$work/empty-bin" "$term")
+  [ -n "$r" ] || fail "a no-op core.editor should not hide git's compiled default (TERM=$term)"
+  case "$r" in true|:|*/true) fail "a no-op core.editor should be discounted, got '$r' (TERM=$term)" ;; esac
+done
+git -C "$repo" config --unset core.editor
+r=$(GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.editor GIT_CONFIG_VALUE_0=true \
+    resolve "$work/empty-bin" xterm)
+[ -n "$r" ] || fail "a no-op core.editor from \`git -c\` should not hide git's compiled default"
+ok "resolve: a no-op core.editor leaves the compiled default reachable"
+
 git -C "$repo" config core.editor "my-editor --wait"
 r=$(resolve "$codebin")
 [ "$r" = "my-editor --wait" ] || fail "core.editor should win over both new rungs, got '$r'"

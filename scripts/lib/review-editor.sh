@@ -72,13 +72,20 @@ anchor_editor_configured() {
 }
 
 # git's compiled default — what a plain `git commit` opens here. It answers only
-# with the environment's own editors out of the way entirely, since it honors an
-# empty or no-op value as the answer rather than falling through, and each of
-# them is walked and discounted above. TERM is pinned because git names no
-# editor at all on a dumb terminal: that answers for the stdio git was handed,
-# where this tool renders in a terminal the host opens (DIFF-17).
+# with the environment's editors and every git config out of the way entirely,
+# since git honors an empty or no-op value as the answer rather than falling
+# through (`git -c core.editor= var GIT_EDITOR` prints nothing), and each of
+# them is walked and discounted above. GIT_DIR names no repository so the
+# repo's own config is skipped along with the global and system files. TERM is
+# pinned because git names no editor at all on a dumb terminal: that answers for
+# the stdio git was handed, where this tool renders in a terminal the host opens
+# (DIFF-17).
 anchor_editor_compiled_default() {
-  ( unset GIT_EDITOR VISUAL EDITOR; TERM=xterm git var GIT_EDITOR ) 2>/dev/null || true
+  (
+    unset GIT_EDITOR VISUAL EDITOR GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT
+    GIT_DIR=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
+      TERM=xterm git var GIT_EDITOR
+  ) 2>/dev/null || true
 }
 
 # Does this session have somewhere to put a terminal — a tmux popup, the calling

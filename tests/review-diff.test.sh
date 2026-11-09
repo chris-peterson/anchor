@@ -684,6 +684,26 @@ o=$(run --skill commit --commit)
 git -C "$repo" update-ref -d refs/remotes/origin/main
 grep -qE '^  next: +push these commits$' "$REVDIFF_DESC_CAPTURE" \
   || fail "a commit review of unpushed commits should say they are pushed next: $(cat "$REVDIFF_DESC_CAPTURE")"
+
+# A push sends every unpushed commit, so --commit reviews all of them, not the newest.
+pushrepo="$work/pushrepo"
+git init --quiet -b main "$pushrepo"
+git -C "$pushrepo" config user.email t@example.com
+git -C "$pushrepo" config user.name T
+git -C "$pushrepo" config commit.gpgsign false
+git -C "$pushrepo" config anchor.diff.tool revdiff
+git -C "$pushrepo" commit --quiet --allow-empty -m base
+git -C "$pushrepo" remote add origin https://github.com/acme/widget.git
+git -C "$pushrepo" update-ref refs/remotes/origin/main HEAD
+git -C "$pushrepo" branch --quiet --set-upstream-to=origin/main main
+printf 'a\n' > "$pushrepo/a.txt"; git -C "$pushrepo" add a.txt; git -C "$pushrepo" commit --quiet -m a
+printf 'b\n' > "$pushrepo/b.txt"; git -C "$pushrepo" add b.txt; git -C "$pushrepo" commit --quiet -m b
+export REVDIFF_ARGS_FILE="$work/push-args.txt"
+o=$( (cd "$pushrepo" && bash "$dispatch" --skill commit --commit) )
+grep -qx '@{upstream}' "$REVDIFF_ARGS_FILE" \
+  || fail "two unpushed commits should be reviewed from the upstream, not HEAD~1: $(cat "$REVDIFF_ARGS_FILE")"
+unset REVDIFF_ARGS_FILE
+ok "--commit reviews every unpushed commit the push will send"
 o=$(run --skill commit --previous)
 ! grep -q -- 'next:' "$REVDIFF_DESC_CAPTURE" \
   || fail "a range that may already be pushed should not promise a push: $(cat "$REVDIFF_DESC_CAPTURE")"
