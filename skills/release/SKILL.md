@@ -278,8 +278,8 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill release --mode <REVI
 notes cover, the tool from the probe, and the sections the draft holds.
 
 What each verdict leads to here: `approved` moves on to the publish
-confirmation below, carrying the `editedFields` text with `target:
-"release-notes"` where the result carries one, the draft otherwise;
+confirmation below with `<RELEASE_NOTES_PATH>`, which an approved review leaves
+holding the approved notes, the reviewer's edit included;
 `changes-requested` folds the comments in and re-opens; `rejected` publishes
 nothing and stops, with no fallback; `no-verdict` with `raw.exitCode` `undecided` asks Accept, Reject, or Reopen and acts on the answer (`${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md`); `incomplete`,
 any other `no-verdict`, a missing verdict line, and a probe reporting nothing installed

@@ -401,7 +401,7 @@ The title is the review's heading, so it names the CR under review: its referenc
 
 What each verdict leads to here:
 
-- **`approved`** — write the draft to the CR (see "Write it" below): the `editedFields` text with `target: "description"` where the result carries one, the draft otherwise. The reviewer read the description and signed off, so a second chat gate asking the same question is the ceremony this step exists to remove.
+- **`approved`** — write `DESC_DRAFT_PATH` to the CR (see "Write it" below). An approved review leaves the approved text in that file, the reviewer's edit included. The reviewer read the description and signed off, so a second chat gate asking the same question is the ceremony this step exists to remove.
 - **`changes-requested`** — fold in the comments and re-open on the revised draft, with the previous draft as the left-hand side rather than `CURRENT_DESC_PATH`: the description the forge holds is the comparison the first pass already answered.
 - **`rejected`** — nothing is written to the CR, and nothing falls back; say so and stop.
 - **`no-verdict`** with `raw.exitCode` `undecided` — ask Accept, Reject, or Reopen, and act on the answer as that verdict (`${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md`).

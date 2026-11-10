@@ -98,6 +98,14 @@ printf '# Why this change\n\nStale text.\n' > "$prior"
 nothing="$work/nothing.md"; : > "$nothing"
 blank="$work/blank.md"; printf '\n\n' > "$blank"
 
+# An approved edit is written over the artifact file, so a case that approves a
+# change reviews a copy, and `$draft` stays the fixture every other case reads.
+# Every outcome but that one has to leave the artifact file byte for byte as
+# drafted, which `untouched` holds it to.
+draft_orig="$work/proposed.orig"; cp "$draft" "$draft_orig"
+draft_copy() { cp "$draft_orig" "$work/$1.md"; printf '%s' "$work/$1.md"; }
+untouched() { cmp -s "$draft" "$draft_orig" || fail "$1 wrote the draft file: $(cat "$draft")"; }
+
 # --- saved unchanged -> approved, nothing edited ----------------------------
 export EDITOR_STUB_MODE=save
 export EDITOR_BUFFER_CAPTURE="$work/buffer.txt"
@@ -110,7 +118,8 @@ o=$(GIT_EDITOR=plain-editor run --skill prepare-review --mode edit --files "$pri
 [ "$(jq '.comments|length' <<<"$j")" = 0 ]           || fail "edit mode carries no comments"
 [ "$(jq -r .capabilities.editableDescription <<<"$j")" = true ] || fail "caps.editableDescription"
 [ "$(jq -r .reviewCompleteness <<<"$j")" = null ]    || fail "completeness should be null"
-ok "edit: saved unchanged -> approved, no editedFields"
+untouched "an approval of the draft as drafted"
+ok "edit: saved unchanged -> approved, no editedFields, the draft file byte for byte as drafted"
 
 # The buffer is the artifact, then the scissors, then the change under review.
 grep -qx '# Why this change' "$EDITOR_BUFFER_CAPTURE" || fail "markdown heading missing from buffer"
@@ -186,27 +195,62 @@ export EDITOR_STUB_MODE=replace
 export EDITOR_STUB_TEXT='# Rewritten by hand
 
 ## A heading the editor added'
-o=$(run --skill prepare-review --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
+d=$(draft_copy changed)
+prior_bytes=$(cat "$prior")
+o=$(run --skill prepare-review --mode edit --files "$prior" "$d"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = approved ] || fail "changed -> $(verdict_of "$o"), want approved"
 [ "$(jq -r '.editedFields[0].target' <<<"$j")" = description ] || fail "target should be description"
 [ "$(jq -r '.editedFields[0].edited' <<<"$j")" = "$EDITOR_STUB_TEXT" ] \
   || fail "edited text not adopted verbatim: $(jq -c '.editedFields[0].edited' <<<"$j")"
-[ "$(jq -r '.editedFields[0].original' <<<"$j")" = "$(cat "$draft")" ] || fail "original not carried"
+[ "$(jq -r '.editedFields[0].original' <<<"$j")" = "$(cat "$draft_orig")" ] || fail "original not carried"
 [[ "$(jq -r '.editedFields[0].edited' <<<"$j")" != *'>8'* ]] || fail "context leaked past the scissors"
-ok "edit: saved changed -> approved, edited text adopted verbatim (markdown intact)"
+[ "$(cat "$d")" = "$EDITOR_STUB_TEXT" ] || fail "the draft file should hold the approved text: $(cat "$d")"
+[ "$(cat "$prior")" = "$prior_bytes" ] || fail "the left-hand side is context, never written: $(cat "$prior")"
+ok "edit: saved changed -> approved, edited text adopted verbatim (markdown intact) and written over the draft file"
+
+# The report behind DIFF-13's write-back: a paragraph the author deleted and
+# saved reached the CR anyway, because the CR was opened from the draft file.
+two="$work/two-paragraphs.md"
+printf '# Why this change\n\nKeep this paragraph.\n\nThe paragraph the author removes.\n' > "$two"
+o=$(EDITOR_STUB_TEXT=$'# Why this change\n\nKeep this paragraph.' \
+    run --skill prepare-review --mode edit --files "$nothing" "$two"); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = approved ] || fail "a removed paragraph -> $(verdict_of "$o"), want approved"
+[ "$(grep -c 'The paragraph the author removes' "$two")" = 0 ] \
+  || fail "the removed paragraph is still in the draft file: $(cat "$two")"
+grep -q 'Keep this paragraph' "$two" || fail "the kept paragraph should stay: $(cat "$two")"
+ok "edit: a paragraph removed and saved is gone from the --files draft file"
+
+# A file the approved text cannot be written to is an error the caller sees,
+# with the text it could not write still in hand. Root writes through a
+# read-only mode, so there the case has nothing to hold.
+ro=$(draft_copy readonly); chmod 444 "$ro"
+if [ -w "$ro" ]; then
+  echo "ok - # SKIP write-failed: a read-only file is writable here"
+else
+  o=$(run --skill prepare-review --mode edit --files "$prior" "$ro" 2>"$work/err.txt"); j=$(json_of "$o")
+  chmod 644 "$ro"
+  [ "$(verdict_of "$o")" = no-verdict ] || fail "an unwritable draft -> $(verdict_of "$o"), want no-verdict"
+  [ "$(jq -r .raw.exitCode <<<"$j")" = write-failed ] || fail "raw.exitCode should be write-failed: $(jq -c .raw <<<"$j")"
+  [ "$(jq -r '.editedFields[0].edited' <<<"$j")" = "$EDITOR_STUB_TEXT" ] || fail "the approved text should ride back: $j"
+  grep -q "could not be written to $ro" "$work/err.txt" || fail "stderr should name the file: $(cat "$work/err.txt")"
+  cmp -s "$ro" "$draft_orig" || fail "the unwritable draft changed: $(cat "$ro")"
+  ok "edit: an approved edit that cannot be written -> no-verdict, write-failed, the text in editedFields"
+fi
 
 # --- emptied -> rejected ----------------------------------------------------
 export EDITOR_STUB_MODE=empty
 o=$(run --skill prepare-review --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = rejected ] || fail "emptied -> $(verdict_of "$o"), want rejected"
 [ "$(jq '.editedFields|length' <<<"$j")" = 0 ] || fail "a rejection edits nothing"
-ok "edit: emptied buffer -> rejected"
+untouched "an emptied buffer"
+ok "edit: emptied buffer -> rejected, the draft file untouched"
 
 # --- exit 2 (ZX) -> rejected, whatever was saved ----------------------------
-o=$(EDITOR_STUB_MODE=save EDITOR_STUB_RC=2 run --skill prepare-review --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
+o=$(EDITOR_STUB_MODE=replace EDITOR_STUB_RC=2 run --skill prepare-review --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = rejected ] || fail "exit 2 -> $(verdict_of "$o"), want rejected"
 [ "$(jq '.editedFields|length' <<<"$j")" = 0 ] || fail "a rejection edits nothing"
-ok "edit: exit 2 -> rejected"
+untouched "a rejection after an edit"
+ok "edit: exit 2 -> rejected, an edit saved first left out of the draft file"
 
 # --- quit without saving -> undecided, asked about --------------------------
 export EDITOR_STUB_MODE=quit
@@ -215,7 +259,8 @@ o=$(run --skill prepare-review --mode edit --files "$prior" "$draft" 2>"$work/er
 [ "$(jq -r .raw.exitCode <<<"$j")" = undecided ]  || fail "raw.exitCode should be undecided, got $(jq -c .raw <<<"$j")"
 [ "$(jq '.editedFields|length' <<<"$j")" = 0 ]    || fail "an unanswered review edits nothing"
 grep -q 'no verdict chosen' "$work/err.txt"       || fail "stderr should say no verdict was chosen"
-ok "edit: quit without saving -> no-verdict, undecided"
+untouched "a review closed without saving"
+ok "edit: quit without saving -> no-verdict, undecided, the draft file untouched"
 
 # --- a GUI editor missing its wait flag is not the reviewer declining --------
 # Both cases write nothing, so they are indistinguishable at the buffer. Only
@@ -238,11 +283,13 @@ git -C "$repo" config --unset anchor.edit.tool
 ok "edit: a GUI editor that returned without waiting names the flag it needs"
 
 # --- exited non-zero -> abort ----------------------------------------------
-export EDITOR_STUB_MODE=quit EDITOR_STUB_RC=1
+# Saved first, so the status alone is what keeps the edit out of the draft file.
+export EDITOR_STUB_MODE=replace EDITOR_STUB_RC=1
 o=$(run --skill prepare-review --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = no-verdict ]    || fail "editor failure -> want no-verdict"
 [ "$(jq -r .raw.exitCode <<<"$j")" = 1 ] || fail "raw.exitCode should carry the editor's status"
-ok "edit: non-zero editor exit -> no-verdict, status in raw.exitCode"
+untouched "an editor that exited non-zero"
+ok "edit: non-zero editor exit -> no-verdict, status in raw.exitCode, the draft file untouched"
 unset EDITOR_STUB_RC
 
 # The terminal the editor was drawing in went away before it could answer —
@@ -255,18 +302,21 @@ o=$(run --skill prepare-review --mode edit --files "$prior" "$draft" 2>"$work/er
 [ "$(verdict_of "$o")" = no-verdict ]                || fail "a closed pane -> want no-verdict"
 [ "$(jq -r .raw.exitCode <<<"$j")" = pane-closed ]   || fail "raw.exitCode should name the cause, got $(jq -c .raw <<<"$j")"
 grep -q 'before anything was saved' "$work/err.txt"  || fail "the remedy should reach stderr"
-ok "edit: a closed review pane -> no-verdict, cause named rather than numbered"
+untouched "a pane closed before a save"
+ok "edit: a closed review pane -> no-verdict, cause named rather than numbered, the draft file untouched"
 
 # But the pane closing after a save is not that case: the reviewer answered and
 # the answer is on disk, so it is graded like any other save rather than thrown
 # away with the terminal that was drawing it.
 export EDITOR_STUB_MODE=replace EDITOR_STUB_RC=124
 export EDITOR_STUB_TEXT='# Saved, then the pane went away'
-o=$(run --skill prepare-review --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
+d=$(draft_copy pane-closed)
+o=$(run --skill prepare-review --mode edit --files "$prior" "$d"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = approved ] || fail "saved then pane closed -> $(verdict_of "$o"), want approved"
 [ "$(jq -r '.editedFields[0].edited' <<<"$j")" = "$EDITOR_STUB_TEXT" ] \
   || fail "the saved text should survive the pane, got $(jq -c '.editedFields[0].edited' <<<"$j")"
-ok "edit: saved, then the pane closed -> approved, the saved text survives"
+[ "$(cat "$d")" = "$EDITOR_STUB_TEXT" ] || fail "the saved text should reach the draft file: $(cat "$d")"
+ok "edit: saved, then the pane closed -> approved, the saved text survives into the draft file"
 unset EDITOR_STUB_RC EDITOR_STUB_TEXT
 export EDITOR_STUB_MODE=save
 
@@ -281,6 +331,7 @@ o=$( cd "$repo" && PATH="$bin:/usr/bin:/bin" ANCHOR_EDITOR_LAUNCHER='' TMUX='' \
      --files "$prior" "$draft" </dev/null 2>/dev/null ); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = no-verdict ]            || fail "nowhere to open -> want no-verdict"
 [ "$(jq -r .raw.exitCode <<<"$j")" = no-host ]   || fail "raw.exitCode should be no-host, got $(jq -c .raw <<<"$j")"
+untouched "a review with nowhere to open"
 ok "edit: nowhere to open the editor -> no-verdict, no-host"
 
 # --- a drafted commit message rides the same path --------------------------
@@ -289,20 +340,43 @@ export EDITOR_STUB_TEXT='Rewrite the subject
 
 And the body the user typed.'
 msg="$work/msg.txt"; printf 'Add a feature\n\nThe body explains why.\n' > "$msg"
+msg_orig="$work/msg.orig"; cp "$msg" "$msg_orig"
+msg_copy() { cp "$msg_orig" "$work/$1.txt"; printf '%s' "$work/$1.txt"; }
 printf 'one\ntwo\nthree\n' > "$repo/a.txt"
-o=$(run --skill commit --mode edit --local --message-file "$msg"); j=$(json_of "$o")
+m=$(msg_copy changed)
+o=$(run --skill commit --mode edit --local --message-file "$m"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = approved ] || fail "message edit -> $(verdict_of "$o")"
 [ "$(jq -r '.editedFields[0].target' <<<"$j")" = commit-message ] || fail "target should be commit-message"
 [ "$(jq -r '.editedFields[0].edited' <<<"$j")" = "$EDITOR_STUB_TEXT" ] || fail "edited message not adopted"
+[ "$(cat "$m")" = "$EDITOR_STUB_TEXT" ] || fail "the message file should hold the approved message: $(cat "$m")"
 grep -q 'three' "$EDITOR_BUFFER_CAPTURE" || fail "staged diff should sit below the scissors"
-ok "edit: --message-file -> editedFields[commit-message], diff below the scissors"
+ok "edit: --message-file -> editedFields[commit-message] and the message file, diff below the scissors"
+
+# The same report through a commit message: a paragraph removed and saved is
+# gone from the file commit.sh commits from.
+m="$work/two-paragraphs.txt"
+printf 'Add a feature\n\nKeep this paragraph.\n\nThe paragraph the author removes.\n' > "$m"
+o=$(EDITOR_STUB_TEXT=$'Add a feature\n\nKeep this paragraph.' \
+    run --skill commit --mode edit --local --message-file "$m"); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = approved ] || fail "a removed paragraph -> $(verdict_of "$o"), want approved"
+[ "$(grep -c 'The paragraph the author removes' "$m")" = 0 ] \
+  || fail "the removed paragraph is still in the message file: $(cat "$m")"
+ok "edit: a paragraph removed and saved is gone from the --message-file message file"
+
+# Anything short of approval leaves the message file as drafted.
+o=$(EDITOR_STUB_MODE=empty run --skill commit --mode edit --local --message-file "$msg"); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = rejected ] || fail "an emptied message -> $(verdict_of "$o"), want rejected"
+o=$(EDITOR_STUB_RC=1 run --skill commit --mode edit --local --message-file "$msg"); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = no-verdict ] || fail "a failed editor -> $(verdict_of "$o"), want no-verdict"
+cmp -s "$msg" "$msg_orig" || fail "a review short of approval wrote the message file: $(cat "$msg")"
+ok "edit: an emptied or failed message review leaves the message file untouched"
 
 # the diff below the scissors covers the named paths only, not a peer's edit
 printf 'peer\n' > "$repo/peer.txt"
 git -C "$repo" add peer.txt
 git -C "$repo" commit --quiet -m peer
 printf 'peer\nin flight\n' > "$repo/peer.txt"
-o=$(run --skill commit --mode edit --local --message-file "$msg" --path a.txt)
+o=$(run --skill commit --mode edit --local --message-file "$(msg_copy path)" --path a.txt)
 grep -q 'three' "$EDITOR_BUFFER_CAPTURE" || fail "the named path's diff should be in the buffer"
 ! grep -q 'in flight' "$EDITOR_BUFFER_CAPTURE" || fail "a peer's edit outside --path should not be in the buffer"
 git -C "$repo" checkout --quiet -- peer.txt
@@ -325,7 +399,7 @@ ok "edit: a commit message opens as git's COMMIT_EDITMSG, its context commented"
 ok "edit: the seeded message body is not duplicated in the header"
 
 # A markdown draft keeps `#` for headings, so its context is an HTML comment.
-o=$(run --skill prepare-review --mode edit --files "$prior" "$draft")
+o=$(run --skill prepare-review --mode edit --files "$prior" "$(draft_copy comment)")
 [ "$(sed -n '/>8/{n;p;}' "$EDITOR_BUFFER_CAPTURE")" = '<!--' ] \
   || fail "a markdown draft's context should open a comment under the scissors: $(cat "$EDITOR_BUFFER_CAPTURE")"
 grep -qxF -- '-->' "$EDITOR_BUFFER_CAPTURE" || fail "the comment should close before the diff"
@@ -333,9 +407,9 @@ ok "edit: a markdown draft's context sits in an HTML comment"
 
 # --- the artifact target follows the invoking skill ------------------------
 export EDITOR_STUB_MODE=replace EDITOR_STUB_TEXT='## Issue body'
-o=$(run --skill issue --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
+o=$(run --skill issue --mode edit --files "$prior" "$(draft_copy issue)"); j=$(json_of "$o")
 [ "$(jq -r '.editedFields[0].target' <<<"$j")" = issue-body ] || fail "issue -> issue-body"
-o=$(run --skill release --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
+o=$(run --skill release --mode edit --files "$prior" "$(draft_copy release)"); j=$(json_of "$o")
 [ "$(jq -r '.editedFields[0].target' <<<"$j")" = release-notes ] || fail "release -> release-notes"
 ok "edit: editedFields target follows --skill"
 
@@ -820,11 +894,25 @@ grep -q 'hide hints' "$EDITOR_BUFFER_CAPTURE"    || fail "the buffer should say 
 [ "$(jq '.comments|length' <<<"$j")" = 1 ]         || fail "the note comes back as a comment: $j"
 [ "$(jq -r '.editedFields[0].edited' <<<"$j")" = '# Edited first' ] || fail "the edit made before switching rides back: $j"
 [ "$(jq -r '.editedFields[0].target' <<<"$j")" = description ] || fail "the edit is aimed at the artifact: $j"
+untouched "a switch the viewer sent back with notes"
 ok "annotate: exit 3 reopens the saved draft in the viewer, and its notes and the earlier edit both come back"
+
+# The switch hands the verdict to the viewer, so an approval there is an
+# approval of the draft as saved before the switch, and that is what the draft
+# file holds afterwards.
+d=$(draft_copy switched)
+o=$(EDITOR_STUB_MODE=replace EDITOR_STUB_TEXT='# Edited first' EDITOR_STUB_RC=3 \
+    REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT=$'## proposed.md:1 (+)\nlgtm' \
+    run --skill prepare-review --mode edit --files "$nothing" "$d"); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = approved ]                || fail "a lone lgtm in the viewer -> approved: $o"
+[ "$(jq -r '.editedFields[0].edited' <<<"$j")" = '# Edited first' ] || fail "the edit made before switching rides back: $j"
+[ "$(cat "$d")" = '# Edited first' ]               || fail "the approved edit should reach the draft file: $(cat "$d")"
+ok "annotate: an approval in the viewer writes the edit made before the switch over the draft file"
 
 o=$(EDITOR_STUB_MODE=quit EDITOR_STUB_RC=3 REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT='' \
     run --skill prepare-review --mode edit --files "$nothing" "$draft" 2>/dev/null); j=$(json_of "$o")
 cmp -s "$REVDIFF_NEW_CAPTURE" "$draft"             || fail "an unsaved switch shows the draft as drafted: $(cat "$REVDIFF_NEW_CAPTURE")"
+untouched "a switch made without saving"
 [ "$(jq -r .raw.exitCode <<<"$j")" = undecided ]   || fail "a viewer quit with no notes chooses no verdict: $o"
 [ "$(jq '.editedFields|length' <<<"$j")" = 0 ]     || fail "nothing was edited: $j"
 ok "annotate: switching without saving shows the draft as drafted"
@@ -863,10 +951,12 @@ for vimbin in vim nvim; do
       run --skill prepare-review --mode edit --files "$nothing" "$draft" 2>&1); j=$(json_of "$o")
   [ "$(verdict_of "$o")" = approved ]            || fail "$vimbin: ZZ on an unchanged draft approves it: $o"
   [ "$(jq '.editedFields|length' <<<"$j")" = 0 ] || fail "$vimbin: ZZ unchanged edits nothing: $j"
+  untouched "$vimbin: ZZ on an unchanged draft"
   o=$(VIM_KEYS=ZX GIT_EDITOR="$vimed" ANCHOR_EDITOR_LAUNCHER='' ANCHOR_HOST_RUNNER="$bin/vim-keys.sh" \
       run --skill prepare-review --mode edit --files "$nothing" "$draft" 2>&1)
   [ "$(verdict_of "$o")" = rejected ]            || fail "$vimbin: ZX rejects: $o"
-  ok "$vimbin: ZZ approves a draft left unchanged, ZX rejects it"
+  untouched "$vimbin: ZX"
+  ok "$vimbin: ZZ approves a draft left unchanged, ZX rejects it, and neither changes the draft file"
 done
 
 echo "# all checks passed"

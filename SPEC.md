@@ -1068,7 +1068,16 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
 - **[DIFF-13]** Where the selected mode is `edit`, the system shall open the
   drafted artifact in the user's editor with the change under review below a
   scissors line, adopt the saved text verbatim as the artifact, and return it in
-  `editedFields` rather than re-drafting from it. It shall not strip lines
+  `editedFields` rather than re-drafting from it. Where the review is `approved`
+  and the saved text differs from the draft, including an approval given in
+  `diff` after a switch (DIFF-39), the system shall write the saved text over the
+  artifact file the caller named (the right side of a `--files` review, the
+  `--message-file` of a range review) and over no other file, so the path a
+  skill publishes from holds the approved text without the skill copying it out
+  of `editedFields`. Every other outcome shall leave that file byte for byte as
+  drafted. A write that fails shall return `no-verdict` with `raw.exitCode`
+  `write-failed` and the approved text in `editedFields`, since a file still
+  holding the draft would publish the text the reviewer removed. It shall not strip lines
   beginning with `#`, which are headings in the markdown artifacts it carries.
   The buffer shall be named for the artifact's own format — `.md` for the three
   markdown artifacts, git's `COMMIT_EDITMSG` for a commit message — since an

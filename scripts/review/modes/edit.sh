@@ -30,17 +30,26 @@
 # four artifacts anchor drafts are markdown, where `#` is a heading.
 #
 # Verdict mapping (DIFF-13):
-#   saved, changed or not -> approved; a changed artifact rides back in
-#                            editedFields and is adopted verbatim
+#   saved, changed or not -> approved; a changed artifact is written over the
+#                            artifact file the caller named and rides back in
+#                            editedFields
 #   exited 2 (`ZX`)       -> rejected, whatever was saved
 #   saved emptied         -> rejected
 #   exited 3 (`ZD`)       -> the review reopens in `diff` mode on the draft as
 #                            saved, and returns that mode's verdict, carrying
 #                            any edit made before the switch in editedFields
+#                            and writing it back only where that verdict is
+#                            approved
 #   closed without saving -> no-verdict, `undecided`, for the caller to ask about
 #   exited non-zero otherwise (vim's `:cq`)
 #                         -> no-verdict, since a failing editor exits the same
 #                            way; never read as approval
+#
+# The artifact file is written only on approval, and only when the text changed,
+# so every other outcome leaves it byte for byte as the caller drafted it. The
+# skills write from the path they passed in, so it is that path that has to
+# carry the approved text. A write that fails is `no-verdict` `write-failed`,
+# the approved text still in editedFields.
 #
 # The save is the answer. It is one keystroke either way, it is an act rather
 # than the absence of one, and it survives whatever happened to the terminal
@@ -241,13 +250,22 @@ editor_viewer() {
   printf '%s' "$resolved_tool"
 }
 
+# Write approved text $2 over artifact file $1.
+editor_write_back() {
+  local file="$1" text="$2"
+  if ! printf '%s\n' "$text" > "$file"; then
+    echo "review-diff.sh: the approved text could not be written to $file, which still holds the draft as it was before the review. The approved text is in editedFields; publish nothing from $file until it holds that text." >&2
+    return 1
+  fi
+}
+
 # Reopen this review in `diff` mode on draft $3, the artifact $1 as the reviewer
 # left it, and relay that mode's result. What they edited before switching
 # rides back in editedFields, so the draft a skill revises or adopts is the one
-# they annotated.
+# they annotated, and an approval of it is written over artifact file $4.
 # shellcheck disable=SC2034,SC2154
 editor_annotate() {
-  local target="$1" original="$2" draft="$3" draft_file empty_file="" edited='[]' line
+  local target="$1" original="$2" draft="$3" artifact_file="$4" draft_file empty_file="" edited='[]' line result
   draft_file=$(anchor_tmpfile anchor-annotate "$(editor_buffer_ext "$target")")
   printf '%s\n' "$draft" > "$draft_file"
   if [[ "$review_subject" == files ]]; then
@@ -267,13 +285,26 @@ editor_annotate() {
   review_tool=$(editor_viewer)
   # shellcheck source=diff.sh
   source "$(dirname "${BASH_SOURCE[0]}")/diff.sh"
+  result=$(emit_review)
+  rm -f "$draft_file" "$empty_file"
+
+  local write_failed=false
+  if [[ "$draft" != "$original" ]] && grep -qx 'REVIEW_VERDICT=approved' <<<"$result" \
+     && ! editor_write_back "$artifact_file" "$draft"; then
+    write_failed=true
+  fi
   while IFS= read -r line; do
     case "$line" in
-      REVIEW_OUTPUT=*) printf 'REVIEW_OUTPUT=%s\n' "$(jq -c --argjson e "$edited" '.editedFields = $e' <<<"${line#REVIEW_OUTPUT=}")" ;;
-      *)               printf '%s\n' "$line" ;;
+      REVIEW_VERDICT=*)
+        if [[ "$write_failed" == true ]]; then echo "REVIEW_VERDICT=no-verdict"; else printf '%s\n' "$line"; fi ;;
+      REVIEW_OUTPUT=*)
+        printf 'REVIEW_OUTPUT=%s\n' "$(jq -c --argjson e "$edited" --argjson failed "$write_failed" '
+          .editedFields = $e
+          | if $failed then .verdict = "no-verdict" | .raw.exitCode = "write-failed" else . end' \
+          <<<"${line#REVIEW_OUTPUT=}")" ;;
+      *) printf '%s\n' "$line" ;;
     esac
-  done < <(emit_review)
-  rm -f "$draft_file" "$empty_file"
+  done <<<"$result"
 }
 
 # Open $2 in the resolved editor $1 and return the editor's exit status, in
@@ -400,7 +431,7 @@ emit_review() {
   if [[ "$rc" == "$editor_rc_annotate" ]]; then
     local draft="$original"
     [[ "$wrote" -eq 0 || -z "${saved//[[:space:]]/}" ]] || draft="$saved"
-    editor_annotate "$artifact_target" "$original" "$draft"
+    editor_annotate "$artifact_target" "$original" "$draft" "$artifact_file"
     return
   fi
 
@@ -466,5 +497,9 @@ emit_review() {
   local edited_json
   edited_json=$(jq -cn --arg t "$artifact_target" --arg o "$original" --arg e "$saved" \
     '[{target:$t, original:$o, edited:$e}]')
+  if ! editor_write_back "$artifact_file" "$saved"; then
+    editor_emit no-verdict write-failed "the approved text could not be written to $artifact_file" "$edited_json"
+    return
+  fi
   editor_emit approved 0 "" "$edited_json"
 }

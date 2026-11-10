@@ -99,9 +99,9 @@ honest way to read it.
 **Offer the editor** when the probe reported `REVIEW_EDIT_AVAILABLE=1`. That
 rung is a real review, not a consolation: the dispatcher opens the artifact in
 the user's own editor with the change under review below a scissors line, and
-whatever they save comes back through the contract as `editedFields`, adopted
-verbatim (DIFF-13). For the skills that already default to it, this rung is
-where they started, so a `no-verdict` from the editor lands on rung 2 instead of
+whatever they save is written over the draft and comes back through the
+contract as `editedFields` (DIFF-13). For the skills that already default to
+it, this rung is where they started, so a `no-verdict` from the editor lands on rung 2 instead of
 being offered the same tool twice.
 
 ```bash
