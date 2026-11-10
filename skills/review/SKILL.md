@@ -47,8 +47,8 @@ state.
 
 **revdiff is required.** The round is reviewed through notes preloaded into the
 diff, and revdiff is the viewer that takes them (`--annotations`) and hands back
-what the user left. This skill runs revdiff whatever `anchor.diff.tool` names;
-the other skills keep that key.
+what the user left. Every diff review runs revdiff, and `anchor.diff.tool` is
+ignored in 2.0.
 
 CR = change request: a pull request on GitHub, a merge request on GitLab. Pick
 the forge tool by the resolved CR, not by the working directory's `origin`.

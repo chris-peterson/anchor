@@ -1,12 +1,11 @@
 # Reading a reviewer's edits
 
-Some review tools take feedback as annotations. A difftool takes it as *edits*:
-the reviewer opens the changeset, writes into it, and quits. anchor snapshots
-every reviewed file before the tool opens and reports each one they changed,
-carrying the diff of what they wrote (`comments[].target: "file"`, with the
-patch in `body` and `raw`).
+A reviewer mostly answers with notes, but `e` in revdiff opens a file under
+review in their editor, and what they write there lands in the working tree.
+`/anchor:review` reports that patch as `userEdits`; in any other review, it is
+the change in the tree since the review opened.
 
-That diff is not a list of instructions. It is a mix of two different things,
+That patch is not a list of instructions. It is a mix of two different things,
 and separating them is your job — the script can say *what changed*, but only
 you can say which kind of change it was.
 
@@ -48,8 +47,8 @@ worth taking rather than a second copy of the first one.
 ## What not to do
 
 - **Don't treat the edit as approval.** The tree changed, so the changeset the
-  reviewer graded is not the one that would land. That is why edits come back as
-  `changes-requested` rather than `approved` with a note.
+  reviewer graded is not the one that would land. It goes back for review
+  before it does.
 - **Don't expand past what they touched.** Their edit scopes the work; the rest
   of the file is out of scope ([changeset-scope](changeset-scope.md)).
 - **Don't re-litigate a fix by reverting it.** If you think it is wrong, keep it

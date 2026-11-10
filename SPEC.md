@@ -65,10 +65,9 @@ behavior, not an independent authority — review them against the source.
   output to react to. Every key the plugin publishes is declared in `plugin.yml`.
   Defined under EVENTS.
 - **revdiff** — a terminal-native visual diff reviewer: a binary on the machine,
-  driven directly and rendered in a terminal `anchor` hosts itself.
-  `/anchor:review` and batch reviews require it, since their notes and
-  `(context).md` exist only there; other `diff` reviews run it when it is the
-  named viewer (CONFIG-15a).
+  driven directly and rendered in a terminal `anchor` hosts itself. Every
+  `diff` review requires it, since `(context).md`, preloaded notes, and the
+  Review box that carries the verdict exist only there (CONFIG-15a).
 
 ## Requirements
 
@@ -1056,10 +1055,10 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   be openable in full, program and host together (DIFF-25a): where neither can
   open, the subject's mode is kept, because a report naming the editor that is
   missing serves the user better than one naming a viewer they are no closer to
-  reaching. On the **tool** axis there is no substitution: a viewer the user named
-  is the viewer reported, installed or not, and the flow hands off to the fallback
-  ladder (DIFF-20) rather than opening a tool nobody chose and returning its
-  verdict as theirs.
+  reaching. On the **tool** axis there is no substitution: `diff` runs revdiff
+  (CONFIG-15a), reported whether or not it is installed, and a revdiff that
+  cannot run stops the review (DIFF-48) rather than opening a viewer with no
+  verdict to give.
 - **[DIFF-12]** If the dispatcher reports no parseable verdict — no
   `REVIEW_VERDICT` line, empty output, or output the consumer cannot read — then
   the system shall treat the review as `no-verdict`, halt the action the review
@@ -1152,7 +1151,7 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   somewhere to open it — since the editor is a rung the
   fallback ladder offers rather than a viewer the probe selects, and offering it
   where a launch would reach nothing dead-ends the user in a host error.
-- **[DIFF-18]** The system shall drive git's difftool as a `diff` tool, and
+- ~~**[DIFF-18]** The system shall drive git's difftool as a `diff` tool, and
   shall read its verdict from the working tree rather than from the tool. A
   difftool speaks no contract of its own, so a review that only put the changeset
   on screen would end where an absent viewer's does — the user has read
@@ -1170,13 +1169,18 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   never happened. Where a side of the review is not the working tree (the index,
   or a commit range such as a CR, the previous commit, or the full branch), git
   hands the tool temp copies, so the system shall return `no-verdict` rather than
-  read an untouched tree as approval.
+  read an untouched tree as approval.~~
+
+  _Retired 2026-11-09: every `diff` review runs revdiff (CONFIG-15a), so git's
+  difftool is not a review tool in 2.0. Whether it returns, with an explicit
+  verdict, is #171's. The ID is not reused._
 - **[DIFF-19]** Where a git-range review's subject is not the local `HEAD`, the
   system shall accept a caller-supplied title and detail rows and use them in
   place of the computed header, so a range fetched from another author's change
   request is not labelled with the reviewer's own last commit.
-- **[DIFF-20]** Where a review is ungraded — nothing usable installed, or a
-  result that is `no-verdict`, `incomplete`, or carries no parseable verdict —
+- **[DIFF-20]** Where a review is ungraded (nowhere to open it, or a result
+  that is `no-verdict`, `incomplete`, or carries no parseable verdict), other
+  than for a revdiff that cannot run (DIFF-48),
   the system shall offer a rung that produces a real answer rather than a
   question that treats the launch as one. It shall not ask whether a shown diff
   is approved: a window that opened is not evidence it was read, and the two
@@ -1307,13 +1311,17 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   subscriber before the next tool call opens the split.
 - **[DIFF-48]** The system shall run revdiff with stop-at-annotations, so `]`
   and `[` stop at a note on a whole file or on an unchanged line as they do at a
-  change. If the installed revdiff is older than 1.14.0, the first to have the
-  setting, or reports no version the system can read, then the system shall
-  refuse it as `no-verdict` with `raw.exitCode` `unusable`, naming the version
-  and the upgrade, and the probe shall report it unavailable with the same
-  reason. An older revdiff ignores the setting without an error, so a review run
-  on one would let the reviewer step past notes and finish believing they had
-  read them all.
+  change. If revdiff is not installed, then the system shall refuse the review as
+  `no-verdict` with `raw.exitCode` `absent`, naming the install. If the
+  installed revdiff is older than 1.14.0, the first to have the setting, or
+  reports no version the system can read, then the system shall refuse it as
+  `no-verdict` with `raw.exitCode` `unusable`, naming the version and the
+  upgrade. Either way the probe shall report it unavailable with the same
+  reason, and the consuming skill shall stop with that reason and publish
+  nothing rather than take the fallback ladder (DIFF-20), since every `diff`
+  review needs revdiff and the fix is an install the user makes once. An older
+  revdiff ignores the setting without an error, so a review run on one would let
+  the reviewer step past notes and finish believing they had read them all.
 - **[DIFF-30]** The system shall move the input focus to the split it opens. A
   split opened through the terminal's scripting interface is created without
   being selected, so the review draws in a pane the keyboard does not reach and
@@ -1332,13 +1340,9 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   the chat side could discard what the reviewer has written in it, and a verdict
   given before the chat feedback grades a version that will not land.
 - **[DIFF-33]** Where a local-changes review names a partly staged path, the
-  system shall show the index against `HEAD` rather than the working tree, and
-  shall return `no-verdict` with `raw.exitCode` `staged-unsupported` when the
-  tool's verdict is read from edits to the working tree. The tree holds the hunks
-  the commit leaves out, so a working-tree review grades a changeset that is not
-  the one that lands; and git opens a staged diff's index side as temp copies,
-  so a reviewer's edits there never reach a file and read as an untouched tree,
-  which is approval.
+  system shall show the index against `HEAD` rather than the working tree. The
+  tree holds the hunks the commit leaves out, so a working-tree review grades a
+  changeset that is not the one that lands.
 - **[DIFF-34]** Where the caller names the skill that opened a review, the
   system shall lead the review's plain-text header with that skill and with what
   approving the review hands it, ahead of the rows the caller supplied. A revdiff
@@ -1348,11 +1352,10 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   reviewer often returns to it without remembering which flow is waiting on
   them or what their answer sets off.
 - **[DIFF-35]** Where the caller passes notes to preload, or asks for untracked
-  files to be shown, the system shall hand them to a tool that can carry them and
-  return the set of notes the reviewer left, and shall report `no-verdict` with a
-  named cause for a tool that cannot, rather than opening a review that silently
-  drops them. A note on an unchanged line shall come back anchored to its file and
-  line.
+  files to be shown, the system shall hand them to revdiff and return the set of
+  notes the reviewer left, and shall refuse them for a review that resolved to
+  `edit` mode rather than opening a review that silently drops them. A note on an
+  unchanged line shall come back anchored to its file and line.
 - **[DIFF-36]** Where the review tool lists files beside the diff, the system
   shall show the review's header as a file at the root of that list, read back a
   note on it as feedback on the drafted artifact the header carries, and shall
@@ -1393,8 +1396,8 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   shall reopen the review in `diff` mode on the draft as the reviewer saved it,
   shown against nothing where the subject had no prior version, return that
   mode's verdict and comments, and carry any edit made before the switch in
-  `editedFields`. The buffer shall name the status and the viewer it switches
-  to, and shall offer the switch only where a viewer is named (CONFIG-15a). An
+  `editedFields`. The buffer shall name the status and revdiff, the viewer it
+  switches to (CONFIG-15a). An
   edit review answers a draft that needs a small fix; a change the reviewer
   wants made rather than makes is a note, and the mode the subject picked has
   nowhere to leave one.
@@ -1575,24 +1578,24 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   one skill's review lands in whichever shape fits the review it is actually
   opening: a first draft and a revision of the same artifact are different
   subjects.
-- **[CONFIG-15a]** The system shall make the tool that runs a mode configurable,
-  one key per mode and symmetric between them: `anchor.edit.tool` names the
-  editor, ranking above git's own chain (DIFF-16) as the narrower statement, and
-  `anchor.diff.tool` names the viewer, falling through to git's own `diff.tool`.
-  The tool is the half that is a preference, where the mode is not. **No viewer
-  shall be assumed past those keys**: where neither names one, the system shall
-  report that and name the keys that would, rather than selecting a viewer on the
-  user's behalf. `/anchor:review` and batch reviews are the exception: their
-  preloaded notes and `(context).md` exist only in revdiff, so they run revdiff
-  whatever the keys name and stop when it can't open (REVIEW-05). A recommended viewer is still only a recommendation — it reaches
-  a review by being named, the same as any other — and a tool the user did not
-  choose returns a verdict recorded as theirs, which is the one thing a review
-  must not manufacture. A single key naming a mode and
-  a tool together has nowhere to say *which* viewer and makes the editor's own name
-  ride a second, parallel set of report fields; where such a superseded key is
-  set, the system shall report that it no longer does anything and name the keys
-  that replaced it, so a configuration written against the old shape is neither
-  silently obeyed nor silently ignored.
+- **[CONFIG-15a]** The system shall make the editor that runs `edit` mode
+  configurable: `anchor.edit.tool` names it, ranking above git's own chain
+  (DIFF-16) as the narrower statement. The system shall run every `diff` review
+  in revdiff and shall read no key to choose the viewer: `anchor.diff.tool` and
+  git's own `diff.tool` are ignored in 2.0. A 2.0 review is `(context).md` and
+  its Review box, preloaded notes, an `approve` or `reject` note as the verdict,
+  and re-reviews that answer each note on its line, all of which exist only in
+  revdiff; a viewer without them has no verdict to give, and a changeset shown
+  without one ends in "you saw it, approve?". Where `anchor.diff.tool`, or with
+  it unset git's `diff.tool`, names a viewer other than revdiff, the system shall
+  say in one line that 2.0 reviews in revdiff and the key is ignored, then open
+  revdiff, so a configuration written for another viewer is neither silently
+  obeyed nor silently ignored; a key naming revdiff shall print nothing. Where
+  revdiff cannot run, the review stops before it opens (DIFF-48). A single key
+  naming a mode and a tool together has nowhere to say *which* viewer and makes
+  the editor's own name ride a second, parallel set of report fields; where such
+  a superseded key is set, the system shall report that it no longer does
+  anything and name what replaced it.
 - **[CONFIG-15b]** Where a consumer probes before launching (DIFF-17, DIFF-24), the
   system shall answer from the same subject the launch will carry, and the consumer
   shall pass it — the review's mode flag and, for a two-path review, both paths. A
@@ -1829,19 +1832,19 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   none), its size (files and lines for a changeset, sections for a drafted
   document), the tool about to draw it, and what approving it sets off. A review tool renders one file or one buffer at a
   time and never shows the set, so a reviewer cannot tell from the tool whether
-  the scope in front of them is the scope they asked for. Where the tool or
-  the editor was one the system settled on rather than one the user configured,
+  the scope in front of them is the scope they asked for. Where the editor was
+  one the system settled on rather than one the user configured,
   that message shall additionally name the configuration key that would choose
   it and the value producing what is on screen. A review opens in whatever the
   resolution ladder coalesced onto, and the tool it opens is the last place that
   would mention the preference exists — so the moment the user is looking at a
   choice they didn't make is the moment to say it is a choice. The hint shall
-  stand only for the half that was defaulted, which retires it as soon as they
+  stand only while the editor is defaulted, which retires it as soon as they
   set one. The rest of the launch
   stays silent under UX-01: the command, its flags, the tool resolution, and
   the wait are plumbing.
-- **[UX-08]** Where a review returns the reviewer's own edits rather than
-  annotations (DIFF-18), the system shall read each edit as either a fix or a
+- **[UX-08]** Where a reviewer answers a review by editing the files under it
+  (revdiff's `e`), the system shall read each edit as either a fix or a
   note and act on it accordingly: a fix is already in the working tree and is
   kept, while a note the reviewer wrote in the file's comment syntax shall be
   answered and its lines removed before anything is committed. The separation is

@@ -92,8 +92,8 @@ header the user has no reason to look for.
 
 **In `diff` mode, print that artifact verbatim under the table, in a fenced
 block.** A diff viewer draws the changeset, not the prose that rides with it:
-revdiff puts it in a `(context).md` file the reviewer has to open, and a
-difftool has nowhere to put it at all. A reviewer can approve without opening
+revdiff puts it in a `(context).md` file the reviewer has to open. A reviewer
+can approve without opening
 `(context).md`, so a message shown only there can be approved without being
 read, which CONFIRM-02 rules out. `edit` mode needs no copy: the
 buffer the reviewer saves *is* the artifact.
@@ -114,11 +114,12 @@ place that would ever mention it. The mode has no key (the subject picks it), so
 `REVIEW_MODE_SOURCE` never calls for this line. Add one line under the table naming the key, and the value that
 would have produced what they're looking at:
 
-> Editor picked by anchor — `git config anchor.edit.tool <editor>` chooses it
-> (`anchor.diff.tool` for the viewer).
+> Editor picked by anchor — `git config anchor.edit.tool <editor>` chooses it.
 
-The mode has no key to name, so the hint is only ever about the tool: where the
-shape anchor picked isn't the one wanted, the fix is the subject, not a setting.
+The mode has no key to name, so the hint is only ever about the editor: where
+the shape anchor picked isn't the one wanted, the fix is the subject, not a
+setting. A `diff` review reports `REVIEW_TOOL_SOURCE=required`, since every one
+runs revdiff and no key chooses it, so it gets no hint.
 
 Only for the half anchor picked; a choice the user typed needs no hint, which is
 what retires the line once they've made one. Say it in the launch

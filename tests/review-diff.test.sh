@@ -8,8 +8,8 @@
 # tool-resolution behavior. Requires jq.
 set -euo pipefail
 
-# Hermetic: ignore the user's global/system git config so tool selection is
-# controlled per-case here, not by a global anchor.diff.tool.
+# Hermetic: ignore the user's global/system git config so the keys a case sets
+# are the only ones the dispatcher reads.
 export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -111,9 +111,6 @@ git init --quiet -b main "$repo"
 git -C "$repo" config user.email "t@example.com"
 git -C "$repo" config user.name "T"
 git -C "$repo" config commit.gpgsign false
-# Nothing assumes a viewer, so the suite names the one it exercises. A hermetic
-# repo with this unset is the `no-tool` case, which has its own coverage below.
-git -C "$repo" config anchor.diff.tool revdiff
 printf 'one\n' > "$repo/a.txt"; git -C "$repo" add -A; git -C "$repo" commit --quiet -m first
 printf 'one\ntwo\n' > "$repo/a.txt"; git -C "$repo" add -A; git -C "$repo" commit --quiet -m second
 
@@ -286,8 +283,7 @@ grep -qxF -- 'in `HEAD~1...HEAD`' "$cap.context" \
 grep -qxF -- '--only=(context).md' "$work/ctx.args"    || fail "--only should name the context file: $(cat "$work/ctx.args")"
 grep -qxF -- '--only=a.txt' "$work/ctx.args"           || fail "--only should still name the changed file: $(cat "$work/ctx.args")"
 [ ! -e "$repo/(context).md" ]                          || fail "(context).md should be removed when the review closes"
-grep -qxF '/(context).md' "$(git -C "$repo" rev-parse --git-path info/exclude)" \
-  || grep -qxF '/(context).md' "$repo/$(git -C "$repo" rev-parse --git-path info/exclude)" \
+grep -qxF '/(context).md' "$(git -C "$repo" rev-parse --path-format=absolute --git-path info/exclude)" \
   || fail "info/exclude should carry the context file"
 ok "revdiff: the header is a (context).md at the root that git never sees, gone when the review closes"
 
@@ -360,16 +356,6 @@ rc=0; run --previous --untracked >/dev/null 2>&1 || rc=$?
 unset REVDIFF_ARGS_FILE
 ok "--untracked: passed on a working-tree review, refused between two commits"
 
-# a viewer that can't preload notes refuses rather than dropping them
-git -C "$repo" config difftool.stubtool.cmd true
-git -C "$repo" config anchor.diff.tool stubtool
-printf 'one\ntwo\nthree\n' > "$repo/a.txt"
-o=$(run HEAD --annotations "$notes" 2>/dev/null); j=$(json_of "$o")
-[ "$(jq -r .raw.exitCode <<<"$j")" = annotations-unsupported ] || fail "difftool + annotations: $j"
-git -C "$repo" checkout --quiet -- a.txt
-git -C "$repo" config anchor.diff.tool revdiff
-ok "--annotations: a viewer that can't preload notes refuses the review"
-
 # --notes: the agent's notes on its own change ride with the message header,
 # and a note the reviewer only read, or deleted, is no feedback (UX-12, DIFF-41)
 printf 'one\ntwo\nthree\n' > "$repo/a.txt"
@@ -417,17 +403,12 @@ p=$(run --skill commit --probe --local)
 grep -q '^codes\.bridgeai\.anchor/attention\.released ' <<<"$o" || fail "the launch announced no release: $o"
 ok "a probe requests the review it can open, and the launch releases it"
 
-# A viewer that can't show notes opens without them, and the probe says so first.
+# An editor can't show notes, and the probe says so before an `edit` review opens.
 export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
-git -C "$repo" config anchor.diff.tool stubtool
-[ "$(sed -n 's/^REVIEW_PRELOADS=//p' <<<"$(run --skill commit --probe --local)")" = 0 ] || fail "a difftool doesn't preload notes"
-o=$(run --skill commit --local --message-file "$xmsg" --path a.txt --notes "$xin" 2>/dev/null); j=$(json_of "$o")
-[ "$(jq -r .raw.exitCode <<<"$j")" != annotations-unsupported ] || fail "--notes should open without the notes: $j"
-[ "$(verdict_of "$o")" = approved ] || fail "a difftool review with --notes still grades: $o"
-git -C "$repo" config anchor.diff.tool revdiff
+[ "$(sed -n 's/^REVIEW_PRELOADS=//p' <<<"$(run --skill commit --probe --mode edit --local)")" = 0 ] || fail "an editor doesn't preload notes"
 git -C "$repo" reset --quiet
 git -C "$repo" checkout --quiet -- a.txt
-ok "--notes: a viewer that can't show notes opens without them, and the probe reports it"
+ok "--notes: the probe reports an edit review can't show notes"
 
 
 
@@ -691,7 +672,6 @@ git init --quiet -b main "$pushrepo"
 git -C "$pushrepo" config user.email t@example.com
 git -C "$pushrepo" config user.name T
 git -C "$pushrepo" config commit.gpgsign false
-git -C "$pushrepo" config anchor.diff.tool revdiff
 git -C "$pushrepo" commit --quiet --allow-empty -m base
 git -C "$pushrepo" remote add origin https://github.com/acme/widget.git
 git -C "$pushrepo" update-ref refs/remotes/origin/main HEAD
@@ -730,66 +710,74 @@ ok "mode: an unknown mode exits non-zero"
 # built for the case: a system PATH carries no viewer, and $bin carries revdiff.
 system_path="/usr/bin:/bin"
 
-pb() { ( cd "$repo" && PATH="$1" bash "$dispatch" --probe ); }
+pb() { ( cd "$repo" && PATH="$1" bash "$dispatch" --probe 2>"$work/pb.err" ); }
+launch() { ( cd "$repo" && PATH="$1" bash "$dispatch" --previous 2>"$work/launch.err" ); }
 
+# Every diff review runs revdiff (CONFIG-15a). With no key set, and with a key
+# set to revdiff, it opens with nothing said about the keys.
 o=$(pb "$bin:$PATH")
-grep -qx 'REVIEW_TOOL=revdiff' <<<"$o" || fail "named and installed -> want revdiff, got: $o"
-ok "tool: the viewer the key names is the one the probe reports"
-
-# A named viewer that isn't installed stays named. Substituting one the user
-# didn't ask for would report its verdict as theirs, so the probe says the named
-# tool cannot open rather than quietly naming another.
-git -C "$repo" config anchor.diff.tool definitely-not-installed
-o=$(pb "$bin:$PATH")
-grep -qx 'REVIEW_TOOL=definitely-not-installed' <<<"$o" \
-  || fail "an absent named tool should stay named, got: $o"
-grep -qx 'REVIEW_AVAILABLE=0' <<<"$o" \
-  || fail "an absent named tool cannot open, got: $o"
-! grep -q 'REVIEW_TOOL_CONFIGURED=' <<<"$o" \
-  || fail "nothing was substituted, so nothing should report as replaced: $o"
+grep -qx 'REVIEW_TOOL=revdiff' <<<"$o"           || fail "no key -> want revdiff, got: $o"
+grep -qx 'REVIEW_TOOL_SOURCE=required' <<<"$o"   || fail "no key chooses revdiff, so source=required, got: $o"
+grep -qx 'REVIEW_AVAILABLE=1' <<<"$o"            || fail "installed revdiff with a host is available, got: $o"
+[ ! -s "$work/pb.err" ]                          || fail "no key -> nothing on stderr, got: $(cat "$work/pb.err")"
+export REVDIFF_ARGS_FILE="$work/tool-args.txt"; rm -f "$REVDIFF_ARGS_FILE"
+o=$(launch "$bin:$PATH")
+[ "$(jq -r .tool <<<"$(json_of "$o")")" = revdiff ] || fail "no key -> the review runs revdiff: $o"
+[ -s "$REVDIFF_ARGS_FILE" ]                      || fail "no key -> revdiff opened"
 git -C "$repo" config anchor.diff.tool revdiff
-ok "tool: an absent named viewer is reported by name, not swapped out"
-
-# No key at all is its own answer: the review names the keys that would pick a
-# viewer rather than reaching for anchor's recommendation on the user's behalf.
+o=$(pb "$bin:$PATH")
+grep -qx 'REVIEW_TOOL=revdiff' <<<"$o"           || fail "anchor.diff.tool=revdiff -> want revdiff, got: $o"
+[ ! -s "$work/pb.err" ]                          || fail "a key naming revdiff prints nothing, got: $(cat "$work/pb.err")"
+git -C "$repo" config diff.tool meld
+o=$(launch "$bin:$PATH")
+[ ! -s "$work/launch.err" ]                      || fail "anchor.diff.tool=revdiff outranks diff.tool, so nothing is ignored: $(cat "$work/launch.err")"
 git -C "$repo" config --unset anchor.diff.tool
-o=$(pb "$bin:$PATH")
-grep -qx 'REVIEW_TOOL=' <<<"$o"             || fail "no key -> want an empty tool, got: $o"
-grep -qx 'REVIEW_TOOL_SOURCE=unset' <<<"$o" || fail "no key -> want source=unset, got: $o"
-grep -qx 'REVIEW_AVAILABLE=0' <<<"$o"       || fail "no key -> want AVAILABLE=0, got: $o"
-r=$( cd "$repo" && PATH="$bin:$PATH" bash "$dispatch" --previous 2>&1 )
-grep -q 'REVIEW_VERDICT=no-verdict' <<<"$r" || fail "no key -> want no-verdict, got: $r"
-grep -q 'anchor.diff.tool' <<<"$r"          || fail "no key -> the report should name the key, got: $r"
-git -C "$repo" config anchor.diff.tool revdiff
-ok "tool: with no viewer named, the review names the key instead of choosing one"
+git -C "$repo" config --unset diff.tool
+ok "tool: unset, or set to revdiff, the review opens revdiff and says nothing about the key"
 
-# Named, and installed nowhere: the probe reports the name and that it cannot open.
+# A key naming another viewer is ignored, and the review says so in one line.
+for key in anchor.diff.tool diff.tool; do
+  git -C "$repo" config "$key" meld
+  o=$(pb "$bin:$PATH")
+  grep -qx 'REVIEW_TOOL=revdiff' <<<"$o" || fail "$key=meld -> want revdiff, got: $o"
+  rm -f "$REVDIFF_ARGS_FILE"
+  o=$(launch "$bin:$PATH")
+  [ "$(jq -r .tool <<<"$(json_of "$o")")" = revdiff ] || fail "$key=meld -> the review runs revdiff: $o"
+  [ -s "$REVDIFF_ARGS_FILE" ]                         || fail "$key=meld -> revdiff opened"
+  [ "$(wc -l < "$work/launch.err" | tr -d ' ')" = 1 ] || fail "$key=meld -> want one line, got: $(cat "$work/launch.err")"
+  grep -q "$key names 'meld'.*revdiff.*ignored" "$work/launch.err" \
+    || fail "$key=meld -> the line names the key and says it is ignored: $(cat "$work/launch.err")"
+  git -C "$repo" config --unset "$key"
+done
+unset REVDIFF_ARGS_FILE
+ok "tool: a key naming another viewer prints one line saying it is ignored, and revdiff opens"
+
+# No revdiff on PATH stops the review before it opens, naming the install. The
+# probe says why, so a skill stops rather than taking the fallback ladder.
 o=$(pb "$system_path")
-grep -qx 'REVIEW_TOOL=revdiff' <<<"$o" || fail "no viewer -> want the configured name, got: $o"
-grep -qx 'REVIEW_AVAILABLE=0' <<<"$o"     || fail "no viewer -> want AVAILABLE=0, got: $o"
-ok "tool: with nothing installed the probe reports the preference, unavailable"
+grep -qx 'REVIEW_TOOL=revdiff' <<<"$o"  || fail "no revdiff -> still names revdiff, got: $o"
+grep -qx 'REVIEW_AVAILABLE=0' <<<"$o"   || fail "no revdiff -> want AVAILABLE=0, got: $o"
+grep -qx 'REVIEW_UNUSABLE=revdiff is not installed (brew install umputun/apps/revdiff)' <<<"$o" \
+  || fail "no revdiff -> the probe names the install, got: $o"
+grep -qx 'REVIEW_MODE=diff' <<<"$o"     || fail "no revdiff -> the mode stays diff, got: $o"
+export REVDIFF_ARGS_FILE="$work/absent-args.txt"; rm -f "$REVDIFF_ARGS_FILE"
+o=$(launch "$system_path"); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = no-verdict ]         || fail "no revdiff -> want no-verdict, got: $o"
+[ "$(jq -r .raw.exitCode <<<"$j")" = absent ] || fail "no revdiff -> raw.exitCode absent, got: $j"
+grep -q 'revdiff is not installed (brew install umputun/apps/revdiff)' "$work/launch.err" \
+  || fail "no revdiff -> the launch names the install: $(cat "$work/launch.err")"
+[ ! -e "$REVDIFF_ARGS_FILE" ]                 || fail "no revdiff -> nothing opened"
+unset REVDIFF_ARGS_FILE
+ok "tool: a missing revdiff stops the review before it opens and names the install"
 
-# The run keeps the configured adapter, whose report names the tool that is
-# missing. Nothing below it stands in — a viewer the user did not name would
-# report its verdict as theirs — so the flow hands off to the skill's fallback
-# ladder instead.
-o=$( cd "$repo" && PATH="$system_path" bash "$dispatch" --previous )
-[ "$(jq -r .tool <<<"$(json_of "$o")")" = revdiff ] \
-  || fail "no viewer -> want the configured adapter, got: $(json_of "$o")"
-ok "tool: no viewer installed keeps the configured adapter, never a difftool"
-
-# `git` names no tool. A difftool git can launch is selectable (DIFF-18) and
-# answers through `anchor_difftool_known`, but the bare binary is not one of
-# those names, so asking for it fails the way any other typo does.
-git -C "$repo" config anchor.diff.tool git
-o=$( cd "$repo" && PATH="$system_path" bash "$dispatch" --previous 2>&1 )
+# `--tool` names a tool within the mode, and anchor ships an adapter for
+# revdiff alone, so any other name fails before anything opens.
+o=$( cd "$repo" && PATH="$system_path" bash "$dispatch" --tool git --previous 2>&1 )
 grep -q 'REVIEW_VERDICT=no-verdict' <<<"$o" \
   || fail "git tool -> want no-verdict, got: $o"
 grep -q "no adapter for diff tool 'git'" <<<"$o" \
   || fail "git tool -> want the no-adapter error naming it, got: $o"
-! grep -q 'REVIEW_VERDICT=approved' <<<"$o" || fail "git tool -> nothing should be approved, got: $o"
-git -C "$repo" config anchor.diff.tool revdiff
-ok "tool: git names no tool, so asking for it fails like any typo"
+ok "tool: --tool naming a tool anchor ships no adapter for fails before anything opens"
 
 # edit mode is selectable but never substituted in, so an absent viewer doesn't
 # turn a changeset review into an editor buffer.
@@ -823,12 +811,13 @@ o=$( cd "$other" && bash "$dispatch" --previous --repo "$repo" --title '--repo' 
 [ "$(verdict_of "$o")" = approved ] || fail "--title '--repo' should stay a title value: $o"
 ok "context: a flag-shaped option value is not read as a context flag"
 
-# per-skill tool selection still resolves when --skill trails the mode
-export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
+# --skill is read when it trails the mode
+export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT="" REVDIFF_DESC_CAPTURE="$work/trailing-desc.txt"
 o=$( cd "$other" && bash "$dispatch" --previous --repo "$repo" --skill trailing )
-[ "$(jq -r .tool <<<"$(json_of "$o")")" = revdiff ] \
-  || fail "trailing --skill did not select the per-skill tool: $(json_of "$o")"
-ok "context: --skill after the mode still selects the per-skill tool"
+grep -qE '^  opened by: +/anchor:trailing$' "$REVDIFF_DESC_CAPTURE" \
+  || fail "trailing --skill was not read: $(cat "$REVDIFF_DESC_CAPTURE")"
+unset REVDIFF_DESC_CAPTURE
+ok "context: --skill after the mode is still read"
 
 # a misspelled flag is an error, not a silently dropped argument
 rc=0; o=$( cd "$repo" && bash "$dispatch" --previous --repoo "$repo" 2>&1 ) || rc=$?
@@ -897,15 +886,6 @@ o=$(run --local --staged-path a.txt)
 [ "$(sed -n 's/^REVIEW_INDEX=//p' <<<"$o")" != "$staged_index" ] || fail "REVIEW_INDEX should change once more is staged: $o"
 ok "--local: REVIEW_INDEX changes when the reviewed path's index entry does"
 
-# a difftool reports through edits to the working tree, and the index side of a
-# staged diff reaches it as temp copies, so its verdict here would be lost
-git -C "$repo" config difftool.stubtool.cmd true
-git -C "$repo" config anchor.diff.tool stubtool
-o=$(run --local --staged-path a.txt 2>/dev/null); j=$(json_of "$o")
-[ "$(verdict_of "$o")" = no-verdict ] || fail "difftool on a staged review -> $(verdict_of "$o"), want no-verdict"
-[ "$(jq -r .raw.exitCode <<<"$j")" = staged-unsupported ] || fail "difftool staged raw.exitCode: $j"
-git -C "$repo" config anchor.diff.tool revdiff
-ok "--local --staged-path: a difftool returns no-verdict rather than losing the reviewer's edits"
 git -C "$repo" checkout --quiet -- a.txt
 git -C "$repo" reset --quiet --hard
 
@@ -941,7 +921,6 @@ ok "empty range: under --untracked, a new file is content and the context file i
 first="$work/first"
 git init --quiet -b main "$first"
 git -C "$first" config user.email t@example.com; git -C "$first" config user.name T
-git -C "$first" config anchor.diff.tool revdiff
 printf 'one\ntwo\n' > "$first/a.txt"
 printf '{"notes":[{"file":"a.txt","line":2,"note":"two"}]}\n' > "$work/first-in.json"
 printf 'First\n' > "$work/first-msg.txt"

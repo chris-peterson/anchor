@@ -126,14 +126,14 @@ New tools usually open with a configuration page. There is
 [one](/guides/configuring) for when you want it. You do not need it before your
 first commit.
 
-- **No diff viewer?** A review with nothing installed to run it comes back
-  *ungraded*, and `anchor` walks the change with you in chat. It does not ask
-  *"you saw the diff, approve?"*, which would turn a missing tool into your
-  sign-off.
+- **No revdiff?** Every diff review opens in revdiff, so without it the review
+  stops before it opens, names `brew install umputun/apps/revdiff`, and
+  publishes nothing. It does not ask *"you saw the diff, approve?"*, which would
+  turn a missing tool into your sign-off.
 - **No editor set?** It uses `core.editor` and git's own chain, the same editor
   `git commit` would have opened.
 - **Want the setup the reviews are built around?** revdiff for diffs and helix
-  for drafts take two `git config` lines:
+  for drafts, with one `git config` line for helix:
   [Recommended setup](/guides/configuring?id=recommended-setup), and how each
   ends a review in [Ending a review](/guides/configuring?id=ending-a-review).
 - **Nothing lands in your repo.** Every knob is a `git config anchor.*` value in

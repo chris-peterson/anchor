@@ -228,7 +228,7 @@ revdiff_header() {
   local repo="$1" repo_url="$2" path exclude body where line label value next sha url
   path=$(revdiff_context_path) || return 0
   next=$(revdiff_detail next)
-  exclude=$(git rev-parse --git-path info/exclude)
+  exclude=$(git rev-parse --path-format=absolute --git-path info/exclude)
   mkdir -p "$(dirname "$exclude")"
   grep -qxF -- "/$REVDIFF_CONTEXT_FILE" "$exclude" 2>/dev/null \
     || printf '/%s\n' "$REVDIFF_CONTEXT_FILE" >> "$exclude"

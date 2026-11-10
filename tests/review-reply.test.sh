@@ -57,7 +57,6 @@ git init --quiet -b main "$repo"
 git -C "$repo" config user.email "t@example.com"
 git -C "$repo" config user.name "T"
 git -C "$repo" config commit.gpgsign false
-git -C "$repo" config anchor.diff.tool revdiff
 printf 'one\ntwo\nthree\n' > "$repo/a.txt"
 git -C "$repo" add -A
 git -C "$repo" commit --quiet -m first

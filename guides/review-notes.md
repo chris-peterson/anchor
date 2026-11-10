@@ -48,6 +48,6 @@ A reviewer who wants a note's reason kept says so on the note, and that is
 feedback like any other: fold it into the message or a comment, and the text
 comes back for review.
 
-A tool that can't show preloaded notes (a difftool, an editor review) opens
-without them; the probe's `REVIEW_PRELOADS=0` says so before the launch, and the
-notes go in the manifest instead, one line each with its `file:line`.
+An editor review can't show preloaded notes, so it opens without them; the
+probe's `REVIEW_PRELOADS=0` says so before the launch, and the notes go in the
+manifest instead, one line each with its `file:line`.

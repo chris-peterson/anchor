@@ -69,12 +69,10 @@ set -euo pipefail
 #   mode     the shape the review takes — `edit` or `diff`. The subject decides
 #            it (subject_default_mode); there is no key, because the shape that
 #            fits is a property of what is being reviewed rather than a taste.
-#   tool  the tool that runs that mode, and the half that *is* a taste:
-#            `anchor.edit.tool` names the editor (else git's chain),
-#            `anchor.diff.tool` the viewer (else git's own `diff.tool`). No
-#            viewer is assumed past those: anchor recommends revdiff, and
-#            revdiff reaches a review by being named like any other tool. A
-#            mode can grow more tools without touching the mode question.
+#   tool     the tool that runs that mode. `anchor.edit.tool` names the
+#            editor (else git's chain). Every `diff` review runs revdiff
+#            (CONFIG-15a): `anchor.diff.tool` and git's `diff.tool` are read
+#            only to say, once, that a value naming another viewer is ignored.
 #
 # A third thing decides where the review lands on screen — the host — and this
 # script does not resolve it, because it is neither a property of the review nor
@@ -127,9 +125,9 @@ set -euo pipefail
 #       REVIEW_MODE_SOURCE=override|config|subject
 #       REVIEW_MODE_CONFIGURED=<mode>      only when the run uses another
 #       REVIEW_TOOL=<command>           the tool that will open — an editor
-#         in `edit` mode, a viewer in `diff`. Empty in `diff` where no key
-#         names one, which is what REVIEW_TOOL_SOURCE=unset says.
-#       REVIEW_TOOL_SOURCE=override|config|default|unset
+#         in `edit` mode, revdiff in `diff`.
+#       REVIEW_TOOL_SOURCE=override|config|default|required
+#         `required` is `diff` mode's revdiff, which no key chooses.
 #       REVIEW_AVAILABLE=0|1               0 = this mode cannot open here.
 #         Both halves are asked: the program, and the host that would draw it
 #         (scripts/lib/review-host.sh) — an installed viewer with no terminal to
@@ -137,11 +135,16 @@ set -euo pipefail
 #         The SOURCE pair says whether what is about to open is something the
 #         user chose, so a launch that fell through to git's own key can name the
 #         anchor key that would make it a choice (UX-07).
+#       REVIEW_UNUSABLE=<reason>           with 0 in `diff`: revdiff is missing
+#         or too old, and the reason names the install or the upgrade. The
+#         review stops there; the fallback ladder is for a host that can't
+#         open a pane.
 #       REVIEW_EDIT_AVAILABLE=0|1          1 = --mode edit would reach an
 #         editor. Reported on its own axis because it answers a different
 #         question: not "which viewer shows the changeset" but "can the user be
 #         handed the drafted artifact to edit" — the rung a skill offers when
-#         the viewer is missing or died (see guides/review-fallback.md).
+#         the pane couldn't open or the review died
+#         (see guides/review-fallback.md).
 #       REVIEW_HOST=tmux|gui|iterm2|agterm|launcher   where the review will be
 #         drawn (scripts/review/hosts/); empty when nowhere can. The manifest
 #         names it, since a split of the session's pane doesn't take the eye the
@@ -152,8 +155,6 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/review-editor.sh"
 # shellcheck source=lib/review-host.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/review-host.sh"
-# shellcheck source=lib/review-difftool.sh
-source "$(dirname "${BASH_SOURCE[0]}")/lib/review-difftool.sh"
 # shellcheck source=lib/stage-paths.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/stage-paths.sh"
 # shellcheck source=lib/size-stack.sh
@@ -242,7 +243,22 @@ report_superseded_key() {
   [[ -z "$review_skill" ]] || legacy=$(git config "anchor.${review_skill}.reviewBackend" 2>/dev/null || true)
   [[ -n "$legacy" ]] || legacy=$(git config anchor.reviewBackend 2>/dev/null || true)
   [[ -n "$legacy" ]] || return 0
-  echo "review-diff.sh: anchor.reviewBackend ('$legacy') no longer does anything. The review's shape now follows what it is reviewing, and the tool is anchor.edit.tool (an editor) or anchor.diff.tool (a viewer)." >&2
+  echo "review-diff.sh: anchor.reviewBackend ('$legacy') no longer does anything. The review's shape now follows what it is reviewing, anchor.edit.tool names the editor, and diff reviews open in revdiff." >&2
+}
+
+# The key that would have chosen the viewer before 2.0, read only to say that it
+# is ignored: anchor.diff.tool where set, else git's own diff.tool. A key set to
+# revdiff already says what runs, so it prints nothing.
+report_ignored_viewer_key() {
+  [[ "$resolved_mode" == diff && -z "$tool_override" ]] || return 0
+  local key=anchor.diff.tool value
+  value=$(git config --get "$key" 2>/dev/null || true)
+  if [[ -z "$value" ]]; then
+    key=diff.tool
+    value=$(git config --get "$key" 2>/dev/null || true)
+  fi
+  [[ -n "$value" && "$value" != revdiff ]] || return 0
+  echo "review-diff.sh: $key names '$value', and anchor 2.0 reviews every diff in revdiff, so $key is ignored." >&2
 }
 
 # Resolution answers are set rather than printed: a `$(...)` call would run the
@@ -270,36 +286,22 @@ resolve_mode() {
   resolved_mode_source=subject
 }
 
-# Which tool runs the resolved mode — the half that is a preference, so each mode
-# has one key for it. `edit` falls through to git's own editor chain and anchor's
-# rungs past it (scripts/lib/review-editor.sh); `diff` falls through to git's own
-# `diff.tool` and no further.
+# Which tool runs the resolved mode. `edit` takes anchor.edit.tool, then git's
+# own editor chain and anchor's rungs past it (scripts/lib/review-editor.sh).
+# `diff` runs revdiff and reads no key (CONFIG-15a): its context file, preloaded
+# notes, and Review box are what a 2.0 review is, and a viewer without them has
+# no verdict to give.
 resolve_tool() {
-  local b="$tool_override"
+  if [[ -n "$tool_override" ]]; then
+    resolved_tool="$tool_override"; resolved_tool_source=override; return
+  fi
   if [[ "$resolved_mode" == "edit" ]]; then
-    if [[ -n "$b" ]]; then
-      resolved_tool="$b"; resolved_tool_source=override; return
-    fi
     resolved_tool=$(anchor_editor_resolve)
     resolved_tool_source=$(anchor_editor_source)
     return
   fi
-  local src=override
-  if [[ -z "$b" ]]; then
-    src=config
-    b=$(git config anchor.diff.tool 2>/dev/null || true)
-    # The mirror of `edit` falling through to git's editor chain: a `diff.tool`
-    # the user set is a tool they already chose for reading a diff, and anchor's
-    # own preference for an annotating viewer is not a reason to override them.
-    [[ -n "$b" ]] || b=$(anchor_difftool_configured)
-  fi
-  # No viewer named, and none is assumed. anchor recommends revdiff, but it
-  # reaches a review the way any other viewer does — because the user named it —
-  # so an unset key resolves to nothing and the report says which key to set
-  # rather than opening a tool nobody chose.
-  [[ -n "$b" ]] || src="unset"
-  resolved_tool="$b"
-  resolved_tool_source="$src"
+  resolved_tool=revdiff
+  resolved_tool_source=required
 }
 
 # Can this mode open here at all? Both need a program *and* somewhere to draw
@@ -308,11 +310,7 @@ resolve_tool() {
 mode_available() {
   case "$1" in
     edit) anchor_editor_available ;;
-    # A viewer answers on PATH; a difftool answers to git, which can launch a
-    # name that is no binary of its own. An unnamed viewer answers neither.
-    *)    [[ -n "$resolved_tool" ]] \
-            && { command -v "$resolved_tool" >/dev/null 2>&1 \
-                   || anchor_difftool_known "$resolved_tool"; } \
+    *)    command -v "$resolved_tool" >/dev/null 2>&1 \
             && [[ -z "$(tool_unusable)" ]] \
             && anchor_host_available diff ;;
   esac
@@ -326,10 +324,10 @@ mode_available() {
 # probe's answer reaches the launch, and quietly running a different shape than
 # the one just reported is the disagreement the probe exists to prevent.
 #
-# Giving way takes a `diff` review that can actually open — a viewer the user
-# named, and a host to draw it in. With no viewer configured there is nothing to
-# give way to, so the subject's `edit` is kept and its own report names the
-# editor problem instead of trading it for a viewer problem.
+# Giving way takes a `diff` review that can actually open: revdiff installed and
+# new enough, and a host to draw it in. Where it can't, the subject's `edit` is
+# kept and its own report names the editor problem instead of trading it for a
+# viewer problem.
 #
 # The `diff` half is resolved and asked here rather than read off the settled
 # state, which still holds `edit`'s editor at this point — the two answers would
@@ -357,8 +355,8 @@ usable_mode() {
 
 # Both axes, resolved together and in order — the tool question is asked of a
 # settled mode, and a mode that gave way re-asks it. There is no within-mode
-# substitution: a viewer the user named and did not install stays named, so the
-# report says which tool is missing instead of opening a different one.
+# substitution: a revdiff that is missing stays named, so the report says what
+# to install instead of opening a different tool.
 resolve_review() {
   resolve_mode
   resolve_tool
@@ -389,10 +387,9 @@ tool_preloads() {
   )
 }
 
-# Why the resolved diff tool, though installed, can't run the review (DIFF-48),
-# asked of its adapter as the launch asks it; empty when it can.
+# Why the resolved diff tool can't run the review, asked of its adapter as the
+# launch asks it: not installed, or too old (DIFF-48). Empty when it can.
 tool_unusable() {
-  [[ -n "$resolved_tool" ]] || return 0
   (
     # shellcheck source=review/modes/diff.sh
     source "$(dirname "${BASH_SOURCE[0]}")/review/modes/diff.sh"
@@ -400,7 +397,10 @@ tool_unusable() {
     [[ -n "$f" ]] || exit 0
     # shellcheck source=/dev/null
     source "$f"
-    bin=$(command -v "$resolved_tool" 2>/dev/null) || exit 0
+    if ! bin=$(command -v "$resolved_tool" 2>/dev/null); then
+      printf '%s is not installed (%s)' "$resolved_tool" "$diff_tool_install_hint"
+      exit 0
+    fi
     ! declare -F diff_tool_unusable >/dev/null || diff_tool_unusable "$bin" || true
   )
 }
@@ -429,6 +429,7 @@ review_span_target() {
 if [[ "$probe_only" == "1" ]]; then
   report_superseded_key
   resolve_review
+  report_ignored_viewer_key
   edit_available=0
   anchor_editor_available && edit_available=1
   # The two answers first, then where each came from, then what the preference
@@ -785,6 +786,7 @@ fi
 
 report_superseded_key
 resolve_review
+report_ignored_viewer_key
 review_mode="$resolved_mode"
 review_tool="$resolved_tool"
 if [[ -n "$review_notes_md" && "$(tool_preloads)" == 1 ]]; then
@@ -802,19 +804,16 @@ review_items=""
 [[ -z "$review_annotations" || -n "$review_seeded" || -n "$review_reply" ]] || review_items=1
 
 # One adapter per mode. Within `diff`, the tool's own half lives in
-# review/tools/<tool>.sh, which that adapter sources — so a second viewer is a
-# file beside revdiff's rather than a branch here.
+# review/tools/<tool>.sh, which that adapter sources.
 adapter="$(dirname "${BASH_SOURCE[0]}")/review/modes/${review_mode}.sh"
 if [[ ! -r "$adapter" ]]; then
   echo "review-diff.sh: unknown review mode '$review_mode' (no adapter at $adapter)." >&2
   exit 64
 fi
-# A machine with no viewer installed keeps the resolved adapter, whose report
-# names the tool that is missing. There is nothing below it to degrade into —
-# git's difftool is not a tool (DIFF-18) because a changeset shown without a
-# verdict invites "you saw it, approve?", which is the rubber stamp the contract
-# exists to prevent. The skill's fallback ladder (guides/review-fallback.md) is
-# the rung below.
+# A machine without revdiff keeps the resolved adapter, whose report names the
+# install. There is nothing below it to degrade into: a changeset shown without
+# a verdict invites "you saw it, approve?", which is the rubber stamp the
+# contract exists to prevent.
 
 # An empty range has nothing to show, and a viewer opened on nothing is quit the
 # same way an approved review is — so launching one manufactures an `approved`

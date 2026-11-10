@@ -56,8 +56,8 @@ anchor_editor_candidates=(code code-insiders)
 # user chose it — the launch names a config key only for one anchor picked.
 anchor_editor_configured() {
   local ed
-  # anchor's own key first: `edit` mode's tool half, the mirror of
-  # anchor.diff.tool. Above git's chain because it is the narrower statement —
+  # anchor's own key first: `edit` mode's tool half. Above git's chain because
+  # it is the narrower statement —
   # which editor to review in, not which to open for everything.
   ed=$(git config anchor.edit.tool 2>/dev/null || true)
   # The variable itself, not `git var GIT_EDITOR`: that walks the rest of this

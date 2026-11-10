@@ -116,12 +116,11 @@ what picks the level.
   where they are shown a changeset and comment on it. The subject picks it —
   `edit` where there is nothing to diff against, `diff` everywhere else.
 - **Review tool** — the tool that runs a mode: the user's editor in `edit`
-  (`anchor.edit.tool`, else `core.editor` and its chain), a viewer in `diff`
-  (`anchor.diff.tool`, else git's own `diff.tool`, else `revdiff`). The mode
-  has no key — the subject settles it — and the tool is the half that does, one
-  key per mode. A difftool has nowhere to leave an annotation, so its adapter
-  reads the reviewer's answer out of the working tree: the files they edited come
-  back as the feedback.
+  (`anchor.edit.tool`, else `core.editor` and its chain), and revdiff in `diff`,
+  which every diff review needs. `anchor.diff.tool` and git's own `diff.tool`
+  are ignored in 2.0: a value naming another viewer gets one line saying so,
+  and revdiff opens. The mode has no key (the subject settles it), so the editor
+  is the one tool a user sets.
 - **Review host** — where a review is put on screen. The set is one file per
   host in `scripts/review/hosts/`, ranked by `anchor_review_hosts` in
   `scripts/lib/review-host.sh`; what each looks like to a user is in

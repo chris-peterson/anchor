@@ -99,21 +99,17 @@ editor_context() {
   viewer=$(editor_viewer)
   if [[ "$chords" -eq 1 ]]; then
     cta="\`ZZ\` approve the text above the line, as saved
-\`ZX\` reject it (exit code $editor_rc_reject): nothing this review gates happens"
-    [[ -z "$viewer" ]] || cta+="
-\`ZD\` ask for changes in $viewer (saves, then exit code $editor_rc_annotate)"
-    cta+="
+\`ZX\` reject it (exit code $editor_rc_reject): nothing this review gates happens
+\`ZD\` ask for changes in $viewer (saves, then exit code $editor_rc_annotate)
 Quit without saving, and you're asked what to do.
 
 $(anchor_hints_off)"
   else
     cta="Save to approve the text above the line, unchanged if it already reads right.
 
-To reject it, quit with exit code $editor_rc_reject, and nothing this review gates will happen."
-    [[ -z "$viewer" ]] || cta+="
+To reject it, quit with exit code $editor_rc_reject, and nothing this review gates will happen.
 
-To ask for changes instead, save, then quit with exit code $editor_rc_annotate, and the saved draft opens in $viewer to annotate."
-    cta+="
+To ask for changes instead, save, then quit with exit code $editor_rc_annotate, and the saved draft opens in $viewer to annotate.
 
 Quit without saving, and you're asked what to do."
   fi
@@ -236,8 +232,8 @@ editor_rc_reject=2
 editor_rc_annotate=3
 
 # The viewer a `diff` review would open, resolved the way the dispatcher
-# resolves it; empty when none is named. Call it in a subshell, since it
-# resolves over the dispatcher's settled state.
+# resolves it. Call it in a subshell, since it resolves over the dispatcher's
+# settled state.
 # shellcheck disable=SC2034,SC2154
 editor_viewer() {
   resolved_mode="diff"; tool_override=""

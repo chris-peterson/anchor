@@ -46,17 +46,10 @@
 #
 # and may define, where the default below doesn't fit:
 #
-#   diff_tool_reports_via_tree  1 == the tool's verdict is the reviewer's
-#                                  edits to the working tree, so it can grade
-#                                  only a review whose right side *is* the tree
-#                                  (default: 0, the tool reports for itself)
-#   diff_tool_available <name>  is the tool reachable (default: on PATH)
 #   diff_tool_unusable <bin>    print why the installed tool can't run this
 #                                  review, such as a version too old, or print
 #                                  nothing and return 1 (default: it can)
-#   diff_tool_before            run before the tool opens — a tool that
-#                                  reads the reviewer's answer out of the working
-#                                  tree takes its baseline here
+#   diff_tool_before            run before the tool opens
 #   diff_tool_cleanup           run after the result is emitted
 #   diff_tool_edited            the draft as the reviewer changed it in the tool,
 #                                  as editedFields, written over the draft
@@ -73,8 +66,6 @@
 
 # shellcheck source=../../lib/review-host.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../../lib/review-host.sh"
-# shellcheck source=../../lib/review-difftool.sh
-source "$(dirname "${BASH_SOURCE[0]}")/../../lib/review-difftool.sh"
 
 # Emit a `no-verdict` for a cause the host owns, naming it rather than numbering
 # it — the number would attribute to the tool a status it never returned.
@@ -87,16 +78,10 @@ diff_unavailable() {
     | { read -r out; echo "REVIEW_VERDICT=no-verdict"; echo "REVIEW_OUTPUT=$out"; }
 }
 
-# The adapter that runs <tool>: a name anchor ships an adapter for wins, and
-# anything else git can launch as a difftool goes to the adapter that drives
-# them all. Empty when neither fits.
+# The adapter that runs <tool>, or empty where anchor ships none for it.
 diff_tool_file() {
-  local tool_dir tool_file
-  tool_dir="$(dirname "${BASH_SOURCE[0]}")/../tools"
-  tool_file="${tool_dir}/$1.sh"
-  if [[ ! -r "$tool_file" && -r "${tool_dir}/difftool.sh" ]] && anchor_difftool_known "$1"; then
-    tool_file="${tool_dir}/difftool.sh"
-  fi
+  local tool_file
+  tool_file="$(dirname "${BASH_SOURCE[0]}")/../tools/$1.sh"
   [[ ! -r "$tool_file" ]] || printf '%s' "$tool_file"
 }
 
@@ -120,65 +105,22 @@ diff_relaunch() {
 # shellcheck disable=SC2154
 emit_review() {
   local tool_file
-  # Nothing named the viewer, and nothing stands in for it. Say which key names
-  # one and what anchor recommends putting there, rather than picking a tool the
-  # user never chose and reporting its verdict as theirs.
-  if [[ -z "${review_tool:-}" ]]; then
-    diff_tool_caps='{"producesVerdict":false,"perHunkReview":false,"editableCommitMessage":false,"editableDescription":false,"sideMarkers":false}'
-    diff_unavailable "no diff viewer configured. Set anchor.diff.tool (or git's own diff.tool) to the viewer you want — anchor recommends revdiff: brew install umputun/apps/revdiff" no-tool
-    return
-  fi
   tool_file=$(diff_tool_file "$review_tool")
   if [[ -z "$tool_file" ]]; then
-    # Resolution keeps a name it could not place so this report can carry it.
+    # A --tool naming something anchor ships no adapter for is kept so this
+    # report can carry it.
     diff_tool_caps='{"producesVerdict":false,"perHunkReview":false,"editableCommitMessage":false,"editableDescription":false,"sideMarkers":false}'
-    diff_unavailable "no adapter for diff tool '${review_tool}' (looked in $(dirname "${BASH_SOURCE[0]}")/../tools). Set anchor.diff.tool to one anchor ships." unknown-tool
+    diff_unavailable "no adapter for diff tool '${review_tool}' (looked in $(dirname "${BASH_SOURCE[0]}")/../tools); diff reviews run revdiff." unknown-tool
     return
   fi
   # shellcheck source=/dev/null
   source "$tool_file"
 
-  # A request the tool can't carry is refused rather than dropped: preloaded
-  # notes that never reach the reviewer read back as notes they deleted.
-  if [[ -n "${review_annotations:-}" ]] && [[ "$(jq -r '.preloadsAnnotations // false' <<<"$diff_tool_caps")" != true ]]; then
-    diff_unavailable "$review_tool can't preload review notes; this review needs a viewer that can (anchor.diff.tool=revdiff)" annotations-unsupported
-    return
-  fi
-  if [[ "${review_untracked:-0}" -eq 1 ]] && [[ "$(jq -r '.showsUntracked // false' <<<"$diff_tool_caps")" != true ]]; then
-    diff_unavailable "$review_tool can't show untracked files; this review needs a viewer that can (anchor.diff.tool=revdiff)" untracked-unsupported
-    return
-  fi
-
-  # git hands a difftool temp copies of any side that isn't the working tree,
-  # so an edit there never reaches a file and the untouched tree reads as
-  # approval. The index (a partly staged commit) and a commit range (a CR, the
-  # previous commit, the full branch) are both such sides.
-  if [[ "${diff_tool_reports_via_tree:-0}" -eq 1 && "$review_subject" == "range" ]]; then
-    if [[ "${diff_staged:-0}" -eq 1 ]]; then
-      diff_unavailable "$review_tool reports through edits to the working tree, and git opens a staged diff's index side as temp copies, so its verdict on a partly staged commit would be lost; review it with a tool that reads the index and reports itself (anchor.diff.tool=revdiff)" staged-unsupported
-      return
-    fi
-    if [[ "$diff_range" == *..* ]]; then
-      diff_unavailable "$review_tool reports through edits to the working tree, and git opens both sides of $diff_range as temp copies, so its verdict would be lost; review a commit range with a tool that reports itself (anchor.diff.tool=revdiff)" range-unsupported
-      return
-    fi
-  fi
-
-  # PATH answers for most tools; one git launches by recipe or by a configured
-  # command has its own way of saying whether it is reachable.
   local bin
-  if declare -F diff_tool_available >/dev/null; then
-    if ! diff_tool_available "$review_tool"; then
-      diff_unavailable "$review_tool is not reachable ($diff_tool_install_hint)" absent
-      return
-    fi
-    bin="$review_tool"
-  else
-    bin=$(command -v "$review_tool" 2>/dev/null || true)
-    if [[ -z "$bin" ]]; then
-      diff_unavailable "$review_tool is not installed ($diff_tool_install_hint)" absent
-      return
-    fi
+  bin=$(command -v "$review_tool" 2>/dev/null || true)
+  if [[ -z "$bin" ]]; then
+    diff_unavailable "$review_tool is not installed ($diff_tool_install_hint)" absent
+    return
   fi
   local unusable
   if declare -F diff_tool_unusable >/dev/null && unusable=$(diff_tool_unusable "$bin"); then

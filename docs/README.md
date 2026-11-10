@@ -23,6 +23,7 @@ change.
 ```bash
 claude plugin marketplace add chris-peterson/claude-marketplace
 claude plugin install anchor@chris-peterson
+brew install umputun/apps/revdiff   # every diff review opens in revdiff 1.14 or later
 ```
 
 ## Getting started
@@ -179,17 +180,17 @@ path of least resistance.
   with the *why*, and deep-links the critical path so a skim lands on what
   matters.
 
-## Optional integrations
+## Integrations
 
-- **[revdiff](https://revdiff.com)**: required by `/anchor:review` and by
-  batch edits, whose notes and `(context).md` exist only there, and the viewer
-  `anchor` recommends for every other diff review, named through
-  `anchor.diff.tool` or git's own `diff.tool`: a terminal-native diff reviewer
-  (git, hg, and jj) that returns a normalized verdict and marks which diff side
-  each annotation sits on. It carries no commit-message round-trip, so the skill
-  confirms the message itself. It renders in a terminal, so `anchor` opens it in
-  one it hosts itself: a tmux popup, or an iTerm2 split of the session you are
-  in. With [helix](https://github.com/helix-editor/helix) for drafts, it is the
+- **[revdiff](https://revdiff.com)**: required. Every diff review opens in it,
+  whatever `anchor.diff.tool` or git's own `diff.tool` names; both keys are
+  ignored in 2.0. It is a terminal-native diff reviewer (git, hg, and jj) whose
+  `(context).md`, preloaded notes, and Review box carry the verdict, and it marks
+  which diff side each annotation sits on. Without revdiff 1.14 or later, a diff
+  review stops before it opens and names the install. It renders in a terminal,
+  so `anchor` opens it in one it hosts itself: a tmux popup, or an iTerm2 split
+  of the session you are in. With [helix](https://github.com/helix-editor/helix)
+  for drafts, it is the
   [recommended setup](/guides/configuring?id=recommended-setup).
 
 Integration runs the other way too, and needs nothing configured. `anchor`

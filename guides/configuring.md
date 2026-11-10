@@ -31,7 +31,7 @@ The four verbosity dials are listed in lifecycle order, and they descend:
 | Key | Default | What that gets you |
 |---|---|---|
 | [`anchor.edit.tool`](#key-edit-tool) | `core.editor`, then git's chain | Which editor an `edit` review opens. |
-| [`anchor.diff.tool`](#key-diff-tool) | git's own `diff.tool` | Which viewer a `diff` review opens. Set neither and a `diff` review says so instead of opening. |
+| [`anchor.diff.tool`](#key-diff-tool) | ignored | Every `diff` review opens in revdiff, whatever this or git's `diff.tool` names. |
 | [`anchor.hints`](#key-hints) | `true` | A review names the keys that step through it and leave notes. |
 | [`anchor.reviewBudgetMins`](#key-reviewbudgetmins) | `10` | Descriptions are written for ten minutes of focused review — enough for the change and the topics around it. |
 | [`anchor.issue.verbosity`](#key-issueverbosity) | `75` | Issue bodies run long: the people who pick the work up need the context in the issue. |
@@ -53,19 +53,18 @@ set.
 
 ## Recommended setup :id=recommended-setup
 
-Nothing here is required, but this is the setup the review flows are built
-around:
+revdiff is required for `diff` reviews. helix is the editor the `edit` reviews
+are built around:
 
 ```bash
 brew install umputun/apps/revdiff helix
-git config --global anchor.diff.tool revdiff   # diffs: notes on the line, and a Verdict to choose
 git config --global anchor.edit.tool hx        # drafts: three chords end the review
 ```
 
-- **[revdiff](https://revdiff.com)** for `diff` reviews. It is the one viewer
-  that takes notes `anchor` preloads and hands back the ones you leave, which
-  is what a batch of edits, an `/anchor:review` round, and a reply review are
-  made of. `/anchor:review` needs it.
+- **[revdiff](https://revdiff.com)** runs every `diff` review. It is the one
+  viewer that takes notes `anchor` preloads and hands back the ones you leave,
+  which is what a batch of edits, an `/anchor:review` round, and a reply review
+  are made of, and its Review box is where you choose the verdict.
 - **[helix](https://github.com/helix-editor/helix)** for `edit` reviews. `anchor`
   binds `ZZ`, `ZX`, and `ZD` for the review, so approving, rejecting, and
   switching to revdiff are each one key pair ([Ending a
@@ -139,38 +138,33 @@ than for everything git opens one for.
 
 ### `anchor.diff.tool` :id=key-diff-tool
 
-```bash
-git config anchor.diff.tool revdiff
-```
+Ignored in 2.0, as is git's own `diff.tool`: every `diff` review opens in
+[revdiff](https://revdiff.com), a terminal-native reviewer. Where either key
+names another viewer, the review says in one line that the key is ignored and
+opens revdiff. A key set to `revdiff` says nothing.
 
-Which viewer a `diff` review opens. Unset, the tool is git's own
-[`diff.tool`](#difftool-reviews) if you've set one. With neither set, a `diff`
-review names these keys rather than opening a viewer you didn't pick — `anchor`
-recommends [revdiff](https://revdiff.com), a terminal-native reviewer. A viewer
-named here that neither `anchor` nor git can launch reports that rather than
-opening something else.
+A 2.0 review is built on what only revdiff carries: the `(context).md` file and
+its Review box, notes preloaded on the lines they concern, an `approve` or
+`reject` note as the verdict, and re-reviews that answer each note on its line.
+A viewer without those has no verdict to give, and a changeset shown with no
+verdict ends in "you saw it, approve?", which is a rubber stamp rather than a
+review.
 
-`/anchor:review` runs revdiff whatever this key names. Its review is a set of
-notes preloaded into the diff, one per finding, that you keep, edit, or delete
-in place: first on the drafted fixes alone, then on the whole change with the
-ones you kept in it. revdiff is the viewer that takes the notes and hands back
-what you left. Without revdiff, `/anchor:review` says so and stops before examining
-anything.
+`anchor` needs revdiff 1.14 or later. Where revdiff is missing or older, a
+`diff` review stops before it opens, names the install
+(`brew install umputun/apps/revdiff`) or the upgrade
+(`brew upgrade umputun/apps/revdiff`), and publishes nothing. It runs revdiff
+with stop-at-annotations, so `]` stops at a note on a whole file or on an
+unchanged line as well as at each change, and reaching the last change means you
+have passed every note. Older versions ignore that setting.
 
-`anchor` needs revdiff 1.14 or later, and opens no review on an older one. It
-runs revdiff with stop-at-annotations, so `]` stops at a note on a whole file or
-on an unchanged line as well as at each change, and reaching the last change
-means you have passed every note. Older versions ignore that setting.
+`/anchor:review` is a set of notes preloaded into the diff, one per finding,
+that you keep, edit, or delete in place: first on the drafted fixes alone, then
+on the whole change with the ones you kept in it.
 
-These two are the *tool* half of a review, one key per mode, and they are the
-only half you set: which mode a review runs in follows what it is reviewing
-([A mode per subject](#a-mode-per-subject)). Whichever tool runs, it returns a
-normalized verdict, including your own difftool — what you write in it is the
-review ([your own `diff.tool`](#difftool-reviews)). A changeset shown with no
-verdict at all ends in "you saw it, approve?", which is a rubber stamp rather
-than a review, so no tool reaches a review without one.
-
-How the chosen tool renders the diff is its own knob, not an `anchor.*` key: see
+Which mode a review runs in follows what it is reviewing
+([A mode per subject](#a-mode-per-subject)), so the editor is the one review
+tool you set. How each tool renders is its own knob, not an `anchor.*` key: see
 [Review config](#review-config) (per mode:
 [`diff`](#review-config-diff), [`edit`](#review-config-edit)).
 
@@ -536,39 +530,6 @@ reaches exactly as far as an editor review does
 ([Where a review opens](#review-hosts)). Where there is none, a revdiff review
 reports `no-verdict` naming that rather than opening on nothing.
 
-#### Review config: your own `diff.tool` :id=difftool-reviews
-
-Set `diff.tool` and reviews open in it — the same fall-through `edit` mode makes
-to `core.editor`, for the same reason: a tool you already chose for reading a
-diff is the one you want.
-
-A difftool has no way to leave an annotation, so **what you write is the
-review.** anchor snapshots every file before opening the tool and compares them
-after, so the diff you make *is* the feedback:
-
-- **Fix it in place** — type the correction into the code. It's already in your
-  working tree; the commit picks it up.
-- **Ask a question** — leave it in the file's own comment syntax. `// why is
-  this ordered?`, `# TODO: handle nil`, whatever you'd normally write.
-- **Change nothing** — quit. An untouched tree is the approval.
-
-There's no marker to learn and nothing to strip: anchor reads what you wrote and
-sorts the fixes from the questions, answering the questions and taking the
-comment lines back out before the commit. Anything you touched sends the review
-round again, so you see the result of your own edit before it lands.
-
-`--dir-diff` opens the whole changeset at once instead of prompting file by file,
-and symlinks the working-tree side so your edits reach the real files. The tool's
-own exit code is ignored — plenty of them use non-zero to mean "the files
-differ", and the tree already said what you meant.
-
-A difftool review returns `no-verdict` wherever a side isn't the working tree: a
-partly staged file (the index), and a commit range (a change request, the previous
-commit, the whole branch). anchor reads your answer from the edits you leave in the
-working tree, and git opens those sides as temp copies, so an edit made there never
-reaches a file and an untouched tree would read as approval. `revdiff` records its
-comments itself, so it runs those reviews.
-
 #### Review config: `edit` :id=review-config-edit
 
 The `edit` mode opens the editor git would open, so the knob is git's own:
@@ -683,10 +644,9 @@ A review resolves on two axes, and only one of them is yours to set:
 - **mode** — the shape: `edit` or `diff`. **Not configurable.** Which shape fits
   is a property of what's being reviewed, so the subject answers it and there's
   no key to get it wrong with.
-- **tool** — the tool that runs the shape, and the half that *is* a
-  preference: [`anchor.edit.tool`](#key-edit-tool) for the editor,
-  [`anchor.diff.tool`](#key-diff-tool) for the viewer. A mode can grow more
-  tools without changing what the mode means.
+- **tool** — the tool that runs the shape. [`anchor.edit.tool`](#key-edit-tool)
+  names the editor, and every `diff` review opens in revdiff
+  ([`anchor.diff.tool`](#key-diff-tool) is ignored in 2.0).
 
 The mode turns on one question: **has this review got a diff to show?**
 
@@ -700,18 +660,17 @@ when it files a new body and a viewer when it updates one; the second pass of a
 `/anchor:prepare-review` description lands in the viewer, which is where "what
 did the feedback change" is legible.
 
-What you name is the tool each shape opens:
+What you name is the editor an `edit` review opens:
 
 ```bash
-git config anchor.diff.tool revdiff   # the viewer a diff review opens
 git config anchor.edit.tool hx        # the editor an edit review opens
 ```
 
-Both are global to the repo: the tool that suits a shape suits it wherever the
-shape comes up, so there is no per-skill split to keep in sync.
+It is global to the repo: the editor that suits a draft suits it wherever a
+draft comes up, so there is no per-skill split to keep in sync.
 
-Until you set one of them, the launch message says the tool was `anchor`'s pick
-and names the key — the same hint the editor ladder prints.
+Until you set it, the launch message says the editor was `anchor`'s pick and
+names the key, the same hint the editor ladder prints.
 
 **What `editor` does with the draft.** It opens the artifact in a buffer with the
 change under review below a scissors line, the way `git commit --verbose` does.
@@ -738,10 +697,8 @@ The gateway drops idle connections, so the first call after …
 
 **Asking for a change instead of making it.** Some drafts need a change you'd
 rather describe than write. `ZD` (or save, then quit with exit code 3) reopens
-the same review in your diff viewer ([`anchor.diff.tool`](#key-diff-tool)) with
-the draft as saved, where a note on a line asks Claude to revise it. Any edit
-you saved before switching is kept. The buffer offers this only when a viewer is
-named.
+the same review in revdiff with the draft as saved, where a note on a line asks
+Claude to revise it. Any edit you saved before switching is kept.
 
 A CR description, an issue body, or release notes opens as a `.md` buffer,
 where `#` is a heading, so the same context sits in an HTML comment under the
@@ -758,11 +715,11 @@ what approving does next. The buffer is named for the repo, branch, and artifact
 says what you're reviewing. Helix starts in the buffer's own directory, so its
 status line shows that name rather than a temp path.
 
-**When the tool isn't there.** `anchor` asks which tool a review can actually
-open before it opens one — so a `revdiff` you haven't installed yet gets you the
-diff viewer you *do* have, named in one line rather than discovered as a surprise
-window. What substitutes is a *default*: a defaulted `editor` with nowhere to
-open gives way to an installed viewer, since nobody asked for it. A tool you
+**When the tool isn't there.** `anchor` asks whether a review can actually open
+before it opens one. A `diff` review without revdiff stops there and names the
+install. What gives way is a *default*: a defaulted `editor` with nowhere to
+open gives way to revdiff where revdiff can open, named in one line rather than
+discovered as a surprise window, since nobody asked for the editor. A tool you
 named in the config is kept whether or not it can open, and reports what's
 missing — handing you a diff viewer when you asked for the editor would answer a
 question you didn't ask.
@@ -804,8 +761,9 @@ others. It is a subsection on all of them now:
 | `anchor.crTemplateRepo` | `anchor.cr.templateRepo` |
 
 `anchor.reviewBudgetMins`, `anchor.workTrackerBaseUri`,
-`anchor.watchPipelineAfterPush`, `anchor.<skill>.watchPipelineAfterPush`,
-`anchor.edit.tool`, and `anchor.diff.tool` are unchanged.
+`anchor.watchPipelineAfterPush`, `anchor.<skill>.watchPipelineAfterPush`, and
+`anchor.edit.tool` are unchanged. `anchor.diff.tool` is ignored in 2.0
+([`anchor.diff.tool`](#key-diff-tool)).
 
 **Old names are not carried over.** A key set under one no longer does anything;
 `anchor` reports it and names the key that replaced it, so you can move it

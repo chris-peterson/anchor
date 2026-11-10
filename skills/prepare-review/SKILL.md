@@ -384,7 +384,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --pro
 ```
 
 - `REVIEW_MODE=edit` — what an empty `CURRENT_DESC_PATH` gets: no CR holds a description yet, so there is nothing to diff and the draft is all new. It opens in the user's editor and whatever they save *is* the description.
-- `REVIEW_MODE=diff` (or another viewer) — the CR already has a description, so the two sides make real hunks; or the user configured a viewer, or no editor was reachable and an installed one stood in. The user comments and you fold the comments in.
+- `REVIEW_MODE=diff` — the CR already has a description, so the two sides make real hunks; or no editor was reachable and revdiff stood in. It opens in revdiff, the user comments, and you fold the comments in.
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --mode <REVIEW_MODE> --files \

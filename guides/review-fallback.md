@@ -2,14 +2,21 @@
 
 A review reaches this guide from two places, and they are the same case:
 
-- the probe said nothing usable is installed
-  (`REVIEW_AVAILABLE=0`), or
+- the probe said the review has nowhere to open (`REVIEW_AVAILABLE=0`): no
+  host for a pane, or no editor for an `edit` review, or
 - the review ran and came back `no-verdict`, `incomplete`, or with no parseable
   `REVIEW_VERDICT` at all — the tool closed early, died, or never launched.
 
 Either way the change is **ungraded**, and nothing the review gates may
 publish. What follows is the ladder down: each rung is a way to get a real
 answer, not a way to get past the missing one.
+
+A missing or too-old revdiff is not one of these. The probe reports it as
+`REVIEW_UNUSABLE`, and the launch as `no-verdict` with `raw.exitCode` `absent`
+or `unusable`: every `diff` review needs revdiff, so the review stops there,
+names the install (`brew install umputun/apps/revdiff`) or the upgrade, and
+publishes nothing. The ladder is for a review revdiff could run but this session
+can't show.
 
 ## Say what happened, not where you are in this guide
 
@@ -26,8 +33,8 @@ not
 
 > Since the editor was already the rung, here's the draft in chat.
 
-Name the failure in the terms the user can see — the editor closed, the viewer
-isn't installed, the pane went away — and then do the step.
+Name the failure in the terms the user can see (the editor closed, there was
+no terminal to open revdiff in, the pane went away), and then do the step.
 
 ## Mark the reply as a failed review
 
@@ -72,10 +79,9 @@ converts a tooling failure into an approval, which is the one outcome the
 verdict contract exists to prevent. Ask about the **content**, never about the
 window.
 
-It is also why a difftool earns its verdict from the working tree rather than
-from the screen (DIFF-18). Putting a diff in front of someone proves nothing; the
-edits they leave in the files do, which is why a difftool is a tool here and a
-mere viewer is not a rung.
+It is also why every `diff` review runs revdiff, whose verdict is a note the
+reviewer leaves in its Review box. Putting a diff in front of someone proves
+nothing, which is why a viewer that only shows one is not a rung.
 
 ## Rung 1 — hand over the artifact
 
@@ -161,12 +167,12 @@ something their editor would have shown them properly.
 
 ## Naming the fix
 
-Every rung here is a workaround for a machine with no diff viewer on it, and
-that is worth saying once, without nagging. When the ladder was reached because
-nothing is installed, close with the one-time cost rather than only the
+Every rung here is a workaround for a session revdiff can't open in, and that
+is worth saying once, without nagging. When the ladder was reached because there
+was nowhere to open a pane, close with what would give one rather than only the
 degradation:
 
-> No diff viewer installed — reviewing in chat. `revdiff` would give you inline
-> comments and a real verdict.
+> No terminal to open revdiff in, so this was reviewed in chat. Run the session
+> inside tmux, iTerm2, or agterm and the next review opens beside it.
 
 Once per flow, at the end, and never in place of doing the rung.

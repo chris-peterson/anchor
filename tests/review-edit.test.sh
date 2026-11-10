@@ -73,14 +73,12 @@ git -C "$repo" config commit.gpgsign false
 printf 'one\n' > "$repo/a.txt"; git -C "$repo" add -A; git -C "$repo" commit --quiet -m first
 printf 'one\ntwo\n' > "$repo/a.txt"; git -C "$repo" add -A; git -C "$repo" commit --quiet -m second
 
-# Hermetic in PATH as well as in git config. Tool resolution settles the
-# configured name against what is installed, so without a fixed PATH the
-# assertions would read the host's installed set rather than the key resolution
-# they are about. A stub revdiff ahead of everything makes the configured
-# tool present, which is the state the substitution rule leaves alone. It
-# sits in its own dir, not
-# $bin: the probe cases below run against $bin precisely to assert what happens
-# when no viewer is installed.
+# Hermetic in PATH as well as in git config. Availability reads what is
+# installed, so without a fixed PATH the assertions would read the host's
+# installed set rather than the resolution they are about. A stub revdiff ahead
+# of everything makes revdiff present. It sits in its own dir, not $bin: the
+# probe cases below run against $bin precisely to assert what happens when
+# revdiff is not installed.
 viewerbin="$work/viewerbin"; mkdir -p "$viewerbin"
 # shellcheck disable=SC2016  # the stub's own $1, expanded when it runs
 printf '#!/usr/bin/env bash\n[ "${1:-}" != --version ] || echo "version: v1.14.0"\nexit 0\n' > "$viewerbin/revdiff"; chmod +x "$viewerbin/revdiff"
@@ -360,11 +358,6 @@ EOF
 chmod +x "$bin/stub-host-runner.sh"
 export ANCHOR_HOST_RUNNER="$bin/stub-host-runner.sh"
 
-# The viewer is named, because nothing names it for you: revdiff is anchor's
-# recommendation and reaches a review the same way any other viewer does, so a
-# case about *which* mode ran has to set the key or it measures the unset one.
-git -C "$repo" config anchor.diff.tool revdiff
-
 mode_of()    { jq -r .mode    <<<"$(json_of "$1")"; }
 tool_of() { jq -r .tool <<<"$(json_of "$1")"; }
 
@@ -392,8 +385,8 @@ b=$(tool_of "$(GIT_EDITOR='my-editor --wait' run --skill commit --mode edit --lo
 unset ANCHOR_EDITOR_LAUNCHER
 ok "mode: the tool names the tool that ran the mode, editor or viewer"
 
-# anchor.edit.tool is the mirror of anchor.diff.tool — edit mode's tool
-# half, above git's chain because it is the narrower statement.
+# anchor.edit.tool names edit mode's tool, above git's chain because it is the
+# narrower statement.
 export ANCHOR_EDITOR_LAUNCHER="$bin/stub-editor.sh"
 git -C "$repo" config anchor.edit.tool 'anchor-editor --wait'
 b=$(tool_of "$(GIT_EDITOR='my-editor --wait' run --skill commit --mode edit --local --message-file "$msg" 2>/dev/null)")
@@ -406,27 +399,13 @@ ok "tool: anchor.edit.tool names edit mode's tool, over git's chain"
 if run --skill commit --mode bogus --previous 2>/dev/null; then fail "unknown mode should exit non-zero"; fi
 ok "mode: an unknown mode exits non-zero"
 
-# --- a named viewer anchor cannot place stays named. Nothing stands in for it:
-# substituting a viewer the user didn't ask for would report a different tool's
-# verdict as theirs, so the report names the one that could not be placed.
+# --- a key naming another viewer moves nothing: the review runs revdiff.
 git -C "$repo" config anchor.diff.tool bogus-viewer
 v=$( ( cd "$repo" && PATH="$bin:/usr/bin:/bin" bash "$dispatch" --skill commit --previous ) 2>/dev/null )
-[ "$(verdict_of "$v")" = no-verdict ] \
-  || fail "an unknown diff tool should report no-verdict"
-[ "$(jq -r .raw.exitCode <<<"$(json_of "$v")")" = unknown-tool ] \
-  || fail "the cause should name it as a tool anchor has no adapter for"
-[ "$(tool_of "$v")" = bogus-viewer ] \
-  || fail "the report should carry the viewer that was asked for, not a substitute"
-
-# --- with no viewer named at all, the review says which key names one rather
-# than picking anchor's recommendation on the user's behalf.
+[ "$(tool_of "$v")" = revdiff ] \
+  || fail "anchor.diff.tool naming another viewer should still run revdiff, got $(tool_of "$v")"
 git -C "$repo" config --unset anchor.diff.tool || true
-v=$( ( cd "$repo" && PATH="$bin:/usr/bin:/bin" bash "$dispatch" --skill commit --previous ) 2>/dev/null )
-[ "$(verdict_of "$v")" = no-verdict ] || fail "an unset viewer should report no-verdict"
-[ "$(jq -r .raw.exitCode <<<"$(json_of "$v")")" = no-tool ] \
-  || fail "the cause should say no viewer is configured"
-git -C "$repo" config anchor.diff.tool revdiff
-ok "tool: a viewer anchor cannot place is named, and an unset one names the key"
+ok "tool: a diff review runs revdiff whatever anchor.diff.tool names"
 
 # ====================== the probe ==========================================
 # The skills ask how a review resolves before deciding whether a visual review is
@@ -502,27 +481,23 @@ o=$( cd "$repo" && PATH="$viewerbin:$bin:/usr/bin:/bin" bash "$dispatch" --skill
 [ "$(key_of REVIEW_TOOL "$o")" = revdiff ] || fail "a diff-mode probe should name the viewer"
 ok "probe: the tool key names the viewer in diff mode and the editor in edit"
 
-git -C "$repo" config anchor.diff.tool definitely-not-installed
 o=$(probe --skill commit --probe)
-[ "$(key_of REVIEW_TOOL "$o")" = definitely-not-installed ] || fail "probe should report the configured viewer"
-[ "$(key_of REVIEW_AVAILABLE "$o")" = 0 ]                      || fail "an absent binary should report unavailable"
-ok "probe: with no diff viewer installed at all, the probe reports unavailable"
+[ "$(key_of REVIEW_TOOL "$o")" = revdiff ]   || fail "probe should report revdiff"
+[ "$(key_of REVIEW_AVAILABLE "$o")" = 0 ]    || fail "an absent binary should report unavailable"
+ok "probe: with revdiff not installed, the probe reports unavailable"
 
-# An installed viewer that the user named is what opens. Nothing substitutes for
-# a named one, so the configured name is the reported name either way — what
-# moves is only whether it can open.
+# revdiff is what opens, and no key chose it.
 cat > "$bin/revdiff" <<'EOF'
 #!/usr/bin/env bash
 [ "${1:-}" != --version ] || { echo "version: ${REVDIFF_STUB_VERSION:-v1.14.0}"; exit 0; }
 exit 0
 EOF
 chmod +x "$bin/revdiff"
-git -C "$repo" config anchor.diff.tool revdiff
 o=$(probe_hosted --skill commit --probe)
-[ "$(key_of REVIEW_TOOL "$o")" = revdiff ]        || fail "the named viewer should be what opens"
-[ "$(key_of REVIEW_TOOL_SOURCE "$o")" = config ]  || fail "a named viewer is the user's own choice"
-[ "$(key_of REVIEW_AVAILABLE "$o")" = 1 ]         || fail "an installed viewer with a host is available"
-ok "probe: the viewer the user named is the one reported"
+[ "$(key_of REVIEW_TOOL "$o")" = revdiff ]          || fail "revdiff should be what opens"
+[ "$(key_of REVIEW_TOOL_SOURCE "$o")" = required ]  || fail "no key chooses revdiff, so source=required"
+[ "$(key_of REVIEW_AVAILABLE "$o")" = 1 ]           || fail "an installed viewer with a host is available"
+ok "probe: revdiff is the one reported, as required rather than chosen"
 
 # The other half of the same question. Both modes need a program *and* somewhere
 # to draw it, so a viewer that is plainly installed reports unavailable where
@@ -533,17 +508,16 @@ o=$(probe --skill commit --probe)
 [ "$(key_of REVIEW_AVAILABLE "$o")" = 0 ]      || fail "an installed viewer with nowhere to render is not available"
 ok "probe: a viewer with no host reports unavailable, as an editor does"
 
-# An unnamed viewer reports as unnamed rather than as anchor's recommendation,
-# and never flips the mode to edit — which edits one artifact rather than
-# showing a diff.
+# A missing revdiff never flips the mode to edit, which edits one artifact
+# rather than showing a diff.
 rm -f "$bin/revdiff"
-git -C "$repo" config --unset anchor.diff.tool || true
 o=$(probe_hosted --skill commit --probe)
-[ "$(key_of REVIEW_MODE "$o")" = diff ]          || fail "an unnamed viewer should never flip the mode to edit"
-[ -z "$(key_of REVIEW_TOOL "$o")" ]              || fail "no key names a viewer, so none should be reported"
-[ "$(key_of REVIEW_TOOL_SOURCE "$o")" = unset ]  || fail "the source should say the key is unset"
-[ "$(key_of REVIEW_AVAILABLE "$o")" = 0 ]        || fail "an unnamed viewer cannot open"
-ok "probe: an unnamed viewer is reported as unset, and never becomes edit mode"
+[ "$(key_of REVIEW_MODE "$o")" = diff ]          || fail "a missing revdiff should never flip the mode to edit"
+[ "$(key_of REVIEW_TOOL "$o")" = revdiff ]       || fail "revdiff stays named"
+[ "$(key_of REVIEW_AVAILABLE "$o")" = 0 ]        || fail "a missing revdiff cannot open"
+key_of REVIEW_UNUSABLE "$o" | grep -q 'brew install umputun/apps/revdiff' \
+  || fail "the probe names the install: $o"
+ok "probe: a missing revdiff is reported with its install, and never becomes edit mode"
 
 # --mode drives the review directly, over what the subject would have picked.
 export ANCHOR_EDITOR_LAUNCHER="$bin/stub-editor.sh" EDITOR_STUB_MODE=save
@@ -568,8 +542,8 @@ git -C "$repo" config anchor.reviewBackend editor
 o=$( cd "$repo" && PATH="$viewerbin:$bin:/usr/bin:/bin" \
      bash "$dispatch" --skill commit --probe 2>"$work/legacy.txt" )
 [ "$(key_of REVIEW_MODE "$o")" = diff ]            || fail "the superseded key must not move the mode"
-grep -q 'anchor.edit.tool' "$work/legacy.txt"   || fail "the keys that replaced it should be named on stderr"
-grep -q 'anchor.diff.tool' "$work/legacy.txt"   || fail "the keys that replaced it should be named on stderr"
+grep -q 'anchor.edit.tool' "$work/legacy.txt"   || fail "the key that replaced it should be named on stderr"
+grep -q 'diff reviews open in revdiff' "$work/legacy.txt" || fail "the viewer should be named on stderr"
 git -C "$repo" config --unset anchor.reviewBackend || true
 ok "mode: the superseded anchor.reviewBackend key does nothing, and says so"
 unset EDITOR_BUFFER_CAPTURE
@@ -825,7 +799,6 @@ done
 exit "${REVDIFF_STUB_RC:-0}"
 EOF
 chmod +x "$viewerbin/revdiff"
-git -C "$repo" config anchor.diff.tool revdiff
 export ANCHOR_EDITOR_LAUNCHER="$bin/stub-editor.sh" ANCHOR_HOST_RUNNER="$bin/run-host.sh"
 export REVDIFF_NEW_CAPTURE="$work/annotated.md" EDITOR_BUFFER_CAPTURE="$work/buffer.txt"
 # Helix gets the review's chords; the launcher stands in for it.
@@ -864,13 +837,13 @@ grep -q 'quit with exit code 3, and the' "$EDITOR_BUFFER_CAPTURE" \
 git -C "$repo" config --unset anchor.edit.hints
 ok "annotate: anchor.edit.hints=false drops the editor keys and keeps the switch"
 
-git -C "$repo" config --unset anchor.diff.tool
-EDITOR_STUB_MODE=save run --skill prepare-review --mode edit --files "$nothing" "$draft" >/dev/null
-! grep -q 'exit code 3' "$EDITOR_BUFFER_CAPTURE"  || fail "with no viewer named, the buffer offers no switch: $(cat "$EDITOR_BUFFER_CAPTURE")"
+git -C "$repo" config anchor.diff.tool bogus-viewer
+EDITOR_STUB_MODE=save run --skill prepare-review --mode edit --files "$nothing" "$draft" >/dev/null 2>&1
 # shellcheck disable=SC2016
-grep -q '`ZX` reject it (exit code 2)' "$EDITOR_BUFFER_CAPTURE" || fail "rejecting is offered with or without a viewer: $(cat "$EDITOR_BUFFER_CAPTURE")"
+grep -q '`ZD` ask for changes in revdiff' "$EDITOR_BUFFER_CAPTURE" || fail "the switch opens revdiff whatever anchor.diff.tool names: $(cat "$EDITOR_BUFFER_CAPTURE")"
+git -C "$repo" config --unset anchor.diff.tool
 git -C "$repo" config --unset anchor.edit.tool
-ok "annotate: the switch is offered only where a viewer is named"
+ok "annotate: the switch names revdiff whatever anchor.diff.tool names"
 
 # --- the real Vim and Neovim, driven headless through their chords -----------
 # The runner types $VIM_KEYS in normal mode after the maps load, so the chord
