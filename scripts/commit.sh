@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Commit the staged changes (or amend HEAD) and push, in one invocation.
+# Commit the staged changes (or amend HEAD) and push, in one invocation, or
+# commit without pushing (--no-push) for a push the user wants to hold.
 # /anchor:commit's Step 5 launches this instead of running `git commit` /
 # `git push` as separate agent Bash calls.
 #
@@ -32,13 +33,23 @@
 # with --path: a tree change is always reviewed first, and only the message-only
 # amend, which has none, names no paths.
 #
+# --no-push commits (new or amend) and stops there: the commit stays local for
+# the user to look at, and a later --mode push-existing pushes it through the
+# usual review. It is an error on push-existing, which only pushes.
+#
+# --force-with-lease rewrites the remote branch, so outside an amend it needs
+# --rewritten-history too: a new commit or push-existing force-pushes only where
+# the branch's history moved since its last push (a rebase, a held amend of a
+# pushed commit) and the user approved that force-push. Without it the script
+# exits 64 with nothing committed or pushed.
+#
 # --repo <path> retargets onto a checkout other than the cwd repo
 # (see scripts/lib/resolve-context.sh).
 #
 # Usage:
-#   commit.sh --mode new           --message-file <path> [--reviewed-index <id> --path <p>...] [--allow-default-branch]
-#   commit.sh --mode amend         --message-file <path> [--reviewed-index <id> --path <p>...] [--force-with-lease] [--allow-default-branch]
-#   commit.sh --mode push-existing
+#   commit.sh --mode new           --message-file <path> [--reviewed-index <id> --path <p>...] [--no-push | --force-with-lease --rewritten-history] [--allow-default-branch]
+#   commit.sh --mode amend         --message-file <path> [--reviewed-index <id> --path <p>...] [--no-push | --force-with-lease] [--allow-default-branch]
+#   commit.sh --mode push-existing [--force-with-lease --rewritten-history]
 #
 # Modes:
 #   new            git commit -F <file>        (the ordinary new commit)
@@ -46,7 +57,7 @@
 #   push-existing  no commit — push already-committed, unpushed work
 #
 # Push variant (chosen here, not in prose):
-#   --force-with-lease set        -> git push --force-with-lease   (amend of a pushed commit)
+#   --force-with-lease set        -> git push --force-with-lease   (amend of a pushed commit, or rewritten history)
 #   no upstream (@{u} unset)       -> git push -u origin <branch>   (first push of a new branch)
 #   otherwise                      -> git push
 #
@@ -57,9 +68,10 @@
 # Output (KEY=value on stdout):
 #   COMMIT_SHA=<short-sha>      HEAD after the commit/amend (or the existing HEAD
 #                              for push-existing)
-#   BRANCH=<name>              the branch that was pushed
-#   PUSH_MODE=<set-upstream|plain|force-with-lease>
+#   BRANCH=<name>              the branch that was pushed, or committed to with --no-push
+#   PUSH_MODE=<set-upstream|plain|force-with-lease>   absent with --no-push
 #   PUSHED=ok                  emitted only on a successful push
+#   PUSHED=held                --no-push: committed, and nothing was pushed
 #
 # On a rejected push (non-fast-forward, protected branch, auth) the git error is
 # left on stderr and the script exits non-zero, so the skill surfaces it and
@@ -80,6 +92,8 @@ CTX_REPO=""
 mode=""
 message_file=""
 force_with_lease=0
+rewritten_history=0
+no_push=0
 allow_default_branch=0
 reviewed_index=""
 paths=()
@@ -91,6 +105,8 @@ while [[ $# -gt 0 ]]; do
     --mode)                 mode="${2:?--mode needs a value}"; shift 2 ;;
     --message-file)         message_file="${2:?--message-file needs a path}"; shift 2 ;;
     --force-with-lease)     force_with_lease=1; shift ;;
+    --rewritten-history)    rewritten_history=1; shift ;;
+    --no-push)              no_push=1; shift ;;
     --allow-default-branch) allow_default_branch=1; shift ;;
     --reviewed-index)       reviewed_index="${2:?--reviewed-index needs the REVIEW_INDEX the review printed}"; shift 2 ;;
     *) echo "commit.sh: unknown argument: $1" >&2; exit 64 ;;
@@ -102,6 +118,21 @@ case "$mode" in
   "") echo "commit.sh: --mode is required (new|amend|push-existing)" >&2; exit 64 ;;
   *)  echo "commit.sh: unknown --mode: $mode" >&2; exit 64 ;;
 esac
+
+if [[ "$no_push" -eq 1 && "$mode" == "push-existing" ]]; then
+  echo "commit.sh: --no-push needs a commit to make; --mode push-existing only pushes" >&2; exit 64
+fi
+if [[ "$no_push" -eq 1 && "$force_with_lease" -eq 1 ]]; then
+  echo "commit.sh: --no-push and --force-with-lease contradict each other; a held commit is not pushed" >&2; exit 64
+fi
+if [[ "$rewritten_history" -eq 1 && "$force_with_lease" -eq 0 ]]; then
+  echo "commit.sh: --rewritten-history qualifies --force-with-lease and means nothing without it" >&2; exit 64
+fi
+if [[ "$force_with_lease" -eq 1 && "$mode" != "amend" && "$rewritten_history" -eq 0 ]]; then
+  echo "commit.sh: --force-with-lease on --mode $mode overwrites the remote branch; nothing was committed or pushed." >&2
+  echo "           Pass --rewritten-history only when the branch's history was rewritten since its last push and the user approved the force-push." >&2
+  exit 64
+fi
 
 if [[ "$mode" != "push-existing" ]]; then
   if [[ -z "$message_file" ]]; then
@@ -199,6 +230,13 @@ if [[ "$mode" != "push-existing" ]]; then
 fi
 
 commit_sha=$(git rev-parse --short HEAD)
+
+if [[ "$no_push" -eq 1 ]]; then
+  echo "COMMIT_SHA=$commit_sha"
+  echo "BRANCH=$branch"
+  echo "PUSHED=held"
+  exit 0
+fi
 
 # --- Push ---------------------------------------------------------------------
 # Variant chosen here rather than in skill prose. @{u} is quoted so the safety

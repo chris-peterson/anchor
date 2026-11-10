@@ -187,7 +187,8 @@ behavior, not an independent authority — review them against the source.
 - **[COMMIT-10a]** When the user chooses a squash, the system shall write the
   combined message before the review, so the text reviewed is the text committed.
 - **[COMMIT-11]** When a squash amends a pushed draft CR, the system shall follow
-  the amend with `git push --force-with-lease`.
+  the amend with `git push --force-with-lease` once the user approves that
+  force-push (COMMIT-27).
 - **[COMMIT-12]** If squashing is not on the table, then the system shall not
   mention it or explain why it is unavailable.
 - **[COMMIT-13]** Where only the message (not the tree) of a ready CR's HEAD is
@@ -216,6 +217,8 @@ behavior, not an independent authority — review them against the source.
   commit and push in one step, performed by a single helper (`commit.sh`) rather
   than as separate agent-run `git commit` / `git push` commands, and shall select
   the push variant (set-upstream / plain / force-with-lease) within that helper.
+  Where the user asked to hold the push, the same helper commits without pushing
+  (COMMIT-26).
 - **[COMMIT-19]** If HEAD is the default branch when committing, then the system
   shall not commit or push to the default branch unless the user chose the
   direct-to-default case (COMMIT-07), and the commit helper shall refuse to commit
@@ -249,6 +252,23 @@ behavior, not an independent authority — review them against the source.
   section (REVIEW-31), on someone else's CR under the conditions REVIEW-32 sets;
   pushed to a branch other than the default with no CR, it shall give the commit
   a round in the local record (REVIEW-36).
+- **[COMMIT-26]** Where the user asked to review or hold a commit before it goes
+  out, the system shall commit (a new commit or an amend) without pushing,
+  report the commit's sha, and say that a later push-existing run (COMMIT-05)
+  pushes it through the usual review. The commit helper shall refuse the
+  commit-only mode on push-existing, which makes no commit. The review approves
+  the change, so a user who asked for the commit, a look at it, and then the
+  push would otherwise get all three from one approval.
+- **[COMMIT-27]** When the push that follows a review would be a force-push, the
+  system shall ask for it as its own question after the review verdict, naming
+  the branch and why its history moved, and shall push nothing until the user
+  approves it. The commit helper shall refuse `--force-with-lease` on a new
+  commit or on push-existing, with nothing committed or pushed, unless it is
+  also told the branch's history was rewritten (`--rewritten-history`), and the
+  refusal shall name that flag. An amend keeps `--force-with-lease` on its own,
+  since the squash gate (COMMIT-08) already decided it may rewrite HEAD. A
+  force-push added to an ordinary new commit (because a rebase was pending)
+  overwrites the remote branch under an approval that covered only the diff.
 
 ### PREPARE — Prepare review
 

@@ -3,7 +3,8 @@
 #
 # Drives the real commit + push against a local bare remote, exercising the
 # push-variant selection (set-upstream / plain / force-with-lease), the
-# push-existing mode, and the default-branch guard. Runs on ubuntu / macOS /
+# push-existing mode, the commit-only mode (--no-push), the force-push gate
+# (--rewritten-history), and the default-branch guard. Runs on ubuntu / macOS /
 # Windows-Git-Bash in CI.
 set -euo pipefail
 
@@ -125,6 +126,97 @@ echo "$out" | grep -q '^PUSH_MODE=plain$' || fail "expected plain push for push-
 echo "$out" | grep -q '^PUSHED=ok$'       || fail "push-existing not ok: $out"
 [[ "$(git -C "$remote" log -1 refs/heads/feat --format=%s)" == "Add c directly" ]] || fail "push-existing did not reach remote"
 ok "push-existing pushes the unpushed commit without making a new one"
+
+# --- --no-push commits and holds the push (#170) -----------------------------
+printf 'held\n' > "$repo/held.txt"
+git -C "$repo" add held.txt
+remote_before=$(git -C "$remote" rev-parse refs/heads/feat)
+printf 'Add held\n' > "$msgfile"
+out=$(bash "$commit_sh" --repo "$repo" --mode new --message-file "$msgfile" --no-push \
+        --reviewed-index "$(digest held.txt)" --path held.txt)
+echo "$out" | grep -q '^PUSHED=held$' || fail "--no-push should report PUSHED=held: $out"
+echo "$out" | grep -q '^COMMIT_SHA=' || fail "--no-push should report COMMIT_SHA: $out"
+! echo "$out" | grep -q '^PUSH_MODE=' || fail "--no-push chose a push variant: $out"
+! echo "$out" | grep -q 'commit\.pushed' || fail "--no-push announced a push: $out"
+[[ "$(git -C "$repo" log -1 --format=%s)" == "Add held" ]] || fail "--no-push did not commit"
+[[ "$(git -C "$remote" rev-parse refs/heads/feat)" == "$remote_before" ]] || fail "--no-push pushed"
+ok "--no-push commits and leaves the remote unchanged"
+
+out=$(bash "$commit_sh" --repo "$repo" --mode push-existing)
+echo "$out" | grep -q '^PUSHED=ok$' || fail "push-existing did not push the held commit: $out"
+[[ "$(git -C "$remote" log -1 refs/heads/feat --format=%s)" == "Add held" ]] || fail "the held commit did not reach the remote"
+ok "push-existing pushes a held commit later"
+
+set +e
+out=$(bash "$commit_sh" --repo "$repo" --mode push-existing --no-push 2>&1)
+rc=$?
+set -e
+[[ $rc -eq 64 ]] || fail "--no-push on push-existing -> want exit 64, got $rc: $out"
+ok "--no-push is refused on push-existing (exit 64)"
+
+# --- --force-with-lease outside an amend needs --rewritten-history (#170) ------
+printf 'not forced\n' > "$repo/unforced.txt"
+git -C "$repo" add unforced.txt
+sha_before=$(git -C "$repo" rev-parse HEAD)
+remote_before=$(git -C "$remote" rev-parse refs/heads/feat)
+printf 'Add unforced\n' > "$msgfile"
+set +e
+out=$(bash "$commit_sh" --repo "$repo" --mode new --message-file "$msgfile" --force-with-lease \
+        --reviewed-index "$(digest unforced.txt)" --path unforced.txt 2>&1)
+rc=$?
+set -e
+[[ $rc -eq 64 ]] || fail "--mode new --force-with-lease -> want exit 64, got $rc: $out"
+grep -q -- '--rewritten-history' <<<"$out" || fail "the refusal should name --rewritten-history: $out"
+[[ "$(git -C "$repo" rev-parse HEAD)" == "$sha_before" ]] || fail "a refused force-push still committed"
+[[ "$(git -C "$remote" rev-parse refs/heads/feat)" == "$remote_before" ]] || fail "a refused force-push still pushed"
+ok "--mode new --force-with-lease is refused without --rewritten-history (exit 64)"
+
+set +e
+out=$(bash "$commit_sh" --repo "$repo" --mode push-existing --force-with-lease 2>&1)
+rc=$?
+set -e
+[[ $rc -eq 64 ]] || fail "--mode push-existing --force-with-lease -> want exit 64, got $rc: $out"
+grep -q -- '--rewritten-history' <<<"$out" || fail "the refusal should name --rewritten-history: $out"
+[[ "$(git -C "$remote" rev-parse refs/heads/feat)" == "$remote_before" ]] || fail "a refused force-push still pushed"
+ok "--mode push-existing --force-with-lease is refused without --rewritten-history (exit 64)"
+
+set +e
+out=$(bash "$commit_sh" --repo "$repo" --mode push-existing --rewritten-history 2>&1)
+rc=$?
+set -e
+[[ $rc -eq 64 ]] || fail "--rewritten-history alone -> want exit 64, got $rc: $out"
+ok "--rewritten-history without --force-with-lease is refused (exit 64)"
+
+# A rewritten branch (a rebase reworded HEAD) takes a new commit with the force-push.
+git -C "$repo" commit --quiet --amend --only -m "Add held (rebased)"
+out=$(bash "$commit_sh" --repo "$repo" --mode new --message-file "$msgfile" --force-with-lease \
+        --rewritten-history --reviewed-index "$(digest unforced.txt)" --path unforced.txt)
+echo "$out" | grep -q '^PUSH_MODE=force-with-lease$' || fail "expected force-with-lease with --rewritten-history: $out"
+echo "$out" | grep -q '^PUSHED=ok$' || fail "rewritten-history push not ok: $out"
+[[ "$(git -C "$remote" log -1 refs/heads/feat~1 --format=%s)" == "Add held (rebased)" ]] \
+  || fail "the remote did not take the rewritten history"
+ok "--mode new --force-with-lease --rewritten-history commits and force-pushes"
+
+# A held amend of a pushed commit is pushed later by push-existing, which has to force.
+printf 'amended while held\n' >> "$repo/unforced.txt"
+git -C "$repo" add unforced.txt
+printf 'Add unforced (amended)\n' > "$msgfile"
+out=$(bash "$commit_sh" --repo "$repo" --mode amend --message-file "$msgfile" --no-push \
+        --reviewed-index "$(digest unforced.txt)" --path unforced.txt)
+echo "$out" | grep -q '^PUSHED=held$' || fail "held amend should report PUSHED=held: $out"
+[[ "$(git -C "$remote" log -1 refs/heads/feat --format=%s)" == "Add unforced" ]] || fail "a held amend pushed"
+out=$(bash "$commit_sh" --repo "$repo" --mode push-existing --force-with-lease --rewritten-history)
+echo "$out" | grep -q '^PUSH_MODE=force-with-lease$' || fail "expected force-with-lease for the held amend: $out"
+[[ "$(git -C "$remote" log -1 refs/heads/feat --format=%s)" == "Add unforced (amended)" ]] \
+  || fail "push-existing did not force the held amend to the remote"
+ok "--mode push-existing --force-with-lease --rewritten-history pushes a held amend"
+
+set +e
+out=$(bash "$commit_sh" --repo "$repo" --mode amend --message-file "$msgfile" --no-push --force-with-lease 2>&1)
+rc=$?
+set -e
+[[ $rc -eq 64 ]] || fail "--no-push with --force-with-lease -> want exit 64, got $rc: $out"
+ok "--no-push with --force-with-lease is refused (exit 64)"
 
 # --- --path scopes the commit, leaving a foreign staged file staged ---------
 # The shared-checkout case: another session has its file in the index, and this
