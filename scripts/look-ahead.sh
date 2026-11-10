@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Print the number of unpushed commits: HEAD ahead of @{upstream}, or, on a
-# branch that was never pushed, ahead of origin/<default> (origin/HEAD, then
-# main, then master — the ladder squash-check.sh uses).
+# Print the number of unpushed commits: HEAD ahead of the branch's pushed copy
+# (lib/resolve-context.sh anchor_pushed_ref), or, on a branch that was never pushed, the commits no origin ref holds (the count
+# squash-check.sh uses).
 # Output:
 #   - "N" (integer)
-#   - empty + non-zero exit when there is neither an upstream nor a default
-#     branch on origin to count from
+#   - empty + non-zero exit when there is neither an upstream nor any origin
+#     ref to count from
 #
 # Why a helper: invoking `git rev-list @{u}..HEAD` directly from a skill trips
 # Claude Code's bash safety analyzer (the literal `@{...}` looks like brace
@@ -27,10 +27,9 @@ while [[ $# -gt 0 ]]; do
 done
 ctx_resolve_repo
 
-if git rev-parse --verify --quiet '@{u}' >/dev/null 2>&1; then
-  git rev-list --count '@{u}..HEAD'
+if pushed_ref=$(anchor_pushed_ref); then
+  git rev-list --count "${pushed_ref}..HEAD"
   exit
 fi
 
-default_branch=$(anchor_default_branch) || exit 1
-git rev-list --count "origin/$default_branch..HEAD"
+anchor_unpushed_count

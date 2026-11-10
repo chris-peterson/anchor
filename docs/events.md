@@ -58,7 +58,7 @@ Emitted by `skills/prepare-review`.
 codes.bridgeai.anchor/cr.ready
 ```
 
-the draft flag came off, on the author's say-so. Emitted by the script that clears it, which is the one path that does, so the two callers announce identically: review's self-review handoff, where the author is done and wants eyes on the change, and merge's draft gate, where they choose to land one that never left draft. From that gate the same run goes on to announce cr.merged unless a later gate stops it; from the handoff it stands alone.
+the draft flag came off, on the author's say-so. Emitted by the script that clears it, which is the one path that does, so its callers announce identically: the ready skill, where the author asks for it outright; review's self-review handoff, where the author is done and wants eyes on the change; and merge's draft gate, where they choose to land one that never left draft. From that gate the same run goes on to announce cr.merged unless a later gate stops it; from the handoff it stands alone.
 
 | Field | Value | Meaning |
 |---|---|---|

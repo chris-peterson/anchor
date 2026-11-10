@@ -17,7 +17,10 @@
 #     branch                                   over published shared history; no
 #                                              review-state check makes that safe.
 #                                              Land a new commit.
-#   - HEAD pushed, CR is ready (out for     -> DON'T squash — a reviewer relies
+#   - branch never pushed, HEAD on origin   -> DON'T squash — HEAD is the tip of
+#     (cut from another pushed branch)         the branch this one was cut from,
+#                                              and belongs to that branch's CR
+#   - HEAD pushed, CR is ready (out for    -> DON'T squash — a reviewer relies
 #     review)                                  on the per-commit "changes since"
 #                                              diff; land a new commit
 #
@@ -98,15 +101,19 @@ fi
 default_branch=$(anchor_default_branch || true)
 
 # --- Is HEAD pushed? ----------------------------------------------------------
-# Prefer the configured upstream; fall back to origin/<default> for local-only
-# branches that were never `push -u`'d (the common "first commit on a new
-# branch" case). With neither, treat HEAD as unpushed.
+# Prefer the configured upstream; for local-only branches that were never
+# `push -u`'d (the common "first commit on a new branch" case), count the commits
+# no origin ref holds. Counting against origin/<default> instead reads a branch
+# cut from another pushed branch as unpushed, so its first commit would amend
+# that branch's pushed tip. With neither, treat HEAD as unpushed.
 
 unpushed_count=""
-if git rev-parse --verify --quiet '@{u}' >/dev/null 2>&1; then
-  unpushed_count=$(git rev-list --count '@{u}..HEAD' 2>/dev/null || echo "")
-elif [[ -n "$default_branch" ]] && git rev-parse --verify --quiet "origin/${default_branch}" >/dev/null; then
-  unpushed_count=$(git rev-list --count "origin/${default_branch}..HEAD" 2>/dev/null || echo "")
+has_upstream=0
+if pushed_ref=$(anchor_pushed_ref); then
+  has_upstream=1
+  unpushed_count=$(git rev-list --count "${pushed_ref}..HEAD" 2>/dev/null || echo "")
+else
+  unpushed_count=$(anchor_unpushed_count 2>/dev/null || echo "")
 fi
 
 # HEAD is pushed only when we resolved a count and it's zero. No resolvable
@@ -172,6 +179,11 @@ elif [[ "$head_pushed" -eq 0 ]]; then
   # Unpushed HEAD: squashing never touches published or reviewed history.
   # (Local-only commits on the default branch land here too — fine to amend.)
   squash=allowed
+elif [[ "$has_upstream" -eq 0 ]]; then
+  # This branch was never pushed, yet an origin ref holds HEAD: it is the tip of
+  # the branch this one was cut from (a stacked branch's first commit). That
+  # commit belongs to the other branch and its CR, so land a new commit.
+  :
 elif [[ -n "$default_branch" ]] \
      && git rev-parse --verify --quiet "origin/${default_branch}" >/dev/null \
      && git merge-base --is-ancestor HEAD "origin/${default_branch}" 2>/dev/null; then

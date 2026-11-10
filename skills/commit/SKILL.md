@@ -103,7 +103,8 @@ Act only on the keys; don't re-run the folded-in probes (`git add`, `look-ahead.
 | `RENAME_SOURCES` | the old names of renames whose new name you named. They are part of this commit, not someone else's work: the review and the commit carry them with the new names, so name only the new name |
 | `STAT` | the diffstat total — what's in scope |
 | `BRANCH` / `DEFAULT_BRANCH` / `ON_DEFAULT_BRANCH` | the branch decision in Step 4 |
-| `AHEAD` | unpushed commit count, counted against `origin/<default>` on a branch never pushed — drives push-existing |
+| `AHEAD` | unpushed commit count; on a branch never pushed, the commits no origin ref holds — drives push-existing |
+| `UNPUSHED_BASE` | the commit the unpushed ones start after — the left side of the push-existing range |
 | `SQUASH` / `SQUASH_FORCE_PUSH` / `ALLOW_MESSAGE_AMEND` / `PRIOR_SUBJECT` | the squash gate in Step 4 |
 | `CR_REF` / `CR_URL` | the branch's CR as its forge writes it (`<repo>#<n>`, `<repo>!<n>`) and its page, for Step 5's manifest; empty with no CR |
 | `ANCHOR_CONFIG` | the `anchor.*` keys (JSON) for Steps 3-4 |
@@ -114,10 +115,10 @@ When `STAGED=1`, read the staged diff of the paths you named so you can draft th
 git diff --cached -- <p> [<p>...]
 ```
 
-**Push-existing** — when `STAGED=0`, whatever `OTHER_STAGED` says (a path someone else staged is never pushed by this route): if `AHEAD` is `0` or empty, nothing is staged and nothing is unpushed — warn there are no local changes and stop. If `AHEAD` is `≥1`, the branch has unpushed commit(s) to push: **skip Steps 2-4**, review that range in Step 5 (`review-diff.sh --commit`, not `--local`), and push in Step 6. Read the range (substitute `DEFAULT_BRANCH`):
+**Push-existing** — when `STAGED=0`, whatever `OTHER_STAGED` says (a path someone else staged is never pushed by this route): if `AHEAD` is `0` or empty, nothing is staged and nothing is unpushed — warn there are no local changes and stop. If `AHEAD` is `≥1`, the branch has unpushed commit(s) to push: **skip Steps 2-4**, review that range in Step 5 (`review-diff.sh --commit`, not `--local`), and push in Step 6. Read the range (substitute `UNPUSHED_BASE`):
 
 ```bash
-git diff "origin/main...HEAD"
+git diff "<UNPUSHED_BASE>...HEAD"
 ```
 
 (The message-only-amend case — an unpushed commit whose *message* is wrong, tree unchanged — is the `ALLOW_MESSAGE_AMEND` path in Step 4, not this push-only path.)

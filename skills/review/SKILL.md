@@ -29,7 +29,8 @@ Authorship picks where the result goes:
 | the user's own (`IS_OWN_CR=1`) | **self-review** | the user's checkout, on the CR's branch | part of the round's commit, made through `/anchor:commit`; nothing posts |
 
 A branch that has never had a CR (`HAS_CR=0`) is a self-review of its commits
-ahead of the default branch. Its rounds go to a local record in the repo's git
+ahead of `BASE_BRANCH`: the default branch, or the branch of the open CR it is
+stacked on, whose commits that CR reviews. Its rounds go to a local record in the repo's git
 directory, read the same way, until `/anchor:prepare-review` opens the CR and
 carries them into its description.
 
@@ -119,7 +120,7 @@ where it has never had one. Act only on what it surfaces:
 | Key | What to do with it |
 |-----|--------------------|
 | `FORGE` / `HOST` / `PROJECT` | pick the CLI and target it; `HOST` is `glab --hostname` on self-hosted GitLab |
-| `HAS_CR=0` | the branch has no CR: a self-review of its commits ahead of the default branch. `CR_IID`, `CR_URL`, `CR_STATE`, and `CR_DRAFT` are empty, so the rows that act on them don't apply; `CR_REF` names the repo and the branch. Say in the one line that it has no CR yet |
+| `HAS_CR=0` | the branch has no CR: a self-review of its commits ahead of `BASE_BRANCH` (the default branch, or the open CR's branch it is stacked on). `CR_IID`, `CR_URL`, `CR_STATE`, and `CR_DRAFT` are empty, so the rows that act on them don't apply; `CR_REF` names the repo and the branch. Say in the one line that it has no CR yet |
 | `CR_IID` / `CR_URL` / `CR_TITLE` / `CR_AUTHOR` | the one line you report, and the review's header |
 | `CR_REF` | how the CR is named in prose and titles (`<repo> !<iid>`, `<repo> #<num>`), so its number never reads as a count |
 | `CR_STATE` | anything but `open` → say what state it's in and ask before continuing |

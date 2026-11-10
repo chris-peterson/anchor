@@ -269,6 +269,22 @@ behavior, not an independent authority — review them against the source.
   since the squash gate (COMMIT-08) already decided it may rewrite HEAD. A
   force-push added to an ordinary new commit (because a rebase was pending)
   overwrites the remote branch under an approval that covered only the diff.
+- **[COMMIT-28]** While the branch has never been pushed, the system shall count
+  as unpushed the commits no `origin` ref holds, for the unpushed count, the
+  push-existing range, and the squash gate (COMMIT-08), and the squash gate
+  shall block an amend when an `origin` ref holds HEAD. A branch cut from another
+  pushed branch (a stacked branch) starts on that branch's tip: counted against
+  the default branch, the other branch's commits read as this one's, its review
+  range carries them, and its first commit would amend the other branch's
+  published commit.
+- **[COMMIT-29]** The system shall treat a branch's upstream as its pushed copy
+  only when the upstream carries the branch's own name, and shall otherwise
+  push with `-u origin <branch>`, which publishes the branch and repoints its
+  upstream, whatever `branch.autoSetupMerge`, `push.default`, and
+  `push.autoSetupRemote` are set to. A branch created from `origin/main` tracks
+  `origin/main` under git's defaults; read as the pushed copy, its plain push is
+  refused after the review was approved, and its unpushed commits are counted
+  against `main`.
 
 ### PREPARE — Prepare review
 
@@ -421,6 +437,27 @@ check.
   number taken from anywhere but this branch's own CR (a guess made before the
   create call returned, a value from an earlier run) names someone else's CR,
   and the forge accepts the write whenever the user can edit it.
+- **[PREPARE-24]** The system shall measure the change against its base branch:
+  the open CR's own target where one is open, else the branch the author named
+  (`--onto`), else the branch of the open CR this branch is stacked on, else the
+  default branch. The commit counts ahead and behind, the rebase, the diff the
+  description is drafted from, the deep links, and the CR's target shall all
+  use that base. A branch built on another CR's branch, measured against the
+  default branch, opens a CR whose diff carries both changesets.
+- **[PREPARE-25]** Where the branch is stacked on another open CR and no CR is
+  open yet, the system shall name that CR and ask whether to stack on it or
+  target the default branch before drafting, and once stacked shall treat that
+  CR as the ordering dependency (PREPARE-12) without asking again. The stacked
+  CR is found by the commits the two branches share beyond the default branch,
+  so a predecessor that took commits after this branch was cut still counts, and
+  a CR that targets this branch is not taken as its base. If the listing of open
+  CRs fails, then the system shall report it rather than read the branch as
+  based on the default branch.
+- **[PREPARE-26]** If `--onto` names a branch `origin` doesn't have, or one that
+  differs from the open CR's target, then the system shall refuse and name it,
+  with nothing drafted or opened. Retargeting an open CR is the forge's to do,
+  and a description drafted against one base for a CR measured against another
+  points its links at the wrong lines.
 
 ### REVIEW — Review a change request
 
@@ -658,6 +695,12 @@ ready.
   offer to open the CR rather than to mark it ready. A review needs no CR to be
   worth recording, and without the record every review before the CR opens
   would cover the whole branch again.
+- **[REVIEW-37]** Where a branch with no CR is stacked on another open CR's
+  branch, the system shall review its commits ahead of that branch rather than
+  the default branch, name the base, and count the local record's unreviewed
+  commits (REVIEW-36) from the same base. The predecessor's commits are under
+  review in their own CR, and a self-review that covered them again would raise
+  that CR's findings on this branch.
 
 ### FEEDBACK — Resolve feedback
 
@@ -685,6 +728,29 @@ ready.
   they triggered while it replies and resolves, and shall report that pipeline in
   the summary, so that feedback is not reported as addressed against an unverified
   commit.
+
+### READY — Mark ready
+
+Taking a draft CR out of draft (the `ready` skill), the direct route to the
+handoff `/anchor:review` offers when a self-review ends.
+
+- **[READY-01]** When `/anchor:ready` runs, the system shall resolve the CR the
+  user named, or the branch's open CR, and shall stop and say so where there is
+  none or it is merged or closed.
+- **[READY-02]** Where the checkout is on the CR's branch with uncommitted
+  changes, or with a HEAD other than the CR's head, the system shall ask before
+  marking it ready. A reviewer would be handed a CR missing work the author has
+  in front of them.
+- **[READY-03]** The system shall clear the draft flag through the one script
+  that does so for every skill, which reads the flag fresh, saves the CR first
+  (FORGE-13), and announces `cr.ready`. A CR already ready shall be reported as
+  such, with nothing changed and nothing announced.
+- **[READY-04]** Where the user named reviewers, the system shall request them,
+  adding to the reviewers the CR already has, and shall not ask for reviewers
+  otherwise.
+- **[READY-05]** Once the CR is ready, the system shall report its head's
+  pipeline and name the next step (`/anchor:merge`, or `/anchor:resolve-feedback`
+  when threads come back) without running it.
 
 ### MERGE — Merge
 

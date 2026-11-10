@@ -415,4 +415,26 @@ set -e
 [[ "$(git -C "$repo" rev-parse HEAD)" == "$sha_before" ]] || fail "absolute --path still committed"
 ok "an absolute --path is refused before anything is committed"
 
+
+# --- A branch created from origin/main tracks origin/main (#165) -------------
+# git's default branch.autoSetupMerge=true makes origin/main the upstream, and
+# push.default=simple refuses a plain push to an upstream with another name. The
+# push has to publish the branch and repoint its upstream instead.
+git -C "$repo" switch --quiet -c tracks-main origin/main
+[[ "$(git -C "$repo" rev-parse --abbrev-ref --symbolic-full-name '@{u}')" == origin/main ]] \
+  || fail "setup: the branch should track origin/main under git's defaults"
+main_before=$(git -C "$remote" rev-parse main)
+printf 'from origin/main\n' > "$repo/t.txt"
+git -C "$repo" add -A
+printf 'Add t\n' > "$msgfile"
+out=$(bash "$commit_sh" --repo "$repo" --mode new --message-file "$msgfile")
+echo "$out" | grep -q '^PUSH_MODE=set-upstream$' || fail "expected set-upstream for a branch tracking origin/main; got: $out"
+echo "$out" | grep -q '^PUSHED=ok$' || fail "the push should land: $out"
+git -C "$remote" rev-parse --verify --quiet tracks-main >/dev/null || fail "tracks-main not pushed to the remote"
+[[ "$(git -C "$remote" rev-parse main)" == "$main_before" ]] || fail "the push reached main"
+[[ "$(git -C "$repo" rev-parse --abbrev-ref --symbolic-full-name '@{u}')" == origin/tracks-main ]] \
+  || fail "the upstream should now be the branch's own"
+ok "a branch tracking origin/main pushes to its own name and repoints its upstream"
+git -C "$repo" checkout --quiet feat
+
 echo "# all checks passed"

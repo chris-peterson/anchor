@@ -41,8 +41,11 @@
 #   BRANCH=<name>           current branch (empty on detached HEAD)
 #   DEFAULT_BRANCH=<name>   origin/HEAD -> main -> master (empty if none resolve)
 #   ON_DEFAULT_BRANCH=<0|1> 1 == BRANCH is the default branch
-#   AHEAD=<n>               unpushed commit count; with no upstream, the count
-#                           ahead of origin/<default> (empty when neither exists)
+#   AHEAD=<n>               unpushed commit count; with no upstream, the commits
+#                           no origin ref holds (empty when neither exists)
+#   UNPUSHED_BASE=<sha>     the commit those unpushed commits start after, so
+#                           `UNPUSHED_BASE...HEAD` is what the push sends; empty
+#                           when neither exists
 #   SQUASH=<allowed|blocked> ... plus SQUASH_FORCE_PUSH / ALLOW_MESSAGE_AMEND /
 #                            PRIOR_SUBJECT — emitted verbatim by squash-check.sh
 #   ANCHOR_CONFIG=<json>    the anchor.* keys as a JSON object ({} when none)
@@ -97,6 +100,11 @@ on_default=0
 [[ -n "$branch" && "$branch" == "$default_branch" ]] && on_default=1
 
 ahead=$(bash "$here/look-ahead.sh" 2>/dev/null || true)
+if pushed_ref=$(anchor_pushed_ref); then
+  unpushed_base=$(git rev-parse "$pushed_ref")
+else
+  unpushed_base=$(anchor_unpushed_base 2>/dev/null || true)
+fi
 
 config_json=$(anchor_config_json)
 anchor_config_warnings >&2
@@ -110,6 +118,7 @@ echo "BRANCH=$branch"
 echo "DEFAULT_BRANCH=$default_branch"
 echo "ON_DEFAULT_BRANCH=$on_default"
 echo "AHEAD=$ahead"
+echo "UNPUSHED_BASE=$unpushed_base"
 # squash-check emits SQUASH / SQUASH_FORCE_PUSH / ALLOW_MESSAGE_AMEND / PRIOR_SUBJECT / CR_REF / CR_URL.
 # Runs in this script's cwd (already the target repo), so it needs no --repo.
 bash "$here/squash-check.sh"

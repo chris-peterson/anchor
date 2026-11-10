@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- **`/anchor:ready` takes a draft CR out of draft.** Run it on a branch with a draft CR, or name one, and it clears the draft flag, requests the reviewers you name, and reports where the CR's pipeline stands. It asks first when your checkout has uncommitted changes or commits the CR doesn't have yet.
+- **Stacked CRs target the branch they're built on.** When your branch is cut from another branch that has an open CR, `/anchor:prepare-review` names that CR and asks whether to stack on it. Stacked, the new CR targets the other branch, so its diff holds only your commits, and the other CR is recorded as the one to merge first. Name a base yourself with `/anchor:prepare-review --onto <branch>`. An open CR's own target is always its base, so the rebase prompt, the diff, and the deep links follow it. `/anchor:review` on a branch with no CR reviews only the commits past the CR it's stacked on, and counts its unreviewed commits from there too.
+
 ### Changed
 
 - **Every diff review opens in revdiff.** Reviewing a commit, a CR description against its last version, an issue update, release notes, or a batch of edits opens revdiff 1.14 or later, whatever `anchor.diff.tool` or git's `diff.tool` names. A review is built on revdiff's `(context).md`, its preloaded notes, and the `approve` or `reject` note in its Review box, and a viewer without those has no verdict to give. **This breaks reviews for anyone with `diff.tool` or `anchor.diff.tool` set to another viewer** (meld, vimdiff, a custom `difftool.<name>.cmd`): the key is ignored, the review says so in one line, and revdiff opens. Without revdiff, a diff review stops before it opens, names `brew install umputun/apps/revdiff`, and publishes nothing. Editor reviews are unchanged.
@@ -35,6 +40,8 @@
 
 ### Fixed
 
+- **`/anchor:commit` pushes a branch created from `origin/main`.** A branch started with `git switch -c <branch> origin/main` tracks `origin/main`, and the push after an approved review was refused. It now pushes the branch under its own name and points its upstream there, with no git setting needed.
+- **`/anchor:commit` doesn't amend another branch's commit.** On a new branch cut from another pushed branch, its first commit is a new commit rather than an amend of that branch's tip, and the commits it reviews and pushes are only the ones not on the remote yet.
 - **What you save in an editor review is what gets published.** When you edit a CR description, commit message, issue body, or release notes in your editor and save, the draft file the skill publishes from now holds your text. Before, a paragraph you deleted could still reach the CR, commit, issue, or release, because the skill wrote from the draft as it stood before the review. Closing without saving, emptying the draft, rejecting it, or an editor that fails leaves the draft as it was.
 - **`/anchor:commit` can commit without pushing.** Ask to look at the commit before it goes out, or to push later, and it commits and stops there. Run `/anchor:commit` again with nothing staged to review the commit and push it.
 - **A force-push from `/anchor:commit` is its own question.** Approving the review approves the change; when the push after it would rewrite the branch, the agent asks separately, naming the branch and why its history moved. `commit.sh` refuses `--force-with-lease` on a new commit or a push of existing commits unless `--rewritten-history` says the branch was rewritten, so a new commit can't become a force-push because a rebase was pending.

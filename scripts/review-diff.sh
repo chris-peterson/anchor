@@ -32,9 +32,9 @@
 #
 # Commit mode — review the just-made commit; the range is determined here:
 #   bash review-diff.sh --commit
-#     1 unpushed commit         -> @{upstream}...HEAD
+#     1 unpushed commit         -> <pushed copy>...HEAD (the upstream, when it carries the branch's name)
 #     2+ unpushed commits       -> HEAD~1...HEAD (prior commits already reviewed)
-#     no upstream tracking      -> origin/HEAD (symbolic), then origin/main, then origin/master
+#     no upstream tracking      -> <parent of the oldest commit no origin ref holds>...HEAD
 #
 # Range mode — review an explicit git range:
 #   bash review-diff.sh <diff-range>
@@ -496,12 +496,15 @@ determine_default_branch_range() {
 # Determine the diff range for a commit review from the unpushed commit count:
 # every unpushed commit, since the push that follows sends all of them.
 determine_commit_range() {
-  local count
-  count=$(git rev-list --count '@{u}..HEAD' 2>/dev/null || true)
+  local count="" base pushed_ref
+  if pushed_ref=$(anchor_pushed_ref); then
+    count=$(git rev-list --count "${pushed_ref}..HEAD" 2>/dev/null || true)
+  fi
   if [[ -z "$count" ]]; then
-    determine_default_branch_range
+    base=$(anchor_unpushed_base) || return 1
+    echo "${base}...HEAD"
   elif [[ "$count" -ge 1 ]]; then
-    echo '@{upstream}...HEAD'
+    echo "${pushed_ref}...HEAD"
   else
     echo "HEAD~1...HEAD"
   fi
@@ -584,7 +587,7 @@ else
 
   if [[ "${1:-}" == "--commit" ]]; then
     diff_range=$(determine_commit_range) || {
-      echo "review-diff.sh: could not determine a diff range (no upstream tracking branch and no origin/main or origin/master)" >&2
+      echo "review-diff.sh: could not determine a diff range (no upstream tracking branch, and origin has no refs here to measure the unpushed commits against)" >&2
       exit 65
     }
     header_mode="commit"

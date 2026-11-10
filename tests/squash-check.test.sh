@@ -110,4 +110,24 @@ o=$(bash "$squash_check" --repo "$empty")
 [[ "$(val SQUASH "$o")" == blocked ]] || fail "no commit means nothing to squash into: $o"
 ok "a branch with no commit blocks the squash"
 
+# --- A stacked branch, cut from another pushed branch and never pushed itself ---
+# HEAD is the predecessor's pushed tip, so it is that branch's commit: amending
+# it would fold this change into the other CR. Counting "unpushed" against the
+# default branch read it as local and allowed the amend.
+repo=$(make_repo "stacked.github.com")
+git -C "$repo" checkout --quiet -b stacked
+: > "$CR_JSON"
+o=$(bash "$squash_check" --repo "$repo")
+[[ "$(val SQUASH "$o")" == blocked ]] \
+  || fail "a never-pushed branch sitting on another branch's pushed tip must block the squash; got: $o"
+ok "a never-pushed branch on another branch's pushed tip blocks the squash"
+
+printf 'more\n' > "$repo/b.txt"; git -C "$repo" add -A; git -C "$repo" commit --quiet -m more
+o=$(bash "$squash_check" --repo "$repo")
+[[ "$(val SQUASH "$o")" == allowed && "$(val SQUASH_FORCE_PUSH "$o")" == 0 ]] \
+  || fail "the stacked branch's own unpushed commit may be squashed without a force-push; got: $o"
+[[ "$(bash "$here/../scripts/look-ahead.sh" --repo "$repo")" == 1 ]] \
+  || fail "look-ahead should count only the commit no origin ref holds"
+ok "a stacked branch's own unpushed commit counts as unpushed, and only it"
+
 echo "all squash-check tests passed"

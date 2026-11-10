@@ -34,14 +34,14 @@ mkdir -p "$bin"
 
 # Both stubs read the CR from $CR_JSON, append every call to $CALL_LOG, and fail
 # whichever subcommand $FAIL_ON names. The backup's read (the PR view that asks
-# for headRefName, the MR API GET) serves $BACKUP_JSON where a test sets it.
+# for labels, the MR API GET) serves $BACKUP_JSON where a test sets it.
 cat > "$bin/gh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 echo "gh $*" >> "$CALL_LOG"
 case "${1:-} ${2:-}" in
   "pr view")  [[ "$FAIL_ON" != view  ]] || { echo "no pull requests found" >&2; exit 1; }
-              if [[ "$*" == *headRefName* ]]; then cat "${BACKUP_JSON:-$CR_JSON}"; else cat "$CR_JSON"; fi ;;
+              if [[ "$*" == *labels* ]]; then cat "${BACKUP_JSON:-$CR_JSON}"; else cat "$CR_JSON"; fi ;;
   "pr ready") [[ "$FAIL_ON" != ready ]] || { echo "GraphQL: not permitted" >&2; exit 1; } ;;
   *) echo "stub gh: unhandled command: $*" >&2; exit 1 ;;
 esac
@@ -148,9 +148,34 @@ echo "$err" | grep -q '^READY_ERROR=' || fail "no READY_ERROR on a refused mutat
 echo "$out" | grep -q 'cr\.ready' && fail "announced a flag that never came off: $out"
 ok "a refused mutation is an error, and announces nothing"
 
+# --- The branch's CR, with the forge read off origin ---------------------------
+printf '{"url":"https://github.com/o/r/pull/128","isDraft":true,"number":128,"title":"T","state":"OPEN","headRefOid":"abc","headRefName":"feat"}\n' > "$CR_JSON"
+run --check
+[[ "$status" -eq 0 ]] || fail "--check exited $status: $err"
+for kv in FORGE=github CR_NUMBER=128 CR_REF=r#128 CR_STATE=open CR_DRAFT=true CR_HEAD_SHA=abc LOCAL_STATE=elsewhere; do
+  echo "$out" | grep -qx "$kv" || fail "--check should report $kv: $out"
+done
+grep -q '^gh pr view --json' "$CALL_LOG" || fail "the CR should be the branch's, not a named one: $(cat "$CALL_LOG")"
+grep -q 'pr ready' "$CALL_LOG" && fail "--check changed the CR: $(cat "$CALL_LOG")"
+echo "$out" | grep -q 'CR_BACKUP_PATH=\|cr\.ready' && fail "--check backed up or announced: $out"
+ok "--check reads the branch's CR off origin's forge and changes nothing"
+
+run
+[[ "$status" -eq 0 ]] || fail "the inferred mark-ready exited $status: $err"
+grep -q '^gh pr ready 128$' "$CALL_LOG" || fail "the inferred CR's number should be marked ready: $(cat "$CALL_LOG")"
+echo "$out" | grep -q '^CR_READY=ok$' || fail "did not report the flag cleared: $out"
+ok "with no --cr, the branch's open CR is marked ready"
+
+printf '{"url":"https://github.com/o/r/pull/128","isDraft":true,"number":128,"state":"MERGED"}\n' > "$CR_JSON"
+run
+[[ "$status" -eq 65 ]] || fail "a merged CR should exit 65, got $status"
+echo "$err" | grep -q '^READY_ERROR=r#128 is merged, not open$' || fail "the state should be named: $err"
+grep -q 'pr ready' "$CALL_LOG" && fail "marked a merged CR ready: $(cat "$CALL_LOG")"
+ok "a CR that isn't open is exit 65, and is left alone"
+
 # --- Usage -------------------------------------------------------------------
 FAIL_ON=""
-for args in "--cr 128" "--forge bitbucket --cr 1" "--forge github" "--forge github --cr 1 --nope" "--forge github --cr 1 --repo"; do
+for args in "--forge bitbucket --cr 1" "--forge github --cr 1 --nope" "--forge github --cr 1 --repo"; do
   # shellcheck disable=SC2086  # each case is a deliberate argv split
   run $args
   [[ "$status" -eq 64 ]] || fail "expected exit 64 for '$args', got $status"

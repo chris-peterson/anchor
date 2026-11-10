@@ -140,8 +140,10 @@ git -C "$repo" add local.txt
 git -C "$repo" commit --quiet -m "Local only"
 o=$(run)
 [ "$(val STAGED "$o")" = 0 ] || fail "nothing staged on never-pushed"
-[ "$(val AHEAD "$o")" = 1 ]  || fail "AHEAD should count against origin/main with no upstream; got '$(val AHEAD "$o")'"
-ok "no upstream: AHEAD counts the commits ahead of origin/<default>"
+[ "$(val AHEAD "$o")" = 1 ]  || fail "AHEAD should count the commit no origin ref holds; got '$(val AHEAD "$o")'"
+[ "$(val UNPUSHED_BASE "$o")" = "$(git -C "$repo" rev-parse main)" ] \
+  || fail "UNPUSHED_BASE should be the commit the unpushed one starts after; got '$(val UNPUSHED_BASE "$o")'"
+ok "no upstream: AHEAD counts the commits no origin ref holds, from UNPUSHED_BASE"
 
 # another session's staged file is OTHER_STAGED, and leaves push-existing open
 printf 'theirs\n' > "$repo/peer.txt"

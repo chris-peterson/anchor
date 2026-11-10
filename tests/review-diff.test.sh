@@ -680,7 +680,7 @@ printf 'a\n' > "$pushrepo/a.txt"; git -C "$pushrepo" add a.txt; git -C "$pushrep
 printf 'b\n' > "$pushrepo/b.txt"; git -C "$pushrepo" add b.txt; git -C "$pushrepo" commit --quiet -m b
 export REVDIFF_ARGS_FILE="$work/push-args.txt"
 o=$( (cd "$pushrepo" && bash "$dispatch" --skill commit --commit) )
-grep -qx '@{upstream}' "$REVDIFF_ARGS_FILE" \
+grep -qx 'origin/main' "$REVDIFF_ARGS_FILE" \
   || fail "two unpushed commits should be reviewed from the upstream, not HEAD~1: $(cat "$REVDIFF_ARGS_FILE")"
 unset REVDIFF_ARGS_FILE
 ok "--commit reviews every unpushed commit the push will send"

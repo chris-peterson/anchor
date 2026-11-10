@@ -60,6 +60,8 @@ case "${1:-}" in
   pr)
     case "${2:-}" in
       view)   [[ -s "$CR_JSON" ]] || exit 1; cat "$CR_JSON" ;;
+      list)   [[ "${CR_LIST_FAIL:-0}" == 1 ]] && { echo "stub gh: HTTP 401" >&2; exit 1; }
+              if [[ -s "$CR_LIST" ]]; then cat "$CR_LIST"; else echo '[]'; fi ;;
       create) cp "$CR_AFTER_CREATE" "$CR_JSON"
               echo "https://github.com/example/repo/pull/7" ;;
       edit)   while [[ $# -gt 0 && "$1" != --body-file ]]; do shift; done
@@ -103,6 +105,8 @@ case "${1:-}" in
   mr)
     case "${2:-}" in
       view)   [[ -s "$CR_JSON" ]] || exit 1; cat "$CR_JSON" ;;
+      list)   [[ "${CR_LIST_FAIL:-0}" == 1 ]] && { echo "stub glab: 401" >&2; exit 1; }
+              if [[ -s "$CR_LIST" ]]; then cat "$CR_LIST"; else echo '[]'; fi ;;
       create) cp "$CR_AFTER_CREATE" "$CR_JSON"
               echo "https://gitlab.com/example/repo/-/merge_requests/7" ;;
       *) echo "stub glab: unhandled mr subcommand: ${2:-}" >&2; exit 1 ;;
@@ -182,6 +186,7 @@ key() { sed -n "s/^$2=//p" <<<"$1"; }
 export CALL_LOG="$work/calls.log"
 export CR_JSON="$work/cr.json"
 export CR_AFTER_CREATE="$work/cr-after-create.json"
+export CR_LIST="$work/cr-list.json"
 export WRITTEN_BODY="$work/written-body.md"
 export DELETE_ON_MERGE=false
 export GH_OWNER=example
@@ -810,5 +815,126 @@ for edit_call in 'gh pr edit' 'glab mr update'; do
     || fail "the label step runs '$edit_call' without first running forge-backup.sh --kind cr"
 done
 ok "the label and milestone edit backs up the CR before editing it"
+
+# --- Stacked CRs: the base is the branch the CR is stacked on ----------------
+# A branch cut from another branch with an open CR has to be measured against
+# that branch, or the predecessor's commits count as its own: AHEAD doubles,
+# and a CR opened against the default branch shows both changesets.
+
+# stack_on <repo> <name>: cut <name> from the current branch, commit, push.
+stack_on() {
+  local repo=$1 name=$2
+  git -C "$repo" checkout --quiet -b "$name"
+  printf '%s\n' "$name" > "$repo/$name.txt"
+  git -C "$repo" add -A
+  git -C "$repo" commit --quiet -m "Add $name"
+  git -C "$repo" push --quiet -u origin "$name"
+}
+# gh_list / gl_list <head branch> <head sha> <number> [target branch]
+gh_list() { printf '[{"headRefName":"%s","headRefOid":"%s","number":%s,"url":"https://github.com/example/repo/pull/%s","baseRefName":"%s"}]\n' "$1" "$2" "$3" "$3" "${4:-main}" > "$CR_LIST"; }
+gl_list() { printf '[{"source_branch":"%s","sha":"%s","iid":%s,"web_url":"https://gitlab.com/example/repo/-/merge_requests/%s","target_branch":"%s"}]\n' "$1" "$2" "$3" "$3" "${4:-main}" > "$CR_LIST"; }
+
+repo="$(make_repo github.com gh-stacked)"
+gh_list feat "$(git -C "$repo" rev-parse HEAD)" 7
+stack_on "$repo" feat2
+: > "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo")
+[[ "$(key "$out" BASE_BRANCH)" == feat && "$(key "$out" BASE_SOURCE)" == stacked ]] \
+  || fail "a branch cut from an open CR's branch should be based on it; got: $out"
+[[ "$(key "$out" STACK_CR_IID)" == 7 && "$(key "$out" STACK_CR_URL)" == */pull/7 ]] \
+  || fail "the predecessor CR should be reported; got: $out"
+[[ "$(key "$out" AHEAD)" == 1 && "$(key "$out" CR_PENDING)" == 1 ]] \
+  || fail "only the stacked branch's own commit should count as ahead; got: $out"
+ok "a branch stacked on an open PR is based on its branch"
+
+gh_pr_json "$(git -C "$repo" rev-parse HEAD)"
+: > "$CALL_LOG"
+bash "$prepare_review_sh" --repo "$repo" --onto feat --open --title 'A change' --body-file "$approved_body" >/dev/null
+grep -q 'gh pr create .*--base feat' "$CALL_LOG" \
+  || fail "the create should target the --onto branch: $(cat "$CALL_LOG")"
+ok "--open --onto creates the PR against that branch"
+
+# The predecessor took a review fix after the branch was cut, so its head is no
+# longer in HEAD's history; the shared commits still make it the base.
+git -C "$repo" checkout --quiet feat
+printf 'fix\n' >> "$repo/a.txt"
+git -C "$repo" commit --quiet -am "Fix a"
+git -C "$repo" push --quiet origin feat
+gh_list feat "$(git -C "$repo" rev-parse HEAD)" 7
+git -C "$repo" checkout --quiet feat2
+: > "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo")
+[[ "$(key "$out" BASE_SOURCE)" == stacked && "$(key "$out" BEHIND)" == 1 ]] \
+  || fail "a predecessor that moved on should still be the base, one commit ahead of HEAD; got: $out"
+ok "a predecessor that took commits after the branch was cut is still the base"
+
+# The predecessor's own recon must not adopt the branch stacked on it.
+git -C "$repo" checkout --quiet feat
+gh_list feat2 "$(git -C "$repo" rev-parse feat2)" 8 feat
+out=$(bash "$prepare_review_sh" --repo "$repo")
+[[ "$(key "$out" BASE_SOURCE)" == default ]] \
+  || fail "a CR stacked on this branch is not its base; got: $out"
+ok "a CR stacked on this branch is not taken as its base"
+
+# --onto the default branch is the author declining the stack.
+git -C "$repo" checkout --quiet feat2
+gh_list feat "$(git -C "$repo" rev-parse feat)" 7
+out=$(bash "$prepare_review_sh" --repo "$repo" --onto main)
+[[ "$(key "$out" BASE_BRANCH)" == main && "$(key "$out" BASE_SOURCE)" == onto && -z "$(key "$out" STACK_CR_IID)" ]] \
+  || fail "--onto main should override the detected predecessor; got: $out"
+ok "--onto the default branch overrides a detected predecessor"
+
+repo="$(make_repo github.com gh-sibling)"
+gh_list feat "$(git -C "$repo" rev-parse feat)" 7
+git -C "$repo" checkout --quiet main
+stack_on "$repo" sibling
+: > "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo")
+[[ "$(key "$out" BASE_SOURCE)" == default && "$(key "$out" BASE_BRANCH)" == main ]] \
+  || fail "a branch cut from the default branch should not be stacked; got: $out"
+ok "a sibling branch cut from the default branch keeps the default base"
+
+export CR_LIST_FAIL=1
+out=$(bash "$prepare_review_sh" --repo "$repo")
+export CR_LIST_FAIL=0
+[[ "$(key "$out" STACK_LOOKUP_ERROR)" == *401* && "$(key "$out" BASE_SOURCE)" == default ]] \
+  || fail "a failed CR listing should be reported, not dropped; got: $out"
+ok "a failed CR listing is reported as STACK_LOOKUP_ERROR"
+
+if bash "$prepare_review_sh" --repo "$repo" --onto no-such-branch >/dev/null 2>"$work/err"; then
+  fail "--onto a branch origin lacks should fail"
+fi
+grep -q "PREPARE_ERROR=origin has no branch 'no-such-branch'" "$work/err" \
+  || fail "expected a PREPARE_ERROR naming the branch: $(cat "$work/err")"
+ok "--onto a branch origin lacks fails with PREPARE_ERROR"
+
+# An open CR's own target is the base, and an --onto that disagrees with it stops.
+repo="$(make_repo gitlab.com gl-stacked)"
+gl_list feat "$(git -C "$repo" rev-parse HEAD)" 7
+stack_on "$repo" feat2
+glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false
+sed 's/"state"/"target_branch":"feat","state"/' "$CR_AFTER_CREATE" > "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo")
+[[ "$(key "$out" BASE_BRANCH)" == feat && "$(key "$out" BASE_SOURCE)" == cr && "$(key "$out" AHEAD)" == 1 ]] \
+  || fail "an open MR's target should be the base; got: $out"
+ok "an open MR's target branch is the base"
+if bash "$prepare_review_sh" --repo "$repo" --onto main >/dev/null 2>"$work/err"; then
+  fail "--onto that disagrees with the open MR's target should fail"
+fi
+grep -q "already targets 'feat', not 'main'" "$work/err" \
+  || fail "expected the mismatch named: $(cat "$work/err")"
+ok "--onto that disagrees with the open MR's target fails"
+
+: > "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo" --onto feat)
+[[ "$(key "$out" BASE_SOURCE)" == onto && "$(key "$out" STACK_CR_IID)" == 7 ]] \
+  || fail "--onto an open MR's branch should name that MR; got: $out"
+glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false
+: > "$CALL_LOG"
+bash "$prepare_review_sh" --repo "$repo" --onto feat --open --title 'A change' --body-file "$approved_body" >/dev/null
+grep -q -- '--target-branch feat' "$CALL_LOG" \
+  || fail "the MR create should target the --onto branch: $(cat "$CALL_LOG")"
+ok "--onto names the predecessor MR, and --open targets its branch"
+: > "$CR_LIST"
 
 echo "all prepare-review tests passed"

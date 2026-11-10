@@ -59,6 +59,41 @@ anchor_default_branch() {
   return 1
 }
 
+# The branch's pushed copy, as `<remote>/<branch>`: its upstream when the
+# upstream carries the branch's own name. A branch created from a remote-tracking
+# ref (`git switch -c <branch> origin/main`) tracks that ref under git's default
+# `branch.autoSetupMerge`, and that upstream is where it started, not where it
+# was pushed. Prints nothing and returns 1 for such an upstream, and with none.
+anchor_pushed_ref() {
+  local branch upstream
+  branch=$(git symbolic-ref --quiet --short HEAD) || return 1
+  upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null) || return 1
+  [[ "${upstream#*/}" == "$branch" ]] || return 1
+  printf '%s\n' "$upstream"
+}
+
+# Commits on a branch that was never pushed: the ones no origin ref holds. On a
+# branch cut from another pushed branch rather than the default branch, the
+# default branch would count that branch's commits too.
+anchor_unpushed_count() {
+  [[ -n "$(git for-each-ref --count=1 --format='%(refname)' refs/remotes/origin)" ]] || return 1
+  git rev-list --count HEAD --not --remotes=origin
+}
+
+# The commit those unpushed commits start after: the parent of the oldest one,
+# or HEAD when there are none. Returns 1 when origin has no refs here, or the
+# oldest unpushed commit is a root.
+anchor_unpushed_base() {
+  local oldest
+  [[ -n "$(git for-each-ref --count=1 --format='%(refname)' refs/remotes/origin)" ]] || return 1
+  oldest=$(git rev-list --reverse --topo-order HEAD --not --remotes=origin | sed -n 1p)
+  if [[ -z "$oldest" ]]; then
+    git rev-parse HEAD
+    return 0
+  fi
+  git rev-parse --verify --quiet "${oldest}^"
+}
+
 # Whether <sha> is a commit in this checkout, fetching origin once when it isn't.
 anchor_fetch_commit() {
   git rev-parse --verify --quiet "$1^{commit}" >/dev/null 2>&1 && return 0

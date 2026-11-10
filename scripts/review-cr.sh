@@ -29,13 +29,17 @@
 #   PROJECT=<owner/name>         full project path after the host, any depth
 #   HAS_CR=<0|1>                 0 == run with no argument on a branch that has
 #                                never had a CR: the review is of the branch's
-#                                commits ahead of the default branch. Then
+#                                commits ahead of BASE_BRANCH. Then
 #                                CR_IID, CR_URL, CR_STATE, and CR_DRAFT are
 #                                empty, CR_REF is the repo and the branch,
 #                                CR_TITLE counts the commits, DESC_PATH holds
 #                                their messages, oldest first, IS_OWN_CR is 1,
 #                                no thread is open, and REVIEW_STATUS_* and
 #                                REVIEW_DECISIONS_PATH read the local record
+#   BASE_BRANCH=<name>           HAS_CR=0 only: the open CR's branch this one is
+#                                stacked on (lib/stack.sh), else the default
+#                                branch; empty when HAS_CR=1, where the CR's own
+#                                base SHA is the base
 #   CR_IID=<number>              PR number / MR iid
 #   CR_URL=<web url>
 #   CR_TITLE=<title>
@@ -94,6 +98,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/tmpfile.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/review-status.sh"
 # shellcheck source=lib/forge-url.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/forge-url.sh"
+# shellcheck source=lib/stack.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/stack.sh"
 
 CTX_REPO=""
 cr_ref=""
@@ -126,8 +132,9 @@ esac
 
 # --- A branch with no CR yet ---------------------------------------------------
 
-# The branch's commits ahead of the default branch are the change, and their
-# messages stand in for the description. Its rounds are in the local record
+# The branch's commits ahead of its base are the change, and their messages
+# stand in for the description. The base is the default branch, or the branch of
+# the open CR this one is stacked on, whose commits are that CR's to review. Its rounds are in the local record
 # (scripts/lib/review-status.sh) until /anchor:prepare-review opens the CR.
 resolve_branch() {
   local default count
@@ -136,12 +143,16 @@ resolve_branch() {
   git fetch --quiet origin "$default" 2>/dev/null || true
   git rev-parse --verify --quiet "origin/$default^{commit}" >/dev/null 2>&1 \
     || die "origin/$default is not in this checkout — fetch it and re-run"
+  base_branch=$(anchor_branch_base "$forge" "$branch" "$default" 2>&1) || die "$base_branch"
+  if [[ "$base_branch" != "$default" ]]; then
+    git fetch --quiet origin "$base_branch" 2>/dev/null || true
+  fi
   cr_head=$(git rev-parse HEAD)
-  cr_base=$(git merge-base "origin/$default" HEAD)
+  cr_base=$(git merge-base "origin/$base_branch" HEAD)
   cr_start="$cr_base"
   count=$(git rev-list --count --no-merges "$cr_base..$cr_head")
-  [[ "$count" -gt 0 ]] || die "$branch has no CR and no commits ahead of $default — nothing to review"
-  cr_title="$count commit$([[ "$count" -eq 1 ]] || echo s) ahead of $default"
+  [[ "$count" -gt 0 ]] || die "$branch has no CR and no commits ahead of $base_branch — nothing to review"
+  cr_title="$count commit$([[ "$count" -eq 1 ]] || echo s) ahead of $base_branch"
   cr_desc=$(git log --reverse --no-merges --format='## %s%n%n%b' "$cr_base..$cr_head")
   self=$(anchor_forge_self "$forge" 2>/dev/null) || self=""
   cr_author="$self"
@@ -156,7 +167,7 @@ resolve_branch() {
   diff_range="${cr_base}...${cr_head}"
 }
 
-has_cr=1 branch=""
+has_cr=1 branch="" base_branch=""
 if [[ -z "$cr_ref" ]]; then
   branch=$(git symbolic-ref --quiet --short HEAD || true)
 fi
@@ -329,6 +340,7 @@ echo "FORGE=$forge"
 echo "HOST=$host"
 echo "PROJECT=$project"
 echo "HAS_CR=$has_cr"
+echo "BASE_BRANCH=$base_branch"
 echo "CR_IID=$cr_iid"
 # How a reader names the CR: the repo, then the number with the forge's own
 # marker, so a round title can't read the number as a count.

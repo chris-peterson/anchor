@@ -5,6 +5,7 @@
   - [commit](/skills/commit)
   - [prepare-review](/skills/prepare-review)
   - [review](/skills/review)
+  - [ready](/skills/ready)
   - [resolve-feedback](/skills/resolve-feedback)
   - [merge](/skills/merge)
   - [release](/skills/release)

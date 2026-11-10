@@ -1,6 +1,6 @@
 ---
 name: prepare-review
-description: Open the PR/MR on an already-pushed branch, rebase on the default branch if behind, and draft a description that tells reviewers WHY the change exists. Use when opening a PR/MR or creating a review.
+description: Open the PR/MR on an already-pushed branch, rebase on its base branch if behind, and draft a description that tells reviewers WHY the change exists. Use when opening a PR/MR or creating a review.
 ---
 
 # Prepare Review
@@ -67,7 +67,7 @@ Everything else is internal: the per-step recon plumbing ("origin is GitLab, 1 a
 
 ## Step 1: Gather the changeset
 
-Run the gather script once. It performs Step 1's deterministic recon and the safe default-path setup — detect the forge, resolve the CR if one is already open, count the gap to the default branch, capture the current description as the Step 4 diff baseline, check local state against the CR head, read the project template and `anchor.*` config — then prints one `KEY=value` block on stdout:
+Run the gather script once. It performs Step 1's deterministic recon and the safe default-path setup — detect the forge, resolve the CR if one is already open, find the base branch (the open CR's target, the CR this branch is stacked on, or the default branch) and count the gap to it, capture the current description as the Step 4 diff baseline, check local state against the CR head, read the project template and `anchor.*` config — then prints one `KEY=value` block on stdout:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh"
@@ -79,10 +79,13 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 |-----|--------------------|
 | `RESOLVED_VIA` | `cwd` (inferred from the working directory) or `repo` (an explicit `--repo` was honored) — see "Operating against a non-cwd repo" |
 | `FORGE` | `github` / `gitlab` picks the CLI for the rest of the skill; `none` → the URL-free `skip-deep-links` path |
-| `DEFAULT_BRANCH` | substitute for `main` in the diff/log commands below |
+| `DEFAULT_BRANCH` | the repo's default branch; `ON_DEFAULT_BRANCH` is measured against it |
+| `BASE_BRANCH` / `BASE_SOURCE` | the branch the CR targets, and what `AHEAD`, `BEHIND`, the diff, and the deep links are measured against. `stacked` or `onto` → see "A stacked branch" |
+| `STACK_CR_IID` / `STACK_CR_URL` | the open CR whose branch `BASE_BRANCH` is; the ordering dependency Step 2 would otherwise ask for |
+| `STACK_LOOKUP_ERROR` | the open-CR listing failed, so a stacked branch may read as based on the default branch. Surface it; on an auth failure ask for fresh credentials |
 | `ON_DEFAULT_BRANCH=1` | HEAD is the default branch — there's no branch to open a CR *from*. With work to review, `NEEDS_BRANCH=1` routes through branch creation first; clean with nothing ahead → `NOTHING_TO_REVIEW=1` and the script exits 65 |
 | `NOTHING_TO_REVIEW=1` | **The script exited 65.** There is no branch to open a CR from and nothing to put in one, so this flow does not apply here — report that and stop. Say it plainly: a chain that named `/anchor:prepare-review` has lost its CR step, and the user needs to know *before* anything downstream (a merge, a release) runs. Never paraphrase it into "this step was moot" and continue |
-| `AHEAD=0` | nothing ahead of the default branch — `NEEDS_COMMIT=1` chains to `/anchor:commit` (see below); otherwise say so and stop |
+| `AHEAD=0` | nothing ahead of the base branch — `NEEDS_COMMIT=1` chains to `/anchor:commit` (see below); otherwise say so and stop |
 | `NEEDS_BRANCH=1` | on the default branch with work to review — a feature branch must exist before a CR can be opened (see "Get to a reviewable, pushed commit") |
 | `NEEDS_COMMIT=1` | no reviewable commit yet — chain into `/anchor:commit` before continuing (see "Get to a reviewable, pushed commit") |
 | `NEEDS_PUSH=1` | commits are ahead, no CR yet, but the branch isn't pushed — chain into `/anchor:commit`, which commits and pushes, then re-gather (see "Get to a reviewable, pushed commit") |
@@ -101,7 +104,17 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 | `DELETE_BRANCH_ON_MERGE` | `false` on a CR this run opened → name it and offer the remediation (see "Branch deletion on merge"); `unknown` → say nothing |
 | `ANCHOR_CONFIG` | `anchor.*` keys to apply (Step 3), as JSON |
 
-If the block carries a `CR_CREATE_ERROR=…` line, the draft-open hit an auth or push failure — surface it and ask the user to refresh credentials; do **not** fall back to the URL-free path (the fail-fast-on-auth rule). A `PREPARE_ERROR=…` line names a review record (the CR's Review status section, or the local record) that isn't JSON: surface it and stop, since writing the description would carry the broken record forward or drop it.
+If the block carries a `CR_CREATE_ERROR=…` line, the draft-open hit an auth or push failure — surface it and ask the user to refresh credentials; do **not** fall back to the URL-free path (the fail-fast-on-auth rule). A `PREPARE_ERROR=…` line names a review record (the CR's Review status section, or the local record) that isn't JSON, an `--onto` branch origin doesn't have, or an `--onto` the open CR's target disagrees with: surface it and stop, since writing the description would carry the broken record forward or drop it, and a CR opened against the wrong base shows the wrong diff.
+
+### A stacked branch (`BASE_SOURCE`)
+
+A branch cut from another branch that has an open CR is *stacked* on it, and its CR targets that branch so the diff holds only its own commits. The script finds the predecessor and reports it as the base; the author confirms it before anything opens.
+
+- **`cr`** — the open CR already targets `BASE_BRANCH`. Nothing to ask.
+- **`stacked`**, on `CR_PENDING=1` — ask once (header `Base`), before drafting: **Stack on `<BASE_BRANCH>`** (`STACK_CR_URL`'s reference, which must merge first) or **Target `<DEFAULT_BRANCH>`** (the CR's diff will carry the predecessor's commits too). On *Target*, re-run the gather script with `--onto <DEFAULT_BRANCH>` and continue from that block.
+- **`onto`** — the author named the base (`/anchor:prepare-review --onto <branch>`, passed to the gather script as given). Nothing to ask.
+
+When `STACK_CR_IID` is set, that CR is the predecessor: treat it as the ordering dependency Step 2 captures, without asking again, so Step 3 records it and Step 4 sets it on the forge. Pass `--onto <BASE_BRANCH>` to every later `prepare-review.sh` call in this run, `--open` included. When the predecessor merges, the forge retargets this CR to the default branch, and a later run reads that from the CR (`BASE_SOURCE=cr`).
 
 ### Operating against a non-cwd repo
 
@@ -121,11 +134,11 @@ When the target is just the session cwd (no non-cwd repo in play), skip all of t
 
 ### Get to a reviewable, pushed commit (`NEEDS_BRANCH` / `NEEDS_COMMIT` / `NEEDS_PUSH`)
 
-**prepare-review is meant to run from any state.** A CR needs a commit on a feature branch that is **ahead of the default branch and pushed** — opening the draft is a pure forge operation on the pushed branch, since `/anchor:commit` now does the push. When that state doesn't exist yet, the script says so (instead of letting `glab mr create` / `gh pr create` dead-end on a raw *"Could not find any commits between origin/`<default>` and `<branch>`"*) and the skill chains into `/anchor:commit` to get there. The cases, keyed off the block:
+**prepare-review is meant to run from any state.** A CR needs a commit on a feature branch that is **ahead of its base branch and pushed** — opening the draft is a pure forge operation on the pushed branch, since `/anchor:commit` now does the push. When that state doesn't exist yet, the script says so (instead of letting `glab mr create` / `gh pr create` dead-end on a raw *"Could not find any commits between origin/`<base>` and `<branch>`"*) and the skill chains into `/anchor:commit` to get there. The cases, keyed off the block:
 
 - **`NEEDS_COMMIT=1`, `NEEDS_BRANCH=0`** — on a feature branch, work uncommitted. Chain into `/anchor:commit`: it runs its flow (tests, staging, message, the visual review) and, on a clean review, commits **and pushes**. Then re-gather.
 - **`NEEDS_BRANCH=1`, `NEEDS_COMMIT=1`** — on the *default* branch, work uncommitted. Still chain into `/anchor:commit` — it detects the default branch, creates the feature branch (named from the subject it drafts), commits onto it, and pushes it. Then re-gather.
-- **`NEEDS_PUSH=1`** — a feature branch with commit(s) ahead of the default branch that were never pushed (e.g. committed with raw `git`). The branch just needs pushing, which is `/anchor:commit`'s job now — chain into it rather than pushing here, then re-gather.
+- **`NEEDS_PUSH=1`** — a feature branch with commit(s) ahead of the base branch that were never pushed (e.g. committed with raw `git`). The branch just needs pushing, which is `/anchor:commit`'s job now — chain into it rather than pushing here, then re-gather.
 - **`NEEDS_BRANCH=1`, `NEEDS_COMMIT=0`** — on the default branch with commits that exist only on the local default branch (committed to `main` by habit, never pushed). Move them onto their own branch first, then chain into `/anchor:commit` to push it. Slug the latest subject (`git log -1 --format=%s`, the convention `/anchor:commit` uses), confirm the name with the user, then:
 
   ```bash
@@ -178,13 +191,13 @@ The GitHub form changes a setting for **every** PR in the repo, which is why it 
 
 Prefer the `glab api` form over `glab mr update --remove-source-branch`, whose help describes it as a *toggle* — it would turn the flag back off on an MR that already has it.
 
-### Rebase on the default branch when `BEHIND > 0`
+### Rebase on the base branch when `BEHIND > 0`
 
-`BEHIND=0` → skip this section. Otherwise the branch needs `origin/<default>` before it can merge — every conflict with intervening commits has to be resolved before the CR can land, and doing it now (while the change is fresh) is cheaper than after review when context has gone cold. Secondary: deep links anchor to lines in the *current* diff, so a behind-default branch points at content that won't compose cleanly at merge time. Ask:
+`BEHIND=0` → skip this section. Otherwise the branch needs `origin/<BASE_BRANCH>` before it can merge — every conflict with intervening commits has to be resolved before the CR can land, and doing it now (while the change is fresh) is cheaper than after review when context has gone cold. Secondary: deep links anchor to lines in the *current* diff, so a branch behind its base points at content that won't compose cleanly at merge time. Ask:
 
-> Branch is `<BEHIND>` commits behind `origin/<default>`. Rebase now? `[yes / skip]`
+> Branch is `<BEHIND>` commits behind `origin/<BASE_BRANCH>`. Rebase now? `[yes / skip]`
 
-- `yes` — run `git rebase origin/<default>`. On conflict, resolve in place: read both sides of each conflicted region, pick the resolution that preserves the intent of *both* changes (not just one side), `git add` the resolved files, then `git rebase --continue`. Loop until the rebase completes. Surface to the user when intent is genuinely ambiguous — two competing changes to the same logic, semantic conflicts the textual markers don't show, a rename colliding with an edit. Don't guess in those cases; show the conflict and ask. If a hook fails mid-rebase, surface the failure rather than retrying with `--no-verify`.
+- `yes` — run `git rebase origin/<BASE_BRANCH>`. On conflict, resolve in place: read both sides of each conflicted region, pick the resolution that preserves the intent of *both* changes (not just one side), `git add` the resolved files, then `git rebase --continue`. Loop until the rebase completes. Surface to the user when intent is genuinely ambiguous — two competing changes to the same logic, semantic conflicts the textual markers don't show, a rename colliding with an edit. Don't guess in those cases; show the conflict and ask. If a hook fails mid-rebase, surface the failure rather than retrying with `--no-verify`.
 - `skip` — proceed with the current branch state. Note that deep links may render against lines that have shifted by merge time.
 
 A rebase rewrites history, so the push that follows is a force-push. Gate it on `CR_DRAFT` — the author's declared review state, which is reliable in a way that inferred engagement signals (note counts, reviewer lists) are not:
@@ -207,21 +220,21 @@ git push --force-with-lease
 
 ### Read the diff and commit history
 
-Substitute `DEFAULT_BRANCH` from the block for `main`:
+Substitute `BASE_BRANCH` from the block:
 
 ```bash
-git log main..HEAD --oneline
+git log origin/<BASE_BRANCH>..HEAD --oneline
 ```
 
 ```bash
-git diff main...HEAD --stat
+git diff origin/<BASE_BRANCH>...HEAD --stat
 ```
 
 ```bash
-git diff main...HEAD
+git diff origin/<BASE_BRANCH>...HEAD
 ```
 
-(`AHEAD=0` already routed you — chained to `/anchor:commit` on `NEEDS_COMMIT=1`, or stopped otherwise — so a run that reaches here is ahead of the default branch.)
+(`AHEAD=0` already routed you — chained to `/anchor:commit` on `NEEDS_COMMIT=1`, or stopped otherwise — so a run that reaches here is ahead of the base branch.)
 
 ### Act on `STATE`
 
@@ -246,7 +259,7 @@ Before drafting, scan for these common ambiguities and ask the user about each o
 - **Why** — what problem this solves and why it matters (the prompt below)
 - **Audience / threat model** — for security or visibility changes, *who* is the affected population? "Anyone who can read X" is too vague. Name the population concretely: anyone inside the network, anyone with read access to the source, the on-call team, etc.
 - **Scope decisions** — should this be split? Squashed? Feature-gated? Released alongside something else?
-- **Ordering dependency** — must this CR land *after* another one (a shared library before its consumer, a config that points at the consumer)? Don't infer this aggressively — take it when the user says so, or when they've had you open the CRs as an ordered chain this session. If so, capture the predecessor CR (its iid/number, and project when cross-repo); Step 3 records it in the description and Step 4 sets the forge dependency.
+- **Ordering dependency** — must this CR land *after* another one (a shared library before its consumer, a config that points at the consumer)? A stacked branch already answers this (`STACK_CR_IID`, see "A stacked branch"). Otherwise don't infer it aggressively — take it when the user says so, or when they've had you open the CRs as an ordered chain this session. If so, capture the predecessor CR (its iid/number, and project when cross-repo); Step 3 records it in the description and Step 4 sets the forge dependency.
 - **Surface decisions** — version bump, deprecation timeline, migration guidance for downstream callers
 - **Verification gaps** — anything you can't actually test from the working environment (UI, downstream consumers, prod-only behaviors). Surface these to the author so they can plan how/when to verify before merge. These are author homework — they do **not** become checklist items in the description.
 
@@ -366,11 +379,11 @@ The description gets pasted into a markdown renderer, so rendering bugs are user
 
   ```bash
   bash "${CLAUDE_PLUGIN_ROOT}/scripts/deep-links.sh" --check <DESC_DRAFT_PATH> \
-    --base <DEFAULT_BRANCH> [--repo <path>]
+    --base origin/<BASE_BRANCH> [--repo <path>]
   ```
 
-  It exits non-zero with one `UNRESOLVED <kind> <path> <token>` per problem, and each kind is an authoring fix: `ambiguous` (several changed lines match — the candidates are listed with their content, so copy a longer substring off the one you meant), `unchanged` (in the file but not on a changed line), `absent` (a typo), `unknown-file` (a path the range doesn't touch), `malformed` (an `anchor:` that isn't a link destination), `unbracketed` (a token with a parenthesis written without the angle brackets, which cut it at the `)`). Fix and re-run until it's clean — a placeholder that survives into Step 4's expansion stalls the write on a CR that already exists. It needs the clean tree Step 1's `STATE=match` already established: line content comes from the working tree and changed hunks from `<DEFAULT_BRANCH>...HEAD`, and it emits `DEEP_LINK_TREE=dirty` when those have diverged. Skip it on the `skip-deep-links` path, where the description carries no links at all.
-- **A description that predates this convention needs the backstop instead.** Re-running against a CR whose description came from elsewhere means hand-built anchors with hand-read line numbers, which `--check` doesn't see. Run `--verify <DESC_DRAFT_PATH> --forge <FORGE> --cr-url <CR_URL> --base <DEFAULT_BRANCH>` over those, and re-point each `SUSPECT`: `out-of-range`, `blank-line`, `unchanged-line`, `unknown-file`, `malformed` (a line part in a shape the forge won't resolve). A link that landed on the *wrong changed line* is the one case it can't see — which is what replacing it with a placeholder fixes.
+  It exits non-zero with one `UNRESOLVED <kind> <path> <token>` per problem, and each kind is an authoring fix: `ambiguous` (several changed lines match — the candidates are listed with their content, so copy a longer substring off the one you meant), `unchanged` (in the file but not on a changed line), `absent` (a typo), `unknown-file` (a path the range doesn't touch), `malformed` (an `anchor:` that isn't a link destination), `unbracketed` (a token with a parenthesis written without the angle brackets, which cut it at the `)`). Fix and re-run until it's clean — a placeholder that survives into Step 4's expansion stalls the write on a CR that already exists. It needs the clean tree Step 1's `STATE=match` already established: line content comes from the working tree and changed hunks from `origin/<BASE_BRANCH>...HEAD`, and it emits `DEEP_LINK_TREE=dirty` when those have diverged. Skip it on the `skip-deep-links` path, where the description carries no links at all.
+- **A description that predates this convention needs the backstop instead.** Re-running against a CR whose description came from elsewhere means hand-built anchors with hand-read line numbers, which `--check` doesn't see. Run `--verify <DESC_DRAFT_PATH> --forge <FORGE> --cr-url <CR_URL> --base origin/<BASE_BRANCH>` over those, and re-point each `SUSPECT`: `out-of-range`, `blank-line`, `unchanged-line`, `unknown-file`, `malformed` (a line part in a shape the forge won't resolve). A link that landed on the *wrong changed line* is the one case it can't see — which is what replacing it with a placeholder fixes.
 
 ### Open the review
 
@@ -431,17 +444,17 @@ Reached on an `approved` review, or on the ⚠️ write choice from the fallback
 **1. Open the CR, if Step 1 said one is pending.** On `CR_PENDING=1`, this is where the CR first exists, and it exists carrying the text the author just approved:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh" --open \
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh" --open --onto <BASE_BRANCH> \
   --title "<the Step 3 title>" --body-file <DESC_DRAFT_PATH>
 ```
 
-It emits `CR_URL`, `CR_IID`, `CR_DRAFT`, `CR_CREATED=1`, and `DELETE_BRANCH_ON_MERGE` — act on that last one per "Branch deletion on merge". A `CR_CREATE_ERROR=` line is an auth or forge failure: surface it and stop, with the approved draft still in hand. On `CR_PREEXISTING=1` there is nothing to open; carry that CR's URL forward.
+It emits `CR_URL`, `CR_IID`, `CR_DRAFT`, `CR_CREATED=1`, `BASE_BRANCH`, and `DELETE_BRANCH_ON_MERGE` — act on that last one per "Branch deletion on merge". A `CR_CREATE_ERROR=` line is an auth or forge failure: surface it and stop, with the approved draft still in hand. On `CR_PREEXISTING=1` there is nothing to open; carry that CR's URL forward.
 
 **2. Expand the deep links against the URL.** The placeholders can only become URLs once the CR has one:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/deep-links.sh" --expand <DESC_DRAFT_PATH> \
-  --forge <FORGE> --cr-url <CR_URL> --base <DEFAULT_BRANCH> [--repo <path>]
+  --forge <FORGE> --cr-url <CR_URL> --base origin/<BASE_BRANCH> [--repo <path>]
 ```
 
 It rewrites the draft in place and reports `EXPANDED=<n>`. All-or-nothing: an unresolved placeholder leaves the file untouched and exits non-zero, which means the `--check` in the output checklist was skipped or the tree moved since. Fix what it names and re-run — the CR is already open and carrying the approved prose, so nothing is lost. Skip this on `skip-deep-links`, where the draft carries no placeholders.

@@ -28,6 +28,7 @@
 #                              under <git-common-dir>/anchor/backups/; only
 #                              on a run that writes the CR (not --local, not
 #                              STATUS_SKIPPED)
+#   STATUS_BASE_BRANCH=<name>  --local only: the branch the rows run from
 #   STATUS_RECORDED=<n>        commits given another round; 0 when skipped
 #   STATUS_SKIPPED=<reason>    nothing was written, on someone else's CR:
 #                              no-section (its description has none) or draft
@@ -48,7 +49,8 @@
 #
 # --local records a branch that has no CR yet: the round goes to the local
 # record in the repo's git directory (scripts/lib/review-status.sh) rather than
-# to a description, and the rows run from where the branch leaves the default
+# to a description, and the rows run from where the branch leaves its base: the
+# branch of the open CR it is stacked on (lib/stack.sh), else the default
 # branch. /anchor:prepare-review carries those rounds into the CR it opens.
 #
 # Usage:
@@ -66,6 +68,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/tmpfile.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/review-status.sh"
 # shellcheck source=lib/backup.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/backup.sh"
+# shellcheck source=lib/stack.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/stack.sh"
 
 usage() {
   echo "usage: review-status.sh record (--cr <n> | --local) --base <sha> --head <sha> --result <approved|changes-requested> [--kind <agent-assisted|read-through>] [--note <text>]... [--repo <path>]" >&2
@@ -127,6 +131,11 @@ if [[ "$local" -eq 1 ]]; then
   default=$(anchor_default_branch) || default=main
   git rev-parse --verify --quiet "origin/$default^{commit}" >/dev/null \
     || { echo "STATUS_ERROR=origin/$default is not in this checkout; fetch it and re-run" >&2; exit 65; }
+  branch=$(git symbolic-ref --quiet --short HEAD || true)
+  base_branch=$(anchor_branch_base "$forge" "$branch" "$default" 2>&1) \
+    || { echo "STATUS_ERROR=$base_branch" >&2; exit 70; }
+  git rev-parse --verify --quiet "origin/$base_branch^{commit}" >/dev/null \
+    || { echo "STATUS_ERROR=origin/$base_branch is not in this checkout; fetch it and re-run" >&2; exit 65; }
   recorded=$(review_status_local_data) \
     || { echo "STATUS_ERROR=the local review record at $(review_status_local_path) isn't JSON; fix or delete it" >&2; exit 65; }
   data=$(review_status_add "$recorded" "$base" "$head" "$result" "$kind" "$self" "${notes[@]+"${notes[@]}"}")
@@ -134,7 +143,8 @@ if [[ "$local" -eq 1 ]]; then
   tip=$head
   git merge-base --is-ancestor "$head" HEAD && tip=HEAD
   rows=$(anchor_tmpfile cr-review-status-rows json)
-  review_status_rows "$data" "$(git merge-base "origin/$default" "$tip")" "$tip" > "$rows"
+  review_status_rows "$data" "$(git merge-base "origin/$base_branch" "$tip")" "$tip" > "$rows"
+  echo "STATUS_BASE_BRANCH=$base_branch"
   echo "STATUS_RECORDED=$(git rev-list --count --no-merges "$base..$head")"
   echo "STATUS_UNREVIEWED=$(jq '[.[] | select(.rounds == 0)] | length' "$rows")"
   echo "STATUS_ROWS_PATH=$rows"

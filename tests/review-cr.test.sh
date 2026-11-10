@@ -37,7 +37,9 @@ case "${1:-}" in
   pr)   case "${2:-}" in
           view) [[ -s "$CR_JSON" ]] || { echo "no pull requests found" >&2; exit 1; }
                 cat "$CR_JSON" ;;
-          list) if [[ -s "$CR_JSON" ]]; then echo '[{"number":7}]'; else echo '[]'; fi ;;
+          list) if [[ "$*" != *--head* ]]; then
+                  if [[ -s "${CR_LIST:-}" ]]; then cat "$CR_LIST"; else echo '[]'; fi
+                elif [[ -s "$CR_JSON" ]]; then echo '[{"number":7}]'; else echo '[]'; fi ;;
           *) echo "stub gh: unhandled pr $2" >&2; exit 1 ;;
         esac ;;
   api)  case "${2:-}" in
@@ -58,7 +60,9 @@ case "${1:-}" in
   mr)   case "${2:-}" in
           view) [[ -s "$CR_JSON" ]] || { echo "no open merge request" >&2; exit 1; }
                 cat "$CR_JSON" ;;
-          list) if [[ -s "$CR_JSON" ]]; then echo '[{"iid":7}]'; else echo '[]'; fi ;;
+          list) if [[ "$*" != *--source-branch* ]]; then
+                  if [[ -s "${CR_LIST:-}" ]]; then cat "$CR_LIST"; else echo '[]'; fi
+                elif [[ -s "$CR_JSON" ]]; then echo '[{"iid":7}]'; else echo '[]'; fi ;;
           *) echo "stub glab: unhandled mr $2" >&2; exit 1 ;;
         esac ;;
   api)  case "$*" in
@@ -371,6 +375,36 @@ for host in github.com gitlab.com; do
   [[ $rc -ne 0 && "$(key "$out" REVIEW_ERROR)" == *"default branch"* ]] || fail "$host: the default branch is nothing to review: $out"
 done
 ok "a branch with no CR reviews its own commits and skips those the local record covers"
+
+# A branch with no CR, stacked on another branch's open CR: the predecessor's
+# commits are that CR's to review, so the range starts at its branch.
+export CR_LIST="$work/cr-list.json"
+for host in github.com gitlab.com; do
+  read -r srepo _ _ <<<"$(make_repo "$host" "stacked-$host" pull 7)"
+  : > "$CR_JSON"
+  git -C "$srepo" checkout --quiet -b pred
+  pred=$(add_commit "$srepo" p)
+  git -C "$srepo" push --quiet -u origin pred
+  git -C "$srepo" checkout --quiet -b stacked
+  top=$(add_commit "$srepo" s)
+  if [[ "$host" == github.com ]]; then
+    printf '[{"headRefName":"pred","headRefOid":"%s","number":9,"url":"u","baseRefName":"main"}]\n' "$pred" > "$CR_LIST"
+  else
+    printf '[{"source_branch":"pred","sha":"%s","iid":9,"web_url":"u","target_branch":"main"}]\n' "$pred" > "$CR_LIST"
+  fi
+  out=$(bash "$review_cr_sh" --repo "$srepo")
+  [[ "$(key "$out" BASE_BRANCH)" == pred && "$(key "$out" CR_TITLE)" == "1 commit ahead of pred" ]] \
+    || fail "$host: a stacked branch is reviewed from its predecessor's branch: $out"
+  [[ "$(key "$out" CR_BASE_SHA)" == "$pred" && "$(key "$out" CR_HEAD_SHA)" == "$top" ]] \
+    || fail "$host: the range is the stacked branch's own commit: $out"
+  rec=$(bash "$review_status_sh" record --local --base "$pred" --head "$top" --result approved --repo "$srepo")
+  [[ "$(key "$rec" STATUS_BASE_BRANCH)" == pred && "$(key "$rec" STATUS_UNREVIEWED)" == 0 ]] \
+    || fail "$host: the local record counts from the predecessor's branch, so the one commit is all there is: $rec"
+  [[ "$(jq length "$(key "$rec" STATUS_ROWS_PATH)")" == 1 ]] \
+    || fail "$host: the rows hold only the stacked branch's commit: $(cat "$(key "$rec" STATUS_ROWS_PATH)")"
+done
+: > "$CR_LIST"
+ok "a branch with no CR stacked on an open CR is reviewed and recorded from that CR's branch"
 
 # Another branch's commits in the same record don't count toward this one.
 git -C "$repo" checkout --quiet -b other-work

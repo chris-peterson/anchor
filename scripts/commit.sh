@@ -58,7 +58,8 @@
 #
 # Push variant (chosen here, not in prose):
 #   --force-with-lease set        -> git push --force-with-lease   (amend of a pushed commit, or rewritten history)
-#   no upstream (@{u} unset)       -> git push -u origin <branch>   (first push of a new branch)
+#   no upstream (@{u} unset), or an upstream that isn't <remote>/<branch>
+#                                  -> git push -u origin <branch>   (first push of a new branch)
 #   otherwise                      -> git push
 #
 # Default-branch guard: refuses to commit/push onto the repo's default branch
@@ -239,12 +240,16 @@ if [[ "$no_push" -eq 1 ]]; then
 fi
 
 # --- Push ---------------------------------------------------------------------
-# Variant chosen here rather than in skill prose. @{u} is quoted so the safety
-# analyzer never sees it (it runs inside this script).
+# Variant chosen here rather than in skill prose. An upstream counts as the
+# branch's pushed copy only when it carries the branch's name: a branch created
+# from `origin/main` tracks `origin/main`, and git's default `push.default=simple`
+# refuses a plain push to it. `-u origin <branch>` publishes the branch and
+# repoints the upstream, so the next push takes the plain path.
 
+pushed_ref=$(anchor_pushed_ref || true)
 if [[ "$force_with_lease" -eq 1 ]]; then
   push_mode=force-with-lease
-elif git rev-parse --verify --quiet '@{u}' >/dev/null 2>&1; then
+elif [[ -n "$pushed_ref" ]]; then
   push_mode=plain
 else
   push_mode=set-upstream
@@ -255,7 +260,8 @@ echo "BRANCH=$branch"
 echo "PUSH_MODE=$push_mode"
 
 case "$push_mode" in
-  force-with-lease) git push --force-with-lease ;;
+  force-with-lease) if [[ -n "$pushed_ref" ]]; then git push --force-with-lease
+                    else git push --force-with-lease -u origin "$branch"; fi ;;
   plain)            git push ;;
   set-upstream)     git push -u origin "$branch" ;;
 esac

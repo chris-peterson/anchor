@@ -60,10 +60,11 @@ events:
     - key: cr.ready
       when: >-
         the draft flag came off, on the author's say-so. Emitted by the script
-        that clears it, which is the one path that does, so the two callers
-        announce identically: review's self-review handoff, where the author is
-        done and wants eyes on the change, and merge's draft gate, where they
-        choose to land one that never left draft. From that gate the same run
+        that clears it, which is the one path that does, so its callers
+        announce identically: the ready skill, where the author asks for it
+        outright; review's self-review handoff, where the author is done and
+        wants eyes on the change; and merge's draft gate, where they choose to
+        land one that never left draft. From that gate the same run
         goes on to announce cr.merged unless a later gate stops it; from the
         handoff it stands alone.
       emitted_by: scripts/mark-ready.sh
@@ -157,8 +158,9 @@ suite:
   what: "Keeps your issues, commits, change requests, reviews, and releases consistent: the same quality, structure, and formatting every time, not reinvented per change."
   cmds:
     - ["/anchor:commit", "Review the changeset, then commit with a why-first message and push"]
-    - ["/anchor:prepare-review", "Rebase on the default branch and open a draft change request"]
+    - ["/anchor:prepare-review", "Rebase on its base branch and open a draft change request"]
     - ["/anchor:review", "Weigh a CR against your qualities, make the clear fixes, and decide each finding in revdiff"]
+    - ["/anchor:ready", "Take a draft CR out of draft, request reviewers, and report its pipeline"]
     - ["/anchor:resolve-feedback", "Work a CR's review threads to done, one by one"]
     - ["/anchor:merge", "Check the merge gates, wait on the pipeline, then land the CR and clean up"]
     - ["/anchor:release", "Work out what's shipping, recommend a version, draft the notes, publish"]
@@ -174,7 +176,8 @@ suite:
       issue: File a new forge issue (or update an existing one) that leads with WHY the work is needed, or review edits to several issues as one batch.
       merge: Merge an approved change request once its gates are green — waiting on the pipeline if needed — then clean up the branch.
       pipeline: Report a commit's forge pipeline state, or watch until it settles.
-      prepare-review: Open the PR/MR on an already-pushed branch, rebase on the default branch if behind, and draft a description that tells reviewers WHY the change exists.
+      prepare-review: Open the PR/MR on an already-pushed branch, rebase on its base branch if behind, and draft a description that tells reviewers WHY the change exists.
+      ready: Mark a draft change request ready for review.
       release: Cut a release for what has landed — recommend a semver bump, draft the notes, and drive the repo's own publish path.
       resolve-feedback: Fetch an open CR's review feedback and drive each thread to resolution — fix, reply, resolve.
       review: Review an open change request, or a branch that has no CR yet — open revdiff on the commits you haven't reviewed so you read them and leave notes while agents examine them against the qualities you've set, draft a fix for each note and finding, then show those drafts alone so you keep, change, or drop each one, then the whole change with the kept fixes in it.
