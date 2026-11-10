@@ -159,6 +159,7 @@ suite:
   cmds:
     - ["/anchor:commit", "Review the changeset, then commit with a why-first message and push"]
     - ["/anchor:prepare-review", "Rebase on its base branch and open a draft change request"]
+    - ["/anchor:rebase", "Catch a branch, or its whole stack, up to the branch it merges into, resolve the conflicts, and force-push"]
     - ["/anchor:review", "Weigh a CR against your qualities, make the clear fixes, and decide each finding in revdiff"]
     - ["/anchor:ready", "Take a draft CR out of draft, request reviewers, and report its pipeline"]
     - ["/anchor:resolve-feedback", "Work a CR's review threads to done, one by one"]
@@ -178,6 +179,7 @@ suite:
       pipeline: Report a commit's forge pipeline state, or watch until it settles.
       prepare-review: Open the PR/MR on an already-pushed branch, rebase on its base branch if behind, and draft a description that tells reviewers WHY the change exists.
       ready: Mark a draft change request ready for review.
+      rebase: Rebase the current branch on its base branch (the CR's target, or the branch it's stacked on), or a whole stack bottom-up, resolve conflicts, and force-push what was already pushed.
       release: Cut a release for what has landed — recommend a semver bump, draft the notes, and drive the repo's own publish path.
       resolve-feedback: Fetch an open CR's review feedback and drive each thread to resolution — fix, reply, resolve.
       review: Review an open change request, or a branch that has no CR yet — open revdiff on the commits you haven't reviewed so you read them and leave notes while agents examine them against the qualities you've set, draft a fix for each note and finding, then show those drafts alone so you keep, change, or drop each one, then the whole change with the kept fixes in it.

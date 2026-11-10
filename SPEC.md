@@ -322,9 +322,9 @@ check.
   whatever CR used it last; a merged or closed CR adopted as the target skips the
   draft-open, and the description then has no open CR to land on. A CR named
   explicitly resolves whatever its state, because the author asked for that one.
-- **[PREPARE-04]** While the branch is behind the default branch, the system shall
-  offer to rebase and, since the branch is already pushed, follow the rebase with
-  `git push --force-with-lease` per the draft/ready gate.
+- **[PREPARE-04]** While the branch is behind its base branch, the system shall
+  offer to rebase, and on acceptance rebase through `/anchor:rebase` onto the
+  base this run resolved (REBASE-01..06), then gather the changeset again.
 - **[PREPARE-05]** While a CR is a draft, the system shall force-push with lease
   freely; while it is marked ready, the system shall ask before force-pushing.
 - **[PREPARE-06]** If local state does not match the CR head, then the system shall
@@ -752,6 +752,50 @@ handoff `/anchor:review` offers when a self-review ends.
   pipeline and name the next step (`/anchor:merge`, or `/anchor:resolve-feedback`
   when threads come back) without running it.
 
+### REBASE — Rebase
+
+Catching a branch, or the stack it sits on, up to the branch it merges into (the
+`rebase` skill), on its own or as the step `/anchor:prepare-review` offers when
+the branch is behind.
+
+- **[REBASE-01]** When `/anchor:rebase` runs, the system shall rebase onto the
+  same base `prepare-review` measures the branch against (PREPARE-24): the open
+  CR's target, else the branch the user named, else the open CR the branch is
+  stacked on, else the default branch. Before rebasing, the system shall
+  fast-forward the local default branch to origin's where it can, and leave it
+  alone where it holds commits origin lacks.
+- **[REBASE-02]** Where the branch is stacked, the system shall offer to cascade:
+  rebase the lowest branch of the stack onto the default branch, then each
+  branch above onto the rebased one below, replaying only that branch's own
+  commits. A branch below shall first take origin's newer commits, and one
+  holding commits origin lacks shall stop the cascade before anything moves.
+- **[REBASE-03]** If the checkout has uncommitted changes, a rebase started
+  outside the plugin, or a pushed branch holding commits the checkout lacks, or
+  the open-CR listing that resolves the base failed, then the system shall say
+  so and stop before rewriting anything. A branch already on its base shall be
+  reported as up to date, a success.
+- **[REBASE-04]** On a conflict, the system shall stop, resolve it to preserve
+  the intent of both sides, and resume, refusing a file that still holds
+  conflict markers. Where the intent is ambiguous it shall show the conflict
+  rather than guess, and an abort shall put every branch the run moved back
+  where it was. A hook that fails mid-rebase shall be surfaced, never bypassed
+  with `--no-verify`.
+- **[REBASE-05]** Where a branch's pushed copy matched it before the rebase, the
+  system shall force-push it leased on that commit, so a push made since is
+  refused rather than overwritten. With no CR or a draft one the invocation is
+  the sign-off; where the CR is marked ready, the system shall ask before
+  anything moves. A branch that was never pushed, or held commits not pushed
+  yet, shall be rebased and not pushed, naming `/anchor:commit` as the step that
+  pushes.
+- **[REBASE-06]** The rebase, the conflict resume and abort, and the push shall
+  run in one script, so the run asks for no permission beyond that script's.
+- **[REBASE-07]** After a force-push, the system shall report the pipeline the
+  new head starts.
+- **[REBASE-08]** Where a branch to force-push carries a CR someone other than
+  the user opened, the system shall ask before anything moves, and after the
+  push shall give the user a message for that CR's author, ready to copy, saying
+  the branch was rewritten and how to pick it up.
+
 ### MERGE — Merge
 
 Landing an approved CR into the default branch (the `merge` skill) — the terminal
@@ -769,7 +813,7 @@ step after `prepare-review` opens the CR and `resolve-feedback` clears its threa
 - **[MERGE-04]** If the CR is a draft, then the system shall not merge it silently and
   shall ask whether to mark it ready and proceed.
 - **[MERGE-05]** If the CR conflicts with or is behind its target branch, then the
-  system shall stop and route to a rebase via `/anchor:prepare-review` rather than
+  system shall stop and route to a rebase via `/anchor:rebase` rather than
   attempt the merge.
 - **[MERGE-06]** While the pipeline is still running, the system shall watch it to a
   terminal state rather than return control for the user to re-ask.

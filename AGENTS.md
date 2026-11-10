@@ -81,6 +81,15 @@ what picks the level.
   deterministic, and it belongs in `scripts/`. What the change is *for*, and
   whether the drafted prose says it, is the model's half and belongs in the
   `SKILL.md`.
+- **Scripts trade complexity for fewer prompts and less variance.** One allow
+  rule covers a script, where each inline command, and each guarded one like a
+  force-push, prompts on its own; and a script behaves the same every session,
+  where an improvised step doesn't. The price is that every state the script
+  handles is a case its suite covers, on both forges. So a guarded command, a
+  step several skills repeat, or one with a single right answer goes in a
+  script: `scripts/rebase.sh` runs the rebase, the
+  conflict resume, and the leased force-push, and the skill only resolves the
+  conflicts.
 - **A helper's `KEY=value` output is input to the next decision, not output to
   the user.** Skills execute quietly: run the step, read the result, move on. The
   discipline is in `guides/execute-quietly.md` and the skills link to it rather

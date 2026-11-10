@@ -146,7 +146,7 @@ and `CR_TITLE`. Then act on `GATE_BLOCKING`:
   `CR_READY=ok` or `ALREADY_READY=1` both satisfy the gate; run `merge-gates.sh`
   again.
 - **`mergeable`** — `GATE_MERGEABLE=conflicts` or `behind`: stop and route to
-  `/anchor:prepare-review`, which owns the rebase on the default branch.
+  `/anchor:rebase`, which rebases the branch on the CR's target.
   `unknown`: the forge hadn't computed it after the helper's retries; say so and
   stop. `blocked`: the forge's own merge check refuses for a reason
   `GATE_MERGEABLE_DETAIL` names; report it and stop.

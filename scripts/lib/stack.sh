@@ -11,19 +11,19 @@
 # inside the checkout.
 
 # The open CRs of origin's project, one per line as
-# "<head branch>\t<head sha>\t<number>\t<web url>\t<target branch>". Prints a message on stderr
-# and returns 1 when the forge can't be asked.
+# "<head branch>\t<head sha>\t<number>\t<web url>\t<target branch>\t<draft: true|false>\t<author>".
+# Prints a message on stderr and returns 1 when the forge can't be asked.
 anchor_open_crs() {
   local forge=$1 out
   case "$forge" in
     github)
-      out=$(gh pr list --state open --limit 100 --json headRefName,headRefOid,number,url,baseRefName 2>&1) \
+      out=$(gh pr list --state open --limit 100 --json headRefName,headRefOid,number,url,baseRefName,isDraft,author 2>&1) \
         || { printf 'gh pr list failed: %s\n' "$(head -1 <<<"$out")" >&2; return 1; }
-      jq -r '.[] | [.headRefName, .headRefOid, (.number | tostring), .url, .baseRefName] | @tsv' <<<"$out" ;;
+      jq -r '.[] | [.headRefName, .headRefOid, (.number | tostring), .url, .baseRefName, (.isDraft // false | tostring), (.author.login // "")] | @tsv' <<<"$out" ;;
     gitlab)
       out=$(glab mr list --output json --per-page 100 2>&1) \
         || { printf 'glab mr list failed: %s\n' "$(head -1 <<<"$out")" >&2; return 1; }
-      jq -r '.[] | [.source_branch, .sha, (.iid | tostring), .web_url, .target_branch] | @tsv' <<<"$out" ;;
+      jq -r '.[] | [.source_branch, .sha, (.iid | tostring), .web_url, .target_branch, (.draft // false | tostring), (.author.username // "")] | @tsv' <<<"$out" ;;
     *) return 0 ;;
   esac
 }
@@ -42,7 +42,7 @@ anchor_open_crs() {
 anchor_stack_pick() {
   local branch=$1 default=$2 head sha num url target ref mb n best="" best_n=""
   git rev-parse --verify --quiet "origin/${default}^{commit}" >/dev/null || return 0
-  while IFS=$'\t' read -r head sha num url target; do
+  while IFS=$'\t' read -r head sha num url target _; do
     [[ -n "$head" && "$head" != "$branch" && "$head" != "$default" && "$target" != "$branch" ]] || continue
     if git cat-file -e "${sha}^{commit}" 2>/dev/null; then
       ref=$sha

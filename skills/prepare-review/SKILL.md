@@ -25,7 +25,7 @@ flowchart TD
         Pushed -->|No| Commit["/anchor:commit commits and pushes, then re-gather"]
         Pushed -->|Yes| Behind
         Commit --> Behind{Behind main?}
-        Behind -->|Yes| DoRebase["Rebase + force-with-lease"]
+        Behind -->|Yes| DoRebase["/anchor:rebase, then re-gather"]
         Behind -->|No| StateCheck
         DoRebase --> StateCheck["Sanity-check vs CR head"]
     end
@@ -92,7 +92,7 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 | `BEHIND=<n>` | `>0` → run the rebase dialog below |
 | `CR_URL` / `CR_IID` | an already-open CR — the write target. Empty on `CR_PENDING` and on `skip-deep-links` |
 | `CR_PENDING=1` | no CR is open and one can be. Draft, review, *then* open it in Step 4 — nothing is published under the author's name until they have approved the text |
-| `CR_DRAFT` | gates the post-rebase force-push (see below) |
+| `CR_DRAFT` | the CR's draft flag |
 | `PRIOR_CR_IID` / `PRIOR_CR_STATE` | non-empty → the branch name already carries a CR that isn't open, which this run passed over; name it once (see "A reused branch name") |
 | `STATE` | `match` → proceed; anything else → surface and stop (see "Act on `STATE`") |
 | `CURRENT_DESC_PATH` | the review's left-hand side in Step 4 — an empty file until a CR holds a description |
@@ -193,30 +193,12 @@ Prefer the `glab api` form over `glab mr update --remove-source-branch`, whose h
 
 ### Rebase on the base branch when `BEHIND > 0`
 
-`BEHIND=0` → skip this section. Otherwise the branch needs `origin/<BASE_BRANCH>` before it can merge — every conflict with intervening commits has to be resolved before the CR can land, and doing it now (while the change is fresh) is cheaper than after review when context has gone cold. Secondary: deep links anchor to lines in the *current* diff, so a branch behind its base points at content that won't compose cleanly at merge time. Ask:
+`BEHIND=0` → skip this section. Otherwise the branch needs `origin/<BASE_BRANCH>` before it can merge, and doing it now (while the change is fresh) is cheaper than after review. Secondary: deep links anchor to lines in the *current* diff, so a branch behind its base points at content that won't compose cleanly at merge time. Ask:
 
 > Branch is `<BEHIND>` commits behind `origin/<BASE_BRANCH>`. Rebase now? `[yes / skip]`
 
-- `yes` — run `git rebase origin/<BASE_BRANCH>`. On conflict, resolve in place: read both sides of each conflicted region, pick the resolution that preserves the intent of *both* changes (not just one side), `git add` the resolved files, then `git rebase --continue`. Loop until the rebase completes. Surface to the user when intent is genuinely ambiguous — two competing changes to the same logic, semantic conflicts the textual markers don't show, a rename colliding with an edit. Don't guess in those cases; show the conflict and ask. If a hook fails mid-rebase, surface the failure rather than retrying with `--no-verify`.
-- `skip` — proceed with the current branch state. Note that deep links may render against lines that have shifted by merge time.
-
-A rebase rewrites history, so the push that follows is a force-push. Gate it on `CR_DRAFT` — the author's declared review state, which is reliable in a way that inferred engagement signals (note counts, reviewer lists) are not:
-
-**`CR_PENDING=1`** (no CR yet) — nothing is out for review, so nothing can be disturbed. Rebase and force-push with lease.
-
-**`CR_DRAFT=true`** — mutable history is the norm (`anchor` opens CRs as drafts for exactly this reason). Rebase and force-push with lease without further ceremony.
-
-**`CR_DRAFT=false`** (ready) — a reviewer may already be looking, and there's no reliable signal for whether they have. Force-pushing over commits they've seen destroys their "changes since you last looked" diff and marks inline threads outdated. Engagement signals are advisory context for the prompt (reviewers / discussion count via `glab api projects/:fullpath/merge_requests/<CR_IID> | jq '{reviewers, user_notes_count}'` or `gh pr view --json reviews,reviewRequests,comments`), but the decision is the user's — ask before proceeding:
-
-> This CR is marked ready. Rebasing now force-pushes over commits a reviewer may have seen, which resets their incremental diff. Rebase anyway? `[yes / skip]`
-
-After a successful rebase (and the review-activity check above), force-push with lease so the open CR updates to the rewritten history:
-
-```bash
-git push --force-with-lease
-```
-
-`--force-with-lease` rejects the push if anyone else has pushed to the branch since you last fetched — that's the safety against clobbering a coworker's commit. If it rejects, fetch, inspect, and ask the user before escalating. If the rebase itself aborts (uncommitted changes blocking it, a rebase already in progress, missing remote), surface the error and stop.
+- `yes`: chain into `/anchor:rebase`, passing `--onto <BASE_BRANCH>` (and `--repo <path>` when operating against a non-cwd repo) so it rebases onto the base this run resolved rather than asking again. It resolves conflicts and force-pushes the branch when origin held it as it stood. Then re-gather, since the rebase moved `LOCAL_HEAD_SHA` and the CR head. If it stops short of a rebased branch, say so and stop.
+- `skip`: proceed with the current branch state. Note that deep links may render against lines that have shifted by merge time.
 
 ### Read the diff and commit history
 
