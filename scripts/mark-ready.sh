@@ -118,10 +118,14 @@ else
   read_fields='[.web_url, (.draft // false | tostring), (.iid // "" | tostring), .title // "",
                 (.state // "" | if . == "opened" then "open" else . end), .sha // "", .source_branch // ""]'
 fi
+# The trailing line keeps an empty last field, which $(…) would otherwise strip.
+if ! fields=$(jq -r "$read_fields | map(. // \"\") | .[]" <<<"$view" 2>&1 && echo end); then
+  echo "READY_ERROR=could not parse CR ${cr:-for this branch}: $fields" >&2
+  exit 70
+fi
 cr_url="" draft="" number="" title="" state="" head="" source_branch=""
 { IFS= read -r cr_url; IFS= read -r draft; IFS= read -r number; IFS= read -r title
-  IFS= read -r state; IFS= read -r head; IFS= read -r source_branch; } \
-  < <(jq -r "$read_fields | map(. // \"\") | .[]" <<<"$view")
+  IFS= read -r state; IFS= read -r head; IFS= read -r source_branch; } <<<"$fields"
 [[ -n "$cr" ]] || cr="$number"
 
 cr_ref=""
