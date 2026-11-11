@@ -455,9 +455,9 @@ check.
   based on the default branch.
 - **[PREPARE-26]** If `--onto` names a branch `origin` doesn't have, or one that
   differs from the open CR's target, then the system shall refuse and name it,
-  with nothing drafted or opened. Retargeting an open CR is the forge's to do,
-  and a description drafted against one base for a CR measured against another
-  points its links at the wrong lines.
+  with nothing drafted or opened, and shall name `/anchor:stack on` (STACK-04)
+  as the way to move the CR. A description drafted against one base for a CR
+  measured against another points its links at the wrong lines.
 
 ### REVIEW — Review a change request
 

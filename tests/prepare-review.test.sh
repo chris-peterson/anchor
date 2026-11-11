@@ -921,9 +921,9 @@ ok "an open MR's target branch is the base"
 if bash "$prepare_review_sh" --repo "$repo" --onto main >/dev/null 2>"$work/err"; then
   fail "--onto that disagrees with the open MR's target should fail"
 fi
-grep -q "already targets 'feat', not 'main'" "$work/err" \
-  || fail "expected the mismatch named: $(cat "$work/err")"
-ok "--onto that disagrees with the open MR's target fails"
+grep -q "already targets 'feat', not 'main'; move it with /anchor:stack on main" "$work/err" \
+  || fail "expected the mismatch named, with the way to move it: $(cat "$work/err")"
+ok "--onto that disagrees with the open MR's target fails, naming /anchor:stack on"
 
 : > "$CR_JSON"
 out=$(bash "$prepare_review_sh" --repo "$repo" --onto feat)

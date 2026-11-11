@@ -512,7 +512,7 @@ base_source=default
 stack_cr_iid=""; stack_cr_url=""; stack_lookup_error=""
 if [[ "$cr_resolved" -eq 1 && -n "$cr_target" ]]; then
   if [[ -n "$onto" && "$onto" != "$cr_target" ]]; then
-    echo "PREPARE_ERROR=$cr_url already targets '$cr_target', not '$onto'; retarget it on the forge, or drop --onto" >&2
+    echo "PREPARE_ERROR=$cr_url already targets '$cr_target', not '$onto'; move it with /anchor:stack on $onto, or drop --onto" >&2
     exit 1
   fi
   base_branch="$cr_target"
