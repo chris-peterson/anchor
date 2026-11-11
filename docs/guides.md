@@ -24,6 +24,7 @@ notes under your name. These guides are what makes them read the way they do.
 | [CR formatting](/guides/cr-formatting) | Which visualization fits which data shape, plus the mermaid, screenshot, and skim-readability technique to render it | `prepare-review` |
 | [Markdown gotchas](/guides/markdown-gotchas) | The characters and constructs that render wrong once a forge has its way with them, and what neutralizes each | `prepare-review`, `issue`, `release` |
 | [Description vs. docs](/guides/description-vs-docs) | Whether explanatory content belongs to this review or to the repo's docs, and the bar for promoting it | `prepare-review`, `resolve-feedback` |
+| [Sanitizing a draft](/guides/sanitizing) | What a draft can't carry to where it publishes (foreign hosts, credentials, home paths, unreachable tracker links), what stands in each one's place, and what the gate shows | `commit`, `prepare-review`, `issue`, `release`, `resolve-feedback`, `review` |
 
 ## Review
 

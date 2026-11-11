@@ -47,6 +47,8 @@ The four verbosity dials are listed in lifecycle order, and they descend:
 | [`anchor.cr.rules`](#key-crrules) | none | The default CR-description rules apply, with nothing layered on. |
 | [`anchor.gitlab.rules`](#key-mr-pr-rules) / [`anchor.github.rules`](#key-mr-pr-rules) | none | No forge split — GitLab and GitHub get the same rules until you set one. |
 | [`anchor.cr.templateRepo`](#key-crtemplaterepo) | none | Template resolution stops at what the repo and the forge supply. |
+| [`anchor.deny`](#key-deny-allow) / [`anchor.<forge>.deny`](#key-deny-allow) | none | A draft is checked for foreign hosts, credentials, home paths, and unreachable tracker links, and nothing more. |
+| [`anchor.allow`](#key-deny-allow) / [`anchor.<forge>.allow`](#key-deny-allow) | none | Every one of those findings reaches you to resolve. |
 
 Absent keys keep these; the skills never invent a value for a key you haven't
 set.
@@ -325,6 +327,45 @@ template the team already ships.
 
 Give it as `group/project` on GitLab or `owner/repo` on GitHub; the template is
 looked for in that repo's usual locations.
+
+### `anchor.deny` / `anchor.allow` :id=key-deny-allow
+
+```bash
+git config --global --add anchor.deny <codename>           # never published anywhere
+git config --global --add anchor.github.deny <team-name>   # kept off GitHub only
+git config --global --add anchor.allow <public-host>       # a public host anchor doesn't know
+```
+
+Before any draft reaches its approval gate, `anchor` checks it against where it
+publishes and stops on anything that destination's readers shouldn't see: a
+hostname that is neither the destination's own nor a well-known public one, a
+token or `user:pass@` URL or bearer string, an absolute path through a home
+directory, and a link to a tracker on another host. On a commit the staged
+lines are checked too. Each finding is replaced with a placeholder of the same
+shape (`<internal-gitlab-host>`, `<path-to-repo>`), or you're asked what to say,
+and the gate lists every substitution. Nothing publishes while a finding is
+unresolved.
+
+These keys tune what counts. Both are multivalued, so add each term with
+`--add`, and both match a term as a literal, ignoring case:
+
+- **`anchor.deny`**: a term that is a finding wherever it appears, at any
+  destination: a codename, a customer, an internal service name.
+- **`anchor.allow`**: a term that silences a built-in finding whose text
+  contains it: a public host the check doesn't recognize, a path that's meant to
+  be there. It never silences a `deny` term.
+
+With a forge qualifier (`anchor.github.deny`, `anchor.gitlab.allow`) a term
+applies only to what publishes to that forge. The forge is the destination's,
+not `origin`'s: an issue filed on GitHub from a GitLab checkout reads
+`anchor.github.*`. A self-hosted GitLab's own host, and its sibling hosts under
+the same domain, are never findings on that GitLab, since its readers can reach
+them.
+
+An allow term is the answer to a finding you wave through every time: a check
+that flags what a description is supposed to carry teaches you to approve past
+it. How a skill resolves each finding is in
+[Sanitizing a draft](sanitizing.md).
 
 ### `anchor.watchPipelineAfterPush` :id=key-watchpipelineafterpush
 

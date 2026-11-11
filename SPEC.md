@@ -2150,8 +2150,11 @@ requirements govern what the system removes before the CONFIRM gate sees it.
   place in the skill: what is present is a fact, and what to say instead is
   judgment.
 - **[SANITIZE-04]** The system shall find, with nothing configured: a hostname
-  that is neither the destination's own nor a well-known public one; a credential
-  shape — a token, a `user:pass@host` URL, a bearer string; an absolute local
+  that is neither the destination's own nor a well-known public one, where the
+  destination's own covers its subdomains and, on a host three labels deep, its
+  parent domain's, since a self-hosted forge's readers reach its sibling
+  services; a credential shape — a token, a `user:pass@host` URL, a bearer
+  string; an absolute local
   path carrying a user account name; and a link to a tracker the destination's
   readers cannot reach.
 - **[SANITIZE-05]** The system shall read `anchor.deny` as terms that shall not

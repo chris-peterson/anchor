@@ -234,6 +234,16 @@ how hard it was or how little it touched), and the forge's markdown quirks in
 forge markdown). Write the notes to `RELEASE_NOTES_PATH` from the recon block —
 every consumer below takes them by file, never as an inline escaped string.
 
+Then sanitize them against the repo they publish to (SANITIZE-01), before
+Step 5 puts them in front of anyone. Resolve each finding as
+`${CLAUDE_PLUGIN_ROOT}/guides/sanitizing.md` describes, and list the
+substitutions wherever Step 5's model presents the notes. An unresolved finding
+publishes nothing.
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/sanitize-check.sh" --file <RELEASE_NOTES_PATH> [--repo <checkout>]
+```
+
 ## Step 5: Publish along the model's path
 
 Read the matching section of `${CLAUDE_PLUGIN_ROOT}/guides/release-models.md`

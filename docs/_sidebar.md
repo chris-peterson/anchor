@@ -28,6 +28,7 @@
   - [CR formatting](/guides/cr-formatting)
   - [Markdown gotchas](/guides/markdown-gotchas)
   - [Description vs. docs](/guides/description-vs-docs)
+  - [Sanitizing a draft](/guides/sanitizing)
   - [Running a review](/guides/running-a-review)
   - [Notes on your own changes](/guides/review-notes)
   - [When the review tool didn't grade it](/guides/review-fallback)

@@ -626,6 +626,16 @@ contract's comment shape:
 }
 ```
 
+Sanitize it first (SANITIZE-01): scan the findings file against the CR's repo,
+and resolve each finding as `${CLAUDE_PLUGIN_ROOT}/guides/sanitizing.md`
+describes. A span a suggestion copies from lines the CR already carries is
+already at the destination, so it stays without asking. List the substitutions
+under the preview; an unresolved finding posts nothing.
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/sanitize-check.sh" --file <FINDINGS_PATH> --dest-host <HOST>
+```
+
 Render it, and put the output in your reply:
 
 ```bash

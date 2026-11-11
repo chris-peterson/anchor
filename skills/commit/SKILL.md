@@ -227,6 +227,14 @@ Record the choice (new commit vs squash) and proceed to Step 5; the review runs 
 
 Before committing, open the pending changeset — the exact changes Step 6 will commit, against `HEAD` — in a visual review, **with the drafted message shown alongside it**. Launch the **dispatcher** in `--local` mode with `--message-file` (the message file from Step 3). It stages the paths you name so a new file is in the diff at all, diffs those paths (and the old name of any rename among them) against `HEAD`, and nothing else in the tree (the index instead, when you name a `--staged-path`, since the tree still holds the hunks the commit leaves out), seeds the drafted message (subject as the headline, body as prose) plus a repo/branch/summary header, runs the mode the subject calls for — a git range names a base to compare against, so that is `diff`, which opens in revdiff (`anchor.diff.tool` is ignored in 2.0; see the configuring guide's Defaults table), and — once it closes — prints the normalized result on its own stdout. So you review the message and the diff *together*, with no separate chat gate.
 
+**Sanitize before the probe** (SANITIZE-01/02). Scan the message file and the staged lines of your paths against `origin`, and resolve each finding as `${CLAUDE_PLUGIN_ROOT}/guides/sanitizing.md` describes; the substitutions go under the manifest. Name your `--staged-path` files as `--path` here, since the scan reads the index. An unresolved finding commits nothing.
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/sanitize-check.sh" --repo <REPO_ROOT> --file <commit-msg-path> --staged --path <p> [--path <p>...]
+```
+
+Push-existing has no drafted message and nothing staged, so it has nothing to scan.
+
 Run it as the review loop in `${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md` describes — probe, background launch, manifest, chat feedback while it's open, reading the verdict. What's particular to a commit:
 
 **Notes on your changes** (COMMIT-23). Before the launch, write a note for each hunk a reader would stop and ask about, by the bar in `${CLAUDE_PLUGIN_ROOT}/guides/review-notes.md`: one per hunk at most, none on a mechanical change, and none at all for a changeset with nothing to ask about. When the caller handed you notes (`/anchor:review` hands each kept item's reason), seed those and add your own only for hunks they leave unexplained. Write them to a unique temp file as `{"notes": [{"file": "<path>", "line": <n>, "note": "<text>"}]}` (a line numbered in the working tree; no `line` for a note on the whole file) and pass it to the launch as `--notes`. With no notes, leave `--notes` off.

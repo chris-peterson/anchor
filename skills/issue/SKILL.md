@@ -192,6 +192,12 @@ Both listings are pure-remote, so a resolved target needs no checkout — retarg
 
 Write the drafted body to a temp file (`$(mktemp -u /tmp/issue-draft.XXXXXX).md`) — the literal `/tmp` is what a caller's `Edit(//tmp/**)` grant reaches (`${CLAUDE_PLUGIN_ROOT}/guides/temp-paths.md`).
 
+**Sanitize it before presenting it** (SANITIZE-01). Write the title to a temp file beside the body and scan both against the project the issue lands in (`TARGET_HOST` where a target resolved, else the cwd's `origin`). Resolve each finding as `${CLAUDE_PLUGIN_ROOT}/guides/sanitizing.md` describes, and list the substitutions under the presentation below. An unresolved finding files nothing.
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/sanitize-check.sh" --file <draft-path> --file <title-file> [--dest-host <TARGET_HOST>]
+```
+
 **Present the change — in your own message.** Running a command does *not* show the user anything: a Bash tool's output goes to you, and the terminal collapses it to a `+80 lines` stub they'd have to expand. Asking them to approve off the back of that is asking them to approve blind. So whatever you present, it goes in the reply as text.
 
 When updating an existing issue, diff the draft against the baseline captured in Step 1 and **paste that diff** into a fenced `diff` block in your message:

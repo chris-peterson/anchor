@@ -30,6 +30,12 @@ proportionally more.
   matches what the code does. Where the repo keeps a changelog, whether this
   change is recorded there the way its recent entries record theirs. A repo
   without one doesn't need one.
+- **Sanitization**: Something the CR's readers shouldn't see, in its commit
+  messages, its description, or its added lines: a hostname that isn't the
+  forge's own or a public one, a token or password, a path through someone's
+  home directory, a link to a tracker those readers can't open. The commit
+  messages have already published by the time a review runs, so a finding there
+  is one to rewrite before merge.
 
 ## Output
 

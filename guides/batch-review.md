@@ -19,7 +19,10 @@ publishes, is in `templates/batch-items.md`.
 ## Lay out the batch
 
 Write each item's current text and proposed text to temp files
-(`$(mktemp -u /tmp/batch-item.XXXXXX).md`), then an items file in the shape the
+(`$(mktemp -u /tmp/batch-item.XXXXXX).md`), and sanitize the proposed ones
+against the repo each lands in, as `sanitizing.md` describes: items in one repo
+share a scan, and items across repos take one scan per repo's host. List the
+substitutions in the item's note. Then write an items file in the shape the
 script documents at its top, and start the batch:
 
 ```bash

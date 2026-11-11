@@ -365,6 +365,11 @@ The description gets pasted into a markdown renderer, so rendering bugs are user
   ```
 
   It exits non-zero with one `UNRESOLVED <kind> <path> <token>` per problem, and each kind is an authoring fix: `ambiguous` (several changed lines match — the candidates are listed with their content, so copy a longer substring off the one you meant), `unchanged` (in the file but not on a changed line), `absent` (a typo), `unknown-file` (a path the range doesn't touch), `malformed` (an `anchor:` that isn't a link destination), `unbracketed` (a token with a parenthesis written without the angle brackets, which cut it at the `)`). Fix and re-run until it's clean — a placeholder that survives into Step 4's expansion stalls the write on a CR that already exists. It needs the clean tree Step 1's `STATE=match` already established: line content comes from the working tree and changed hunks from `origin/<BASE_BRANCH>...HEAD`, and it emits `DEEP_LINK_TREE=dirty` when those have diverged. Skip it on the `skip-deep-links` path, where the description carries no links at all.
+- **Nothing reaches the CR that its readers shouldn't see** (SANITIZE-01). Write the title to a temp file beside the draft and scan both against the CR's repo. Resolve each finding as `${CLAUDE_PLUGIN_ROOT}/guides/sanitizing.md` describes, and list the substitutions in the manifest. An unresolved finding writes nothing to the CR.
+
+  ```bash
+  bash "${CLAUDE_PLUGIN_ROOT}/scripts/sanitize-check.sh" --file <DESC_DRAFT_PATH> --file <title-file> [--repo <path>]
+  ```
 - **A description that predates this convention needs the backstop instead.** Re-running against a CR whose description came from elsewhere means hand-built anchors with hand-read line numbers, which `--check` doesn't see. Run `--verify <DESC_DRAFT_PATH> --forge <FORGE> --cr-url <CR_URL> --base origin/<BASE_BRANCH>` over those, and re-point each `SUSPECT`: `out-of-range`, `blank-line`, `unchanged-line`, `unknown-file`, `malformed` (a line part in a shape the forge won't resolve). A link that landed on the *wrong changed line* is the one case it can't see — which is what replacing it with a placeholder fixes.
 
 ### Open the review

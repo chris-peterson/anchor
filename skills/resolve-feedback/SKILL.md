@@ -253,6 +253,15 @@ is right. Reply content:
   docs should say, prefer fixing that and replying with the pointer.
 - For defers: where the ask landed (issue/CR link).
 
+Sanitize every drafted reply against the CR's repo before either gate below
+(SANITIZE-01): write each to a temp file and pass them all in one scan. Resolve
+each finding as `${CLAUDE_PLUGIN_ROOT}/guides/sanitizing.md` describes, and list
+the substitutions with the replies. An unresolved finding posts no reply.
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/sanitize-check.sh" --file <reply> [--file <reply>...] [--repo <checkout>]
+```
+
 **Two or more replies are reviewed as one batch in revdiff**, per
 `${CLAUDE_PLUGIN_ROOT}/guides/batch-review.md`, each a thread reply item from
 `${CLAUDE_PLUGIN_ROOT}/templates/batch-items.md`. Publish each `keep` and
