@@ -118,6 +118,33 @@ bare, so it autolinks — and say it must merge first. On GitLab this *complemen
 the enforced block; on GitHub (or a GitLab fall-back) it's the only signal, so say
 plainly that ordering isn't enforced.
 
+## Linking a stack of CRs
+
+A chain of CRs, each targeting the branch below, orders them for git. Whether
+the forge also holds them as a stack differs by forge.
+
+**GitHub — a stack is its own object.** The stack view on each PR and a stack
+number appear only once the PRs are linked. `gh` has no stack verb; the
+[github/gh-stack](https://gh.io/stacks) extension supplies one, and its `link`
+works on existing PRs without its own local tracking:
+
+```bash
+gh stack --version                                  # fails when the extension is missing
+gh stack link --base <default-branch> <n> <n> ...   # PR numbers, bottom to top
+```
+
+Read whether PRs are already in a stack over GraphQL; a host whose schema
+predates stacks answers `Field 'stack' doesn't exist on type 'PullRequest'`:
+
+```bash
+gh api graphql -F owner='{owner}' -F name='{repo}' -f query='
+  query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {
+    p1: pullRequest(number: <n>) { stack { number } } } }'
+```
+
+**GitLab — the chained targets are the stack.** `glab stack` tracks a stack
+locally and chains the MR targets, the same chain `scripts/stack.sh` reads.
+
 ## Defaults `anchor` applies
 
 When `anchor` creates a CR or an issue on your behalf, it applies these defaults.

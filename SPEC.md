@@ -825,8 +825,23 @@ repeats every commit beneath it.
   doesn't finish, the system shall offer to restore the previous target.
 - **[STACK-05]** When the user asks to review the stack, the system shall review
   its CRs one at a time from the bottom up, asking before each next one.
-- **[STACK-06]** The forge reads and the retarget shall run in one script, so
-  the run asks for no permission beyond that script's and the rebase's.
+- **[STACK-06]** The forge reads, the retarget, and the link shall run in one
+  script, so the run asks for no permission beyond that script's and the
+  rebase's.
+- **[STACK-07]** Where the forge is GitHub and the stack holding the current
+  branch is one line of two or more CRs, each targeting the branch it sits on,
+  `/anchor:stack` shall say whether GitHub holds them as one of its stacks, and
+  where it doesn't, whether the gh-stack extension that links them is
+  installed. Chained targets alone don't make a GitHub stack, so its stack view
+  and stack number are missing until the CRs are linked.
+- **[STACK-08]** When the user asks to link the stack, the system shall link the
+  stack holding the current branch as one GitHub stack, bottom to top, leaving
+  each CR's target and draft state as they are, and report the stack's number.
+  A stack GitHub already holds shall be left alone. A stack that forks, one
+  holding a CR whose target disagrees with the branch it sits on, a host whose
+  API has no stacks, a missing gh-stack extension, and GitLab shall be refused
+  before anything changes, each named. Where a CR is someone else's, the system
+  shall ask first.
 
 ### MERGE — Merge
 

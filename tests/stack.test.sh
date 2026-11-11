@@ -40,6 +40,14 @@ case "${1:-} ${2:-}" in
   "pr edit") [[ "${EDIT_FAIL:-0}" == 1 ]] && { echo "HTTP 401: Bad credentials" >&2; exit 1; }
              echo "pr edit $3 $4 $5" >> "$EDIT_LOG" ;;
   "api user") printf '{"login":"%s"}\n' "$VIEWER_LOGIN" ;;
+  "api graphql")
+    if [[ "$(cat "$STACK_JSON")" == unsupported ]]; then
+      echo "gh: Field 'stack' doesn't exist on type 'PullRequest'" >&2; exit 1
+    fi
+    cat "$STACK_JSON" ;;
+  "stack --version") [[ "$GH_STACK" == 1 ]] || { echo "unknown command \"stack\" for \"gh\"" >&2; exit 1; }
+                     echo "gh stack version 0.1.0" ;;
+  "stack link") shift 2; echo "stack link $*" >> "$EDIT_LOG"; cp "$STACK_LINKED" "$STACK_JSON" ;;
   *) echo "stub gh: unhandled command: $*" >&2; exit 1 ;;
 esac
 EOF
@@ -69,6 +77,11 @@ export MR_DIR="$work/mrs"
 export EDIT_LOG="$work/edits.log"
 export VIEWER_LOGIN=me
 export EDIT_FAIL=0
+export STACK_JSON="$work/stack.json"
+export STACK_LINKED="$work/stack-linked.json"
+export GH_STACK=1
+echo '{"data":{"repository":{"p1":{"stack":null},"p2":{"stack":null},"p3":{"stack":null}}}}' > "$STACK_JSON"
+echo '{"data":{"repository":{"p1":{"stack":{"number":7}},"p2":{"stack":{"number":7}},"p3":{"stack":{"number":7}}}}}' > "$STACK_LINKED"
 mkdir -p "$VIEW_DIR" "$MR_DIR"
 
 key() { sed -n "s/^$2=//p" <<<"$1"; }
@@ -253,6 +266,73 @@ EDIT_FAIL=1 run retarget --onto a --allow-others --repo "$repo"
 [[ $rc -eq 1 && "$(key "$out" STACK_AUTH)" == 1 ]] || fail "retarget: an auth failure"$'\n'"$out"
 ok "retarget asks before moving someone else's CR, and marks an auth failure"
 
+# --- GitHub: native stacks ----------------------------------------------------------
+git -C "$repo" checkout --quiet c
+{
+  gh_cr 1 a main false me "" DRAFT ""
+  gh_cr 2 b a true me "" DRAFT ""
+  gh_cr 3 c b true me "" DRAFT ""
+} | jq -s . > "$CR_LIST"
+unlinked=$(cat "$STACK_JSON")
+run show --repo "$repo"
+[[ $rc -eq 0 && "$(key "$out" NATIVE_STACK)" == unlinked ]] || fail "show: an unlinked stack"$'\n'"$out"
+GH_STACK=0 run show --repo "$repo"
+[[ "$(key "$out" NATIVE_STACK)" == no-gh-stack ]] || fail "show: no gh-stack extension"$'\n'"$out"
+GH_STACK=0 run link --repo "$repo"
+[[ $rc -eq 1 && "$(key "$out" STACK_ERROR)" == *"gh extension install github/gh-stack"* ]] \
+  || fail "link: no gh-stack extension"$'\n'"$out"
+ok "show reports a stack GitHub doesn't hold as one, and whether gh-stack can link it"
+
+: > "$EDIT_LOG"
+run link --repo "$repo"
+[[ $rc -eq 0 && "$(key "$out" LINK)" == "done" && "$(key "$out" NATIVE_STACK_NUMBER)" == 7 ]] || fail "link: exit $rc"$'\n'"$out"
+[[ "$(key "$out" LINK_ORDER)" == "#1,#2,#3" ]] || fail "link: order"$'\n'"$out"
+[[ "$(cat "$EDIT_LOG")" == "stack link --base main 1 2 3" ]] || fail "link: the gh-stack call"$'\n'"$(cat "$EDIT_LOG")"
+: > "$EDIT_LOG"
+run link --repo "$repo"
+[[ $rc -eq 0 && "$(key "$out" LINK)" == unchanged && ! -s "$EDIT_LOG" ]] || fail "link: already linked"$'\n'"$out"
+run show --repo "$repo"
+[[ "$(key "$out" NATIVE_STACK)" == linked ]] || fail "show: a linked stack"$'\n'"$out"
+ok "link makes the stack one GitHub stack, bottom to top, and leaves a linked one alone"
+
+echo "$unlinked" > "$STACK_JSON"
+{
+  gh_cr 1 a main false me "" DRAFT ""
+  gh_cr 2 b a true ana "" DRAFT ""
+  gh_cr 3 c b true me "" DRAFT ""
+} | jq -s . > "$CR_LIST"
+: > "$EDIT_LOG"
+run link --repo "$repo"
+[[ $rc -eq 66 && "$(key "$out" CONFIRM_OTHERS)" == "#2:ana" && ! -s "$EDIT_LOG" ]] || fail "link: someone else's CR"$'\n'"$out"
+{
+  gh_cr 1 a main false me "" DRAFT ""
+  gh_cr 2 b a true me "" DRAFT ""
+  gh_cr 3 c main true me "" DRAFT ""
+} | jq -s . > "$CR_LIST"
+run link --repo "$repo"
+[[ $rc -eq 1 && "$(key "$out" STACK_ERROR)" == "#3 targets"* && ! -s "$EDIT_LOG" ]] || fail "link: a mis-targeted CR"$'\n'"$out"
+run show --repo "$repo"
+[[ -z "$(key "$out" NATIVE_STACK)" ]] || fail "show: no native state for a mis-targeted stack"$'\n'"$out"
+{
+  gh_cr 1 a main false me "" DRAFT ""
+  gh_cr 2 b a true me "" DRAFT ""
+  gh_cr 3 c a true me "" DRAFT ""
+} | jq -s . > "$CR_LIST"
+run link --repo "$repo"
+[[ $rc -eq 1 && "$(key "$out" STACK_ERROR)" == *forks* ]] || fail "link: a forked stack"$'\n'"$out"
+echo unsupported > "$STACK_JSON"
+{
+  gh_cr 1 a main false me "" DRAFT ""
+  gh_cr 2 b a true me "" DRAFT ""
+  gh_cr 3 c b true me "" DRAFT ""
+} | jq -s . > "$CR_LIST"
+run show --repo "$repo"
+[[ $rc -eq 0 && -z "$(key "$out" NATIVE_STACK)" ]] || fail "show: a host without stacks"$'\n'"$out"
+run link --repo "$repo"
+[[ $rc -eq 1 && "$(key "$out" STACK_ERROR)" == *"no pull request stacks"* ]] || fail "link: a host without stacks"$'\n'"$out"
+echo "$unlinked" > "$STACK_JSON"
+ok "link asks before taking in someone else's CR, and refuses a mis-targeted or forked stack"
+
 # --- GitLab -----------------------------------------------------------------------
 repo=$(make_repo gitlab.com)
 {
@@ -281,6 +361,10 @@ ok "GitLab: each MR's pipeline and approvals come from its own record"
 run retarget --onto '!1' --repo "$repo"
 [[ "$(cat "$EDIT_LOG")" == "mr update 3 --target-branch a" ]] || fail "gitlab retarget"$'\n'"$out"$'\n'"$(cat "$EDIT_LOG")"
 ok "GitLab: retarget sets the MR's target branch"
+
+run link --repo "$repo"
+[[ $rc -eq 1 && "$(key "$out" STACK_ERROR)" == *"GitHub feature"* ]] || fail "gitlab link"$'\n'"$out"
+ok "GitLab: link is refused, since chained targets are the stack there"
 
 run show --bogus
 [[ $rc -eq 64 ]] || fail "usage: exit $rc"

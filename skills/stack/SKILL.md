@@ -1,6 +1,6 @@
 ---
 name: stack
-description: Work with a stack of change requests, each built on the one below. Show the stack as a tree with each CR's state, start the next branch on top of the current one, move a branch onto another CR or base, and review the stack from the bottom up. Use when stacking work, starting a branch on top of another, changing a CR's base or target, showing or checking a stack of PRs/MRs, or reviewing a stack bottom to top.
+description: Work with a stack of change requests, each built on the one below. Show the stack as a tree with each CR's state, start the next branch on top of the current one, move a branch onto another CR or base, link the stack as one GitHub stack, and review the stack from the bottom up. Use when stacking work, starting a branch on top of another, changing a CR's base or target, showing or checking a stack of PRs/MRs, linking PRs into a GitHub stack, or reviewing a stack bottom to top.
 ---
 
 # Stack
@@ -15,9 +15,10 @@ which CR merges first. This skill keeps the stack legible and in order.
 What's worth surfacing is the tree, a question that needs the user, and the
 result.
 
-Every forge read and the retarget run inside `scripts/stack.sh`; every rebase
-and force-push runs inside `/anchor:rebase`. Don't call `gh pr edit`,
-`glab mr update`, `git rebase`, or `git push` yourself.
+Every forge read, the retarget, and the link run inside `scripts/stack.sh`;
+every rebase and force-push runs inside `/anchor:rebase`. Don't call
+`gh pr edit`, `gh stack`, `glab mr update`, `git rebase`, or `git push`
+yourself.
 
 ## Pick the mode
 
@@ -26,6 +27,7 @@ and force-push runs inside `/anchor:rebase`. Don't call `gh pr edit`,
 | `/anchor:stack`, "show the stack", "render the stack" | **Show** |
 | `/anchor:stack <description of the next piece of work>` | **New** |
 | `/anchor:stack on <cr-or-branch>`, "stack onto !150", "change the base to …" | **Move** |
+| `/anchor:stack link`, "make it a GitHub stack", "create the stack on GitHub" | **Link** |
 | `/anchor:stack review`, `/anchor:stack /anchor:review`, "review the stack bottom to top" | **Review** |
 
 `--all` widens Show and Review from the stacks holding your CRs or the current
@@ -58,6 +60,12 @@ order:
 - **A CR flagged `base-not-open`** targets a branch with no open CR: the CR
   below it merged or closed. Offer **Move** onto the default branch.
 - **`merge` is `now`** on the bottom CR: name `/anchor:merge`.
+- **`NATIVE_STACK=unlinked`**: the PRs target each other, but GitHub doesn't
+  hold them as one stack, so they get no stack view or stack number. Offer
+  **Link**.
+- **`NATIVE_STACK=no-gh-stack`**: the same, and linking needs the gh-stack
+  extension. Name `gh extension install github/gh-stack`, then
+  `/anchor:stack link`.
 - **`FETCH_ERROR`**: the fetch failed, so no CR's base was checked. Say so in
   one line.
 
@@ -111,6 +119,28 @@ its diff is wrong until it does. Say so, and offer to put the target back:
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/stack.sh" retarget --onto <PREVIOUS_TARGET> [--repo <checkout>]
 ```
+
+## Link
+
+GitHub only. Chained targets order the PRs for git, but GitHub shows them as a
+stack (its stack view, a stack number on each PR) only once they are linked.
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/stack.sh" link [--allow-others] [--repo <checkout>]
+```
+
+It links the stack holding the current branch, bottom to top, through the
+gh-stack extension (`gh stack link`). Draft state and targets stay as they are.
+
+| Result | Then |
+| --- | --- |
+| `LINK=done` | report `LINK_ORDER` as GitHub stack `NATIVE_STACK_NUMBER` |
+| `LINK=unchanged` | GitHub already holds them as that stack; say so |
+| exit 66, `CONFIRM_OTHERS=<cr>:<author>,…` | someone else opened those PRs, and linking puts them in a stack their reviewers see. Ask (header `Link`): **Link** (re-run with `--allow-others`) or **Stop** |
+
+`STACK_ERROR` names why it can't link: a PR whose target disagrees with where
+it sits (offer **Move** first), a stack that forks (a GitHub stack is one line),
+or the gh-stack extension missing (name the install command).
 
 ## Review
 

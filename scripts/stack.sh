@@ -13,6 +13,10 @@
 #   new        cut a branch for the next CR at HEAD, on top of the current one.
 #   retarget   point the current branch's CR at another base. Rebasing onto that
 #              base is scripts/rebase.sh, which follows the CR's target.
+#   link       GitHub only: make the stack holding the current branch one of
+#              GitHub's stacks (`gh stack link`, from the github/gh-stack
+#              extension). Chained targets alone don't make one; a GitHub stack
+#              is its own object, with its own view and number on each PR.
 #
 # A CR's parent is the open CR whose branch it targets. A CR that targets the
 # default branch while its commits sit on another open CR's branch (a stacked CR
@@ -35,6 +39,11 @@
 #               that can land as it stands; waits: one with a CR under it)
 #       flag    -|stacked-on:<branch>|base-not-open
 #   STACK_ORDER=<ref,ref,...>  the tree holding the current branch, bottom to top
+#   NATIVE_STACK=<linked|unlinked|no-gh-stack>
+#                             GitHub only, for a STACK_ORDER of two or more CRs
+#                             in one line with no flag: whether GitHub holds
+#                             them as one stack (no-gh-stack: it doesn't, and the
+#                             gh-stack extension that links them is missing)
 #
 # new:
 #   NEW_BRANCH, BASE_BRANCH, STACKED=<0|1>   (0: cut from the default branch)
@@ -45,6 +54,12 @@
 #   CR_REF, CR_URL, PREVIOUS_TARGET, NEW_TARGET
 #   RETARGET=<done|unchanged|no-cr>
 #   CONFIRM_OTHERS=<cr>:<author>   (exit 66; nothing changed)
+#
+# link:
+#   LINK_ORDER=<ref,ref,...>   the CRs linked, bottom to top
+#   LINK=<done|unchanged>      unchanged: GitHub already holds them as one stack
+#   NATIVE_STACK_NUMBER=<n>    the stack's number on GitHub
+#   CONFIRM_OTHERS=<cr>:<author>,...   (exit 66; nothing changed)
 #
 # Errors: STACK_ERROR=<message>, plus STACK_AUTH=1 when the forge refused the
 # credentials.
@@ -59,6 +74,7 @@
 #   stack.sh show [--all] [--repo <path>]
 #   stack.sh new <branch> [--repo <path>]
 #   stack.sh retarget --onto <branch|#n|!n|n|cr-url> [--allow-others] [--repo <path>]
+#   stack.sh link [--allow-others] [--repo <path>]
 
 set -euo pipefail
 
@@ -70,7 +86,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/stack.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/forge-url.sh"
 
 usage() {
-  echo "usage: stack.sh show [--all] [--repo <path>] | new <branch> [--repo <path>] | retarget --onto <base> [--allow-others] [--repo <path>]" >&2
+  echo "usage: stack.sh show [--all] [--repo <path>] | new <branch> [--repo <path>] | retarget --onto <base> [--allow-others] [--repo <path>] | link [--allow-others] [--repo <path>]" >&2
   exit 64
 }
 
@@ -97,6 +113,7 @@ case "$cmd" in
   show)     [[ -z "$onto$new_branch" && $allow_others -eq 0 ]] || usage ;;
   new)      [[ -n "$new_branch" && -z "$onto" && $all -eq 0 && $allow_others -eq 0 ]] || usage ;;
   retarget) [[ -n "$onto" && $all -eq 0 ]] || usage ;;
+  link)     [[ -z "$onto$new_branch" && $all -eq 0 ]] || usage ;;
   *)        usage ;;
 esac
 
@@ -232,11 +249,11 @@ gitlab_details() {
   done | jq -sc 'map({key: (.num | tostring), value: .}) | from_entries'
 }
 
-cmd_show() {
-  local crs who fetch_err="" shown picks pairs details iids
-  crs=$(open_crs_json)
-  who=$(viewer)
-
+# Fetch, then mark each default-targeting CR among the stacks `keep` shows with
+# the open CR branch its commits sit on. Reads and sets the caller's `crs`,
+# `who`, and `fetch_err`.
+annotate_stacked_on() {
+  local showall=$1 shown picks pairs=""
   if ! fetch_err=$(git fetch --quiet origin 2>&1); then
     fetch_err=$(head -1 <<<"$fetch_err")
     [[ -n "$fetch_err" ]] || fetch_err="git fetch origin failed"
@@ -244,10 +261,8 @@ cmd_show() {
     fetch_err=""
   fi
 
-  # The CRs a default-targeting CR's commits are read against: the ones shown.
-  shown=$(jq -c --arg b "$branch" --arg v "$who" --argjson sa "$all" --arg d "$default_branch" \
+  shown=$(jq -c --arg b "$branch" --arg v "$who" --argjson sa "$showall" --arg d "$default_branch" \
     "$TREE_JQ"' map(. + {stackedOn: ""}) | parented($d) | trees | keep($b; $v; $sa == 1) | add // [] | map(.head)' <<<"$crs")
-  pairs=""
   if [[ -z "$fetch_err" ]]; then
     picks=$(jq -r --arg d "$default_branch" --argjson shown "$shown" \
       '.[] | select(.target == $d and (.head as $h | $shown | index($h)) != null) | [.head, .sha] | @tsv' <<<"$crs")
@@ -256,6 +271,46 @@ cmd_show() {
   crs=$(jq -c --arg pairs "$pairs" '
     ($pairs | split("\n") | map(select(length > 0) | split("\t") | {key: .[0], value: .[1]}) | from_entries) as $on
     | map(. + {stackedOn: ($on[.head] // "")})' <<<"$crs")
+}
+
+# The tree holding the current branch, as GitHub's stacks see it: its CRs bottom
+# to top, whether it is one line (a GitHub stack can't fork), the first CR whose
+# target disagrees with where it sits, and the CRs someone else opened.
+current_chain() {
+  jq -c --arg b "$branch" --arg v "$who" --arg d "$default_branch" --arg m "$(mark)" "$TREE_JQ"'
+    parented($d) | trees | map(select(any(.[]; .head == $b))) | (.[0] // [])
+    | { nums: map(.num),
+        refs: map($m + (.num | tostring)),
+        linear: (map(.depth) == [range(length)]),
+        stray: (map(select(.flag != "-")) | .[0] // null | if . then $m + (.num | tostring) else null end),
+        others: map(select(.author != $v) | $m + (.num | tostring) + ":" + .author) }' <<<"$crs"
+}
+
+# Sets the caller's `native` to linked:<stack number>, unlinked, or unsupported
+# (the host's API has no stacks), for the PR numbers given.
+native_state() {
+  local q="" n out
+  for n in "$@"; do q+=" p$n: pullRequest(number: $n) { stack { number } }"; done
+  # shellcheck disable=SC2016  # GraphQL variables, not shell ones
+  if ! out=$(gh api graphql -F owner='{owner}' -F name='{repo}' \
+      -f query='query($owner: String!, $name: String!) { repository(owner: $owner, name: $name) {'"$q"' } }' 2>&1); then
+    if grep -q "doesn't exist on type" <<<"$out"; then
+      native=unsupported
+      return 0
+    fi
+    forge_fail "gh api graphql (pull request stacks) failed" "$out"
+  fi
+  native=$(jq -r '[.data.repository[] | .stack.number]
+    | if length > 0 and all(. != null) and (unique | length) == 1 then "linked:\(.[0])" else "unlinked" end' <<<"$out")
+}
+
+has_gh_stack() { gh stack --version >/dev/null 2>&1; }
+
+cmd_show() {
+  local crs who fetch_err="" details iids chain native=""
+  crs=$(open_crs_json)
+  who=$(viewer)
+  annotate_stacked_on "$all"
 
   if [[ "$forge" == gitlab ]]; then
     iids=$(jq -r --arg b "$branch" --arg v "$who" --argjson sa "$all" --arg d "$default_branch" \
@@ -307,6 +362,16 @@ cmd_show() {
       ($trees[][] | "STACK_CR=\(.depth) \(ref) \(.head) \(.target) \(if .draft then "draft" else "ready" end) \(.checks) \(.review) \(merge_state) \(.author) \(.flag) \(.title)"),
       "STACK_ORDER=" + ([$trees[] | select(any(.[]; .head == $b)) | .[] | ref] | join(","))
   ' <<<"$crs"
+
+  [[ "$forge" == github ]] || return 0
+  chain=$(current_chain)
+  jq -e '(.nums | length) > 1 and .linear and .stray == null' <<<"$chain" >/dev/null || return 0
+  # shellcheck disable=SC2046  # PR numbers, one word each
+  native_state $(jq -r '.nums[]' <<<"$chain")
+  case "$native" in
+    linked:*) echo "NATIVE_STACK=linked" ;;
+    unlinked) if has_gh_stack; then echo "NATIVE_STACK=unlinked"; else echo "NATIVE_STACK=no-gh-stack"; fi ;;
+  esac
 }
 
 # --- new --------------------------------------------------------------------------
@@ -399,8 +464,51 @@ cmd_retarget() {
   printf 'RETARGET=done\n'
 }
 
+# --- link -------------------------------------------------------------------------
+
+cmd_link() {
+  local crs who fetch_err="" chain stray others native="" out
+  [[ "$forge" == github ]] || die "a stack of linked CRs is a GitHub feature; on GitLab the chained targets are the stack"
+  crs=$(open_crs_json)
+  who=$(viewer)
+  annotate_stacked_on 0
+  [[ -z "$fetch_err" ]] || die "git fetch origin failed, so no CR's base could be checked: $fetch_err"
+
+  chain=$(current_chain)
+  jq -e '(.nums | length) > 0' <<<"$chain" >/dev/null || die "no open CR is on '$branch' or in a stack holding it"
+  jq -e '(.nums | length) > 1' <<<"$chain" >/dev/null || die "the stack holding '$branch' has one CR, so there is nothing to link"
+  jq -e '.linear' <<<"$chain" >/dev/null || die "the stack holding '$branch' forks, and a GitHub stack is one line of CRs"
+  stray=$(jq -r '.stray // empty' <<<"$chain")
+  [[ -z "$stray" ]] || die "$stray targets a branch other than the one it sits on; move it with /anchor:stack on first"
+
+  printf 'LINK_ORDER=%s\n' "$(jq -r '.refs | join(",")' <<<"$chain")"
+  # shellcheck disable=SC2046  # PR numbers, one word each
+  native_state $(jq -r '.nums[]' <<<"$chain")
+  [[ "$native" != unsupported ]] || die "this GitHub host's API has no pull request stacks"
+  if [[ "$native" == linked:* ]]; then
+    printf 'LINK=unchanged\nNATIVE_STACK_NUMBER=%s\n' "${native#linked:}"
+    return 0
+  fi
+
+  others=$(jq -r '.others | join(",")' <<<"$chain")
+  if [[ -n "$others" && $allow_others -eq 0 ]]; then
+    printf 'CONFIRM_OTHERS=%s\n' "$others"
+    exit 66
+  fi
+  has_gh_stack || die "linking needs the gh-stack extension: gh extension install github/gh-stack"
+
+  # shellcheck disable=SC2046  # PR numbers, one word each
+  out=$(gh stack link --base "$default_branch" $(jq -r '.nums[]' <<<"$chain") 2>&1) \
+    || forge_fail "gh stack link failed" "$out"
+  # shellcheck disable=SC2046
+  native_state $(jq -r '.nums[]' <<<"$chain")
+  [[ "$native" == linked:* ]] || die "gh stack link reported success, but GitHub doesn't hold the CRs as one stack"
+  printf 'LINK=done\nNATIVE_STACK_NUMBER=%s\n' "${native#linked:}"
+}
+
 case "$cmd" in
   show)     cmd_show ;;
   new)      cmd_new ;;
   retarget) cmd_retarget ;;
+  link)     cmd_link ;;
 esac
