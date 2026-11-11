@@ -7,7 +7,7 @@
 An announcement is one line: a key, then a compact JSON object.
 
 ```text
-codes.bridgeai.anchor/cr.created {"uri":"https://github.com/o/r/pull/3533"}
+codes.bridgeai.anchor/cr.created {"uri":"…","title":"…"}
 ```
 
 The events, each linkable on its own:
@@ -161,8 +161,8 @@ An announcement reaches a `PostToolUse` hook on `Bash` as `tool_response.stdout`
 ```bash
 input=$(cat)
 output=$(printf '%s' "$input" | jq -r '.tool_response.stdout // empty' 2>/dev/null) || exit 0
-line=$(printf '%s' "$output" | grep -m1 '^codes\.bridgeai\.anchor/cr\.created[[:space:]]') || exit 0
-uri=$(printf '%s' "${line#* }" | jq -r '.uri // empty' 2>/dev/null) || exit 0
+line=$(grep -m1 '^codes\.bridgeai\.anchor/cr\.created[[:space:]]' <<<"$output") || exit 0
+uri=$(printf '%s' "${line#* }" | jq -er 'if type == "object" then (.uri // "" | tostring | gsub("[[:cntrl:]]"; "")) else error end' 2>/dev/null) || exit 0
 ```
 
 Register that in your own plugin's `hooks.yml`. `anchor` gains no entry, no config, and no knowledge that you subscribed, which is what lets either side ship without the other.
