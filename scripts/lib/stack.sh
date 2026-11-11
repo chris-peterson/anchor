@@ -39,8 +39,11 @@ anchor_open_crs() {
 # HEAD, is stacked on this one rather than under it, and is skipped: once both
 # branches have commits of their own, the shared ones read the same from
 # either side, and only the CR's target says which way the stack runs.
+#
+# A third argument measures that commit instead of HEAD, for a branch that isn't
+# checked out.
 anchor_stack_pick() {
-  local branch=$1 default=$2 head sha num url target ref mb n best="" best_n=""
+  local branch=$1 default=$2 tip=${3:-HEAD} head sha num url target ref mb n best="" best_n=""
   git rev-parse --verify --quiet "origin/${default}^{commit}" >/dev/null || return 0
   while IFS=$'\t' read -r head sha num url target _; do
     [[ -n "$head" && "$head" != "$branch" && "$head" != "$default" && "$target" != "$branch" ]] || continue
@@ -51,9 +54,9 @@ anchor_stack_pick() {
     else
       continue
     fi
-    mb=$(git merge-base "$ref" HEAD 2>/dev/null) || continue
+    mb=$(git merge-base "$ref" "$tip" 2>/dev/null) || continue
     git merge-base --is-ancestor "$mb" "origin/${default}" && continue
-    n=$(git rev-list --count "${mb}..HEAD")
+    n=$(git rev-list --count "${mb}..${tip}")
     [[ "$n" -gt 0 ]] || continue
     if [[ -z "$best_n" || "$n" -lt "$best_n" ]]; then
       best_n=$n

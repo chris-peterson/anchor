@@ -34,7 +34,7 @@ forge cookbook's "Resolving a named target repo" describes).
 
 | Key | What to do with it |
 |-----|--------------------|
-| `REBASE_ERROR=…` | an `--onto` origin doesn't have, or one the open CR's target disagrees with. Surface it and stop |
+| `REBASE_ERROR=…` | an `--onto` origin doesn't have, or one the open CR's target disagrees with. Surface it and stop; for the second, `/anchor:stack on <branch>` moves the CR first |
 | `PLAN_PENDING=1` | an earlier run stopped on a conflict. Ask (header `Rebase`): **Continue it** (Step 3) or **Abort it** (`rebase.sh --abort`) |
 | `REBASE_IN_PROGRESS=1`, `PLAN_PENDING=0` | a rebase started outside anchor. Show `git status` and stop |
 | `STACK_LOOKUP_ERROR` | the open-CR listing failed, so the base can't be resolved. Surface it and stop; on an auth failure ask for fresh credentials |

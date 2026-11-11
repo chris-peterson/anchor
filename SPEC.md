@@ -796,6 +796,38 @@ the branch is behind.
   push shall give the user a message for that CR's author, ready to copy, saying
   the branch was rewritten and how to pick it up.
 
+### STACK — Stack
+
+Keeping a stack of CRs, each targeting the branch of the one below, legible and
+in order (the `stack` skill). A stack only splits a change for its reviewers
+while every CR targets the right branch: one targeting the default branch
+repeats every commit beneath it.
+
+- **[STACK-01]** When `/anchor:stack` runs with no argument, the system shall
+  show each stack of open CRs holding one of the user's CRs or the current
+  branch (every stack, when asked for all) as a tree, each CR under the CR whose
+  branch it targets and the bottom CR first, with each CR's draft state, failing
+  or running checks, requested changes, conflicts, and whether the bottom CR can
+  merge as it stands.
+- **[STACK-02]** Where a CR targets the default branch while its commits sit on
+  another open CR's branch, the system shall draw it under that CR and flag the
+  mismatch. Where a CR targets a branch no open CR holds, the system shall flag
+  that too.
+- **[STACK-03]** When the user names the next piece of work, the system shall
+  cut a branch for it at the current commit, on top of the current branch, and
+  say how its CR will stack: on the current branch's CR, or with `--onto` where
+  the current branch has none yet.
+- **[STACK-04]** When the user names a CR or branch to stack onto, the system
+  shall point the current branch's CR at that branch, then rebase onto it as
+  REBASE describes. A CR that isn't open, a branch origin doesn't have, and a
+  base stacked on the current branch shall be refused before anything changes.
+  Where the CR is someone else's, the system shall ask first. If the rebase
+  doesn't finish, the system shall offer to restore the previous target.
+- **[STACK-05]** When the user asks to review the stack, the system shall review
+  its CRs one at a time from the bottom up, asking before each next one.
+- **[STACK-06]** The forge reads and the retarget shall run in one script, so
+  the run asks for no permission beyond that script's and the rebase's.
+
 ### MERGE — Merge
 
 Landing an approved CR into the default branch (the `merge` skill) — the terminal

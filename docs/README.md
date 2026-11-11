@@ -128,6 +128,7 @@ Requirement: RULE-02 in [SPEC](/spec).
 | [`/anchor:commit`](/skills/commit) | Review the changeset, then commit with a why-first message and push |
 | [`/anchor:prepare-review`](/skills/prepare-review) | Rebase on its base branch (stacked on another CR, where it is) and open a draft change request |
 | [`/anchor:rebase`](/skills/rebase) | Catch a branch, or its whole stack, up to the branch it merges into, resolve the conflicts, and force-push |
+| [`/anchor:stack`](/skills/stack) | Show a stack of CRs as a tree, start the next branch on top, move a branch onto another CR, review it bottom up |
 | [`/anchor:review`](/skills/review) | Weigh a CR against your qualities, draft a fix per finding, and decide each one in revdiff before reviewing the whole change |
 | [`/anchor:ready`](/skills/ready) | Take a draft CR out of draft, request reviewers, and report its pipeline |
 | [`/anchor:resolve-feedback`](/skills/resolve-feedback) | Work a CR's review threads to done, one by one |

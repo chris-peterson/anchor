@@ -200,7 +200,7 @@ resolve_base() {
   base_source=default
   if [[ -n "$cr_target" ]]; then
     [[ -z "$onto" || "$onto" == "$cr_target" ]] \
-      || die "$cr_url targets '$cr_target', not '$onto'; retarget it on the forge, or drop --onto"
+      || die "$cr_url targets '$cr_target', not '$onto'; move it with /anchor:stack on $onto, or drop --onto"
     base_branch="$cr_target"
     base_source=cr
   elif [[ -n "$onto" ]]; then
