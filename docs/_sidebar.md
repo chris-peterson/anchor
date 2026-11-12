@@ -3,6 +3,7 @@
 - [SPEC](/spec)
 - Skills
   - [commit](/skills/commit)
+  - [amend](/skills/amend)
   - [prepare-review](/skills/prepare-review)
   - [rebase](/skills/rebase)
   - [stack](/skills/stack)

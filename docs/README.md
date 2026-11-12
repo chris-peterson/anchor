@@ -126,6 +126,7 @@ Requirement: RULE-02 in [SPEC](/spec).
 | Skill | What it does |
 |---|---|
 | [`/anchor:commit`](/skills/commit) | Review the changeset, then commit with a why-first message and push |
+| [`/anchor:amend`](/skills/amend) | Fold the staged changes into the last commit, with the same tests and review as a commit |
 | [`/anchor:prepare-review`](/skills/prepare-review) | Rebase on its base branch (stacked on another CR, where it is) and open a draft change request |
 | [`/anchor:rebase`](/skills/rebase) | Catch a branch, or its whole stack, up to the branch it merges into, resolve the conflicts, and force-push |
 | [`/anchor:stack`](/skills/stack) | Show a stack of CRs as a tree, start the next branch on top, move a branch onto another CR, review it bottom up |

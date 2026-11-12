@@ -286,6 +286,38 @@ behavior, not an independent authority — review them against the source.
   refused after the review was approved, and its unpushed commits are counted
   against `main`.
 
+### AMEND — Amend
+
+Folding the staged changes into HEAD (the `amend` skill): `/anchor:commit`'s
+flow, with the new-commit-or-amend question already answered by the invocation.
+
+- **[AMEND-01]** When `/anchor:amend` runs, the system shall run the commit flow
+  (COMMIT-01..29) with an amend of HEAD as the shape, and shall not ask whether to
+  squash or make a new commit, or make the relatedness judgment (COMMIT-10). The
+  user already answered that question by invoking the skill.
+- **[AMEND-02]** If the squash gate (COMMIT-08) blocks amending HEAD, then the
+  system shall not amend. It shall say in one line that HEAD can't be amended,
+  without the reason (COMMIT-12), and offer to land the change as a new commit
+  through the commit flow.
+- **[AMEND-03]** The system shall draft the message to cover HEAD's change and
+  the staged one together. Where HEAD's message still describes both, it shall
+  keep that message word for word and name it in one line in the review manifest
+  rather than print it, since the user has nothing to decide about it.
+- **[AMEND-04]** When the amend replaces a pushed commit, the system shall ask for
+  the force-push as COMMIT-27 requires and push with lease once the user
+  approves. If the gate closes between the pre-flight and the amend, nothing
+  shall be committed, and a new commit shall go back through review with a
+  message redrafted for the staged change alone.
+- **[AMEND-05]** Where nothing is staged, the system shall treat the run as a
+  message-only amend. Where the squash gate allows an amend, or COMMIT-13's
+  exception applies, it shall show the corrected message verbatim and ask for
+  approval once, naming any force-push. Where neither applies, or the redraft
+  matches HEAD's message, it shall say there is nothing to amend and stop.
+- **[AMEND-06]** The system shall decide whether HEAD can be amended, run the
+  review, and amend and push through the same scripts the commit flow uses
+  (`commit-preflight.sh`, `review-diff.sh`, `commit.sh`), so the two skills
+  cannot disagree about when amending is safe.
+
 ### PREPARE — Prepare review
 
 The `prepare-review` skill: open (or refresh) a draft CR on an already-pushed
