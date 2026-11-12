@@ -4,7 +4,7 @@ Tracking status of the requirements declared in [`SPEC.md`](SPEC.md).
 
 **Last audit:** 2026-11-11
 **Spec version:** root SPEC.md (unversioned)
-**Plugin version:** 1.18.1
+**Plugin version:** 2.0.0
 **Coverage:** 341 Covered, 33 Partial, 11 Missing, 0 Contradicts (385 total)
 
 The implementation is the plugin itself — the skill prompts under
