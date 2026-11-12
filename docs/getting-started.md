@@ -148,7 +148,10 @@ That is the whole setup. Edit some code, then:
 ```
 
 It reviews the pending changeset with you, writes a *why*-first message, and
-commits and pushes once the review is clean. Then, on the pushed branch:
+commits and pushes once the review is clean. The diff it opens has a
+`(context).md` file and notes of anchor's already on the lines;
+[Reading a diff](/guides/reading-a-diff) explains both. Then, on the pushed
+branch:
 
 ```text
 /anchor:prepare-review

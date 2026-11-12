@@ -32,10 +32,12 @@ doesn't arrive.
 
 | Guide | What it settles | Read by |
 |---|---|---|
+| [Reading a diff](/guides/reading-a-diff) | What a 2.0 diff shows you from the first `/anchor:commit`: the `(context).md` file, anchor's notes on the lines, and how to give the verdict | you, before your first `/anchor:commit` |
 | [Running a review](/guides/running-a-review) | The loop every review follows: probe, launch, what chat feedback does while it's open, and what each verdict means | `commit`, `prepare-review`, `review`, `issue`, `release` |
 | [When the review tool didn't grade it](/guides/review-fallback) | What an ungraded change gets instead of a *"you saw the diff, approve?"* prompt | `commit`, `prepare-review`, `review`, `issue`, `release` |
 | [Reading a reviewer's edits](/guides/reviewer-edits) | How to read the edits a reviewer makes in the working tree with revdiff's `e`, rather than as notes | `commit`, `prepare-review`, `review`, `issue`, `release` |
 | [What a review tool can show](/guides/review-palette) | Which markdown constructs revdiff and helix colour, which ones both do, and how to make a line in `(context).md` stand out or recede | maintainers writing `(context).md` and the size stack |
+| [Batch Editing](/guides/batch-editing) | How several issue, milestone, or reply edits are approved as one review: answering each item, then ending the batch | you, when a batch opens |
 | [Reviewing a batch of edits](/guides/batch-review) | How edits to several issues or threads are approved as one set in revdiff, and what each item's outcome leads to | `issue`, `resolve-feedback` |
 | [Staying in changeset scope](/guides/changeset-scope) | How far a fix may reach when a comment lands next to pre-existing code the diff doesn't own | `commit`, `resolve-feedback` |
 
@@ -48,6 +50,7 @@ to say while doing it.
 |---|---|---|
 | [Configuring `anchor`](/guides/configuring) | Every `git config anchor.*` key, and how your forge's own CR template composes with `anchor`'s voice | `commit`, `prepare-review`, `issue` |
 | [Forge cookbook](/guides/forge-cookbook) | The canonical `gh` and `glab` invocations, and the places the two CLIs diverge | every skill that touches the forge |
+| [Backups](/guides/backups) | Where `anchor` keeps what it overwrote on the forge, and how to restore a description, issue, or milestone from it | `issue`, `prepare-review`, `ready`, `review` |
 | [Release models](/guides/release-models) | Who owns the version bump, and the publish step each model takes | `release` |
 | [Watching a pipeline](/guides/watching-a-pipeline) | How a skill watches CI in the background, which watch speaks when a newer pipeline supersedes an older one, and how to read the verdict | `commit`, `prepare-review`, `resolve-feedback`, `merge`, `release`, `pipeline` |
 | [Temp paths a caller can grant](/guides/temp-paths) | The temp-file form that stays inside a caller's permission grant on every platform | `commit`, `issue`, `resolve-feedback` |

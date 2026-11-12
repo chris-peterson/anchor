@@ -70,6 +70,18 @@ that later fills it. Decline and nothing is written.
 
 Requirements: CONFIRM-01..06 in [SPEC](/spec).
 
+### Many edits are one review, and you decide each one :id=tenet-batch
+
+Relabelling a set of issues, planning a release's milestones, answering every
+thread on a change request: when `anchor` drafts edits to several things at
+once, they open together in revdiff, one file per item with its current text
+against the proposed one. Keep, edit, redraft, or drop each item where it sits,
+then approve the set. Several drafts in a reply scroll the first ones away before
+the question arrives; one per prompt turns reading into a chore of approving.
+See [Batch Editing](/guides/batch-editing).
+
+Requirements: CONFIRM-10..16 in [SPEC](/spec).
+
 ### A review that did not happen is not an approval :id=tenet-review
 
 A viewer that opened and reported no verdict, an editor closed without saving, a
@@ -85,7 +97,7 @@ Before `anchor` overwrites text on the forge, it saves what was there to
 `.git/anchor/backups/` in your checkout, quietly, and keeps it there. A write
 that lands on the wrong change request, or one you change your mind about, is
 a paste away from undone, whatever edit history the forge keeps: ask the agent
-to put it back.
+to restore it, or [do it yourself](/guides/backups).
 
 Requirement: FORGE-13 in [SPEC](/spec).
 
@@ -96,7 +108,7 @@ concerns: the line that changed, or the line you asked on. You read it where you
 were already reading, the way you would in any code review, instead of leaving
 the diff to find what a note means.
 
-Requirement: UX-09 in [SPEC](/spec).
+Requirement: UX-09 in [SPEC](/spec); [reading a diff](/guides/reading-a-diff).
 
 ### An explanation lasts as long as it stays true :id=tenet-transient
 

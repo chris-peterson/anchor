@@ -1,10 +1,26 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **A new guide shows where anchor's backups live and how to restore one.** [Backups](https://chris-peterson.github.io/anchor/#/guides/backups) names the file each write saves under `.git/anchor/backups/`, which one is the state before the last write, and the `gh` and `glab` commands that put a description, issue, or its fields back. It also warns that restoring an older CR description rolls back its Review status record.
+- **A new guide explains batch edits from the reviewer's side.** [Batch Editing](https://chris-peterson.github.io/anchor/#/guides/batch-editing) covers when a batch opens, what each item's file and `(context).md` show, how to keep, edit, redraft, or drop an item, and how the batch is approved and published. The docs home page states it as a tenet (`#/?id=tenet-batch`).
+- **A new guide explains what a diff shows you.** [Reading a diff](https://chris-peterson.github.io/anchor/#/guides/reading-a-diff) covers the `(context).md` file at the top of every revdiff review, the notes anchor leaves on the lines, and how to give the verdict, and Getting started points to it before the first `/anchor:commit`. The 2.0.0 notes below now lead with the same three under **What's new**.
+
 ## 2.0.0
 
 ### Breaking
 
 - **Every diff review needs revdiff 1.14 or later, whatever `diff.tool` or `anchor.diff.tool` names.** Reviewing a commit, a CR description against its last version, an issue update, release notes, or a batch of edits opens revdiff, and so does `/anchor:review`. A review is built on revdiff's `(context).md`, its preloaded notes, and the `approve` or `reject` note in its Review box, and a viewer without those has no verdict to give. If you set `diff.tool` or `anchor.diff.tool` to another viewer (meld, vimdiff, a custom `difftool.<name>.cmd`), the key is ignored, the review says so in one line, and revdiff opens. Without revdiff, or with one older than 1.14, a diff review stops before it opens, names the command that installs or upgrades it, and publishes nothing. **To keep reviewing, install revdiff (`brew install umputun/apps/revdiff`) or upgrade it (`brew upgrade umputun/apps/revdiff`).** Editor reviews are unchanged.
+
+### What's new
+
+- **A `(context).md` at the top of every revdiff review.** It holds the change's title, the repo and base commit, its size, and the Review box where you give the verdict. git never sees it, and it's removed when the review closes.
+- **Notes already on the lines, from anchor.** What it weighed, a constraint the code doesn't show, a spot it wants you to check. Delete one once you've read it, or write on it to push back. They leave with the review, so the commit message only has to say why the change exists.
+- **`q` no longer approves.** With nothing to say, `ZZ` approves and `ZQ` rejects, in revdiff as in Helix or Vim, or leave a single `approve` or `reject` note in `(context).md`. Quitting with `q` and nothing of your own asks Approve, Reject, or Go back in the same pane, with focus on Go back. `Q` does nothing.
+
+[Reading a diff](https://chris-peterson.github.io/anchor/#/guides/reading-a-diff) walks through all three.
 
 ### Added
 
