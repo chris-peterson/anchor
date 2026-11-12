@@ -11,6 +11,9 @@
 # there is no address to build, and a caller announcing an empty field says that
 # more honestly than one carrying a guess.
 #
+# The CR helpers alongside them (anchor_forge_self, anchor_cr_write_description,
+# anchor_cr_reference) carry the forge calls more than one script makes.
+#
 # The remote comes in four shapes that all have to reach the same web address —
 # `https://host/path`, `ssh://git@host:2222/path`, the scp-like
 # `git@host:group/path`, and any of them with a trailing `.git`. The path may be
@@ -34,6 +37,42 @@ anchor_forge_of_origin() {
     *gitlab*)     printf 'gitlab\n' ;;
     *)            printf 'none\n' ;;
   esac
+}
+
+# The signed-in user's login on <forge>. On failure it prints the CLI's output
+# instead and returns 1, so a caller can hand that text to its own error report.
+anchor_forge_self() {
+  local out
+  case "$1" in
+    github) out=$(gh api user 2>&1) || { printf '%s\n' "$out"; return 1; }
+            jq -r '.login // empty' <<<"$out" ;;
+    gitlab) out=$(glab api user 2>&1) || { printf '%s\n' "$out"; return 1; }
+            jq -r '.username // empty' <<<"$out" ;;
+    *)      printf 'origin is neither GitHub nor GitLab\n'; return 1 ;;
+  esac
+}
+
+# Replace CR <iid>'s description with <file>. On failure it prints the CLI's
+# output and returns 1.
+anchor_cr_write_description() {
+  local out
+  case "$1" in
+    github) out=$(gh pr edit "$2" --body-file "$3" 2>&1) ;;
+    gitlab) out=$(glab api -X PUT "projects/:fullpath/merge_requests/$2" -F "description=@$3" 2>&1) ;;
+    *)      out="origin is neither GitHub nor GitLab"; false ;;
+  esac || { printf '%s\n' "$out"; return 1; }
+}
+
+# A CR as its forge writes it, from the CR's web URL and number: the project's
+# own name, then # (pull request) or ! (merge request) and the number, with
+# <gap> between the name and the marker.
+anchor_cr_reference() {
+  local url="$1" n="$2" gap="${3:-}" mark='#' path
+  case "$url" in */merge_requests/*) mark='!' ;; esac
+  path="${url%/pull/*}"
+  path="${path%/-/merge_requests/*}"
+  path="${path%/merge_requests/*}"
+  printf '%s%s%s%s\n' "${path##*/}" "$gap" "$mark" "$n"
 }
 
 anchor_repo_web_url() {

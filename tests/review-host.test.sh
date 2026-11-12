@@ -51,6 +51,26 @@ run_launch "$launch" "$sentinel"
 [ "$(cat "$sentinel")" = 10 ] || fail "sentinel holds $(cat "$sentinel"), want 10"
 ok "the command's own status reaches the sentinel"
 
+# --- an after-command runs in the same pane once the command exits, given its
+# status, and the command runs again while it exits 0: the pane's Go back
+# (DIFF-49) reopens the review where the reviewer already is.
+launch="$work/launch-after.sh"
+sentinel="$work/rc-after"
+cat > "$work/after.sh" <<'EOF'
+printf '%s\n' "$1" >> "$(dirname "$0")/after.log"
+[ "$(wc -l < "$(dirname "$0")/after.log")" -lt 2 ]
+EOF
+(
+  cd "$target"
+  anchor_host_after="sh $(anchor_host_sq "$work/after.sh")"
+  anchor_host_launch_script "echo run >> $(anchor_host_sq "$work/runs.log"); ( exit 10 )" > "$launch"
+)
+run_launch "$launch" "$sentinel"
+[ "$(wc -l < "$work/runs.log" | tr -d ' ')" = 2 ] || fail "the command should run twice: $(cat "$work/runs.log")"
+[ "$(tr '\n' ' ' < "$work/after.log")" = "10 10 " ] || fail "the after-command should get each status: $(cat "$work/after.log")"
+[ "$(cat "$sentinel")" = 10 ] || fail "sentinel holds $(cat "$sentinel"), want 10"
+ok "an after-command gets the status in the pane, and exiting 0 runs the command again"
+
 # --- the caller's PATH and editor reach the pane, which starts on neither
 launch="$work/launch-env.sh"
 sentinel="$work/rc-env"

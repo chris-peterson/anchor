@@ -41,6 +41,15 @@ set -euo pipefail
 # GH_FAIL stands in for a CLI that can't reach the forge: no pipeline answer at
 # all, just an error on stderr and a non-zero exit.
 if [ -n "${GH_FAIL:-}" ]; then echo "$GH_FAIL" >&2; exit 1; fi
+# GH_JOBS_FAIL fails only the jobs read, after the run itself was found.
+if [ -n "${GH_JOBS_FAIL:-}" ] && [ "${1:-} ${2:-}" = "run view" ]; then
+  echo "$GH_JOBS_FAIL" >&2; exit 1
+fi
+# GH_FAIL_AT=<n> fails the nth gh call (counted in GH_ARGS_FILE), so a later
+# read of the same path can fail while the first succeeds.
+if [ -n "${GH_FAIL_AT:-}" ] && [ "$(wc -l < "$GH_ARGS_FILE")" -eq "$GH_FAIL_AT" ]; then
+  echo "HTTP 502: Bad Gateway" >&2; exit 1
+fi
 sub="${1:-}"; shift || true
 case "$sub" in
   api)
@@ -91,7 +100,10 @@ set -euo pipefail
 [ -n "${GLAB_ARGS_FILE:-}" ] && printf '%s\n' "$*" >> "$GLAB_ARGS_FILE"
 path="${2:-}"
 case "$path" in
-  */jobs*) jq -c '.' "$GLAB_JOBS" ;;
+  */jobs*)
+    if [ -n "${GLAB_JOBS_FAIL:-}" ]; then echo "$GLAB_JOBS_FAIL" >&2; exit 1; fi
+    jq -c '.' "$GLAB_JOBS"
+    ;;
   *pipelines*)
     ref=""; sha=""
     case "$path" in *ref=*) ref="${path##*ref=}"; ref="${ref%%&*}" ;; esac
@@ -141,6 +153,8 @@ release_run() {
     "html_url": "https://github.com/acme/widget/actions/runs/3040" } ]
 JSON
 }
+
+jobs_fixture '[]'
 
 # ===================== the release-triggered run is findable ==================
 # The bug this test pins: watching a release-event run through a branch-scoped
@@ -348,6 +362,24 @@ o=$(run)
   || fail "a green commit still gets a breakdown: $o"
 ok "the breakdown is emitted on success, not only on failure"
 
+# ===================== a failed jobs read is an error, not an empty run ======
+# A run that shows no jobs reads as a run that ran nothing; when the jobs could
+# not be read, the report has to say the forge failed (CI-10, CI-01).
+o=$(GH_JOBS_FAIL="HTTP 401: Bad credentials" run)
+[ "$(val PIPELINE_STATE "$o")" = unreachable ] \
+  || fail "a failed jobs read should report unreachable, not the run with no jobs: $o"
+grep -q '^PIPELINE_ERROR=HTTP 401: Bad credentials' <<<"$o" \
+  || fail "the jobs read's error should reach stdout: $o"
+[ -z "$(val PIPELINE_RUNS "$o")" ] || fail "a breakdown that could not be read is not emitted: $o"
+ok "a failed GitHub jobs read reports unreachable with the CLI's error"
+
+GH_ARGS_FILE="$work/gh-args.txt"; : > "$GH_ARGS_FILE"
+o=$(GH_ARGS_FILE="$GH_ARGS_FILE" GH_FAIL_AT=2 run)
+[ "$(val PIPELINE_STATE "$o")" = unreachable ] \
+  || fail "a failed runs read for the breakdown should report unreachable: $o"
+grep -q '^PIPELINE_ERROR=HTTP 502' <<<"$o" || fail "the breakdown read's error should reach stdout: $o"
+ok "a failed GitHub runs read for the breakdown reports unreachable"
+
 # ===================== no run for this commit ================================
 runs_fixture '[]'
 o=$(run)
@@ -364,6 +396,8 @@ cat > "$work/pipes.json" <<JSON
     "web_url": "https://gitlab.example.com/acme/gadget/-/pipelines/771" } ]
 JSON
 export GLAB_PIPES="$work/pipes.json"
+printf '[]' > "$work/gl-jobs.json"
+export GLAB_JOBS="$work/gl-jobs.json"
 GLAB_ARGS_FILE="$work/glab-args.txt"; export GLAB_ARGS_FILE
 
 o=$(bash "$status" --repo "$gl_repo" --branch main)
@@ -412,6 +446,13 @@ f=$(val PIPELINE_FAILED_JOBS "$o")
 [ "$(jq -r 'length' <<<"$f")" = "1" ] || fail "only the failed job is a failed job: $f"
 [ "$(jq -r '.[0].stage' <<<"$f")" = "test" ] || fail "the GitLab failed-job shape keeps its stage: $f"
 ok "GitLab failed jobs are derived from the breakdown, stage intact"
+
+o=$(GLAB_JOBS_FAIL="401 Unauthorized" bash "$status" --repo "$gl_repo" --branch main)
+[ "$(val PIPELINE_STATE "$o")" = unreachable ] \
+  || fail "a failed GitLab jobs read should report unreachable, not the pipeline with no jobs: $o"
+grep -q '^PIPELINE_ERROR=401 Unauthorized' <<<"$o" || fail "the jobs read's error should reach stdout: $o"
+[ -z "$(val PIPELINE_RUNS "$o")" ] || fail "a breakdown that could not be read is not emitted: $o"
+ok "a failed GitLab jobs read reports unreachable with the CLI's error"
 
 # --- a forge read that fails is unreachable, never none (CI-01, #46) ----------
 # "No pipeline" lets a merge gate through; a read that failed for a credential

@@ -10,7 +10,7 @@
 # checkout can be shared by more than one agent session, and a whole-tree add
 # sweeps up whatever the others have in flight — their files then get reviewed
 # and committed under this session's message. With no `--path` this stages
-# nothing and reports the index as it found it.
+# nothing, reports STAGED=0, and counts whatever the index holds as OTHER_STAGED.
 #
 # It does NOT read the full staged diff: the model needs that verbatim to draft
 # the message, so the skill reads `git diff --cached` itself. Tests stay out too,
@@ -31,7 +31,7 @@
 # Output (KEY=value on stdout):
 #   REPO_ROOT=<path>        the resolved target checkout, so the skill needs no
 #                           separate `git rev-parse --show-toplevel` call
-#   STAGED=<0|1>            1 == something is staged
+#   STAGED=<0|1>            1 == a named path has something staged
 #   OTHER_STAGED=<n>        staged paths this call did not stage — someone else's
 #                           in-flight work sharing the checkout, which the skill
 #                           surfaces rather than committing
@@ -41,8 +41,11 @@
 #   BRANCH=<name>           current branch (empty on detached HEAD)
 #   DEFAULT_BRANCH=<name>   origin/HEAD -> main -> master (empty if none resolve)
 #   ON_DEFAULT_BRANCH=<0|1> 1 == BRANCH is the default branch
-#   AHEAD=<n>               unpushed commit count; with no upstream, the count
-#                           ahead of origin/<default> (empty when neither exists)
+#   AHEAD=<n>               unpushed commit count; with no upstream, the commits
+#                           no origin ref holds (empty when neither exists)
+#   UNPUSHED_BASE=<sha>     the commit those unpushed commits start after, so
+#                           `UNPUSHED_BASE...HEAD` is what the push sends; empty
+#                           when neither exists
 #   SQUASH=<allowed|blocked> ... plus SQUASH_FORCE_PUSH / ALLOW_MESSAGE_AMEND /
 #                            PRIOR_SUBJECT — emitted verbatim by squash-check.sh
 #   ANCHOR_CONFIG=<json>    the anchor.* keys as a JSON object ({} when none)
@@ -85,26 +88,23 @@ while IFS= read -r spec; do named_specs+=("$spec"); done \
   < <(anchor_commit_pathspecs "${named[@]+"${named[@]}"}")
 
 staged=0
-if ! git diff --cached --quiet; then staged=1; fi
+if [[ ${#named_specs[@]} -gt 0 ]] && ! git diff --cached --quiet -- "${named_specs[@]}"; then staged=1; fi
 stat=""
 [[ "$staged" -eq 1 ]] && stat=$(git diff --cached --stat -- "${named_specs[@]+"${named_specs[@]}"}" | tail -1 | sed 's/^[[:space:]]*//')
 
 branch=$(git branch --show-current 2>/dev/null || true)
 
-default_branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null \
-  | sed 's@^origin/@@' || true)
-if [[ -z "$default_branch" ]]; then
-  if git rev-parse --verify --quiet origin/main >/dev/null; then
-    default_branch=main
-  elif git rev-parse --verify --quiet origin/master >/dev/null; then
-    default_branch=master
-  fi
-fi
+default_branch=$(anchor_default_branch || true)
 
 on_default=0
 [[ -n "$branch" && "$branch" == "$default_branch" ]] && on_default=1
 
 ahead=$(bash "$here/look-ahead.sh" 2>/dev/null || true)
+if pushed_ref=$(anchor_pushed_ref); then
+  unpushed_base=$(git rev-parse "$pushed_ref")
+else
+  unpushed_base=$(anchor_unpushed_base 2>/dev/null || true)
+fi
 
 config_json=$(anchor_config_json)
 anchor_config_warnings >&2
@@ -118,7 +118,8 @@ echo "BRANCH=$branch"
 echo "DEFAULT_BRANCH=$default_branch"
 echo "ON_DEFAULT_BRANCH=$on_default"
 echo "AHEAD=$ahead"
-# squash-check emits SQUASH / SQUASH_FORCE_PUSH / ALLOW_MESSAGE_AMEND / PRIOR_SUBJECT.
+echo "UNPUSHED_BASE=$unpushed_base"
+# squash-check emits SQUASH / SQUASH_FORCE_PUSH / ALLOW_MESSAGE_AMEND / PRIOR_SUBJECT / CR_REF / CR_URL.
 # Runs in this script's cwd (already the target repo), so it needs no --repo.
 bash "$here/squash-check.sh"
 echo "ANCHOR_CONFIG=$config_json"

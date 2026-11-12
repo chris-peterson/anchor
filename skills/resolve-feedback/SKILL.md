@@ -91,13 +91,19 @@ Resolve the open CR for the branch (when no URL was given):
 
 ```bash
 # GitLab
-glab mr view --output json 2>/dev/null | jq '{iid, web_url, draft, sha}'
+glab mr view --output json 2>/dev/null | jq '{iid, web_url, draft, sha, state}'
 
 # GitHub
-gh pr view --json number,url,isDraft,headRefOid 2>/dev/null
+gh pr view --json number,url,isDraft,headRefOid,state 2>/dev/null
 ```
 
-No open CR → say so and stop; there's nothing to address.
+Neither CLI filters a branch lookup by state, so a branch name that has been
+used before resolves to whatever CR used it last. Only `state` `opened`
+(GitLab) or `OPEN` (GitHub) is the branch's open CR; a merged, closed, or
+locked one is not, so don't take its number or head as the target.
+
+No open CR → say so and stop; there's nothing to address. When the lookup
+returned a CR in another state, name it and its state in that line.
 
 **Confirm local state matches the CR head** (same check as prepare-review):
 `git status --porcelain` clean, and local HEAD equals the CR head SHA. If
@@ -199,12 +205,14 @@ not these words or these lines:
 
 1. Stage the files the round's fixes touched with `commit-preflight.sh --path <p>...`.
 2. Write the drafted message to `$(mktemp -u /tmp/commit-msg.XXXXXX).md`.
-3. Open the review: `review-diff.sh --skill resolve-feedback --local
-   --message-file <path> --path <p>...`, printing the manifest and, in `diff`
+3. Probe with `review-diff.sh --skill resolve-feedback --probe --local`, then
+   open the review: `review-diff.sh --skill resolve-feedback --mode <REVIEW_MODE>
+   --local --message-file <path> --path <p>...`, printing the manifest and, in `diff`
    mode, the message verbatim (`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`).
 4. Act on the verdict as the commit skill's "Review the pending changeset"
-   section does: only `approved` commits;
-   `no-verdict` walks the fallback ladder with the message printed in the reply.
+   section does: only `approved` commits; `rejected` stops with nothing
+   committed; `undecided` is asked about; any other `no-verdict` walks the
+   fallback ladder with the message printed in the reply.
 5. Commit and push with `commit.sh --mode new --message-file <path>
    --reviewed-index <REVIEW_INDEX> --path <p>...` (plain push, since the branch
    only gains commits). Never `--force-with-lease` here.
@@ -245,20 +253,24 @@ is right. Reply content:
   docs should say, prefer fixing that and replying with the pointer.
 - For defers: where the ask landed (issue/CR link).
 
-Present them together, each body **verbatim** — the text as it will appear on
-the thread, not a paraphrase of it. A summary hides exactly the thing the user
-is being asked to approve:
+**Two or more replies are reviewed as one batch in revdiff**, per
+`${CLAUDE_PLUGIN_ROOT}/guides/batch-review.md`, each a thread reply item from
+`${CLAUDE_PLUGIN_ROOT}/templates/batch-items.md`. Publish each `keep` and
+`edited` item's `body` in 3d.
+
+One gate for the whole set, not one per thread: the same approval asked N times
+reads as noise, and the user starts approving without reading.
+
+**A single reply** is presented in chat, its body **verbatim**: the text as it
+will appear on the thread, not a paraphrase of it.
 
 | # | Where | Reply |
 |---|-------|-------|
 | 1 | `src/deploy.sh:42` | addressed in <url> |
-| 2 | `taskdef.yml:7` | Fargate would mean rebuilding the image on every deploy — the EC2 launch type keeps the layer cache warm. |
 
 Then ask with `AskUserQuestion` (header `Replies`): **Post as drafted** /
-**Edit** (they name the numbers and what to change; redraft and show the table
-again) / **Skip replying** (leave the threads for a later round). One gate for
-the whole set, not one per thread — the same approval asked N times reads as
-noise, and the user starts approving without reading.
+**Edit** (they say what to change; redraft and show it again) / **Skip
+replying** (leave the thread for a later round).
 
 This is not the Step 2 gate. Step 2 settles *what happens to each thread*
 while the words are still unwritten; approving a disposition is not approving

@@ -60,8 +60,12 @@ case "${1:-}" in
   pr)
     case "${2:-}" in
       view)   [[ -s "$CR_JSON" ]] || exit 1; cat "$CR_JSON" ;;
+      list)   [[ "${CR_LIST_FAIL:-0}" == 1 ]] && { echo "stub gh: HTTP 401" >&2; exit 1; }
+              if [[ -s "$CR_LIST" ]]; then cat "$CR_LIST"; else echo '[]'; fi ;;
       create) cp "$CR_AFTER_CREATE" "$CR_JSON"
               echo "https://github.com/example/repo/pull/7" ;;
+      edit)   while [[ $# -gt 0 && "$1" != --body-file ]]; do shift; done
+              cp "$2" "$WRITTEN_BODY" ;;
       *) echo "stub gh: unhandled pr subcommand: ${2:-}" >&2; exit 1 ;;
     esac ;;
   repo)
@@ -101,6 +105,8 @@ case "${1:-}" in
   mr)
     case "${2:-}" in
       view)   [[ -s "$CR_JSON" ]] || exit 1; cat "$CR_JSON" ;;
+      list)   [[ "${CR_LIST_FAIL:-0}" == 1 ]] && { echo "stub glab: 401" >&2; exit 1; }
+              if [[ -s "$CR_LIST" ]]; then cat "$CR_LIST"; else echo '[]'; fi ;;
       create) cp "$CR_AFTER_CREATE" "$CR_JSON"
               echo "https://gitlab.com/example/repo/-/merge_requests/7" ;;
       *) echo "stub glab: unhandled mr subcommand: ${2:-}" >&2; exit 1 ;;
@@ -112,6 +118,9 @@ case "${1:-}" in
   api)
     case "${2:-}" in
       user) echo '{"username":"tester"}' ;;
+      -X) [[ "${3:-}" == PUT && "${4:-}" == projects/:fullpath/merge_requests/* ]] \
+            || { echo "stub glab: unhandled api write: $*" >&2; exit 1; }
+          cp "${6#description=@}" "$WRITTEN_BODY" ;;
       projects/:fullpath)
         printf '{"merge_requests_template":%s}\n' \
           "$([[ -n "${GL_MR_TEMPLATE_SETTING:-}" ]] && jq -Rs . <<<"$GL_MR_TEMPLATE_SETTING" || echo null)" ;;
@@ -177,6 +186,8 @@ key() { sed -n "s/^$2=//p" <<<"$1"; }
 export CALL_LOG="$work/calls.log"
 export CR_JSON="$work/cr.json"
 export CR_AFTER_CREATE="$work/cr-after-create.json"
+export CR_LIST="$work/cr-list.json"
+export WRITTEN_BODY="$work/written-body.md"
 export DELETE_ON_MERGE=false
 export GH_OWNER=example
 export GH_REMOTE="$work/gh-remote"
@@ -235,7 +246,7 @@ template_repo() {
 gh_pr_json() {
   cat > "$CR_AFTER_CREATE" <<JSON
 {"url":"https://github.com/example/repo/pull/7","number":7,"isDraft":true,
- "headRefOid":"$1","body":"seeded body","state":"${2:-OPEN}"}
+ "headRefOid":"$1","headRefName":"${CR_BRANCH:-feat}","body":"seeded body","state":"${2:-OPEN}"}
 JSON
 }
 
@@ -243,7 +254,7 @@ JSON
 glab_mr_json() {
   cat > "$CR_AFTER_CREATE" <<JSON
 {"web_url":"https://gitlab.com/example/repo/-/merge_requests/7","iid":7,"draft":true,
- "sha":"$1","description":"seeded body","state":"${4:-opened}",
+ "sha":"$1","source_branch":"${CR_BRANCH:-feat}","description":"seeded body","state":"${4:-opened}",
  "should_remove_source_branch":$2,"force_remove_source_branch":$3}
 JSON
 }
@@ -593,8 +604,128 @@ out=$(bash "$prepare_review_sh" --repo "$repo" --cr 7)
 [[ "$(key "$out" CR_PREEXISTING)" == 1 ]] \
   || fail "--cr must resolve a merged PR; got CR_PREEXISTING=$(key "$out" CR_PREEXISTING)"
 [[ "$(key "$out" CR_IID)" == 7 ]] || fail "--cr should resolve PR 7; got $(key "$out" CR_IID)"
+[[ "$(key "$out" CR_REFERENCE)" == 'repo#7' ]] || fail "a PR's reference is <repo>#<number>; got $(key "$out" CR_REFERENCE)"
 [[ "$(key "$out" CR_PENDING)" == 0 ]] || fail "--cr must not queue a second CR; got: $out"
 ok "--cr resolves a merged PR regardless of state"
+
+# The Review status section is anchor's record, not prose: the review baseline
+# leaves it out, and the write puts it back after the redrafted prose.
+section='<!-- anchor:review-status {"k":{"rounds":1,"result":"approved"}} -->'
+jq --arg s "$section" '.body = "seeded body\n\n" + $s + "\n"' "$CR_AFTER_CREATE" > "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo" --cr 7)
+[[ "$(cat "$(key "$out" CURRENT_DESC_PATH)")" == 'seeded body' ]] \
+  || fail "the baseline should hold the prose alone: $(cat "$(key "$out" CURRENT_DESC_PATH)")"
+[[ "$(cat "$(key "$out" CR_REVIEW_STATUS_PATH)")" == "$section" ]] \
+  || fail "the section should be set aside whole: $(cat "$(key "$out" CR_REVIEW_STATUS_PATH)")"
+draft="$work/redrafted.md"
+printf '## Context\n\nredrafted prose\n' > "$draft"
+: > "$WRITTEN_BODY"
+written=$(bash "$prepare_review_sh" --repo "$repo" --write --body-file "$draft" \
+  --status-section "$(key "$out" CR_REVIEW_STATUS_PATH)" --cr 7)
+[[ "$(key "$written" CR_WRITTEN)" == 1 && "$(key "$written" STATUS_CARRIED)" == 1 ]] \
+  || fail "--write should report the write and the section: $written"
+[[ "$(cat "$WRITTEN_BODY")" == "## Context
+
+redrafted prose
+
+$section" ]] || fail "the section should follow the redrafted prose: $(cat "$WRITTEN_BODY")"
+[[ "$(cat "$draft")" == "## Context
+
+redrafted prose" ]] || fail "the reviewed draft should be left as approved: $(cat "$draft")"
+ok "an existing Review status section stays out of the review and goes back on write"
+
+# A round recorded on the CR after recon is still in the section the write lands,
+# and a CR with no section and no carried rounds gets the draft alone.
+jq '.body = "prose\n\n<!-- anchor:review-status {\"k\":{\"rounds\":2,\"result\":\"approved\"},\"late\":{\"rounds\":1,\"result\":\"approved\"}} -->\n"' \
+  "$CR_AFTER_CREATE" > "$CR_JSON"
+written=$(bash "$prepare_review_sh" --repo "$repo" --write --body-file "$draft" \
+  --status-section "$(key "$out" CR_REVIEW_STATUS_PATH)" --cr 7)
+grep -q '"late":{"rounds":1' "$WRITTEN_BODY" || fail "a round recorded since recon should survive: $(cat "$WRITTEN_BODY")"
+grep -q '"k":{"rounds":2' "$WRITTEN_BODY" || fail "the CR's own count wins over the carried one: $(cat "$WRITTEN_BODY")"
+jq '.body = "prose"' "$CR_AFTER_CREATE" > "$CR_JSON"
+empty_section="$work/empty-section.md"
+: > "$empty_section"
+written=$(bash "$prepare_review_sh" --repo "$repo" --write --body-file "$draft" --status-section "$empty_section" --cr 7)
+[[ "$(key "$written" STATUS_CARRIED)" == 0 ]] || fail "nothing to carry should report 0: $written"
+cmp -s "$draft" "$WRITTEN_BODY" || fail "with no rounds the draft lands as is: $(cat "$WRITTEN_BODY")"
+ok "--write joins the CR's current rounds and writes the draft alone when there are none"
+
+repo="$(make_repo gitlab.com gl-write)"
+glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false
+jq --arg s "$section" '.description = "seeded\n\n" + $s + "\n"' "$CR_AFTER_CREATE" > "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo")
+written=$(bash "$prepare_review_sh" --repo "$repo" --write --body-file "$draft" \
+  --status-section "$(key "$out" CR_REVIEW_STATUS_PATH)" --cr 7)
+[[ "$(key "$written" CR_WRITTEN)" == 1 ]] || fail "GitLab --write should report the write: $written"
+grep -qF 'glab api -X PUT projects/:fullpath/merge_requests/7 ' "$CALL_LOG" \
+  || fail "GitLab writes through the API PUT: $(cat "$CALL_LOG")"
+[[ "$(tail -n 1 "$WRITTEN_BODY")" == "$section" ]] || fail "GitLab's write carries the section: $(cat "$WRITTEN_BODY")"
+ok "--write lands the description on GitLab through the API"
+
+# A write lands only on the CR the checkout's branch backs. CR numbers are shared
+# across a project, so a number taken from anywhere but this branch's own CR (a
+# guess made before `--open` returned, a stale value from an earlier run) names
+# someone else's CR, and the forge accepts the write whenever the user can edit it.
+for forge in github gitlab; do
+  case "$forge" in
+    github) repo="$(make_repo github.com gh-write-other)"; maker=gh_pr_json; write_cmd='gh pr edit' ;;
+    gitlab) repo="$(make_repo gitlab.com gl-write-other)"; maker=glab_mr_json; write_cmd='glab api -X PUT' ;;
+  esac
+  if [[ "$forge" == github ]]; then
+    CR_BRANCH=someone-else "$maker" "$(git -C "$repo" rev-parse HEAD)" OPEN
+  else
+    CR_BRANCH=someone-else "$maker" "$(git -C "$repo" rev-parse HEAD)" true false
+  fi
+  cp "$CR_AFTER_CREATE" "$CR_JSON"
+  : > "$CALL_LOG"
+  : > "$WRITTEN_BODY"
+  status=0
+  written=$(bash "$prepare_review_sh" --repo "$repo" --write --body-file "$draft" --cr 7) || status=$?
+  [[ "$status" -ne 0 ]] || fail "$forge: --write to a CR on another branch should fail: $written"
+  [[ "$(key "$written" CR_WRITE_ERROR)" == *someone-else* ]] \
+    || fail "$forge: the refusal should name the CR's branch: $written"
+  ! grep -qF "$write_cmd" "$CALL_LOG" || fail "$forge: nothing should be written: $(cat "$CALL_LOG")"
+  [[ ! -s "$WRITTEN_BODY" ]] || fail "$forge: no body should land: $(cat "$WRITTEN_BODY")"
+done
+ok "--write refuses a CR whose source branch isn't the checkout's"
+
+# Before replacing a description, the write saves the one the CR holds, so a
+# write that lands where it shouldn't can be put back from the copy.
+repo="$(make_repo gitlab.com gl-write-backup)"
+glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false
+jq --arg s "$section" '.description = "the prior text\n\n" + $s' "$CR_AFTER_CREATE" > "$CR_JSON"
+written=$(bash "$prepare_review_sh" --repo "$repo" --write --body-file "$draft" --cr 7)
+backup="$(key "$written" CR_BACKUP_PATH)"
+[[ -n "$backup" && -f "$backup" ]] || fail "--write should report where the prior description went: $written"
+[[ "$(cat "$backup")" == "the prior text
+
+$section" ]] || fail "the backup should hold the description as the CR had it: $(cat "$backup")"
+[[ "$backup" == */repos/gl-write-backup/.git/anchor/backups/* ]] \
+  || fail "the backup should outlive the temp dir, under the repo's git dir: $backup"
+ok "--write backs up the description it replaces"
+
+# Rounds the branch's commits had before the CR existed come from the local
+# record: a pending CR's section holds them, and an existing section gains the
+# commits it has no round for, keeping its own.
+repo="$(make_repo github.com gh-local-record)"
+: > "$CR_JSON"
+patch=$(git -C "$repo" show --format= HEAD | git patch-id --stable | cut -d' ' -f1)
+mkdir -p "$repo/.git/anchor"
+jq -n --arg p "$patch" '{($p): {rounds: 1, by: ["me"], result: "approved", kind: "agent-assisted"},
+  "elsewhere": {rounds: 2, by: ["me"], result: "approved"}}' > "$repo/.git/anchor/review-status.json"
+out=$(bash "$prepare_review_sh" --repo "$repo")
+[[ "$(key "$out" CR_PENDING)" == 1 ]] || fail "expected a pending CR: $out"
+section_file="$(key "$out" CR_REVIEW_STATUS_PATH)"
+grep -q "\"$patch\":{\"rounds\":1" "$section_file" || fail "a pending CR's section carries the branch's rounds: $(cat "$section_file")"
+! grep -q elsewhere "$section_file" || fail "another branch's commits stay out of the section: $(cat "$section_file")"
+
+gh_pr_json "$(git -C "$repo" rev-parse HEAD)" OPEN
+jq '.body = "prose\n\n<!-- anchor:review-status {\"k\":{\"rounds\":3,\"result\":\"approved\"}} -->\n"' "$CR_AFTER_CREATE" > "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo" --cr 7)
+section_file="$(key "$out" CR_REVIEW_STATUS_PATH)"
+grep -q '"k":{"rounds":3' "$section_file" || fail "an existing section keeps its rounds: $(cat "$section_file")"
+grep -q "\"$patch\":{\"rounds\":1" "$section_file" || fail "an existing section gains the local rounds: $(cat "$section_file")"
+ok "the local record's rounds for the branch's commits are carried into the section"
 
 repo="$(make_repo gitlab.com gl-state-explicit)"
 glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false merged
@@ -603,6 +734,7 @@ out=$(bash "$prepare_review_sh" --repo "$repo" --cr 7)
 [[ "$(key "$out" CR_PREEXISTING)" == 1 ]] \
   || fail "--cr must resolve a merged MR; got CR_PREEXISTING=$(key "$out" CR_PREEXISTING)"
 [[ "$(key "$out" CR_IID)" == 7 ]] || fail "--cr should resolve MR 7; got $(key "$out" CR_IID)"
+[[ "$(key "$out" CR_REFERENCE)" == 'repo!7' ]] || fail "an MR's reference is <repo>!<iid>; got $(key "$out" CR_REFERENCE)"
 ok "--cr resolves a merged MR regardless of state"
 # --- NOTHING_TO_REVIEW: the dead end exits, rather than reporting a state -----
 #
@@ -650,5 +782,159 @@ out=$(bash "$prepare_review_sh" --repo "$repo")
 [[ "$(key "$out" NOTHING_TO_REVIEW)" == 0 ]] \
   || fail "expected NOTHING_TO_REVIEW=0 on a feature branch; got: $out"
 ok "a feature branch with a CR reports NOTHING_TO_REVIEW=0"
+
+# A ready CR reports CR_DRAFT=false, which the post-rebase force-push gate
+# tells apart from the empty value of no CR.
+repo="$(make_repo gitlab.com gl-ready)"
+glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false
+sed 's/"draft":true/"draft":false/' "$CR_AFTER_CREATE" > "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo")
+[[ "$(key "$out" CR_DRAFT)" == false ]] || fail "a ready MR should report CR_DRAFT=false; got: $out"
+ok "a ready MR reports CR_DRAFT=false"
+
+repo="$(make_repo github.com gh-ready)"
+gh_pr_json "$(git -C "$repo" rev-parse HEAD)"
+sed 's/"isDraft":true/"isDraft":false/' "$CR_AFTER_CREATE" > "$CR_JSON"
+export DELETE_ON_MERGE=true
+out=$(bash "$prepare_review_sh" --repo "$repo")
+[[ "$(key "$out" CR_DRAFT)" == false ]] || fail "a ready PR should report CR_DRAFT=false; got: $out"
+ok "a ready PR reports CR_DRAFT=false"
+
+# --- The label and milestone edit saves the whole CR first (FORGE-13) ---------
+# `--write` saves only the description, so the labels and milestone the CR held
+# are lost unless the skill backs up the CR itself before the edit.
+label_step=$(awk '/^### Label it and set the milestone/{on=1; next} on && /^### /{exit} on' \
+  "$here/../skills/prepare-review/SKILL.md")
+[[ -n "$label_step" ]] || fail "SKILL.md has no 'Label it and set the milestone' step"
+first_line() { awk -v re="$1" '$0 ~ re {print NR; exit}' <<<"$label_step"; }
+backup_line=$(first_line 'forge-backup[.]sh.*--kind cr')
+for edit_call in 'gh pr edit' 'glab mr update'; do
+  edit_line=$(first_line "^$edit_call ")
+  [[ -n "$edit_line" ]] || fail "the label step has no '$edit_call' call"
+  [[ -n "$backup_line" && "$backup_line" -lt "$edit_line" ]] \
+    || fail "the label step runs '$edit_call' without first running forge-backup.sh --kind cr"
+done
+ok "the label and milestone edit backs up the CR before editing it"
+
+# --- Stacked CRs: the base is the branch the CR is stacked on ----------------
+# A branch cut from another branch with an open CR has to be measured against
+# that branch, or the predecessor's commits count as its own: AHEAD doubles,
+# and a CR opened against the default branch shows both changesets.
+
+# stack_on <repo> <name>: cut <name> from the current branch, commit, push.
+stack_on() {
+  local repo=$1 name=$2
+  git -C "$repo" checkout --quiet -b "$name"
+  printf '%s\n' "$name" > "$repo/$name.txt"
+  git -C "$repo" add -A
+  git -C "$repo" commit --quiet -m "Add $name"
+  git -C "$repo" push --quiet -u origin "$name"
+}
+# gh_list / gl_list <head branch> <head sha> <number> [target branch]
+gh_list() { printf '[{"headRefName":"%s","headRefOid":"%s","number":%s,"url":"https://github.com/example/repo/pull/%s","baseRefName":"%s"}]\n' "$1" "$2" "$3" "$3" "${4:-main}" > "$CR_LIST"; }
+gl_list() { printf '[{"source_branch":"%s","sha":"%s","iid":%s,"web_url":"https://gitlab.com/example/repo/-/merge_requests/%s","target_branch":"%s"}]\n' "$1" "$2" "$3" "$3" "${4:-main}" > "$CR_LIST"; }
+
+repo="$(make_repo github.com gh-stacked)"
+gh_list feat "$(git -C "$repo" rev-parse HEAD)" 7
+stack_on "$repo" feat2
+: > "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo")
+[[ "$(key "$out" BASE_BRANCH)" == feat && "$(key "$out" BASE_SOURCE)" == stacked ]] \
+  || fail "a branch cut from an open CR's branch should be based on it; got: $out"
+[[ "$(key "$out" STACK_CR_IID)" == 7 && "$(key "$out" STACK_CR_URL)" == */pull/7 ]] \
+  || fail "the predecessor CR should be reported; got: $out"
+[[ "$(key "$out" AHEAD)" == 1 && "$(key "$out" CR_PENDING)" == 1 ]] \
+  || fail "only the stacked branch's own commit should count as ahead; got: $out"
+ok "a branch stacked on an open PR is based on its branch"
+
+gh_pr_json "$(git -C "$repo" rev-parse HEAD)"
+: > "$CALL_LOG"
+bash "$prepare_review_sh" --repo "$repo" --onto feat --open --title 'A change' --body-file "$approved_body" >/dev/null
+grep -q 'gh pr create .*--base feat' "$CALL_LOG" \
+  || fail "the create should target the --onto branch: $(cat "$CALL_LOG")"
+ok "--open --onto creates the PR against that branch"
+
+# The predecessor took a review fix after the branch was cut, so its head is no
+# longer in HEAD's history; the shared commits still make it the base.
+git -C "$repo" checkout --quiet feat
+printf 'fix\n' >> "$repo/a.txt"
+git -C "$repo" commit --quiet -am "Fix a"
+git -C "$repo" push --quiet origin feat
+gh_list feat "$(git -C "$repo" rev-parse HEAD)" 7
+git -C "$repo" checkout --quiet feat2
+: > "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo")
+[[ "$(key "$out" BASE_SOURCE)" == stacked && "$(key "$out" BEHIND)" == 1 ]] \
+  || fail "a predecessor that moved on should still be the base, one commit ahead of HEAD; got: $out"
+ok "a predecessor that took commits after the branch was cut is still the base"
+
+# The predecessor's own recon must not adopt the branch stacked on it.
+git -C "$repo" checkout --quiet feat
+gh_list feat2 "$(git -C "$repo" rev-parse feat2)" 8 feat
+out=$(bash "$prepare_review_sh" --repo "$repo")
+[[ "$(key "$out" BASE_SOURCE)" == default ]] \
+  || fail "a CR stacked on this branch is not its base; got: $out"
+ok "a CR stacked on this branch is not taken as its base"
+
+# --onto the default branch is the author declining the stack.
+git -C "$repo" checkout --quiet feat2
+gh_list feat "$(git -C "$repo" rev-parse feat)" 7
+out=$(bash "$prepare_review_sh" --repo "$repo" --onto main)
+[[ "$(key "$out" BASE_BRANCH)" == main && "$(key "$out" BASE_SOURCE)" == onto && -z "$(key "$out" STACK_CR_IID)" ]] \
+  || fail "--onto main should override the detected predecessor; got: $out"
+ok "--onto the default branch overrides a detected predecessor"
+
+repo="$(make_repo github.com gh-sibling)"
+gh_list feat "$(git -C "$repo" rev-parse feat)" 7
+git -C "$repo" checkout --quiet main
+stack_on "$repo" sibling
+: > "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo")
+[[ "$(key "$out" BASE_SOURCE)" == default && "$(key "$out" BASE_BRANCH)" == main ]] \
+  || fail "a branch cut from the default branch should not be stacked; got: $out"
+ok "a sibling branch cut from the default branch keeps the default base"
+
+export CR_LIST_FAIL=1
+out=$(bash "$prepare_review_sh" --repo "$repo")
+export CR_LIST_FAIL=0
+[[ "$(key "$out" STACK_LOOKUP_ERROR)" == *401* && "$(key "$out" BASE_SOURCE)" == default ]] \
+  || fail "a failed CR listing should be reported, not dropped; got: $out"
+ok "a failed CR listing is reported as STACK_LOOKUP_ERROR"
+
+if bash "$prepare_review_sh" --repo "$repo" --onto no-such-branch >/dev/null 2>"$work/err"; then
+  fail "--onto a branch origin lacks should fail"
+fi
+grep -q "PREPARE_ERROR=origin has no branch 'no-such-branch'" "$work/err" \
+  || fail "expected a PREPARE_ERROR naming the branch: $(cat "$work/err")"
+ok "--onto a branch origin lacks fails with PREPARE_ERROR"
+
+# An open CR's own target is the base, and an --onto that disagrees with it stops.
+repo="$(make_repo gitlab.com gl-stacked)"
+gl_list feat "$(git -C "$repo" rev-parse HEAD)" 7
+stack_on "$repo" feat2
+glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false
+sed 's/"state"/"target_branch":"feat","state"/' "$CR_AFTER_CREATE" > "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo")
+[[ "$(key "$out" BASE_BRANCH)" == feat && "$(key "$out" BASE_SOURCE)" == cr && "$(key "$out" AHEAD)" == 1 ]] \
+  || fail "an open MR's target should be the base; got: $out"
+ok "an open MR's target branch is the base"
+if bash "$prepare_review_sh" --repo "$repo" --onto main >/dev/null 2>"$work/err"; then
+  fail "--onto that disagrees with the open MR's target should fail"
+fi
+grep -q "already targets 'feat', not 'main'; move it with /anchor:stack on main" "$work/err" \
+  || fail "expected the mismatch named, with the way to move it: $(cat "$work/err")"
+ok "--onto that disagrees with the open MR's target fails, naming /anchor:stack on"
+
+: > "$CR_JSON"
+out=$(bash "$prepare_review_sh" --repo "$repo" --onto feat)
+[[ "$(key "$out" BASE_SOURCE)" == onto && "$(key "$out" STACK_CR_IID)" == 7 ]] \
+  || fail "--onto an open MR's branch should name that MR; got: $out"
+glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false
+: > "$CALL_LOG"
+bash "$prepare_review_sh" --repo "$repo" --onto feat --open --title 'A change' --body-file "$approved_body" >/dev/null
+grep -q -- '--target-branch feat' "$CALL_LOG" \
+  || fail "the MR create should target the --onto branch: $(cat "$CALL_LOG")"
+ok "--onto names the predecessor MR, and --open targets its branch"
+: > "$CR_LIST"
 
 echo "all prepare-review tests passed"

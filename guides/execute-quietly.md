@@ -16,7 +16,11 @@ relaying the state it surfaced.
 ## Show the finished artifact, keep the intermediates quiet
 
 Silence covers the *intermediate* objects: the `KEY=value` blocks, the gate
-outcomes, the diff you ran to check your own work. The finished artifact is the
+outcomes, the diff you ran to check your own work. A backup is one of them:
+`BACKUP_PATH` and `CR_BACKUP_PATH` name anchor's undo store under
+`.git/anchor/backups/`, which stays put after the session and is no leftover to
+report or clean up. Name a backup only when a write is refused or the user asks
+to undo one. The finished artifact is the
 opposite. The commit message, the CR description, the drafted issue are what the
 user is there to decide on, and they have to actually reach the user — as text
 in your reply, or through a review tool that shows them properly.
@@ -57,19 +61,30 @@ behind them.
 ## Exception: show what is going under review
 
 A review asks the user to grade something, and the tool draws it one file — or
-one buffer — at a time. The *set* is what it never shows: which files are in
-scope, how much each one moved, which repo and branch they belong to, and what
-rides alongside them. So print that manifest as a table in the message that
-launches the review, and let the tool render the contents.
+one buffer — at a time. The *set* is what it never shows: what the review
+belongs to, how big it is, and what approving it sets off. So print that
+manifest as a table in the message that launches the review, under the line
+saying where the review is (`running-a-review.md`), and let the tool render the
+contents:
 
-> Opening the review in a split — revdiff, `chris-peterson/anchor` on `main`,
-> with the drafted commit message:
+| Row | What it holds |
+| --- | --- |
+| Repo | the CR as its forge writes it, linked: `<repo>#<n>` on GitHub, `<repo>!<n>` on GitLab. With no CR, the repo and the branch |
+| Size | how much is under review: the files and lines a changeset touches, the sections a drafted document holds |
+| Tool | the tool's name |
+| What's next | what approving hands on to: the commit and push, the CR update, the publish |
+
+How to answer is the tool's to say: `(context).md` and the notes carry it, so
+the manifest stops at what is under review.
+
+> 👀 The review is open in an iTerm2 split of this pane.
 >
-> | File | Change |
-> |------|--------|
-> | `scripts/lib/review-host.sh` | +45 −29 |
-> | `tests/review-host.test.sh` | +76, new file |
-> | `SPEC.md` | +18 −15 |
+> | | |
+> | --- | --- |
+> | Repo | [`acme-widget#12`](https://github.com/acme/acme-widget/pull/12) |
+> | Size | 3 files, +139 −44 |
+> | Tool | revdiff |
+> | What's next | commit and push |
 
 Name the drafted artifact riding with the diff — the commit message, the CR
 description, the release notes — because the tool shows it in a pane or a
@@ -77,13 +92,13 @@ header the user has no reason to look for.
 
 **In `diff` mode, print that artifact verbatim under the table, in a fenced
 block.** A diff viewer draws the changeset, not the prose that rides with it:
-revdiff puts it behind its `i` popup, and a difftool has nowhere to put it at
-all. Quitting either one approves, so a message shown only there can be approved
-without being read, which CONFIRM-02 rules out. `edit` mode needs no copy: the
+revdiff puts it in a `(context).md` file the reviewer has to open. A reviewer
+can approve without opening
+`(context).md`, so a message shown only there can be approved without being
+read, which CONFIRM-02 rules out. `edit` mode needs no copy: the
 buffer the reviewer saves *is* the artifact.
 
-> Opening the review in a split — revdiff, `chris-peterson/anchor` on `main`.
-> Quitting approves both the diff and this message:
+> (the manifest above, then) Approving the review commits this message:
 >
 > ```text
 > Add retry to checkout
@@ -93,18 +108,18 @@ buffer the reviewer saves *is* the artifact.
 
 ### When anchor picked the tool, say which key would pick it instead
 
-The probe reports where each half of the choice came from —
-`REVIEW_MODE_SOURCE` for the shape and `REVIEW_TOOL_SOURCE` for the tool
-running it. `subject` on the first and `default` on the second both mean anchor
-picked it rather than the user, and the tool itself is the last place that would
-ever mention it. Add one line under the table naming the key, and the value that
+The probe reports where the tool came from in `REVIEW_TOOL_SOURCE`. `default`
+means anchor picked it rather than the user, and the tool itself is the last
+place that would ever mention it. The mode has no key (the subject picks it), so
+`REVIEW_MODE_SOURCE` never calls for this line. Add one line under the table naming the key, and the value that
 would have produced what they're looking at:
 
-> Editor picked by anchor — `git config anchor.edit.tool <editor>` chooses it
-> (`anchor.diff.tool` for the viewer).
+> Editor picked by anchor — `git config anchor.edit.tool <editor>` chooses it.
 
-The mode has no key to name, so the hint is only ever about the tool: where the
-shape anchor picked isn't the one wanted, the fix is the subject, not a setting.
+The mode has no key to name, so the hint is only ever about the editor: where
+the shape anchor picked isn't the one wanted, the fix is the subject, not a
+setting. A `diff` review reports `REVIEW_TOOL_SOURCE=required`, since every one
+runs revdiff and no key chooses it, so it gets no hint.
 
 Only for the half anchor picked; a choice the user typed needs no hint, which is
 what retires the line once they've made one. Say it in the launch

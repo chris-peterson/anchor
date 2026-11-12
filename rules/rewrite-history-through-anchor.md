@@ -3,7 +3,11 @@
 When you're about to rewrite git history — `commit --amend`, a squash, a
 rebase, any force-push — don't do it ad-hoc: use `/anchor:commit`, which
 encodes when amending is safe and when the change must land as a new
-commit, and recommends accordingly.
+commit, and recommends accordingly; `/anchor:amend` is the same flow
+when the user has already said to amend. To catch a branch (or a stack of
+them) up to its base, use `/anchor:rebase`, which force-pushes only a
+branch origin held as it stood, leased on that commit, and asks first over a
+ready CR or someone else's.
 
 For rewrites the skill doesn't cover, gate on what's reliable at decision
 time — push state and the CR's draft flag (`gh pr view --json isDraft` /

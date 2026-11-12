@@ -226,6 +226,107 @@ o=$(run "$repo")
 [ "$(val RELEASE_VERSION "$o")" = "0.2.0" ] || fail "VERSION file wrong: $o"
 ok "gitlab CI_COMMIT_TAG -> tag-triggered, version read from VERSION"
 
+# The gate has to be a job's own rule or `only:`, read with its polarity. The
+# variable named anywhere else in the file, or a rule that keeps tags out, says
+# nothing about who publishes (the GitLab half of RELEASE-03).
+expect_gitlab() {
+  local want="$1" repo ci got
+  ci=$(cat)
+  repo=$(new_repo "gitlab-$RANDOM")
+  printf '%s\n' "$ci" > "$repo/.gitlab-ci.yml"
+  printf '0.2.0\n' > "$repo/VERSION"
+  git -C "$repo" add -A
+  git -C "$repo" commit --quiet -m gitlab
+  got=$(val RELEASE_MODEL "$(run "$repo")")
+  [ "$got" = "$want" ] || fail "expected $want, got $got:
+$ci"
+}
+
+expect_gitlab tag-triggered <<'YAML'
+deploy:
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v/'
+      when: manual
+  script: echo ship
+YAML
+expect_gitlab tag-triggered <<'YAML'
+deploy:
+  only:
+    - tags
+  script: echo ship
+YAML
+expect_gitlab tag-triggered <<'YAML'
+deploy:
+  only: [tags, main]
+  script: echo ship
+YAML
+expect_gitlab tag-triggered <<'YAML'
+deploy:
+  only:
+    refs:
+      - tags
+  script: echo ship
+YAML
+expect_gitlab tag-triggered <<'YAML'
+.tag_rules: &tag_rules
+  - if: $CI_COMMIT_TAG != null
+deploy:
+  rules: *tag_rules
+  script: echo ship
+YAML
+expect_gitlab tag-triggered <<'YAML'
+deploy:
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $CI_COMMIT_TAG
+  script: echo ship
+YAML
+ok "gitlab rules: if / only: tags gating a job -> tag-triggered"
+
+expect_gitlab bump-commit <<'YAML'
+# Releases run when CI_COMMIT_TAG is set, by hand.
+build:
+  script: echo build
+YAML
+expect_gitlab bump-commit <<'YAML'
+build:
+  script:
+    - echo "building $CI_COMMIT_TAG"
+    - if [ -n "$CI_COMMIT_TAG" ]; then echo tagged; fi
+YAML
+expect_gitlab bump-commit <<'YAML'
+variables:
+  IMAGE_TAG: $CI_COMMIT_TAG
+build:
+  script: echo build
+YAML
+expect_gitlab bump-commit <<'YAML'
+test:
+  rules:
+    - if: $CI_COMMIT_TAG == null
+  script: echo test
+YAML
+expect_gitlab bump-commit <<'YAML'
+test:
+  rules:
+    - if: '$CI_COMMIT_TAG == ""'
+  script: echo test
+YAML
+expect_gitlab bump-commit <<'YAML'
+test:
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never
+    - when: on_success
+  script: echo test
+YAML
+expect_gitlab bump-commit <<'YAML'
+test:
+  except:
+    - tags
+  script: echo test
+YAML
+ok "gitlab CI_COMMIT_TAG in a comment, script, variable, or exclusion -> not tag-triggered"
+
 # --- dispatch-triggered: a release workflow someone runs by hand ---------------
 # The escape-hatch trap: every workflow in a repo tends to carry
 # `workflow_dispatch:`, so matching that alone names whichever file sorts first.

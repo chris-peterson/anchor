@@ -23,6 +23,7 @@ change.
 ```bash
 claude plugin marketplace add chris-peterson/claude-marketplace
 claude plugin install anchor@chris-peterson
+brew install umputun/apps/revdiff   # every diff review opens in revdiff 1.14 or later
 ```
 
 ## Getting started
@@ -78,6 +79,41 @@ approve?"*. That question converts a tooling failure into your sign-off.
 
 Requirements: DIFF-12 and DIFF-20 in [SPEC](/spec).
 
+### Anything anchor replaces can be put back :id=tenet-backup
+
+Before `anchor` overwrites text on the forge, it saves what was there to
+`.git/anchor/backups/` in your checkout, quietly, and keeps it there. A write
+that lands on the wrong change request, or one you change your mind about, is
+a paste away from undone, whatever edit history the forge keeps: ask the agent
+to put it back.
+
+Requirement: FORGE-13 in [SPEC](/spec).
+
+### Feedback sits beside the code it is about :id=tenet-in-place
+
+A finding, an answer to your question, or a note on a change goes on the line it
+concerns: the line that changed, or the line you asked on. You read it where you
+were already reading, the way you would in any code review, instead of leaving
+the diff to find what a note means.
+
+Requirement: UX-09 in [SPEC](/spec).
+
+### An explanation lasts as long as it stays true :id=tenet-transient
+
+| What it explains | Lasts | Goes in |
+| --- | --- | --- |
+| why the code is this way | the code's lifetime | a comment, rarely |
+| why this change exists | the history | the commit message, the CR description |
+| why this line is this way, what was weighed, what to check | this review | a note on the line, gone when the review closes |
+
+When `anchor` shows you a change it wrote, the reasoning you need to judge it
+arrives as notes on the lines it concerns, and leaves with the review. The
+commit message, the CR description, and the code keep only what stays true, so
+they stay short, and nothing in the permanent record narrates a decision to a
+reader who wasn't there for it.
+
+Requirement: UX-12 in [SPEC](/spec); [notes on your own changes](/guides/review-notes).
+
 ### No AI attribution :id=tenet-attribution
 
 No `Co-Authored-By` trailer, no *Generated with* footer. The commit author and
@@ -90,8 +126,12 @@ Requirement: RULE-02 in [SPEC](/spec).
 | Skill | What it does |
 |---|---|
 | [`/anchor:commit`](/skills/commit) | Review the changeset, then commit with a why-first message and push |
-| [`/anchor:prepare-review`](/skills/prepare-review) | Rebase on the default branch and open a draft change request |
-| [`/anchor:review`](/skills/review) | Read every change in a CR, weigh it against your qualities, post findings inline |
+| [`/anchor:amend`](/skills/amend) | Fold the staged changes into the last commit, with the same tests and review as a commit |
+| [`/anchor:prepare-review`](/skills/prepare-review) | Rebase on its base branch (stacked on another CR, where it is) and open a draft change request |
+| [`/anchor:rebase`](/skills/rebase) | Catch a branch, or its whole stack, up to the branch it merges into, resolve the conflicts, and force-push |
+| [`/anchor:stack`](/skills/stack) | Show a stack of CRs as a tree, start the next branch on top, move a branch onto another CR, review it bottom up |
+| [`/anchor:review`](/skills/review) | Weigh a CR against your qualities, draft a fix per finding, and decide each one in revdiff before reviewing the whole change |
+| [`/anchor:ready`](/skills/ready) | Take a draft CR out of draft, request reviewers, and report its pipeline |
 | [`/anchor:resolve-feedback`](/skills/resolve-feedback) | Work a CR's review threads to done, one by one |
 | [`/anchor:merge`](/skills/merge) | Check the merge gates, wait on the pipeline, then land the CR and clean up |
 | [`/anchor:release`](/skills/release) | Work out what's shipping, recommend a version, draft the notes, publish |
@@ -144,18 +184,18 @@ path of least resistance.
   with the *why*, and deep-links the critical path so a skim lands on what
   matters.
 
-## Optional integrations
+## Integrations
 
-The skills run with nothing else installed.
-
-- **[revdiff](https://revdiff.com)**: the viewer `anchor` recommends, named
-  through `anchor.diff.tool` or git's own `diff.tool` like any other: a
-  terminal-native diff reviewer
-  (git, hg, and jj) that returns a normalized verdict and marks which diff side
-  each annotation sits on. It carries no commit-message round-trip, so the skill
-  confirms the message itself. It renders in a terminal, so `anchor` opens it in
-  one it hosts itself: a tmux popup, or an iTerm2 split of the session you are
-  in.
+- **[revdiff](https://revdiff.com)**: required. Every diff review opens in it,
+  whatever `anchor.diff.tool` or git's own `diff.tool` names; both keys are
+  ignored in 2.0. It is a terminal-native diff reviewer (git, hg, and jj) whose
+  `(context).md`, preloaded notes, and Review box carry the verdict, and it marks
+  which diff side each annotation sits on. Without revdiff 1.14 or later, a diff
+  review stops before it opens and names the install. It renders in a terminal,
+  so `anchor` opens it in one it hosts itself: a tmux popup, or an iTerm2 split
+  of the session you are in. With [helix](https://github.com/helix-editor/helix)
+  for drafts, it is the
+  [recommended setup](/guides/configuring?id=recommended-setup).
 
 Integration runs the other way too, and needs nothing configured. `anchor`
 [announces](/events) each lifecycle fact it causes (an issue filed, a commit

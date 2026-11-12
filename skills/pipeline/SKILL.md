@@ -166,7 +166,7 @@ The output is `KEY=value` lines:
   what the report tabulates; `PIPELINE_STATE` stays the headline. Absent when
   there's no pipeline (`none` / `absent`) and in `--job` mode, where the job
   lines below carry the detail instead.
-- `PIPELINE_FAILED_JOBS` — present only when `PIPELINE_STATE=failed`: a JSON
+- `PIPELINE_FAILED_JOBS` — present only when `PIPELINE_STATE` is `failed` or `canceled`: a JSON
   array of `{name, url}` (GitHub) or `{name, stage, url}` (GitLab), scoped to
   the run the verdict came from.
 

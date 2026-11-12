@@ -19,7 +19,7 @@ just docs           # render the docs site and serve it locally
 
 just test           # every suite this platform runs, via tests/run-all.sh
 bash tests/<name>.test.sh                                  # one suite
-shellcheck hooks/*.sh scripts/*.sh scripts/review/modes/*.sh scripts/review/tools/*.sh scripts/review/hosts/*.sh tests/*.sh
+shellcheck hooks/*.sh scripts/*.sh scripts/review/*.sh scripts/review/modes/*.sh scripts/review/tools/*.sh scripts/review/hosts/*.sh tests/*.sh
 ```
 
 `tests/run-all.sh` discovers `tests/*.test.sh`, so a new suite needs no wiring in
@@ -54,10 +54,10 @@ block, and most of `docs/` are **generated** by
 Never hand-edit a generated file; edit its source and let the projection follow.
 
 The projection job in `.github/workflows/project.yml` is that writer: it runs
-`shipyard generate` on every push and commits the result to the branch, so a
-committed artifact matches its source at all times and the diff a reviewer
-approves is what lands. `just generate` runs the same projectors locally when
-you want to see the result before pushing.
+`shipyard generate` on each push to `main` and each pull request opened from this
+repo, and commits the result to the branch, so the diff a reviewer approves is
+what lands. A pushed feature branch with no PR yet gets no projection, so run
+`just generate` before committing to keep its generated files current.
 
 Releases are dispatched, not tagged by hand: run the **Release** workflow with a
 bump level, and shipyard derives the version from `plugin.yml`, retitles
@@ -81,6 +81,15 @@ what picks the level.
   deterministic, and it belongs in `scripts/`. What the change is *for*, and
   whether the drafted prose says it, is the model's half and belongs in the
   `SKILL.md`.
+- **Scripts trade complexity for fewer prompts and less variance.** One allow
+  rule covers a script, where each inline command, and each guarded one like a
+  force-push, prompts on its own; and a script behaves the same every session,
+  where an improvised step doesn't. The price is that every state the script
+  handles is a case its suite covers, on both forges. So a guarded command, a
+  step several skills repeat, or one with a single right answer goes in a
+  script: `scripts/rebase.sh` runs the rebase, the
+  conflict resume, and the leased force-push, and the skill only resolves the
+  conflicts.
 - **A helper's `KEY=value` output is input to the next decision, not output to
   the user.** Skills execute quietly: run the step, read the result, move on. The
   discipline is in `guides/execute-quietly.md` and the skills link to it rather
@@ -91,6 +100,10 @@ what picks the level.
 - **Nothing publishes under the user's name without their approval of the exact
   text** (CONFIRM-01..06). A plan describing what the message will say is not the
   message; the artifact itself has to reach the user before it lands.
+- **Back up before overwriting** (FORGE-13). An edit to an existing CR, issue,
+  or milestone saves the item under `.git/anchor/backups/` first, through
+  `scripts/forge-backup.sh` (or inside `prepare-review.sh --write`), and goes
+  ahead only when the saved item is the one presented for approval.
 - **No AI attribution trailers** in anything the plugin authors — the commit
   author and CR author fields already record it.
 
@@ -112,12 +125,11 @@ what picks the level.
   where they are shown a changeset and comment on it. The subject picks it —
   `edit` where there is nothing to diff against, `diff` everywhere else.
 - **Review tool** — the tool that runs a mode: the user's editor in `edit`
-  (`anchor.edit.tool`, else `core.editor` and its chain), a viewer in `diff`
-  (`anchor.diff.tool`, else git's own `diff.tool`, else `revdiff`). The mode
-  has no key — the subject settles it — and the tool is the half that does, one
-  key per mode. A difftool has nowhere to leave an annotation, so its adapter
-  reads the reviewer's answer out of the working tree: the files they edited come
-  back as the feedback.
+  (`anchor.edit.tool`, else `core.editor` and its chain), and revdiff in `diff`,
+  which every diff review needs. `anchor.diff.tool` and git's own `diff.tool`
+  are ignored in 2.0: a value naming another viewer gets one line saying so,
+  and revdiff opens. The mode has no key (the subject settles it), so the editor
+  is the one tool a user sets.
 - **Review host** — where a review is put on screen. The set is one file per
   host in `scripts/review/hosts/`, ranked by `anchor_review_hosts` in
   `scripts/lib/review-host.sh`; what each looks like to a user is in
@@ -127,8 +139,8 @@ what picks the level.
   equally far, and asked of the same dispatcher by the probe and the launch so
   the two cannot disagree.
 - **Review contract** — the tool-agnostic result `scripts/review-diff.sh`
-  returns: a verdict (`approved` · `changes-requested` · `incomplete` ·
-  `no-verdict`) plus normalized comments and capabilities, produced from a
+  returns: a verdict (`approved` · `changes-requested` · `rejected` ·
+  `incomplete` · `no-verdict`) plus normalized comments and capabilities, produced from a
   tool's native output by its adapter. An absent or unparseable verdict is
   `no-verdict` and halts the flow — it is never read as approval.
 - **Squash gate** — the deterministic "is HEAD out for review?" decision in

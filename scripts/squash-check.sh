@@ -17,7 +17,10 @@
 #     branch                                   over published shared history; no
 #                                              review-state check makes that safe.
 #                                              Land a new commit.
-#   - HEAD pushed, CR is ready (out for     -> DON'T squash — a reviewer relies
+#   - branch never pushed, HEAD on origin   -> DON'T squash — HEAD is the tip of
+#     (cut from another pushed branch)         the branch this one was cut from,
+#                                              and belongs to that branch's CR
+#   - HEAD pushed, CR is ready (out for    -> DON'T squash — a reviewer relies
 #     review)                                  on the per-commit "changes since"
 #                                              diff; land a new commit
 #
@@ -34,7 +37,7 @@
 # checkout (see scripts/lib/resolve-context.sh).
 #
 # The stdout is an OUTPUT CONTRACT, not a fact dump: it exports the decision the
-# skill acts on plus the one datum it must present, and keeps the facts that
+# skill acts on plus the data it must present, and keeps the facts that
 # produced the decision (push state, CR state, author identity, the block reason)
 # inside this script. The skill can't narrate what it never receives — so the
 # gate stays quiet by construction rather than by a "don't say this" instruction
@@ -53,11 +56,16 @@
 #                                   and force-pushed). Named by what it PERMITS, not
 #                                   why — the reason itself never crosses the boundary
 #   PRIOR_SUBJECT=<subject>        HEAD's subject line (for the squash option text)
+#   CR_REF=<repo>#<n>|<repo>!<n>   the branch's CR as its forge writes it, empty
+#                                   with none (the review manifest names it)
+#   CR_URL=<url>                   that CR's page
 
 set -euo pipefail
 
 # shellcheck source=lib/resolve-context.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
+# shellcheck source=lib/forge-url.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/forge-url.sh"
 CTX_REPO=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -90,26 +98,22 @@ fi
 # --- Default branch (for the push probe and the default-branch guard) --------
 # Resolved once so both the push probe below and the decision block can reuse it.
 
-default_branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null \
-  | sed 's@^origin/@@' || true)
-if [[ -z "$default_branch" ]]; then
-  if git rev-parse --verify --quiet origin/main >/dev/null; then
-    default_branch=main
-  elif git rev-parse --verify --quiet origin/master >/dev/null; then
-    default_branch=master
-  fi
-fi
+default_branch=$(anchor_default_branch || true)
 
 # --- Is HEAD pushed? ----------------------------------------------------------
-# Prefer the configured upstream; fall back to origin/<default> for local-only
-# branches that were never `push -u`'d (the common "first commit on a new
-# branch" case). With neither, treat HEAD as unpushed.
+# Prefer the configured upstream; for local-only branches that were never
+# `push -u`'d (the common "first commit on a new branch" case), count the commits
+# no origin ref holds. Counting against origin/<default> instead reads a branch
+# cut from another pushed branch as unpushed, so its first commit would amend
+# that branch's pushed tip. With neither, treat HEAD as unpushed.
 
 unpushed_count=""
-if git rev-parse --verify --quiet '@{u}' >/dev/null 2>&1; then
-  unpushed_count=$(git rev-list --count '@{u}..HEAD' 2>/dev/null || echo "")
-elif [[ -n "$default_branch" ]] && git rev-parse --verify --quiet "origin/${default_branch}" >/dev/null; then
-  unpushed_count=$(git rev-list --count "origin/${default_branch}..HEAD" 2>/dev/null || echo "")
+has_upstream=0
+if pushed_ref=$(anchor_pushed_ref); then
+  has_upstream=1
+  unpushed_count=$(git rev-list --count "${pushed_ref}..HEAD" 2>/dev/null || echo "")
+else
+  unpushed_count=$(anchor_unpushed_count 2>/dev/null || echo "")
 fi
 
 # HEAD is pushed only when we resolved a count and it's zero. No resolvable
@@ -121,18 +125,33 @@ fi
 
 # --- CR review state ----------------------------------------------------------
 
+# One line each: the draft flag, the CR's number, its page. A field the forge
+# leaves out comes back as an empty line, so the reads below stay aligned.
+# Neither CLI filters a branch lookup by state, so a merged or closed CR on a
+# reused branch name reads as no CR.
 cr_state=none
 case "$forge" in
   gitlab)
-    draft=$(glab mr view --output json 2>/dev/null | jq -r '.draft // empty' || true)
+    cr=$(glab mr view --output json 2>/dev/null \
+      | jq -r 'select(.state == "opened")
+               | (.draft | values | tostring) // "", (.iid // "" | tostring), (.web_url // "")' || true)
     ;;
   github)
-    draft=$(gh pr view --json isDraft --jq '.isDraft' 2>/dev/null || true)
+    cr=$(gh pr view --json isDraft,number,url,state \
+      --jq 'select(.state == "OPEN")
+            | (.isDraft | values | tostring) // "", (.number // "" | tostring), (.url // "")' 2>/dev/null || true)
     ;;
   *)
-    draft=""
+    cr=""
     ;;
 esac
+draft="" cr_number="" cr_url=""
+{ IFS= read -r draft; IFS= read -r cr_number; IFS= read -r cr_url; } <<<"$cr" || true
+
+cr_ref=""
+if [[ -n "$cr_number" && -n "$cr_url" ]]; then
+  cr_ref=$(anchor_cr_reference "$cr_url" "$cr_number")
+fi
 if [[ "$draft" == "true" ]]; then
   cr_state=draft
 elif [[ "$draft" == "false" ]]; then
@@ -149,7 +168,10 @@ squash=blocked
 force_push=0
 allow_message_amend=0
 
-if [[ "$other_author" -eq 1 ]]; then
+if ! git rev-parse --verify --quiet HEAD >/dev/null; then
+  # No commit yet, so nothing to amend.
+  :
+elif [[ "$other_author" -eq 1 ]]; then
   # HEAD authored by someone else — amending rewrites their commit, never a target
   # (even for a message-only fix).
   :
@@ -157,6 +179,11 @@ elif [[ "$head_pushed" -eq 0 ]]; then
   # Unpushed HEAD: squashing never touches published or reviewed history.
   # (Local-only commits on the default branch land here too — fine to amend.)
   squash=allowed
+elif [[ "$has_upstream" -eq 0 ]]; then
+  # This branch was never pushed, yet an origin ref holds HEAD: it is the tip of
+  # the branch this one was cut from (a stacked branch's first commit). That
+  # commit belongs to the other branch and its CR, so land a new commit.
+  :
 elif [[ -n "$default_branch" ]] \
      && git rev-parse --verify --quiet "origin/${default_branch}" >/dev/null \
      && git merge-base --is-ancestor HEAD "origin/${default_branch}" 2>/dev/null; then
@@ -184,3 +211,5 @@ echo "SQUASH=$squash"
 echo "SQUASH_FORCE_PUSH=$force_push"
 echo "ALLOW_MESSAGE_AMEND=$allow_message_amend"
 echo "PRIOR_SUBJECT=$prior_subject"
+echo "CR_REF=$cr_ref"
+echo "CR_URL=$cr_url"

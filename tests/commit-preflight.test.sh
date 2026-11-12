@@ -140,8 +140,22 @@ git -C "$repo" add local.txt
 git -C "$repo" commit --quiet -m "Local only"
 o=$(run)
 [ "$(val STAGED "$o")" = 0 ] || fail "nothing staged on never-pushed"
-[ "$(val AHEAD "$o")" = 1 ]  || fail "AHEAD should count against origin/main with no upstream; got '$(val AHEAD "$o")'"
-ok "no upstream: AHEAD counts the commits ahead of origin/<default>"
+[ "$(val AHEAD "$o")" = 1 ]  || fail "AHEAD should count the commit no origin ref holds; got '$(val AHEAD "$o")'"
+[ "$(val UNPUSHED_BASE "$o")" = "$(git -C "$repo" rev-parse main)" ] \
+  || fail "UNPUSHED_BASE should be the commit the unpushed one starts after; got '$(val UNPUSHED_BASE "$o")'"
+ok "no upstream: AHEAD counts the commits no origin ref holds, from UNPUSHED_BASE"
+
+# another session's staged file is OTHER_STAGED, and leaves push-existing open
+printf 'theirs\n' > "$repo/peer.txt"
+git -C "$repo" add peer.txt
+o=$(run)
+[ "$(val STAGED "$o")" = 0 ]       || fail "a foreign staged path is not ours to commit; got STAGED=$(val STAGED "$o")"
+[ "$(val OTHER_STAGED "$o")" = 1 ] || fail "the foreign staged path is OTHER_STAGED; got $(val OTHER_STAGED "$o")"
+[ -z "$(val STAT "$o")" ]          || fail "STAT empty with nothing of ours staged; got $(val STAT "$o")"
+[ "$(val AHEAD "$o")" = 1 ]        || fail "AHEAD should still count the unpushed commit"
+git -C "$repo" reset --quiet -- peer.txt
+rm "$repo/peer.txt"
+ok "staging: STAGED counts only named paths, so a peer's staged file leaves push-existing open"
 
 # --- on default branch, nothing new staged --------------------------------
 git -C "$repo" checkout --quiet -f main

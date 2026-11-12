@@ -7,7 +7,7 @@
 An announcement is one line: a key, then a compact JSON object.
 
 ```text
-codes.bridgeai.anchor/cr.created {"uri":"https://github.com/o/r/pull/3533"}
+codes.bridgeai.anchor/cr.created {"uri":"…","title":"…"}
 ```
 
 The events, each linkable on its own:
@@ -18,6 +18,8 @@ The events, each linkable on its own:
 - [`cr.merged`](#cr-merged)
 - [`commit.pushed`](#commit-pushed)
 - [`issue.created`](#issue-created)
+- [`attention.requested`](#attention-requested)
+- [`attention.released`](#attention-released)
 - [`release.created`](#release-created)
 
 ## `cr.created` :id=cr-created
@@ -56,7 +58,7 @@ Emitted by `skills/prepare-review`.
 codes.bridgeai.anchor/cr.ready
 ```
 
-the draft flag came off, on the author's say-so. Emitted by the script that clears it, which is the one path that does, so the two callers announce identically: review's self-review handoff, where the author is done and wants eyes on the change, and merge's draft gate, where they choose to land one that never left draft. From that gate the same run goes on to announce cr.merged unless a later gate stops it; from the handoff it stands alone.
+the draft flag came off, on the author's say-so. Emitted by the script that clears it, which is the one path that does, so its callers announce identically: the ready skill, where the author asks for it outright; review's self-review handoff, where the author is done and wants eyes on the change; and merge's draft gate, where they choose to land one that never left draft. From that gate the same run goes on to announce cr.merged unless a later gate stops it; from the handoff it stands alone.
 
 | Field | Value | Meaning |
 |---|---|---|
@@ -112,6 +114,31 @@ issue filed a new issue. A run that adds to an issue that already existed announ
 
 Emitted by `skills/issue`.
 
+## `attention.requested` :id=attention-requested
+
+```text
+codes.bridgeai.anchor/attention.requested
+```
+
+the review probe found a review that can open. Announced from the probe because the launch runs in the background, where nothing it prints is seen until the review is over; a subscriber hears it before the next tool call opens the review. A probe the skill doesn't follow with a launch has no release to match it.
+
+| Field | Value | Meaning |
+|---|---|---|
+| `target` | always set | what is under review: the CR's web address where the review names one, a drafted document's title for a review of files, or the repository's root |
+| `skill` | may be empty | the skill asking for the review, as passed to `--skill` |
+
+Emitted by `scripts/review-diff.sh`.
+
+## `attention.released` :id=attention-released
+
+```text
+codes.bridgeai.anchor/attention.released
+```
+
+a review launch ended, on every way out of it: a verdict, a refusal, or a killed dispatcher. Read with the verdict, by whichever tool the agent reads it with.
+
+Emitted by `scripts/review-diff.sh`.
+
 ## `release.created` :id=release-created
 
 ```text
@@ -134,8 +161,8 @@ An announcement reaches a `PostToolUse` hook on `Bash` as `tool_response.stdout`
 ```bash
 input=$(cat)
 output=$(printf '%s' "$input" | jq -r '.tool_response.stdout // empty' 2>/dev/null) || exit 0
-line=$(printf '%s' "$output" | grep -m1 '^codes\.bridgeai\.anchor/cr\.created[[:space:]]') || exit 0
-uri=$(printf '%s' "${line#* }" | jq -r '.uri // empty' 2>/dev/null) || exit 0
+line=$(grep -m1 '^codes\.bridgeai\.anchor/cr\.created[[:space:]]' <<<"$output") || exit 0
+uri=$(printf '%s' "${line#* }" | jq -er 'if type == "object" then (.uri // "" | tostring | gsub("[[:cntrl:]]"; "")) else error end' 2>/dev/null) || exit 0
 ```
 
 Register that in your own plugin's `hooks.yml`. `anchor` gains no entry, no config, and no knowledge that you subscribed, which is what lets either side ship without the other.

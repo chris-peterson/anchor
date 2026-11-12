@@ -19,6 +19,17 @@ source "$(dirname "${BASH_SOURCE[0]}")/review-host.sh"
 # shellcheck source=editor-flags.sh
 source "$(dirname "${BASH_SOURCE[0]}")/editor-flags.sh"
 
+# The artifact the invoking skill's review carries, by its editedFields target;
+# empty for a skill that names none.
+anchor_artifact_target() {
+  case "${review_skill:-}" in
+    commit)         printf 'commit-message' ;;
+    prepare-review) printf 'description' ;;
+    issue)          printf 'issue-body' ;;
+    release)        printf 'release-notes' ;;
+  esac
+}
+
 # A no-op editor is treated as unset (DIFF-16): an agent harness commonly exports
 # `GIT_EDITOR=true` to keep git from ever opening one, and honoring that would
 # open nothing, change nothing, and read as "saved unchanged" — an approval the
@@ -45,8 +56,8 @@ anchor_editor_candidates=(code code-insiders)
 # user chose it — the launch names a config key only for one anchor picked.
 anchor_editor_configured() {
   local ed
-  # anchor's own key first: `edit` mode's tool half, the mirror of
-  # anchor.diff.tool. Above git's chain because it is the narrower statement —
+  # anchor's own key first: `edit` mode's tool half. Above git's chain because
+  # it is the narrower statement —
   # which editor to review in, not which to open for everything.
   ed=$(git config anchor.edit.tool 2>/dev/null || true)
   # The variable itself, not `git var GIT_EDITOR`: that walks the rest of this
@@ -61,13 +72,20 @@ anchor_editor_configured() {
 }
 
 # git's compiled default — what a plain `git commit` opens here. It answers only
-# with the environment's own editors out of the way entirely, since it honors an
-# empty or no-op value as the answer rather than falling through, and each of
-# them is walked and discounted above. TERM is pinned because git names no
-# editor at all on a dumb terminal: that answers for the stdio git was handed,
-# where this tool renders in a terminal the host opens (DIFF-17).
+# with the environment's editors and every git config out of the way entirely,
+# since git honors an empty or no-op value as the answer rather than falling
+# through (`git -c core.editor= var GIT_EDITOR` prints nothing), and each of
+# them is walked and discounted above. GIT_DIR names no repository so the
+# repo's own config is skipped along with the global and system files. TERM is
+# pinned because git names no editor at all on a dumb terminal: that answers for
+# the stdio git was handed, where this tool renders in a terminal the host opens
+# (DIFF-17).
 anchor_editor_compiled_default() {
-  ( unset GIT_EDITOR VISUAL EDITOR; TERM=xterm git var GIT_EDITOR ) 2>/dev/null || true
+  (
+    unset GIT_EDITOR VISUAL EDITOR GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT
+    GIT_DIR=/dev/null GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
+      TERM=xterm git var GIT_EDITOR
+  ) 2>/dev/null || true
 }
 
 # Does this session have somewhere to put a terminal — a tmux popup, the calling

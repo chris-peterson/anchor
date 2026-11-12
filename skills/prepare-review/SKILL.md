@@ -1,6 +1,6 @@
 ---
 name: prepare-review
-description: Open the PR/MR on an already-pushed branch, rebase on the default branch if behind, and draft a description that tells reviewers WHY the change exists. Use when opening a PR/MR or creating a review.
+description: Open the PR/MR on an already-pushed branch, rebase on its base branch if behind, and draft a description that tells reviewers WHY the change exists. Use when opening a PR/MR or creating a review.
 ---
 
 # Prepare Review
@@ -25,7 +25,7 @@ flowchart TD
         Pushed -->|No| Commit["/anchor:commit commits and pushes, then re-gather"]
         Pushed -->|Yes| Behind
         Commit --> Behind{Behind main?}
-        Behind -->|Yes| DoRebase["Rebase + force-with-lease"]
+        Behind -->|Yes| DoRebase["/anchor:rebase, then re-gather"]
         Behind -->|No| StateCheck
         DoRebase --> StateCheck["Sanity-check vs CR head"]
     end
@@ -40,7 +40,7 @@ flowchart TD
         Draft --> Resolve["Resolve the placeholder links"]
         Resolve --> Tool{Review mode?}
         Tool -->|Yes| InTool["Review the description in the tool"]
-        Tool -->|No| Chat["Paste the body in chat, then ask"]
+        Tool -->|No| Chat["Walk the fallback ladder, then ask"]
         InTool --> Verdict{Verdict?}
         Verdict -->|approved| Open["Open the draft CR with the approved body"]
         Verdict -->|changes requested| Draft
@@ -67,7 +67,7 @@ Everything else is internal: the per-step recon plumbing ("origin is GitLab, 1 a
 
 ## Step 1: Gather the changeset
 
-Run the gather script once. It performs Step 1's deterministic recon and the safe default-path setup — detect the forge, resolve the CR if one is already open, count the gap to the default branch, capture the current description as the Step 4 diff baseline, check local state against the CR head, read the project template and `anchor.*` config — then prints one `KEY=value` block on stdout:
+Run the gather script once. It performs Step 1's deterministic recon and the safe default-path setup — detect the forge, resolve the CR if one is already open, find the base branch (the open CR's target, the CR this branch is stacked on, or the default branch) and count the gap to it, capture the current description as the Step 4 diff baseline, check local state against the CR head, read the project template and `anchor.*` config — then prints one `KEY=value` block on stdout:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh"
@@ -79,20 +79,24 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 |-----|--------------------|
 | `RESOLVED_VIA` | `cwd` (inferred from the working directory) or `repo` (an explicit `--repo` was honored) — see "Operating against a non-cwd repo" |
 | `FORGE` | `github` / `gitlab` picks the CLI for the rest of the skill; `none` → the URL-free `skip-deep-links` path |
-| `DEFAULT_BRANCH` | substitute for `main` in the diff/log commands below |
+| `DEFAULT_BRANCH` | the repo's default branch; `ON_DEFAULT_BRANCH` is measured against it |
+| `BASE_BRANCH` / `BASE_SOURCE` | the branch the CR targets, and what `AHEAD`, `BEHIND`, the diff, and the deep links are measured against. `stacked` or `onto` → see "A stacked branch" |
+| `STACK_CR_IID` / `STACK_CR_URL` | the open CR whose branch `BASE_BRANCH` is; the ordering dependency Step 2 would otherwise ask for |
+| `STACK_LOOKUP_ERROR` | the open-CR listing failed, so a stacked branch may read as based on the default branch. Surface it; on an auth failure ask for fresh credentials |
 | `ON_DEFAULT_BRANCH=1` | HEAD is the default branch — there's no branch to open a CR *from*. With work to review, `NEEDS_BRANCH=1` routes through branch creation first; clean with nothing ahead → `NOTHING_TO_REVIEW=1` and the script exits 65 |
 | `NOTHING_TO_REVIEW=1` | **The script exited 65.** There is no branch to open a CR from and nothing to put in one, so this flow does not apply here — report that and stop. Say it plainly: a chain that named `/anchor:prepare-review` has lost its CR step, and the user needs to know *before* anything downstream (a merge, a release) runs. Never paraphrase it into "this step was moot" and continue |
-| `AHEAD=0` | nothing ahead of the default branch — `NEEDS_COMMIT=1` chains to `/anchor:commit` (see below); otherwise say so and stop |
+| `AHEAD=0` | nothing ahead of the base branch — `NEEDS_COMMIT=1` chains to `/anchor:commit` (see below); otherwise say so and stop |
 | `NEEDS_BRANCH=1` | on the default branch with work to review — a feature branch must exist before a CR can be opened (see "Get to a reviewable, pushed commit") |
 | `NEEDS_COMMIT=1` | no reviewable commit yet — chain into `/anchor:commit` before continuing (see "Get to a reviewable, pushed commit") |
 | `NEEDS_PUSH=1` | commits are ahead, no CR yet, but the branch isn't pushed — chain into `/anchor:commit`, which commits and pushes, then re-gather (see "Get to a reviewable, pushed commit") |
 | `BEHIND=<n>` | `>0` → run the rebase dialog below |
 | `CR_URL` / `CR_IID` | an already-open CR — the write target. Empty on `CR_PENDING` and on `skip-deep-links` |
 | `CR_PENDING=1` | no CR is open and one can be. Draft, review, *then* open it in Step 4 — nothing is published under the author's name until they have approved the text |
-| `CR_DRAFT` | gates the post-rebase force-push (see below) |
+| `CR_DRAFT` | the CR's draft flag |
 | `PRIOR_CR_IID` / `PRIOR_CR_STATE` | non-empty → the branch name already carries a CR that isn't open, which this run passed over; name it once (see "A reused branch name") |
 | `STATE` | `match` → proceed; anything else → surface and stop (see "Act on `STATE`") |
 | `CURRENT_DESC_PATH` | the review's left-hand side in Step 4 — an empty file until a CR holds a description |
+| `CR_REVIEW_STATUS_PATH` | the description's Review status section (REVIEW-31), set aside so the draft and its review hold prose alone, with the rounds the branch's commits had before the CR existed added from the local record; `--write` puts it back. Empty where there is neither |
 | `DESC_DRAFT_PATH` | where to write the drafted description in Step 4 — already `mktemp`'d, so don't make your own |
 | `TEMPLATE_PATH` | the CR template to compose into (Step 3); empty when the hierarchy holds none, or when the pick needs the author |
 | `TEMPLATE_SOURCE` | which level answered — `local` / `project-settings` / `inherited` / `configured` / `ambiguous` / `none` |
@@ -100,7 +104,17 @@ Read the block and act only on what it surfaces; don't re-run the individual pro
 | `DELETE_BRANCH_ON_MERGE` | `false` on a CR this run opened → name it and offer the remediation (see "Branch deletion on merge"); `unknown` → say nothing |
 | `ANCHOR_CONFIG` | `anchor.*` keys to apply (Step 3), as JSON |
 
-If the block carries a `CR_CREATE_ERROR=…` line, the draft-open hit an auth or push failure — surface it and ask the user to refresh credentials; do **not** fall back to the URL-free path (the fail-fast-on-auth rule).
+If the block carries a `CR_CREATE_ERROR=…` line, the draft-open hit an auth or push failure — surface it and ask the user to refresh credentials; do **not** fall back to the URL-free path (the fail-fast-on-auth rule). A `PREPARE_ERROR=…` line names a review record (the CR's Review status section, or the local record) that isn't JSON, an `--onto` branch origin doesn't have, or an `--onto` the open CR's target disagrees with: surface it and stop, since writing the description would carry the broken record forward or drop it, and a CR opened against the wrong base shows the wrong diff.
+
+### A stacked branch (`BASE_SOURCE`)
+
+A branch cut from another branch that has an open CR is *stacked* on it, and its CR targets that branch so the diff holds only its own commits. The script finds the predecessor and reports it as the base; the author confirms it before anything opens.
+
+- **`cr`** — the open CR already targets `BASE_BRANCH`. Nothing to ask.
+- **`stacked`**, on `CR_PENDING=1` — ask once (header `Base`), before drafting: **Stack on `<BASE_BRANCH>`** (`STACK_CR_URL`'s reference, which must merge first) or **Target `<DEFAULT_BRANCH>`** (the CR's diff will carry the predecessor's commits too). On *Target*, re-run the gather script with `--onto <DEFAULT_BRANCH>` and continue from that block.
+- **`onto`** — the author named the base (`/anchor:prepare-review --onto <branch>`, passed to the gather script as given). Nothing to ask.
+
+When `STACK_CR_IID` is set, that CR is the predecessor: treat it as the ordering dependency Step 2 captures, without asking again, so Step 3 records it and Step 4 sets it on the forge. Pass `--onto <BASE_BRANCH>` to every later `prepare-review.sh` call in this run, `--open` included. When the predecessor merges, the forge retargets this CR to the default branch, and a later run reads that from the CR (`BASE_SOURCE=cr`).
 
 ### Operating against a non-cwd repo
 
@@ -114,17 +128,17 @@ When the CR lives in a repo other than the session's cwd (you're in repo A, the 
 
 Either way, thread the checkout through every later command — the harness resets cwd between Bash calls, so each one needs it again: `prepare-review.sh --repo <path>`, `deep-links.sh --repo <path>`, `git -C <path>`, `-R <owner/name>` on `gh`/`glab` subcommands, and the URL-encoded project for `:fullpath` (plus `--hostname <host>`) on `glab api`, which has no `-R`. The full threading rules are in `${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`.
 
-`--cr <iid|url>` resolves a CR that isn't the checkout's branch — updating an MR while the checkout sits on a WIP branch. The deep-link and diff steps still read the checkout's branch, so point `--repo` at a checkout on the CR's branch when you need those.
+`--cr <iid|url>` resolves a CR that isn't the checkout's branch — updating an MR while the checkout sits on a WIP branch. The deep-link and diff steps still read the checkout's branch, and `--write` refuses a CR whose source branch isn't the checkout's, so point `--repo` at a checkout on the CR's branch to write its description.
 
 When the target is just the session cwd (no non-cwd repo in play), skip all of this — everything below is plain `git` / `gh` / `glab` against the working directory.
 
 ### Get to a reviewable, pushed commit (`NEEDS_BRANCH` / `NEEDS_COMMIT` / `NEEDS_PUSH`)
 
-**prepare-review is meant to run from any state.** A CR needs a commit on a feature branch that is **ahead of the default branch and pushed** — opening the draft is a pure forge operation on the pushed branch, since `/anchor:commit` now does the push. When that state doesn't exist yet, the script says so (instead of letting `glab mr create` / `gh pr create` dead-end on a raw *"Could not find any commits between origin/`<default>` and `<branch>`"*) and the skill chains into `/anchor:commit` to get there. The cases, keyed off the block:
+**prepare-review is meant to run from any state.** A CR needs a commit on a feature branch that is **ahead of its base branch and pushed** — opening the draft is a pure forge operation on the pushed branch, since `/anchor:commit` now does the push. When that state doesn't exist yet, the script says so (instead of letting `glab mr create` / `gh pr create` dead-end on a raw *"Could not find any commits between origin/`<base>` and `<branch>`"*) and the skill chains into `/anchor:commit` to get there. The cases, keyed off the block:
 
 - **`NEEDS_COMMIT=1`, `NEEDS_BRANCH=0`** — on a feature branch, work uncommitted. Chain into `/anchor:commit`: it runs its flow (tests, staging, message, the visual review) and, on a clean review, commits **and pushes**. Then re-gather.
 - **`NEEDS_BRANCH=1`, `NEEDS_COMMIT=1`** — on the *default* branch, work uncommitted. Still chain into `/anchor:commit` — it detects the default branch, creates the feature branch (named from the subject it drafts), commits onto it, and pushes it. Then re-gather.
-- **`NEEDS_PUSH=1`** — a feature branch with commit(s) ahead of the default branch that were never pushed (e.g. committed with raw `git`). The branch just needs pushing, which is `/anchor:commit`'s job now — chain into it rather than pushing here, then re-gather.
+- **`NEEDS_PUSH=1`** — a feature branch with commit(s) ahead of the base branch that were never pushed (e.g. committed with raw `git`). The branch just needs pushing, which is `/anchor:commit`'s job now — chain into it rather than pushing here, then re-gather.
 - **`NEEDS_BRANCH=1`, `NEEDS_COMMIT=0`** — on the default branch with commits that exist only on the local default branch (committed to `main` by habit, never pushed). Move them onto their own branch first, then chain into `/anchor:commit` to push it. Slug the latest subject (`git log -1 --format=%s`, the convention `/anchor:commit` uses), confirm the name with the user, then:
 
   ```bash
@@ -177,50 +191,32 @@ The GitHub form changes a setting for **every** PR in the repo, which is why it 
 
 Prefer the `glab api` form over `glab mr update --remove-source-branch`, whose help describes it as a *toggle* — it would turn the flag back off on an MR that already has it.
 
-### Rebase on the default branch when `BEHIND > 0`
+### Rebase on the base branch when `BEHIND > 0`
 
-`BEHIND=0` → skip this section. Otherwise the branch needs `origin/<default>` before it can merge — every conflict with intervening commits has to be resolved before the CR can land, and doing it now (while the change is fresh) is cheaper than after review when context has gone cold. Secondary: deep links anchor to lines in the *current* diff, so a behind-default branch points at content that won't compose cleanly at merge time. Ask:
+`BEHIND=0` → skip this section. Otherwise the branch needs `origin/<BASE_BRANCH>` before it can merge, and doing it now (while the change is fresh) is cheaper than after review. Secondary: deep links anchor to lines in the *current* diff, so a branch behind its base points at content that won't compose cleanly at merge time. Ask:
 
-> Branch is `<BEHIND>` commits behind `origin/<default>`. Rebase now? `[yes / skip]`
+> Branch is `<BEHIND>` commits behind `origin/<BASE_BRANCH>`. Rebase now? `[yes / skip]`
 
-- `yes` — run `git rebase origin/<default>`. On conflict, resolve in place: read both sides of each conflicted region, pick the resolution that preserves the intent of *both* changes (not just one side), `git add` the resolved files, then `git rebase --continue`. Loop until the rebase completes. Surface to the user when intent is genuinely ambiguous — two competing changes to the same logic, semantic conflicts the textual markers don't show, a rename colliding with an edit. Don't guess in those cases; show the conflict and ask. If a hook fails mid-rebase, surface the failure rather than retrying with `--no-verify`.
-- `skip` — proceed with the current branch state. Note that deep links may render against lines that have shifted by merge time.
-
-A rebase rewrites history, so the push that follows is a force-push. Gate it on `CR_DRAFT` — the author's declared review state, which is reliable in a way that inferred engagement signals (note counts, reviewer lists) are not:
-
-**`CR_PENDING=1`** (no CR yet) — nothing is out for review, so nothing can be disturbed. Rebase and force-push with lease.
-
-**`CR_DRAFT=true`** — mutable history is the norm (`anchor` opens CRs as drafts for exactly this reason). Rebase and force-push with lease without further ceremony.
-
-**`CR_DRAFT=false`** (ready) — a reviewer may already be looking, and there's no reliable signal for whether they have. Force-pushing over commits they've seen destroys their "changes since you last looked" diff and marks inline threads outdated. Engagement signals are advisory context for the prompt (reviewers / discussion count via `glab api projects/:fullpath/merge_requests/<CR_IID> | jq '{reviewers, user_notes_count}'` or `gh pr view --json reviews,reviewRequests,comments`), but the decision is the user's — ask before proceeding:
-
-> This CR is marked ready. Rebasing now force-pushes over commits a reviewer may have seen, which resets their incremental diff. Rebase anyway? `[yes / skip]`
-
-After a successful rebase (and the review-activity check above), force-push with lease so the open CR updates to the rewritten history:
-
-```bash
-git push --force-with-lease
-```
-
-`--force-with-lease` rejects the push if anyone else has pushed to the branch since you last fetched — that's the safety against clobbering a coworker's commit. If it rejects, fetch, inspect, and ask the user before escalating. If the rebase itself aborts (uncommitted changes blocking it, a rebase already in progress, missing remote), surface the error and stop.
+- `yes`: chain into `/anchor:rebase`, passing `--onto <BASE_BRANCH>` (and `--repo <path>` when operating against a non-cwd repo) so it rebases onto the base this run resolved rather than asking again. It resolves conflicts and force-pushes the branch when origin held it as it stood. Then re-gather, since the rebase moved `LOCAL_HEAD_SHA` and the CR head. If it stops short of a rebased branch, say so and stop.
+- `skip`: proceed with the current branch state. Note that deep links may render against lines that have shifted by merge time.
 
 ### Read the diff and commit history
 
-Substitute `DEFAULT_BRANCH` from the block for `main`:
+Substitute `BASE_BRANCH` from the block:
 
 ```bash
-git log main..HEAD --oneline
+git log origin/<BASE_BRANCH>..HEAD --oneline
 ```
 
 ```bash
-git diff main...HEAD --stat
+git diff origin/<BASE_BRANCH>...HEAD --stat
 ```
 
 ```bash
-git diff main...HEAD
+git diff origin/<BASE_BRANCH>...HEAD
 ```
 
-(`AHEAD=0` already routed you — chained to `/anchor:commit` on `NEEDS_COMMIT=1`, or stopped otherwise — so a run that reaches here is ahead of the default branch.)
+(`AHEAD=0` already routed you — chained to `/anchor:commit` on `NEEDS_COMMIT=1`, or stopped otherwise — so a run that reaches here is ahead of the base branch.)
 
 ### Act on `STATE`
 
@@ -245,7 +241,7 @@ Before drafting, scan for these common ambiguities and ask the user about each o
 - **Why** — what problem this solves and why it matters (the prompt below)
 - **Audience / threat model** — for security or visibility changes, *who* is the affected population? "Anyone who can read X" is too vague. Name the population concretely: anyone inside the network, anyone with read access to the source, the on-call team, etc.
 - **Scope decisions** — should this be split? Squashed? Feature-gated? Released alongside something else?
-- **Ordering dependency** — must this CR land *after* another one (a shared library before its consumer, a config that points at the consumer)? Don't infer this aggressively — take it when the user says so, or when they've had you open the CRs as an ordered chain this session. If so, capture the predecessor CR (its iid/number, and project when cross-repo); Step 3 records it in the description and Step 4 sets the forge dependency.
+- **Ordering dependency** — must this CR land *after* another one (a shared library before its consumer, a config that points at the consumer)? A stacked branch already answers this (`STACK_CR_IID`, see "A stacked branch"). Otherwise don't infer it aggressively — take it when the user says so, or when they've had you open the CRs as an ordered chain this session. If so, capture the predecessor CR (its iid/number, and project when cross-repo); Step 3 records it in the description and Step 4 sets the forge dependency.
 - **Surface decisions** — version bump, deprecation timeline, migration guidance for downstream callers
 - **Verification gaps** — anything you can't actually test from the working environment (UI, downstream consumers, prod-only behaviors). Surface these to the author so they can plan how/when to verify before merge. These are author homework — they do **not** become checklist items in the description.
 
@@ -365,11 +361,11 @@ The description gets pasted into a markdown renderer, so rendering bugs are user
 
   ```bash
   bash "${CLAUDE_PLUGIN_ROOT}/scripts/deep-links.sh" --check <DESC_DRAFT_PATH> \
-    --base <DEFAULT_BRANCH> [--repo <path>]
+    --base origin/<BASE_BRANCH> [--repo <path>]
   ```
 
-  It exits non-zero with one `UNRESOLVED <kind> <path> <token>` per problem, and each kind is an authoring fix: `ambiguous` (several changed lines match — the candidates are listed with their content, so copy a longer substring off the one you meant), `unchanged` (in the file but not on a changed line), `absent` (a typo), `unknown-file` (a path the range doesn't touch), `malformed` (an `anchor:` that isn't a link destination). Fix and re-run until it's clean — a placeholder that survives into Step 4's expansion stalls the write on a CR that already exists. It needs the clean tree Step 1's `STATE=match` already established: line content comes from the working tree and changed hunks from `<DEFAULT_BRANCH>...HEAD`, and it emits `DEEP_LINK_TREE=dirty` when those have diverged. Skip it on the `skip-deep-links` path, where the description carries no links at all.
-- **A description that predates this convention needs the backstop instead.** Re-running against a CR whose description came from elsewhere means hand-built anchors with hand-read line numbers, which `--check` doesn't see. Run `--verify <DESC_DRAFT_PATH> --forge <FORGE> --cr-url <CR_URL> --base <DEFAULT_BRANCH>` over those, and re-point each `SUSPECT`: `out-of-range`, `blank-line`, `unchanged-line`, `unknown-file`, `malformed` (a line part in a shape the forge won't resolve). A link that landed on the *wrong changed line* is the one case it can't see — which is what replacing it with a placeholder fixes.
+  It exits non-zero with one `UNRESOLVED <kind> <path> <token>` per problem, and each kind is an authoring fix: `ambiguous` (several changed lines match — the candidates are listed with their content, so copy a longer substring off the one you meant), `unchanged` (in the file but not on a changed line), `absent` (a typo), `unknown-file` (a path the range doesn't touch), `malformed` (an `anchor:` that isn't a link destination), `unbracketed` (a token with a parenthesis written without the angle brackets, which cut it at the `)`). Fix and re-run until it's clean — a placeholder that survives into Step 4's expansion stalls the write on a CR that already exists. It needs the clean tree Step 1's `STATE=match` already established: line content comes from the working tree and changed hunks from `origin/<BASE_BRANCH>...HEAD`, and it emits `DEEP_LINK_TREE=dirty` when those have diverged. Skip it on the `skip-deep-links` path, where the description carries no links at all.
+- **A description that predates this convention needs the backstop instead.** Re-running against a CR whose description came from elsewhere means hand-built anchors with hand-read line numbers, which `--check` doesn't see. Run `--verify <DESC_DRAFT_PATH> --forge <FORGE> --cr-url <CR_URL> --base origin/<BASE_BRANCH>` over those, and re-point each `SUSPECT`: `out-of-range`, `blank-line`, `unchanged-line`, `unknown-file`, `malformed` (a line part in a shape the forge won't resolve). A link that landed on the *wrong changed line* is the one case it can't see — which is what replacing it with a placeholder fixes.
 
 ### Open the review
 
@@ -377,28 +373,34 @@ The description review runs when a review tool is available. Run it as the revie
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --probe \
-  --files <CURRENT_DESC_PATH> <DESC_DRAFT_PATH>
-```
-
-- `REVIEW_MODE=edit` — what an empty `CURRENT_DESC_PATH` gets: no CR holds a description yet, so there is nothing to diff and the draft is all new. It opens in the user's editor and whatever they save *is* the description.
-- `REVIEW_MODE=diff` (or another viewer) — the CR already has a description, so the two sides make real hunks; or the user configured a viewer, or no editor was reachable and an installed one stood in. The user comments and you fold the comments in.
-
-```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --mode <REVIEW_MODE> --files \
-  <CURRENT_DESC_PATH> <DESC_DRAFT_PATH> \
-  --title 'CR description' \
+  --files <CURRENT_DESC_PATH> <DESC_DRAFT_PATH> \
+  --title '<CR_REFERENCE>: <CR_TITLE>' \
   --detail branch=<BRANCH> --detail CR=<CR_URL>
 ```
 
-`CURRENT_DESC_PATH` is the left-hand side — what the forge holds now, and an empty file where no CR holds anything yet. It's context for the draft, not the subject.
+- `REVIEW_MODE=edit` — what an empty `CURRENT_DESC_PATH` gets: no CR holds a description yet, so there is nothing to diff and the draft is all new. It opens in the user's editor and whatever they save *is* the description.
+- `REVIEW_MODE=diff` — the CR already has a description, so the two sides make real hunks; or no editor was reachable and revdiff stood in. It opens in revdiff, the user comments, and you fold the comments in.
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill prepare-review --mode <REVIEW_MODE> --files \
+  <CURRENT_DESC_PATH> <DESC_DRAFT_PATH> --name '<CR_REFERENCE>' \
+  --title '<CR_REFERENCE>: <CR_TITLE>' \
+  --detail branch=<BRANCH> --detail CR=<CR_URL>
+```
+
+The title is the review's heading, so it names the CR under review: its reference and title, and on `CR_PENDING` the repo and the Step 3 title (`<repo>: <title>`), since there is no reference yet.
+
+`CURRENT_DESC_PATH` is the left-hand side — what the forge holds now, and an empty file where no CR holds anything yet. It's context for the draft, not the subject. `--name` gives the reviewed file the CR's reference (`<repo>#<number>`, `<repo>!<iid>`) in place of the draft's temp name; drop it where `CR_REFERENCE` is empty, and the editor names the buffer for the repo and branch.
 
 **The manifest** names the CR (number and title), the repo and branch, the tool, the sections the draft carries, and any template checkbox items dropped as unverifiable — an editor window opens behind the terminal, and a review the user cannot see is one they never grade. After the table, the next thing you say is the verdict, the feedback echoed back, or the one-line write result.
 
 What each verdict leads to here:
 
-- **`approved`** — write the draft to the CR (see "Write it" below): the `editedFields` text with `target: "description"` where `edit` mode returned one, the draft otherwise. The reviewer read the description and signed off, so a second chat gate asking the same question is the ceremony this step exists to remove. Surface any comments an approving review still left after the write.
+- **`approved`** — write `DESC_DRAFT_PATH` to the CR (see "Write it" below). An approved review leaves the approved text in that file, the reviewer's edit included. The reviewer read the description and signed off, so a second chat gate asking the same question is the ceremony this step exists to remove.
 - **`changes-requested`** — fold in the comments and re-open on the revised draft, with the previous draft as the left-hand side rather than `CURRENT_DESC_PATH`: the description the forge holds is the comparison the first pass already answered.
-- **`incomplete`**, **`no-verdict`**, or no verdict line at all — nothing is written to the CR; take the fallback below.
+- **`rejected`** — nothing is written to the CR, and nothing falls back; say so and stop.
+- **`no-verdict`** with `raw.exitCode` `undecided` — ask Accept, Reject, or Reopen, and act on the answer as that verdict (`${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md`).
+- **`incomplete`**, any other **`no-verdict`**, or no verdict line at all — nothing is written to the CR; take the fallback below.
 
 ### When the review didn't grade it (or there's no CR yet)
 
@@ -406,30 +408,35 @@ Three cases land here: no tool is installed, a review that came back without a u
 
 Walk the ladder in `${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md` with `DESC_DRAFT_PATH` as the artifact. This skill's artifact is a drafted document, so the changeset walk doesn't apply; the document rungs do.
 
-Then ask how to proceed with the `AskUserQuestion` tool, header `Disposition`, options in this order:
+Then ask the guide's question (`AskUserQuestion`, header `Unreviewed`), with this skill's options:
 
-- **Yes (write)** *(default)* — push the description to the open CR.
-- **No (copy only)** — leave it for the user to paste into the web UI themselves.
-- **Edit** — say what to change in chat; revise and re-present.
+- **Retry the review** — first, when the user can fix the cause.
+- **Copy only** — leave it for the user to paste into the web UI themselves. The only option on the `skip-deep-links` path, where no CR will exist to write to.
+- **⚠️ Write the description to `<CR_REF>` without a review** — never first.
+- **Stop** — first, when a retry can't reach a review. Nothing is written.
+
+An answer typed in place of these is the change the user wants: revise and present the draft again.
 
 ### Open the CR and write it
 
-Reached on an `approved` review, or on **Yes (write)** from the no-tool fallback. Editing a description is reversible, which is why the review's sign-off is enough to write on. On 401/403 or similar auth failure, surface the error and ask the user to refresh credentials — do not silently fall back to copy-only. The draft is `DESC_DRAFT_PATH`.
+Reached on an `approved` review, or on the ⚠️ write choice from the fallback. Editing a description is reversible, which is why the review's sign-off is enough to write on. On 401/403 or similar auth failure, surface the error and ask the user to refresh credentials — do not silently fall back to copy-only. The draft is `DESC_DRAFT_PATH`.
+
+**Run the three steps below one at a time, each after the last one's output is in hand.** Each takes what the one before printed: `CR_URL` and `CR_IID` come from the `--open` block, or from Step 1's on a pre-existing CR. Never work a number out from another CR's: numbers are shared across the project, so the next one may already be someone else's.
 
 **1. Open the CR, if Step 1 said one is pending.** On `CR_PENDING=1`, this is where the CR first exists, and it exists carrying the text the author just approved:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh" --open \
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh" --open --onto <BASE_BRANCH> \
   --title "<the Step 3 title>" --body-file <DESC_DRAFT_PATH>
 ```
 
-It emits `CR_URL`, `CR_IID`, `CR_DRAFT`, `CR_CREATED=1`, and `DELETE_BRANCH_ON_MERGE` — act on that last one per "Branch deletion on merge". A `CR_CREATE_ERROR=` line is an auth or forge failure: surface it and stop, with the approved draft still in hand. On `CR_PREEXISTING=1` there is nothing to open; carry that CR's URL forward.
+It emits `CR_URL`, `CR_IID`, `CR_DRAFT`, `CR_CREATED=1`, `BASE_BRANCH`, and `DELETE_BRANCH_ON_MERGE` — act on that last one per "Branch deletion on merge". A `CR_CREATE_ERROR=` line is an auth or forge failure: surface it and stop, with the approved draft still in hand. On `CR_PREEXISTING=1` there is nothing to open; carry that CR's URL forward.
 
 **2. Expand the deep links against the URL.** The placeholders can only become URLs once the CR has one:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/deep-links.sh" --expand <DESC_DRAFT_PATH> \
-  --forge <FORGE> --cr-url <CR_URL> --base <DEFAULT_BRANCH> [--repo <path>]
+  --forge <FORGE> --cr-url <CR_URL> --base origin/<BASE_BRANCH> [--repo <path>]
 ```
 
 It rewrites the draft in place and reports `EXPANDED=<n>`. All-or-nothing: an unresolved placeholder leaves the file untouched and exits non-zero, which means the `--check` in the output checklist was skipped or the tree moved since. Fix what it names and re-run — the CR is already open and carrying the approved prose, so nothing is lost. Skip this on `skip-deep-links`, where the draft carries no placeholders.
@@ -438,10 +445,14 @@ It rewrites the draft in place and reports `EXPANDED=<n>`. All-or-nothing: an un
 
 **Screenshots referenced by local path (GitLab) upload first.** `glab api --method POST projects/<id>/uploads --form "file=@local.png"` returns a `markdown` field pointing at a hosted URL — swap each local reference for its upload result in `DESC_DRAFT_PATH` before the write below, so the description lands with working images on the first try. See the forge cookbook's binary-upload recipe; the `-F`/`--form` distinction there is the part that bites.
 
-- **GitHub:** `gh pr edit --body-file <DESC_DRAFT_PATH>`.
-- **GitLab:** use the API form `glab api -X PUT projects/:fullpath/merge_requests/<CR_IID> -F "description=@<DESC_DRAFT_PATH>"` — `glab mr update -d` doesn't accept a file. See the bundled forge cookbook (`${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`) for the full canonical invocation.
+Then write it:
 
-When operating against a non-cwd repo these are the write path, so retarget them per "Operating against a non-cwd repo": add `-R <owner/name>` to `gh pr edit`, and substitute the URL-encoded project for `:fullpath` in the `glab api` PUT (plus `--hostname` for self-hosted).
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh" --write --body-file <DESC_DRAFT_PATH> \
+  --status-section <CR_REVIEW_STATUS_PATH> --cr <CR_IID> [--repo <path>]
+```
+
+The script puts the Review status section back on a copy of the draft, joined with whatever the CR holds now, and writes that copy, so `DESC_DRAFT_PATH` stays the text the author approved. Don't splice the section into the draft or write the description with `gh pr edit` / `glab api` yourself: the section is anchor's record, written without a prompt (CONFIRM-17), and this one call is what an allow rule names. It emits `CR_WRITTEN=1`, `STATUS_CARRIED=<0|1>`, and `CR_BACKUP_PATH`, the description the CR held before the write, saved under the repo's `.git/anchor/backups/`. A `CR_WRITE_ERROR=` line is either a refusal or a failure; surface it and stop. A refusal names a CR whose source branch isn't this checkout's, so its number didn't come from this branch's CR. A failure is an auth or forge error, surfaced the same way as `CR_CREATE_ERROR`.
 
 Report the write as one line once **Label it and set the milestone** below has run — the CR URL, that the description landed, and what the metadata came out as. **No CR to write to** (`skip-deep-links`, or the user picked copy-only): print the body for them to paste into the web UI themselves.
 
@@ -459,6 +470,14 @@ glab mr view <CR_IID> --output json
 
 Match the change against the descriptions the repo ships on its labels and apply the ones that plainly fit and the CR is missing. `--add-label` and `--label` add, so a CR the user already labelled keeps what it has; `--milestone` **replaces** on both forges, so attach one only where the CR has none and exactly one of the open ones fits. Where several labels are plausible and only one belongs, or several milestones fit, ask with `AskUserQuestion` — no label and no milestone are both legitimate answers, and where the project defines none, set nothing and don't raise it.
 
+When a label or a milestone is about to be set, save the whole CR first, since `--write` saved only its description. Skip this where nothing is set. The flags are in the cookbook's "Back up before an overwrite"; retarget it like the calls below:
+
+```bash
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/forge-backup.sh" --kind cr --id <CR_NUMBER|CR_IID> [--repo <path>]
+```
+
+Edit only when `BACKUP_URL` is `CR_URL`. On a mismatch, name the CR it saved and its `BACKUP_PATH`, and stop; on a `BACKUP_ERROR=` line, surface it and stop. Otherwise keep `BACKUP_PATH` for an undo and don't mention it.
+
 ```bash
 # GitHub
 gh pr edit <CR_NUMBER> --add-label "<label>" --milestone "<milestone title>"
@@ -467,11 +486,11 @@ gh pr edit <CR_NUMBER> --add-label "<label>" --milestone "<milestone title>"
 glab mr update <CR_IID> --label "<a,b>" --milestone "<milestone title>"
 ```
 
-Retarget the listing and these calls per "Operating against a non-cwd repo" the same way the write path does (`-R`, `TARGET_PROJECT` for `{owner}/{repo}` in the `gh api` milestones path, `--hostname` for self-hosted GitLab). The full flag set and the CLI gaps — `gh` has no `milestone` command, and `gh pr edit` has no plain `--label` — are in the cookbook's "Labels and milestones".
+Retarget the listing and these calls per "Operating against a non-cwd repo" (`-R`, `TARGET_PROJECT` for `{owner}/{repo}` in the `gh api` milestones path, `--hostname` for self-hosted GitLab). The full flag set and the CLI gaps — `gh` has no `milestone` command, and `gh pr edit` has no plain `--label` — are in the cookbook's "Labels and milestones".
 
 ### Report the branch's pipeline
 
-Run this once the description has landed, as `${CLAUDE_PLUGIN_ROOT}/guides/watching-a-pipeline.md` describes, retargeted the same way as the write path:
+Run this once the description has landed, as `${CLAUDE_PLUGIN_ROOT}/guides/watching-a-pipeline.md` describes, with `--repo <path>` when operating against a non-cwd repo:
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill prepare-review
@@ -494,7 +513,7 @@ No predecessor captured (a single CR, or an independent one) → skip this entir
 
 The last step of the phase, once every mutation above has landed. Siblings in the suite react to what anchor says it did; nothing here reads the output, and a machine where nobody is listening pays nothing for it.
 
-**Exactly one announcement per run**, chosen by `CR_CREATED` from Step 1's block:
+**Exactly one announcement per run**, chosen by `CR_CREATED` from the `--open` block where this run opened the CR, and `0` where the CR existed before this run (Step 1's recon always reports `0`):
 
 - **`CR_CREATED=1`** — announce nothing. `prepare-review.sh` already announced `cr.created` when it opened the CR, and setting up a CR this run just opened is not an update to it.
 - **`CR_CREATED=0`** — the CR existed before this run and this run changed it:

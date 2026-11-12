@@ -2,14 +2,21 @@
 
 A review reaches this guide from two places, and they are the same case:
 
-- the probe said nothing usable is installed
-  (`REVIEW_AVAILABLE=0`), or
+- the probe said the review has nowhere to open (`REVIEW_AVAILABLE=0`): no
+  host for a pane, or no editor for an `edit` review, or
 - the review ran and came back `no-verdict`, `incomplete`, or with no parseable
   `REVIEW_VERDICT` at all — the tool closed early, died, or never launched.
 
 Either way the change is **ungraded**, and nothing the review gates may
 publish. What follows is the ladder down: each rung is a way to get a real
 answer, not a way to get past the missing one.
+
+A missing or too-old revdiff is not one of these. The probe reports it as
+`REVIEW_UNUSABLE`, and the launch as `no-verdict` with `raw.exitCode` `absent`
+or `unusable`: every `diff` review needs revdiff, so the review stops there,
+names the install (`brew install umputun/apps/revdiff`) or the upgrade, and
+publishes nothing. The ladder is for a review revdiff could run but this session
+can't show.
 
 ## Say what happened, not where you are in this guide
 
@@ -26,8 +33,8 @@ not
 
 > Since the editor was already the rung, here's the draft in chat.
 
-Name the failure in the terms the user can see — the editor closed, the viewer
-isn't installed, the pane went away — and then do the step.
+Name the failure in the terms the user can see (the editor closed, there was
+no terminal to open revdiff in, the pane went away), and then do the step.
 
 ## Mark the reply as a failed review
 
@@ -72,10 +79,9 @@ converts a tooling failure into an approval, which is the one outcome the
 verdict contract exists to prevent. Ask about the **content**, never about the
 window.
 
-It is also why a difftool earns its verdict from the working tree rather than
-from the screen (DIFF-18). Putting a diff in front of someone proves nothing; the
-edits they leave in the files do, which is why a difftool is a tool here and a
-mere viewer is not a rung.
+It is also why every `diff` review runs revdiff, whose verdict is a note the
+reviewer leaves in its Review box. Putting a diff in front of someone proves
+nothing, which is why a viewer that only shows one is not a rung.
 
 ## Rung 1 — hand over the artifact
 
@@ -93,9 +99,9 @@ honest way to read it.
 **Offer the editor** when the probe reported `REVIEW_EDIT_AVAILABLE=1`. That
 rung is a real review, not a consolation: the dispatcher opens the artifact in
 the user's own editor with the change under review below a scissors line, and
-whatever they save comes back through the contract as `editedFields`, adopted
-verbatim (DIFF-13). For the skills that already default to it, this rung is
-where they started, so a `no-verdict` from the editor lands on rung 2 instead of
+whatever they save is written over the draft and comes back through the
+contract as `editedFields` (DIFF-13). For the skills that already default to
+it, this rung is where they started, so a `no-verdict` from the editor lands on rung 2 instead of
 being offered the same tool twice.
 
 ```bash
@@ -120,7 +126,9 @@ Running a command that prints it shows the user nothing, for the reasons
 reply as a failed review" above sets out, with copy only and edit beside the ⚠️
 option that writes it.
 
-**A changeset** — walk the hunks. Not one question over a diff the user never
+**A changeset** — walk the hunks. (`/anchor:review` has no rung here: its
+review is the notes revdiff carries, so it stops and names what's missing
+instead.) Not one question over a diff the user never
 saw, and not a dump of `git diff` either: go file by file, and for each, say
 what changed and why it changed, quoting the lines that carry the decision.
 Invite feedback per file rather than once at the end. This is slower than a
@@ -144,23 +152,27 @@ The exception is a tool that was never tried: where the probe named a
 substitute because the configured tool is absent, launching the substitute is a
 first attempt, not a retry.
 
-**`raw.exitCode: "unsaved"` and `"pane-closed"` are neither this case nor a step
-here** — both are re-openable, and DIFF-14 treats them that way. The tool
-worked. On `unsaved` the reviewer left the editor without writing, so the draft
-went ungraded; saving is what approves it, unchanged included, and that is the
-sentence they need. On `pane-closed` the terminal went away before the tool could
+**`raw.exitCode: "unsaved"`, `"pane-closed"`, and `"undecided"` are neither
+this case nor a step here**: all three are re-openable, and DIFF-14 and DIFF-42
+treat them that way. The tool worked. On `undecided` the reviewer quit without
+choosing (revdiff with no `approve` or `reject` note, or an editor without
+saving): without the error banner, ask with `AskUserQuestion` whether to accept,
+reject, or reopen the review, and act on the answer as that verdict; an answer
+typed in place of the three is feedback. On `unsaved` a GUI editor returned
+without waiting, so there was nothing to save; the output names the flag it
+needs, and that is the sentence they need. On `pane-closed` the terminal went away before the tool could
 answer — a `⌘W` on the pane rather than a quit. Either way the draft is intact:
 say which happened and open it again. Walking it in chat instead replaces
 something their editor would have shown them properly.
 
 ## Naming the fix
 
-Every rung here is a workaround for a machine with no diff viewer on it, and
-that is worth saying once, without nagging. When the ladder was reached because
-nothing is installed, close with the one-time cost rather than only the
+Every rung here is a workaround for a session revdiff can't open in, and that
+is worth saying once, without nagging. When the ladder was reached because there
+was nowhere to open a pane, close with what would give one rather than only the
 degradation:
 
-> No diff viewer installed — reviewing in chat. `revdiff` would give you inline
-> comments and a real verdict.
+> No terminal to open revdiff in, so this was reviewed in chat. Run the session
+> inside tmux, iTerm2, or agterm and the next review opens beside it.
 
 Once per flow, at the end, and never in place of doing the rung.

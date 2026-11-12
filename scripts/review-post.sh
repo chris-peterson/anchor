@@ -180,9 +180,11 @@ gl_api() {
 case "$forge" in
   github) current=$(gh api "repos/${project}/pulls/${cr_iid}" --jq .head.sha 2>&1) \
             || fail "could not re-read the CR head: $(head -1 <<<"$current")" ;;
-  gitlab) current=$(gl_api "projects/${gl_project}/merge_requests/${cr_iid}" 2>/dev/null \
-            | jq -r '.diff_refs.head_sha // .sha // ""') \
-            || fail "could not re-read the CR head" ;;
+  gitlab) head_err=$(anchor_tmpfile "cr-review-head" err)
+          mr=$(gl_api "projects/${gl_project}/merge_requests/${cr_iid}" 2>"$head_err") \
+            || fail "could not re-read the CR head: $(head -1 "$head_err")"
+          current=$(jq -r '.diff_refs.head_sha // .sha // ""' <<<"$mr") \
+            || fail "could not re-read the CR head: glab returned something other than JSON" ;;
   *) fail "unknown forge: $forge" ;;
 esac
 

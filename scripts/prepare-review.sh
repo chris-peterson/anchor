@@ -5,7 +5,7 @@
 #
 # Why a script (not skill prose): Step 1 is a string of deterministic recon and
 # safe setup — detect the forge, resolve the CR if one is open, count the gap to
-# the default branch, capture the current description, confirm local state
+# the base branch, capture the current description, confirm local state
 # matches the CR head, read the template and anchor config. Run from the skill
 # each is its own tool call, and each is a slot where the model narrates "now
 # let me…". Folding them into one launch-and-read removes the narration surface
@@ -44,7 +44,19 @@
 #   DEFAULT_BRANCH=<resolved default: origin/HEAD, else main, else master>
 #   ON_DEFAULT_BRANCH=<0|1>      1 == HEAD is the default branch (no CR to open
 #                                from — the skill branches first; see NEEDS_BRANCH)
-#   AHEAD=<n>                    commits HEAD is ahead of the default branch
+#   BASE_BRANCH=<name>           the branch the CR targets, and what AHEAD, BEHIND,
+#                                and the description's diff are measured against
+#   BASE_SOURCE=<cr|onto|stacked|default>
+#                                cr == the open CR's own target; onto == --onto;
+#                                stacked == HEAD is stacked on another open CR's
+#                                branch (STACK_CR_*), found by lib/stack.sh;
+#                                default == none of those
+#   STACK_CR_IID=<iid/number>    the open CR whose branch BASE_BRANCH is, on the
+#   STACK_CR_URL=<web url>       onto and stacked sources; empty otherwise
+#   STACK_LOOKUP_ERROR=<message> the open-CR listing that finds STACK_CR_* failed,
+#                                so BASE_BRANCH may be the default branch when
+#                                HEAD is stacked; empty when it ran
+#   AHEAD=<n>                    commits HEAD is ahead of the base branch
 #   BEHIND=<n>                   commits HEAD is behind — >0 means run the rebase dialog
 #   NEEDS_BRANCH=<0|1>           1 == on the default branch with work to review, so
 #                                the skill must create a feature branch before a CR
@@ -81,6 +93,9 @@
 #   CR_URL=<web url>             empty until a CR exists — on CR_PENDING as well
 #                                as on the skip-deep-links path
 #   CR_IID=<iid/number>          empty when no CR
+#   CR_REFERENCE=<repo>#<n> | <repo>!<iid>   the CR as its forge writes it, the
+#                                review's file name (`review-diff.sh --name`);
+#                                empty when no CR
 #   CR_DRAFT=<true|false|>       the CR's draft flag (empty when no CR)
 #   CR_HEAD_SHA=<sha>            the CR head the reviewer sees (empty when no CR)
 #   LOCAL_HEAD_SHA=<sha>         local HEAD
@@ -89,6 +104,13 @@
 #   CURRENT_DESC_PATH=<path>     temp file holding the CR's current description
 #                                (baseline for the Step 4 review). Always a path;
 #                                the file is empty where no CR holds one yet
+#   CR_REVIEW_STATUS_PATH=<path> the description's Review status section, taken
+#                                out of CURRENT_DESC_PATH so the review compares
+#                                prose with prose, with the rounds the local
+#                                record holds for the branch's commits added
+#                                where the section has none; `--write` puts it
+#                                back. Always a path; the file is empty where
+#                                there is neither
 #   DESC_DRAFT_PATH=<path>       temp file the skill writes the drafted description
 #                                to (the review's right-hand side)
 #   TEMPLATE_PATH=<path>         the CR template to compose into, empty when the
@@ -120,7 +142,10 @@
 # On an auth failure (or any failure) while opening the draft, it prints
 # CR_CREATE_ERROR=<message> and exits non-zero so the skill surfaces it and asks
 # the user to refresh credentials (the fail-fast-on-auth rule) rather than
-# silently dropping to the URL-free path.
+# silently dropping to the URL-free path. A review record it can't read (the
+# CR's Review status section, or the local record), an --onto branch origin
+# doesn't have, or an --onto that disagrees with the open CR's target prints
+# PREPARE_ERROR=<message> on stderr and exits 1.
 #
 # Exit codes:
 #   0   the block is a state the flow continues from
@@ -131,16 +156,26 @@
 #       past it means the CR step was silently dropped from whatever chain asked
 #       for it; the non-zero status is what makes that visible instead of leaving
 #       it to the reader of a KEY=value block.
-#   1   an operational failure (e.g. CR_CREATE_ERROR)
+#   1   an operational failure (CR_CREATE_ERROR, PREPARE_ERROR)
 #
 # Usage:
 #   prepare-review.sh                     # recon: resolve the CR, or report CR_PENDING
 #   prepare-review.sh --no-open           # no CR will be opened -> skip-deep-links path
 #   prepare-review.sh --repo <path>       # operate on a checkout other than the cwd repo
 #   prepare-review.sh --cr <iid|url>      # resolve a specific CR, not the current branch's
+#   prepare-review.sh --onto <branch>     # target <branch> rather than the default
+#                                         # branch or a detected predecessor; pass
+#                                         # it to --open as well
 #   prepare-review.sh --open --title <t> --body-file <path>
 #                                         # open the draft CR with the approved
 #                                         # description; emits the CR keys only
+#   prepare-review.sh --write --body-file <path> [--status-section <path>] [--cr <iid>]
+#                                         # write the approved description to the
+#                                         # CR with its Review status section put
+#                                         # back, after saving the one it replaces;
+#                                         # refuses a CR whose source branch isn't
+#                                         # the checkout's. Emits CR_WRITTEN,
+#                                         # CR_BACKUP_PATH, STATUS_CARRIED
 #
 # --repo cds into the target checkout so every git/gh/glab call below targets it
 # (see scripts/lib/resolve-context.sh); the emitted RESOLVED_VIA reports whether
@@ -156,21 +191,35 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/tmpfile.sh"
 # shellcheck source=lib/anchor-config.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/anchor-config.sh"
+# shellcheck source=lib/review-status.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/review-status.sh"
+# shellcheck source=lib/forge-url.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/forge-url.sh"
+# shellcheck source=lib/backup.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/backup.sh"
+# shellcheck source=lib/stack.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/stack.sh"
 
 will_open=1
 do_open=0
+do_write=0
 open_title=""
 open_body=""
+status_section=""
 CTX_REPO=""
 cr_ref=""
+onto=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --no-open)   will_open=0; shift ;;
     --open)      do_open=1; shift ;;
+    --write)     do_write=1; shift ;;
+    --status-section) status_section="${2:?--status-section needs a path}"; shift 2 ;;
     --title)     open_title="${2:?--title needs a value}"; shift 2 ;;
     --body-file) open_body="${2:?--body-file needs a path}"; shift 2 ;;
     --repo)      CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
     --cr)        cr_ref="${2:?--cr needs an iid or URL}"; shift 2 ;;
+    --onto)      onto="${2:?--onto needs a branch}"; onto="${onto#origin/}"; shift 2 ;;
     *) echo "prepare-review.sh: unknown argument: $1" >&2; exit 64 ;;
   esac
 done
@@ -178,6 +227,12 @@ done
 if [[ "$do_open" -eq 1 ]]; then
   [[ -n "$open_title" ]] || { echo "prepare-review.sh: --open needs --title" >&2; exit 64; }
   [[ -r "$open_body" ]] || { echo "prepare-review.sh: --open needs a readable --body-file" >&2; exit 64; }
+fi
+if [[ "$do_write" -eq 1 ]]; then
+  [[ "$do_open" -eq 0 ]] || { echo "prepare-review.sh: --open and --write are separate calls" >&2; exit 64; }
+  [[ -r "$open_body" ]] || { echo "prepare-review.sh: --write needs a readable --body-file" >&2; exit 64; }
+  [[ -z "$status_section" || -r "$status_section" ]] \
+    || { echo "prepare-review.sh: --status-section must be a readable file" >&2; exit 64; }
 fi
 
 # Retarget onto an explicit --repo checkout when given; otherwise stay in cwd
@@ -195,29 +250,13 @@ esac
 
 branch=$(git rev-parse --abbrev-ref HEAD)
 
-# Resolve the default branch: the symbolic origin/HEAD, then the conventional
-# main and master.
-default_branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null \
-  | sed 's@^origin/@@' || true)
-if [[ -z "$default_branch" ]]; then
-  if git rev-parse --verify --quiet origin/main >/dev/null; then
-    default_branch=main
-  elif git rev-parse --verify --quiet origin/master >/dev/null; then
-    default_branch=master
-  else
-    default_branch=main
-  fi
-fi
+default_branch=$(anchor_default_branch) || default_branch=main
 
 on_default=0
 [[ "$branch" == "$default_branch" ]] && on_default=1
 
-# --- Gap to the default branch -----------------------------------------------
-
 git fetch origin "$default_branch" >/dev/null 2>&1 || true
 git fetch origin "$branch" >/dev/null 2>&1 || true
-ahead=$(git rev-list --count "origin/${default_branch}..HEAD" 2>/dev/null || echo 0)
-behind=$(git rev-list --count "HEAD..origin/${default_branch}" 2>/dev/null || echo 0)
 
 local_head=$(git rev-parse HEAD)
 
@@ -230,7 +269,7 @@ fi
 
 # --- Resolve (or open) the CR ------------------------------------------------
 
-cr_url=""; cr_iid=""; cr_draft=""; cr_head=""; cr_desc=""; cr_delete_branch=""; cr_title=""
+cr_url=""; cr_iid=""; cr_draft=""; cr_head=""; cr_branch=""; cr_target=""; cr_desc=""; cr_delete_branch=""; cr_title=""
 cr_preexisting=0; cr_created=0; cr_pending=0
 prior_cr_iid=""; prior_cr_state=""
 
@@ -264,8 +303,10 @@ resolve_cr() {
       cr_url=$(jq -r '.web_url // empty' <<<"$json")
       [[ -z "$cr_url" ]] && return 1
       cr_iid=$(jq -r '.iid // empty' <<<"$json")
-      cr_draft=$(jq -r '.draft // empty' <<<"$json")
+      cr_draft=$(jq -r '.draft | values' <<<"$json")
       cr_head=$(jq -r '.sha // empty' <<<"$json")
+      cr_branch=$(jq -r '.source_branch // empty' <<<"$json")
+      cr_target=$(jq -r '.target_branch // empty' <<<"$json")
       cr_desc=$(jq -r '.description // ""' <<<"$json")
       cr_title=$(jq -r '.title // ""' <<<"$json")
       # Per-MR on GitLab: the create call's --remove-source-branch, or the
@@ -276,7 +317,7 @@ resolve_cr() {
         then "true" else "false" end' <<<"$json")
       ;;
     github)
-      local json args=(--json "url,number,isDraft,headRefOid,body,state,title")
+      local json args=(--json "url,number,isDraft,headRefOid,headRefName,baseRefName,body,state,title")
       [[ -n "$cr_ref" ]] && args=("$cr_ref" "${args[@]}")
       json=$(gh pr view "${args[@]}" 2>/dev/null) || return 1
       [[ -z "$json" ]] && return 1
@@ -290,8 +331,10 @@ resolve_cr() {
       cr_url=$(jq -r '.url // empty' <<<"$json")
       [[ -z "$cr_url" ]] && return 1
       cr_iid=$(jq -r '.number // empty' <<<"$json")
-      cr_draft=$(jq -r '.isDraft // empty' <<<"$json")
+      cr_draft=$(jq -r '.isDraft | values' <<<"$json")
       cr_head=$(jq -r '.headRefOid // empty' <<<"$json")
+      cr_branch=$(jq -r '.headRefName // empty' <<<"$json")
+      cr_target=$(jq -r '.baseRefName // empty' <<<"$json")
       cr_desc=$(jq -r '.body // ""' <<<"$json")
       cr_title=$(jq -r '.title // ""' <<<"$json")
       ;;
@@ -342,12 +385,13 @@ if [[ "$do_open" -eq 1 ]]; then
     echo "CR_CREATE_ERROR=a CR is already open on this branch ($cr_url) — write to it instead of opening another"
     exit 1
   fi
+  open_base="${onto:-$default_branch}"
   case "$forge" in
     gitlab)
       username=$(glab api user 2>/dev/null | jq -r '.username // empty' || true)
       if ! create_err=$(glab mr create --draft --yes \
             --title "$open_title" --description "$(cat "$open_body")" \
-            --target-branch "$default_branch" --remove-source-branch \
+            --target-branch "$open_base" --remove-source-branch \
             --assignee "$username" 2>&1); then
         echo "CR_CREATE_ERROR=glab mr create failed: $create_err"
         exit 1
@@ -356,7 +400,7 @@ if [[ "$do_open" -eq 1 ]]; then
     github)
       # `gh pr create` has no branch-deletion flag — GitHub carries no per-PR
       # field for it, only the repo-wide setting read below.
-      if ! create_err=$(gh pr create --draft --assignee @me \
+      if ! create_err=$(gh pr create --draft --assignee @me --base "$open_base" \
             --title "$open_title" --body-file "$open_body" 2>&1); then
         echo "CR_CREATE_ERROR=gh pr create failed: $create_err"
         exit 1
@@ -378,8 +422,8 @@ if [[ "$do_open" -eq 1 ]]; then
   echo "CR_IID=$cr_iid"
   echo "CR_DRAFT=$cr_draft"
   echo "DEFAULT_BRANCH=$default_branch"
+  echo "BASE_BRANCH=$open_base"
   echo "CR_TITLE=$open_title"
-  echo "DEFAULT_BRANCH=$default_branch"
   echo "DELETE_BRANCH_ON_MERGE=$delete_branch_on_merge"
   # Announce the CR to whoever in the suite is listening. This is the only path
   # that opens one, so it is the only path holding that fact. The announcement
@@ -393,6 +437,122 @@ if [[ "$do_open" -eq 1 ]]; then
     "uri=$cr_url" "title=$open_title"
   exit 0
 fi
+
+# --- --write: land the approved description on the CR -------------------------
+#
+# The draft the author approved is prose alone; the Review status section goes
+# back on here, into a copy, so the reviewed file never changes after its review.
+# The section joins the one the CR holds now, read fresh, so a round recorded
+# since recon survives, and the CR's own rounds win where both have a commit.
+# The write runs in this script so one allow rule covers it: the section is
+# anchor's record, written without an approval of its text (CONFIRM-17).
+if [[ "$do_write" -eq 1 ]]; then
+  if [[ "$forge" == "none" ]]; then
+    echo "CR_WRITE_ERROR=origin is not a recognized forge, so there is no CR to write to"
+    exit 1
+  fi
+  if ! resolve_cr; then
+    echo "CR_WRITE_ERROR=no open CR resolved to write to; pass --cr <iid>"
+    exit 1
+  fi
+  # CR numbers are shared across a project, so a --cr taken from anywhere but
+  # this branch's own CR names someone else's, and the forge accepts the write
+  # whenever the user can edit it.
+  if [[ "$cr_branch" != "$branch" ]]; then
+    echo "CR_WRITE_ERROR=$cr_url is from branch '${cr_branch:-<unknown>}', not '$branch'; refusing to write another branch's CR"
+    exit 1
+  fi
+  backup_path=$(anchor_backup_path "cr-$cr_iid" md)
+  printf '%s' "$cr_desc" > "$backup_path"
+  fresh_desc="$(anchor_tmpfile cr-desc-fresh md)"
+  printf '%s\n' "$cr_desc" > "$fresh_desc"
+  fresh_rounds=$(review_status_data "$fresh_desc") \
+    || { echo "PREPARE_ERROR=the CR's Review status section holds data that isn't JSON; fix or delete its opening comment" >&2; exit 1; }
+  carried_rounds='{}'
+  if [[ -n "$status_section" ]]; then
+    carried_rounds=$(review_status_data "$status_section") \
+      || { echo "PREPARE_ERROR=--status-section holds data that isn't JSON" >&2; exit 1; }
+  fi
+  rounds=$(jq -c --argjson cr "$fresh_rounds" '. + $cr' <<<"$carried_rounds")
+  write_body="$(anchor_tmpfile cr-desc-write md)"
+  status_carried=0
+  if [[ "$rounds" != '{}' ]]; then
+    section_file="$(anchor_tmpfile cr-review-status-write md)"
+    review_status_section "$rounds" > "$section_file"
+    review_status_splice "$open_body" "$section_file" > "$write_body"
+    status_carried=1
+  else
+    cp "$open_body" "$write_body"
+  fi
+  write_err=$(anchor_cr_write_description "$forge" "$cr_iid" "$write_body") \
+    || { echo "CR_WRITE_ERROR=the description write failed: $write_err"; exit 1; }
+  echo "RESOLVED_VIA=$RESOLVED_VIA"
+  echo "FORGE=$forge"
+  echo "CR_URL=$cr_url"
+  echo "CR_IID=$cr_iid"
+  echo "CR_WRITTEN=1"
+  echo "CR_BACKUP_PATH=$backup_path"
+  echo "STATUS_CARRIED=$status_carried"
+  exit 0
+fi
+
+# --- The base branch, and the gap to it ----------------------------------------
+#
+# The open CR's own target wins, since the forge already measures the CR against
+# it. Without one, --onto names it; failing that, the open CR this branch is
+# stacked on (lib/stack.sh); failing that, the default branch.
+
+cr_resolved=0
+if [[ "$forge" != "none" && "$on_default" -eq 0 ]] && resolve_cr; then
+  cr_resolved=1
+fi
+
+base_branch="$default_branch"
+base_source=default
+stack_cr_iid=""; stack_cr_url=""; stack_lookup_error=""
+if [[ "$cr_resolved" -eq 1 && -n "$cr_target" ]]; then
+  if [[ -n "$onto" && "$onto" != "$cr_target" ]]; then
+    echo "PREPARE_ERROR=$cr_url already targets '$cr_target', not '$onto'; move it with /anchor:stack on $onto, or drop --onto" >&2
+    exit 1
+  fi
+  base_branch="$cr_target"
+  base_source=cr
+elif [[ -n "$onto" ]]; then
+  base_branch="$onto"
+  base_source=onto
+fi
+
+if [[ "$forge" != "none" && "$on_default" -eq 0 && "$cr_resolved" -eq 0 && "$onto" != "$default_branch" ]]; then
+  stack_err="$(anchor_tmpfile stack-lookup-err)"
+  if open_crs=$(anchor_open_crs "$forge" 2>"$stack_err"); then
+    if [[ -n "$onto" ]]; then
+      stack_line=$(awk -F'\t' -v h="$onto" '$1 == h { print $1 "\t" $3 "\t" $4; exit }' <<<"$open_crs")
+    else
+      stack_line=$(anchor_stack_pick "$branch" "$default_branch" <<<"$open_crs")
+    fi
+    if [[ -n "$stack_line" ]]; then
+      IFS=$'\t' read -r stack_head stack_cr_iid stack_cr_url <<<"$stack_line"
+      if [[ "$base_source" == default ]]; then
+        base_branch="$stack_head"
+        base_source=stacked
+      fi
+    fi
+  else
+    stack_lookup_error=$(head -1 "$stack_err")
+  fi
+  rm -f "$stack_err"
+fi
+
+if [[ "$base_branch" != "$default_branch" ]]; then
+  git fetch origin "$base_branch" >/dev/null 2>&1 || true
+  if ! git rev-parse --verify --quiet "refs/remotes/origin/${base_branch}" >/dev/null; then
+    echo "PREPARE_ERROR=origin has no branch '$base_branch' to target" >&2
+    exit 1
+  fi
+fi
+
+ahead=$(git rev-list --count "origin/${base_branch}..HEAD" 2>/dev/null || echo 0)
+behind=$(git rev-list --count "HEAD..origin/${base_branch}" 2>/dev/null || echo 0)
 
 needs_commit=0
 needs_branch=0
@@ -422,19 +582,19 @@ if [[ "$forge" != "none" && "$on_default" -eq 1 ]]; then
     nothing_to_review=1
   fi
 elif [[ "$forge" != "none" && "$on_default" -eq 0 ]]; then
-  if resolve_cr; then
+  if [[ "$cr_resolved" -eq 1 ]]; then
     cr_preexisting=1
   elif [[ "$ahead" -eq 0 ]]; then
-    # No CR, and nothing committed ahead of the default branch. Opening a draft
+    # No CR, and nothing committed ahead of the base branch. Opening a draft
     # here is what fails — `glab mr create` / `gh pr create` reject with "Could
-    # not find any commits between origin/<default> and <branch>". The work is
+    # not find any commits between origin/<base> and <branch>". The work is
     # finished but uncommitted (or the only commits are unpushed and zero ahead
     # of the default branch, e.g. on the default branch itself). Report the
     # condition so the skill chains into /anchor:commit instead of surfacing a
     # raw forge error.
     needs_commit=1
   elif [[ "$branch_pushed" -eq 0 ]]; then
-    # Commit(s) ahead of the default branch, no CR, but the branch isn't pushed.
+    # Commit(s) ahead of the base branch, no CR, but the branch isn't pushed.
     # /anchor:commit commits and pushes; this script never pushes. Report
     # NEEDS_PUSH so the skill directs the user to /anchor:commit rather than
     # pushing an as-yet-unpushed branch here.
@@ -458,9 +618,28 @@ read_delete_branch_on_merge
 # paths, so an empty string here is a usage error rather than an empty left-hand
 # side, and the review the skill is about to open never launches.
 current_desc_path="$(anchor_tmpfile cr-desc-current)"
+review_status_path="$(anchor_tmpfile cr-review-status)"
 : > "$current_desc_path"
+: > "$review_status_path"
 if [[ -n "$cr_url" ]]; then
-  printf '%s' "$cr_desc" > "$current_desc_path"
+  printf '%s\n' "$cr_desc" > "$current_desc_path.full"
+  review_status_strip "$current_desc_path.full" "$review_status_path" > "$current_desc_path"
+  rm -f "$current_desc_path.full"
+fi
+
+# Rounds the branch's commits had before the CR existed are in the local record
+# (scripts/lib/review-status.sh). They join the section where it has none for a
+# commit, so the CR's first review starts where those rounds stopped.
+if [[ "$on_default" -eq 0 ]] && git rev-parse --verify --quiet "origin/${base_branch}" >/dev/null; then
+  branch_base=$(git merge-base "origin/${base_branch}" HEAD)
+  local_data=$(review_status_local_data) \
+    || { echo "PREPARE_ERROR=the local review record at $(review_status_local_path) isn't JSON; fix or delete it" >&2; exit 1; }
+  local_rounds=$(review_status_pick "$local_data" "$branch_base" HEAD)
+  cr_rounds=$(review_status_data "$review_status_path") \
+    || { echo "PREPARE_ERROR=the CR's Review status section holds data that isn't JSON; fix or delete its opening comment" >&2; exit 1; }
+  if jq -e --argjson cr "$cr_rounds" 'keys - ($cr | keys) | length > 0' <<<"$local_rounds" >/dev/null; then
+    review_status_section "$(jq -c --argjson cr "$cr_rounds" '. + $cr' <<<"$local_rounds")" > "$review_status_path"
+  fi
 fi
 
 # --- State check: local tree vs the CR head ----------------------------------
@@ -703,6 +882,9 @@ anchor_config_warnings >&2
 # costs no separate mktemp call.
 desc_draft_path="$(anchor_tmpfile cr-desc-draft)"
 
+cr_reference=""
+[[ -z "$cr_iid" ]] || cr_reference=$(anchor_cr_reference "$cr_url" "$cr_iid")
+
 # --- Emit ---------------------------------------------------------------------
 
 echo "RESOLVED_VIA=$RESOLVED_VIA"
@@ -710,6 +892,11 @@ echo "FORGE=$forge"
 echo "BRANCH=$branch"
 echo "DEFAULT_BRANCH=$default_branch"
 echo "ON_DEFAULT_BRANCH=$on_default"
+echo "BASE_BRANCH=$base_branch"
+echo "BASE_SOURCE=$base_source"
+echo "STACK_CR_IID=$stack_cr_iid"
+echo "STACK_CR_URL=$stack_cr_url"
+echo "STACK_LOOKUP_ERROR=$stack_lookup_error"
 echo "AHEAD=$ahead"
 echo "BEHIND=$behind"
 echo "NEEDS_BRANCH=$needs_branch"
@@ -723,6 +910,7 @@ echo "PRIOR_CR_IID=$prior_cr_iid"
 echo "PRIOR_CR_STATE=$prior_cr_state"
 echo "CR_URL=$cr_url"
 echo "CR_IID=$cr_iid"
+echo "CR_REFERENCE=$cr_reference"
 echo "CR_DRAFT=$cr_draft"
 echo "CR_TITLE=$cr_title"
 echo "CR_HEAD_SHA=$cr_head"
@@ -730,6 +918,7 @@ echo "LOCAL_HEAD_SHA=$local_head"
 echo "WORKTREE_CLEAN=$worktree_clean"
 echo "STATE=$state"
 echo "CURRENT_DESC_PATH=$current_desc_path"
+echo "CR_REVIEW_STATUS_PATH=$review_status_path"
 echo "DESC_DRAFT_PATH=$desc_draft_path"
 echo "TEMPLATE_PATH=$template_path"
 echo "TEMPLATE_SOURCE=$template_source"

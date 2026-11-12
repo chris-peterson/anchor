@@ -37,7 +37,9 @@
 #                              state: [{id, workflow, state, url,
 #                              jobs:[{name, stage, state, url}]}]. This is what
 #                              the report tabulates; PIPELINE_STATE stays the
-#                              headline verdict. Absent when there's no pipeline.
+#                              headline verdict. Absent when there's no pipeline,
+#                              and when a run's jobs couldn't be read (the state
+#                              is then unreachable).
 #   PIPELINE_FAILED_JOBS=<json> (state failed or canceled) [{name, ...}] the jobs
 #                               that failed or were canceled, compact array
 #
@@ -231,16 +233,18 @@ is_terminal() {
   esac
 }
 
+# The jobs readers and the breakdown fail (return 1, error in $forge_err) rather
+# than answer `[]`: a run with no jobs reads as one that ran nothing.
 jobs_github() {
   local id="$1" jobs
-  jobs=$(gh run view "$id" --json jobs 2>/dev/null) || { echo '[]'; return; }
+  jobs=$(gh run view "$id" --json jobs 2>"$forge_err") || return 1
   jq -c "$JQ_GH_NORMALIZE"'
     [ .jobs[] | {name, stage: "", url, state: normalize} ]' <<<"$jobs"
 }
 
 jobs_gitlab() {
   local id="$1" jobs
-  jobs=$(glab api "projects/:fullpath/pipelines/$id/jobs?per_page=100" 2>/dev/null) || { echo '[]'; return; }
+  jobs=$(glab api "projects/:fullpath/pipelines/$id/jobs?per_page=100" 2>"$forge_err") || return 1
   jq -c "$JQ_GL_NORMALIZE"'
     [ .[] | {name, stage, url: .web_url, state: normalize} ]' <<<"$jobs"
 }
@@ -257,8 +261,8 @@ jobs_gitlab() {
 # Built once, when the result is emitted, rather than per poll: a watch costs
 # one extra round of calls, not one per iteration.
 runs_breakdown_github() {
-  local list acc='[]' rec rid runs
-  runs=$(gh api "repos/{owner}/{repo}/actions/runs?head_sha=$sha&per_page=100" 2>/dev/null) || { echo '[]'; return; }
+  local list acc='[]' rec rid runs jobs
+  runs=$(gh api "repos/{owner}/{repo}/actions/runs?head_sha=$sha&per_page=100" 2>"$forge_err") || return 1
   list=$(jq -c --arg wf "$workflow" "$JQ_GH_NORMALIZE"'
     [ .workflow_runs[]
       | select($wf == "" or .path == $wf
@@ -270,7 +274,8 @@ runs_breakdown_github() {
   while IFS= read -r rec; do
     [[ -n "$rec" ]] || continue
     rid=$(jq -r '.id' <<<"$rec")
-    acc=$(jq -c --argjson r "$rec" --argjson j "$(jobs_github "$rid")" \
+    jobs=$(jobs_github "$rid") || return 1
+    acc=$(jq -c --argjson r "$rec" --argjson j "$jobs" \
              '. + [ $r + {jobs: $j} ]' <<<"$acc")
   done < <(jq -c '.[]' <<<"$list")
   echo "$acc"
@@ -279,9 +284,10 @@ runs_breakdown_github() {
 # One pipeline per commit on GitLab, so the breakdown is that pipeline plus its
 # jobs — the stage each job belongs to is what groups the table's rows.
 runs_breakdown_gitlab() {
-  local id="$1" state="$2" url="$3"
+  local id="$1" state="$2" url="$3" jobs
+  jobs=$(jobs_gitlab "$id") || return 1
   jq -nc --arg id "$id" --arg state "$state" --arg url "$url" \
-     --argjson jobs "$(jobs_gitlab "$id")" \
+     --argjson jobs "$jobs" \
      '[ {id: $id, workflow: "", state: $state, url: $url, jobs: $jobs} ]'
 }
 
@@ -350,7 +356,11 @@ probe_job() {
 emit() {
   local state="$1" url="$2" id="$3" wf="$4" timed_out="${5:-}" err="${6:-}"
   local breakdown=""
-  [[ -n "$id" ]] && breakdown=$(runs_breakdown "$id" "$state" "$url")
+  if [[ -n "$id" ]] && ! breakdown=$(runs_breakdown "$id" "$state" "$url"); then
+    state=unreachable
+    err=$(head -1 "$forge_err")
+    breakdown=""
+  fi
   echo "PIPELINE_FORGE=$forge"
   echo "PIPELINE_STATE=$state"
   echo "PIPELINE_URL=$url"

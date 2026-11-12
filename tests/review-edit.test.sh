@@ -53,7 +53,7 @@ case "${EDITOR_STUB_MODE:-save}" in
     ;;
   replace)
     scissors='------------------------ >8 ------------------------'
-    rest=$(sed -n "/^${scissors}\$/,\$p" "$buffer")
+    rest=$(sed -En "/^(# )?${scissors}\$/,\$p" "$buffer")
     { printf '%s\n\n' "${EDITOR_STUB_TEXT:-}"; printf '%s\n' "$rest"; } > "$buffer"
     ;;
   empty) : > "$buffer" ;;
@@ -73,16 +73,15 @@ git -C "$repo" config commit.gpgsign false
 printf 'one\n' > "$repo/a.txt"; git -C "$repo" add -A; git -C "$repo" commit --quiet -m first
 printf 'one\ntwo\n' > "$repo/a.txt"; git -C "$repo" add -A; git -C "$repo" commit --quiet -m second
 
-# Hermetic in PATH as well as in git config. Tool resolution settles the
-# configured name against what is installed, so without a fixed PATH the
-# assertions would read the host's installed set rather than the key resolution
-# they are about. A stub revdiff ahead of everything makes the configured
-# tool present, which is the state the substitution rule leaves alone. It
-# sits in its own dir, not
-# $bin: the probe cases below run against $bin precisely to assert what happens
-# when no viewer is installed.
+# Hermetic in PATH as well as in git config. Availability reads what is
+# installed, so without a fixed PATH the assertions would read the host's
+# installed set rather than the resolution they are about. A stub revdiff ahead
+# of everything makes revdiff present. It sits in its own dir, not $bin: the
+# probe cases below run against $bin precisely to assert what happens when
+# revdiff is not installed.
 viewerbin="$work/viewerbin"; mkdir -p "$viewerbin"
-printf '#!/usr/bin/env bash\nexit 0\n' > "$viewerbin/revdiff"; chmod +x "$viewerbin/revdiff"
+# shellcheck disable=SC2016  # the stub's own $1, expanded when it runs
+printf '#!/usr/bin/env bash\n[ "${1:-}" != --version ] || echo "version: v1.14.0"\nexit 0\n' > "$viewerbin/revdiff"; chmod +x "$viewerbin/revdiff"
 run() { ( cd "$repo" && PATH="$viewerbin:$PATH" bash "$dispatch" "$@" ); }
 verdict_of() { sed -n 's/^REVIEW_VERDICT=//p' <<<"$1"; }
 json_of()    { sed -n 's/^REVIEW_OUTPUT=//p' <<<"$1"; }
@@ -99,22 +98,35 @@ printf '# Why this change\n\nStale text.\n' > "$prior"
 nothing="$work/nothing.md"; : > "$nothing"
 blank="$work/blank.md"; printf '\n\n' > "$blank"
 
+# An approved edit is written over the artifact file, so a case that approves a
+# change reviews a copy, and `$draft` stays the fixture every other case reads.
+# Every outcome but that one has to leave the artifact file byte for byte as
+# drafted, which `untouched` holds it to.
+draft_orig="$work/proposed.orig"; cp "$draft" "$draft_orig"
+draft_copy() { cp "$draft_orig" "$work/$1.md"; printf '%s' "$work/$1.md"; }
+untouched() { cmp -s "$draft" "$draft_orig" || fail "$1 wrote the draft file: $(cat "$draft")"; }
+
 # --- saved unchanged -> approved, nothing edited ----------------------------
 export EDITOR_STUB_MODE=save
 export EDITOR_BUFFER_CAPTURE="$work/buffer.txt"
-o=$(run --skill prepare-review --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
+# An editor with no chords, named rather than left to the host's default, which
+# is vi on one platform and something else on another.
+o=$(GIT_EDITOR=plain-editor run --skill prepare-review --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = approved ]                  || fail "unchanged -> $(verdict_of "$o"), want approved"
 [ "$(jq -r .mode <<<"$j")" = edit ]                  || fail "mode should be edit"
 [ "$(jq '.editedFields|length' <<<"$j")" = 0 ]       || fail "unchanged should edit nothing"
 [ "$(jq '.comments|length' <<<"$j")" = 0 ]           || fail "edit mode carries no comments"
 [ "$(jq -r .capabilities.editableDescription <<<"$j")" = true ] || fail "caps.editableDescription"
 [ "$(jq -r .reviewCompleteness <<<"$j")" = null ]    || fail "completeness should be null"
-ok "edit: saved unchanged -> approved, no editedFields"
+untouched "an approval of the draft as drafted"
+ok "edit: saved unchanged -> approved, no editedFields, the draft file byte for byte as drafted"
 
 # The buffer is the artifact, then the scissors, then the change under review.
 grep -qx '# Why this change' "$EDITOR_BUFFER_CAPTURE" || fail "markdown heading missing from buffer"
 grep -q '>8' "$EDITOR_BUFFER_CAPTURE"                 || fail "scissors line missing from buffer"
 grep -q 'Stale text' "$EDITOR_BUFFER_CAPTURE"         || fail "the diff against the prior file is not below the scissors"
+grep -q '^│ Save to approve' "$EDITOR_BUFFER_CAPTURE"  || fail "what saving does is outlined: $(cat "$EDITOR_BUFFER_CAPTURE")"
+grep -q 'To reject it, quit with exit code 1' "$EDITOR_BUFFER_CAPTURE" || fail "an editor with no chords names the reject status: $(cat "$EDITOR_BUFFER_CAPTURE")"
 ok "edit: buffer is artifact + scissors + the change under review"
 
 # The editor reads the name to pick its mode, so a markdown artifact opens under
@@ -132,6 +144,12 @@ dir_name="${buffer_path%/*}"; dir_name="${dir_name##*/}"
 [[ "$dir_name" == anchor-editor.?????? ]] || fail "the buffer should sit in a directory of its own, got $dir_name"
 [ ! -e "${buffer_path%/*}" ] || fail "the buffer's directory outlived the review"
 ok "edit: the buffer is named repo@branch.artifact, in a directory of its own"
+
+EDITOR_BUFFER_CAPTURE="$work/named.txt" GIT_EDITOR=plain-editor \
+  run --skill issue --mode edit --files "$prior" "$draft" --name 'acme#7' >/dev/null
+buffer_path=$(cat "$work/named.txt.path")
+[ "${buffer_path##*/}" = 'acme#7.md' ] || fail "--name should name the buffer, got ${buffer_path##*/}"
+ok "edit: --name names the buffer for the object it edits"
 
 # The draft opens on the first line. Below the scissors, the flow that opened
 # the review and what approving hands it come first, and the diff names its
@@ -177,30 +195,72 @@ export EDITOR_STUB_MODE=replace
 export EDITOR_STUB_TEXT='# Rewritten by hand
 
 ## A heading the editor added'
-o=$(run --skill prepare-review --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
+d=$(draft_copy changed)
+prior_bytes=$(cat "$prior")
+o=$(run --skill prepare-review --mode edit --files "$prior" "$d"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = approved ] || fail "changed -> $(verdict_of "$o"), want approved"
 [ "$(jq -r '.editedFields[0].target' <<<"$j")" = description ] || fail "target should be description"
 [ "$(jq -r '.editedFields[0].edited' <<<"$j")" = "$EDITOR_STUB_TEXT" ] \
   || fail "edited text not adopted verbatim: $(jq -c '.editedFields[0].edited' <<<"$j")"
-[ "$(jq -r '.editedFields[0].original' <<<"$j")" = "$(cat "$draft")" ] || fail "original not carried"
+[ "$(jq -r '.editedFields[0].original' <<<"$j")" = "$(cat "$draft_orig")" ] || fail "original not carried"
 [[ "$(jq -r '.editedFields[0].edited' <<<"$j")" != *'>8'* ]] || fail "context leaked past the scissors"
-ok "edit: saved changed -> approved, edited text adopted verbatim (markdown intact)"
+[ "$(cat "$d")" = "$EDITOR_STUB_TEXT" ] || fail "the draft file should hold the approved text: $(cat "$d")"
+[ "$(cat "$prior")" = "$prior_bytes" ] || fail "the left-hand side is context, never written: $(cat "$prior")"
+ok "edit: saved changed -> approved, edited text adopted verbatim (markdown intact) and written over the draft file"
 
-# --- emptied -> abort -------------------------------------------------------
+# The report behind DIFF-13's write-back: a paragraph the author deleted and
+# saved reached the CR anyway, because the CR was opened from the draft file.
+two="$work/two-paragraphs.md"
+printf '# Why this change\n\nKeep this paragraph.\n\nThe paragraph the author removes.\n' > "$two"
+o=$(EDITOR_STUB_TEXT=$'# Why this change\n\nKeep this paragraph.' \
+    run --skill prepare-review --mode edit --files "$nothing" "$two"); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = approved ] || fail "a removed paragraph -> $(verdict_of "$o"), want approved"
+[ "$(grep -c 'The paragraph the author removes' "$two")" = 0 ] \
+  || fail "the removed paragraph is still in the draft file: $(cat "$two")"
+grep -q 'Keep this paragraph' "$two" || fail "the kept paragraph should stay: $(cat "$two")"
+ok "edit: a paragraph removed and saved is gone from the --files draft file"
+
+# A file the approved text cannot be written to is an error the caller sees,
+# with the text it could not write still in hand. Root writes through a
+# read-only mode, so there the case has nothing to hold.
+ro=$(draft_copy readonly); chmod 444 "$ro"
+if [ -w "$ro" ]; then
+  echo "ok - # SKIP write-failed: a read-only file is writable here"
+else
+  o=$(run --skill prepare-review --mode edit --files "$prior" "$ro" 2>"$work/err.txt"); j=$(json_of "$o")
+  chmod 644 "$ro"
+  [ "$(verdict_of "$o")" = no-verdict ] || fail "an unwritable draft -> $(verdict_of "$o"), want no-verdict"
+  [ "$(jq -r .raw.exitCode <<<"$j")" = write-failed ] || fail "raw.exitCode should be write-failed: $(jq -c .raw <<<"$j")"
+  [ "$(jq -r '.editedFields[0].edited' <<<"$j")" = "$EDITOR_STUB_TEXT" ] || fail "the approved text should ride back: $j"
+  grep -q "could not be written to $ro" "$work/err.txt" || fail "stderr should name the file: $(cat "$work/err.txt")"
+  cmp -s "$ro" "$draft_orig" || fail "the unwritable draft changed: $(cat "$ro")"
+  ok "edit: an approved edit that cannot be written -> no-verdict, write-failed, the text in editedFields"
+fi
+
+# --- emptied -> rejected ----------------------------------------------------
 export EDITOR_STUB_MODE=empty
 o=$(run --skill prepare-review --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
-[ "$(verdict_of "$o")" = no-verdict ] || fail "emptied -> $(verdict_of "$o"), want no-verdict"
-[ "$(jq '.editedFields|length' <<<"$j")" = 0 ] || fail "an abort edits nothing"
-ok "edit: emptied buffer -> no-verdict (abort)"
+[ "$(verdict_of "$o")" = rejected ] || fail "emptied -> $(verdict_of "$o"), want rejected"
+[ "$(jq '.editedFields|length' <<<"$j")" = 0 ] || fail "a rejection edits nothing"
+untouched "an emptied buffer"
+ok "edit: emptied buffer -> rejected, the draft file untouched"
 
-# --- quit without saving -> abort, and the save is what would have approved --
+# --- exit 1 (ZQ, :cq) -> rejected, whatever was saved -----------------------
+o=$(EDITOR_STUB_MODE=replace EDITOR_STUB_RC=1 run --skill prepare-review --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = rejected ] || fail "exit 1 -> $(verdict_of "$o"), want rejected"
+[ "$(jq '.editedFields|length' <<<"$j")" = 0 ] || fail "a rejection edits nothing"
+untouched "a rejection after an edit"
+ok "edit: exit 1 -> rejected, an edit saved first left out of the draft file"
+
+# --- quit without saving -> undecided, asked about --------------------------
 export EDITOR_STUB_MODE=quit
 o=$(run --skill prepare-review --mode edit --files "$prior" "$draft" 2>"$work/err.txt"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = no-verdict ]             || fail "quit unsaved -> $(verdict_of "$o"), want no-verdict"
-[ "$(jq -r .raw.exitCode <<<"$j")" = unsaved ]    || fail "raw.exitCode should be unsaved, got $(jq -c .raw <<<"$j")"
-[ "$(jq '.editedFields|length' <<<"$j")" = 0 ]    || fail "an abort edits nothing"
-grep -q 'without saving' "$work/err.txt"          || fail "the remedy should reach stderr"
-ok "edit: quit without saving -> no-verdict (abort), cause unsaved"
+[ "$(jq -r .raw.exitCode <<<"$j")" = undecided ]  || fail "raw.exitCode should be undecided, got $(jq -c .raw <<<"$j")"
+[ "$(jq '.editedFields|length' <<<"$j")" = 0 ]    || fail "an unanswered review edits nothing"
+grep -q 'no verdict chosen' "$work/err.txt"       || fail "stderr should say no verdict was chosen"
+untouched "a review closed without saving"
+ok "edit: quit without saving -> no-verdict, undecided, the draft file untouched"
 
 # --- a GUI editor missing its wait flag is not the reviewer declining --------
 # Both cases write nothing, so they are indistinguishable at the buffer. Only
@@ -214,20 +274,22 @@ grep -q -- '--wait' "$work/err.txt"   || fail "stderr should name the flag: $(ca
 [ "$(jq -r .raw.exitCode <<<"$j")" = unsaved ] || fail "still the unsaved class, nothing was written"
 [[ "$(jq -r .raw.output <<<"$j")" == *'--wait'* ]] \
   || fail "raw.output should name the flag, got $(jq -r .raw.output <<<"$j")"
-grep -q 'without saving' "$work/err.txt" && fail "the declining-to-save wording should not fire here"
+grep -q 'no verdict chosen' "$work/err.txt" && fail "the undecided wording should not fire here"
 # Invoked with the flag, an unsaved buffer is the reviewer's own choice again.
 git -C "$repo" config anchor.edit.tool 'code --wait'
 o=$(run --skill prepare-review --mode edit --files "$prior" "$draft" 2>"$work/err.txt")
-grep -q 'without saving' "$work/err.txt" || fail "with the flag set, the reviewer declined: $(cat "$work/err.txt")"
+grep -q 'no verdict chosen' "$work/err.txt" || fail "with the flag set, the reviewer chose nothing: $(cat "$work/err.txt")"
 git -C "$repo" config --unset anchor.edit.tool
 ok "edit: a GUI editor that returned without waiting names the flag it needs"
 
 # --- exited non-zero -> abort ----------------------------------------------
-export EDITOR_STUB_MODE=quit EDITOR_STUB_RC=3
+# Saved first, so the status alone is what keeps the edit out of the draft file.
+export EDITOR_STUB_MODE=replace EDITOR_STUB_RC=4
 o=$(run --skill prepare-review --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = no-verdict ]    || fail "editor failure -> want no-verdict"
-[ "$(jq -r .raw.exitCode <<<"$j")" = 3 ] || fail "raw.exitCode should carry the editor's status"
-ok "edit: non-zero editor exit -> no-verdict, status in raw.exitCode"
+[ "$(jq -r .raw.exitCode <<<"$j")" = 4 ] || fail "raw.exitCode should carry the editor's status"
+untouched "an editor that exited non-zero"
+ok "edit: non-zero editor exit -> no-verdict, status in raw.exitCode, the draft file untouched"
 unset EDITOR_STUB_RC
 
 # The terminal the editor was drawing in went away before it could answer —
@@ -240,18 +302,21 @@ o=$(run --skill prepare-review --mode edit --files "$prior" "$draft" 2>"$work/er
 [ "$(verdict_of "$o")" = no-verdict ]                || fail "a closed pane -> want no-verdict"
 [ "$(jq -r .raw.exitCode <<<"$j")" = pane-closed ]   || fail "raw.exitCode should name the cause, got $(jq -c .raw <<<"$j")"
 grep -q 'before anything was saved' "$work/err.txt"  || fail "the remedy should reach stderr"
-ok "edit: a closed review pane -> no-verdict, cause named rather than numbered"
+untouched "a pane closed before a save"
+ok "edit: a closed review pane -> no-verdict, cause named rather than numbered, the draft file untouched"
 
 # But the pane closing after a save is not that case: the reviewer answered and
 # the answer is on disk, so it is graded like any other save rather than thrown
 # away with the terminal that was drawing it.
 export EDITOR_STUB_MODE=replace EDITOR_STUB_RC=124
 export EDITOR_STUB_TEXT='# Saved, then the pane went away'
-o=$(run --skill prepare-review --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
+d=$(draft_copy pane-closed)
+o=$(run --skill prepare-review --mode edit --files "$prior" "$d"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = approved ] || fail "saved then pane closed -> $(verdict_of "$o"), want approved"
 [ "$(jq -r '.editedFields[0].edited' <<<"$j")" = "$EDITOR_STUB_TEXT" ] \
   || fail "the saved text should survive the pane, got $(jq -c '.editedFields[0].edited' <<<"$j")"
-ok "edit: saved, then the pane closed -> approved, the saved text survives"
+[ "$(cat "$d")" = "$EDITOR_STUB_TEXT" ] || fail "the saved text should reach the draft file: $(cat "$d")"
+ok "edit: saved, then the pane closed -> approved, the saved text survives into the draft file"
 unset EDITOR_STUB_RC EDITOR_STUB_TEXT
 export EDITOR_STUB_MODE=save
 
@@ -266,6 +331,7 @@ o=$( cd "$repo" && PATH="$bin:/usr/bin:/bin" ANCHOR_EDITOR_LAUNCHER='' TMUX='' \
      --files "$prior" "$draft" </dev/null 2>/dev/null ); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = no-verdict ]            || fail "nowhere to open -> want no-verdict"
 [ "$(jq -r .raw.exitCode <<<"$j")" = no-host ]   || fail "raw.exitCode should be no-host, got $(jq -c .raw <<<"$j")"
+untouched "a review with nowhere to open"
 ok "edit: nowhere to open the editor -> no-verdict, no-host"
 
 # --- a drafted commit message rides the same path --------------------------
@@ -274,39 +340,76 @@ export EDITOR_STUB_TEXT='Rewrite the subject
 
 And the body the user typed.'
 msg="$work/msg.txt"; printf 'Add a feature\n\nThe body explains why.\n' > "$msg"
+msg_orig="$work/msg.orig"; cp "$msg" "$msg_orig"
+msg_copy() { cp "$msg_orig" "$work/$1.txt"; printf '%s' "$work/$1.txt"; }
 printf 'one\ntwo\nthree\n' > "$repo/a.txt"
-o=$(run --skill commit --mode edit --local --message-file "$msg"); j=$(json_of "$o")
+m=$(msg_copy changed)
+o=$(run --skill commit --mode edit --local --message-file "$m"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = approved ] || fail "message edit -> $(verdict_of "$o")"
 [ "$(jq -r '.editedFields[0].target' <<<"$j")" = commit-message ] || fail "target should be commit-message"
 [ "$(jq -r '.editedFields[0].edited' <<<"$j")" = "$EDITOR_STUB_TEXT" ] || fail "edited message not adopted"
+[ "$(cat "$m")" = "$EDITOR_STUB_TEXT" ] || fail "the message file should hold the approved message: $(cat "$m")"
 grep -q 'three' "$EDITOR_BUFFER_CAPTURE" || fail "staged diff should sit below the scissors"
-ok "edit: --message-file -> editedFields[commit-message], diff below the scissors"
+ok "edit: --message-file -> editedFields[commit-message] and the message file, diff below the scissors"
+
+# The same report through a commit message: a paragraph removed and saved is
+# gone from the file commit.sh commits from.
+m="$work/two-paragraphs.txt"
+printf 'Add a feature\n\nKeep this paragraph.\n\nThe paragraph the author removes.\n' > "$m"
+o=$(EDITOR_STUB_TEXT=$'Add a feature\n\nKeep this paragraph.' \
+    run --skill commit --mode edit --local --message-file "$m"); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = approved ] || fail "a removed paragraph -> $(verdict_of "$o"), want approved"
+[ "$(grep -c 'The paragraph the author removes' "$m")" = 0 ] \
+  || fail "the removed paragraph is still in the message file: $(cat "$m")"
+ok "edit: a paragraph removed and saved is gone from the --message-file message file"
+
+# Anything short of approval leaves the message file as drafted.
+o=$(EDITOR_STUB_MODE=empty run --skill commit --mode edit --local --message-file "$msg"); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = rejected ] || fail "an emptied message -> $(verdict_of "$o"), want rejected"
+o=$(EDITOR_STUB_RC=4 run --skill commit --mode edit --local --message-file "$msg"); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = no-verdict ] || fail "an editor exiting 4 -> $(verdict_of "$o"), want no-verdict"
+cmp -s "$msg" "$msg_orig" || fail "a review short of approval wrote the message file: $(cat "$msg")"
+ok "edit: an emptied or failed message review leaves the message file untouched"
 
 # the diff below the scissors covers the named paths only, not a peer's edit
 printf 'peer\n' > "$repo/peer.txt"
 git -C "$repo" add peer.txt
 git -C "$repo" commit --quiet -m peer
 printf 'peer\nin flight\n' > "$repo/peer.txt"
-o=$(run --skill commit --mode edit --local --message-file "$msg" --path a.txt)
+o=$(run --skill commit --mode edit --local --message-file "$(msg_copy path)" --path a.txt)
 grep -q 'three' "$EDITOR_BUFFER_CAPTURE" || fail "the named path's diff should be in the buffer"
 ! grep -q 'in flight' "$EDITOR_BUFFER_CAPTURE" || fail "a peer's edit outside --path should not be in the buffer"
 git -C "$repo" checkout --quiet -- peer.txt
 ok "edit: the buffer's diff covers only --path"
 
-[[ "$(cat "$EDITOR_BUFFER_CAPTURE.path")" == *.txt ]] \
-  || fail "a commit message should open in a .txt buffer, got $(cat "$EDITOR_BUFFER_CAPTURE.path")"
-ok "edit: a commit message opens in a .txt buffer"
+# git's own shape, so the editor's gitcommit mode greys the context: the buffer
+# named the way git names it, under the repo and branch, and git's scissors with
+# the context commented below it.
+[[ "$(cat "$EDITOR_BUFFER_CAPTURE.path")" == */repo@main/COMMIT_EDITMSG ]] \
+  || fail "a commit message should open in repo@main/COMMIT_EDITMSG, got $(cat "$EDITOR_BUFFER_CAPTURE.path")"
+grep -qxF '# ------------------------ >8 ------------------------' "$EDITOR_BUFFER_CAPTURE" \
+  || fail "a commit buffer should carry git's scissors: $(cat "$EDITOR_BUFFER_CAPTURE")"
+grep -qxF '#   opened by: /anchor:commit' "$EDITOR_BUFFER_CAPTURE" \
+  || fail "the context below a commit's scissors should be commented: $(cat "$EDITOR_BUFFER_CAPTURE")"
+ok "edit: a commit message opens as git's COMMIT_EDITMSG, its context commented"
 
 # The seeded message is the editable region, so it is not repeated as a header row.
 [ "$(grep -c 'The body explains why' "$EDITOR_BUFFER_CAPTURE")" = 1 ] \
   || fail "the message body appears twice in the buffer"
 ok "edit: the seeded message body is not duplicated in the header"
 
+# A markdown draft keeps `#` for headings, so its context is an HTML comment.
+o=$(run --skill prepare-review --mode edit --files "$prior" "$(draft_copy comment)")
+[ "$(sed -n '/>8/{n;p;}' "$EDITOR_BUFFER_CAPTURE")" = '<!--' ] \
+  || fail "a markdown draft's context should open a comment under the scissors: $(cat "$EDITOR_BUFFER_CAPTURE")"
+grep -qxF -- '-->' "$EDITOR_BUFFER_CAPTURE" || fail "the comment should close before the diff"
+ok "edit: a markdown draft's context sits in an HTML comment"
+
 # --- the artifact target follows the invoking skill ------------------------
 export EDITOR_STUB_MODE=replace EDITOR_STUB_TEXT='## Issue body'
-o=$(run --skill issue --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
+o=$(run --skill issue --mode edit --files "$prior" "$(draft_copy issue)"); j=$(json_of "$o")
 [ "$(jq -r '.editedFields[0].target' <<<"$j")" = issue-body ] || fail "issue -> issue-body"
-o=$(run --skill release --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
+o=$(run --skill release --mode edit --files "$prior" "$(draft_copy release)"); j=$(json_of "$o")
 [ "$(jq -r '.editedFields[0].target' <<<"$j")" = release-notes ] || fail "release -> release-notes"
 ok "edit: editedFields target follows --skill"
 
@@ -328,11 +431,6 @@ exit 0
 EOF
 chmod +x "$bin/stub-host-runner.sh"
 export ANCHOR_HOST_RUNNER="$bin/stub-host-runner.sh"
-
-# The viewer is named, because nothing names it for you: revdiff is anchor's
-# recommendation and reaches a review the same way any other viewer does, so a
-# case about *which* mode ran has to set the key or it measures the unset one.
-git -C "$repo" config anchor.diff.tool revdiff
 
 mode_of()    { jq -r .mode    <<<"$(json_of "$1")"; }
 tool_of() { jq -r .tool <<<"$(json_of "$1")"; }
@@ -361,8 +459,8 @@ b=$(tool_of "$(GIT_EDITOR='my-editor --wait' run --skill commit --mode edit --lo
 unset ANCHOR_EDITOR_LAUNCHER
 ok "mode: the tool names the tool that ran the mode, editor or viewer"
 
-# anchor.edit.tool is the mirror of anchor.diff.tool — edit mode's tool
-# half, above git's chain because it is the narrower statement.
+# anchor.edit.tool names edit mode's tool, above git's chain because it is the
+# narrower statement.
 export ANCHOR_EDITOR_LAUNCHER="$bin/stub-editor.sh"
 git -C "$repo" config anchor.edit.tool 'anchor-editor --wait'
 b=$(tool_of "$(GIT_EDITOR='my-editor --wait' run --skill commit --mode edit --local --message-file "$msg" 2>/dev/null)")
@@ -375,27 +473,13 @@ ok "tool: anchor.edit.tool names edit mode's tool, over git's chain"
 if run --skill commit --mode bogus --previous 2>/dev/null; then fail "unknown mode should exit non-zero"; fi
 ok "mode: an unknown mode exits non-zero"
 
-# --- a named viewer anchor cannot place stays named. Nothing stands in for it:
-# substituting a viewer the user didn't ask for would report a different tool's
-# verdict as theirs, so the report names the one that could not be placed.
+# --- a key naming another viewer moves nothing: the review runs revdiff.
 git -C "$repo" config anchor.diff.tool bogus-viewer
 v=$( ( cd "$repo" && PATH="$bin:/usr/bin:/bin" bash "$dispatch" --skill commit --previous ) 2>/dev/null )
-[ "$(verdict_of "$v")" = no-verdict ] \
-  || fail "an unknown diff tool should report no-verdict"
-[ "$(jq -r .raw.exitCode <<<"$(json_of "$v")")" = unknown-tool ] \
-  || fail "the cause should name it as a tool anchor has no adapter for"
-[ "$(tool_of "$v")" = bogus-viewer ] \
-  || fail "the report should carry the viewer that was asked for, not a substitute"
-
-# --- with no viewer named at all, the review says which key names one rather
-# than picking anchor's recommendation on the user's behalf.
+[ "$(tool_of "$v")" = revdiff ] \
+  || fail "anchor.diff.tool naming another viewer should still run revdiff, got $(tool_of "$v")"
 git -C "$repo" config --unset anchor.diff.tool || true
-v=$( ( cd "$repo" && PATH="$bin:/usr/bin:/bin" bash "$dispatch" --skill commit --previous ) 2>/dev/null )
-[ "$(verdict_of "$v")" = no-verdict ] || fail "an unset viewer should report no-verdict"
-[ "$(jq -r .raw.exitCode <<<"$(json_of "$v")")" = no-tool ] \
-  || fail "the cause should say no viewer is configured"
-git -C "$repo" config anchor.diff.tool revdiff
-ok "tool: a viewer anchor cannot place is named, and an unset one names the key"
+ok "tool: a diff review runs revdiff whatever anchor.diff.tool names"
 
 # ====================== the probe ==========================================
 # The skills ask how a review resolves before deciding whether a visual review is
@@ -441,7 +525,14 @@ o=$( cd "$repo" && PATH="$bin:/usr/bin:/bin" ANCHOR_EDITOR_LAUNCHER="$bin/stub-e
      bash "$dispatch" --skill commit --probe --mode edit )
 [ "$(key_of REVIEW_AVAILABLE "$o")" = 1 ]      || fail "a reachable editor makes a selected edit mode available"
 [ "$(key_of REVIEW_EDIT_AVAILABLE "$o")" = 1 ] || fail "a reachable editor should be reported as offerable"
-ok "probe: a reachable editor is reported on its own axis"
+[ "$(key_of REVIEW_HOST "$o")" = launcher ]    || fail "the probe names where the review opens: $o"
+ok "probe: a reachable editor is reported on its own axis, with where it opens"
+
+o=$(probe_hosted --skill commit --probe --mode diff)
+[ "$(key_of REVIEW_HOST "$o")" = launcher ] || fail "a diff probe names the host the viewer opens in: $o"
+o=$(probe --skill commit --probe --mode edit)
+grep -qx 'REVIEW_HOST=' <<<"$o" || fail "with nowhere to open, the host is reported empty: $o"
+ok "probe: REVIEW_HOST names where the review opens in either mode, and is empty when nowhere can"
 
 # Whether what is about to open is something the user chose (UX-07). The mode
 # here comes from a config key and the editor from anchor's own ladder, so the
@@ -464,26 +555,23 @@ o=$( cd "$repo" && PATH="$viewerbin:$bin:/usr/bin:/bin" bash "$dispatch" --skill
 [ "$(key_of REVIEW_TOOL "$o")" = revdiff ] || fail "a diff-mode probe should name the viewer"
 ok "probe: the tool key names the viewer in diff mode and the editor in edit"
 
-git -C "$repo" config anchor.diff.tool definitely-not-installed
 o=$(probe --skill commit --probe)
-[ "$(key_of REVIEW_TOOL "$o")" = definitely-not-installed ] || fail "probe should report the configured viewer"
-[ "$(key_of REVIEW_AVAILABLE "$o")" = 0 ]                      || fail "an absent binary should report unavailable"
-ok "probe: with no diff viewer installed at all, the probe reports unavailable"
+[ "$(key_of REVIEW_TOOL "$o")" = revdiff ]   || fail "probe should report revdiff"
+[ "$(key_of REVIEW_AVAILABLE "$o")" = 0 ]    || fail "an absent binary should report unavailable"
+ok "probe: with revdiff not installed, the probe reports unavailable"
 
-# An installed viewer that the user named is what opens. Nothing substitutes for
-# a named one, so the configured name is the reported name either way — what
-# moves is only whether it can open.
+# revdiff is what opens, and no key chose it.
 cat > "$bin/revdiff" <<'EOF'
 #!/usr/bin/env bash
+[ "${1:-}" != --version ] || { echo "version: ${REVDIFF_STUB_VERSION:-v1.14.0}"; exit 0; }
 exit 0
 EOF
 chmod +x "$bin/revdiff"
-git -C "$repo" config anchor.diff.tool revdiff
 o=$(probe_hosted --skill commit --probe)
-[ "$(key_of REVIEW_TOOL "$o")" = revdiff ]        || fail "the named viewer should be what opens"
-[ "$(key_of REVIEW_TOOL_SOURCE "$o")" = config ]  || fail "a named viewer is the user's own choice"
-[ "$(key_of REVIEW_AVAILABLE "$o")" = 1 ]         || fail "an installed viewer with a host is available"
-ok "probe: the viewer the user named is the one reported"
+[ "$(key_of REVIEW_TOOL "$o")" = revdiff ]          || fail "revdiff should be what opens"
+[ "$(key_of REVIEW_TOOL_SOURCE "$o")" = required ]  || fail "no key chooses revdiff, so source=required"
+[ "$(key_of REVIEW_AVAILABLE "$o")" = 1 ]           || fail "an installed viewer with a host is available"
+ok "probe: revdiff is the one reported, as required rather than chosen"
 
 # The other half of the same question. Both modes need a program *and* somewhere
 # to draw it, so a viewer that is plainly installed reports unavailable where
@@ -494,17 +582,16 @@ o=$(probe --skill commit --probe)
 [ "$(key_of REVIEW_AVAILABLE "$o")" = 0 ]      || fail "an installed viewer with nowhere to render is not available"
 ok "probe: a viewer with no host reports unavailable, as an editor does"
 
-# An unnamed viewer reports as unnamed rather than as anchor's recommendation,
-# and never flips the mode to edit — which edits one artifact rather than
-# showing a diff.
+# A missing revdiff never flips the mode to edit, which edits one artifact
+# rather than showing a diff.
 rm -f "$bin/revdiff"
-git -C "$repo" config --unset anchor.diff.tool || true
 o=$(probe_hosted --skill commit --probe)
-[ "$(key_of REVIEW_MODE "$o")" = diff ]          || fail "an unnamed viewer should never flip the mode to edit"
-[ -z "$(key_of REVIEW_TOOL "$o")" ]              || fail "no key names a viewer, so none should be reported"
-[ "$(key_of REVIEW_TOOL_SOURCE "$o")" = unset ]  || fail "the source should say the key is unset"
-[ "$(key_of REVIEW_AVAILABLE "$o")" = 0 ]        || fail "an unnamed viewer cannot open"
-ok "probe: an unnamed viewer is reported as unset, and never becomes edit mode"
+[ "$(key_of REVIEW_MODE "$o")" = diff ]          || fail "a missing revdiff should never flip the mode to edit"
+[ "$(key_of REVIEW_TOOL "$o")" = revdiff ]       || fail "revdiff stays named"
+[ "$(key_of REVIEW_AVAILABLE "$o")" = 0 ]        || fail "a missing revdiff cannot open"
+key_of REVIEW_UNUSABLE "$o" | grep -q 'brew install umputun/apps/revdiff' \
+  || fail "the probe names the install: $o"
+ok "probe: a missing revdiff is reported with its install, and never becomes edit mode"
 
 # --mode drives the review directly, over what the subject would have picked.
 export ANCHOR_EDITOR_LAUNCHER="$bin/stub-editor.sh" EDITOR_STUB_MODE=save
@@ -529,8 +616,8 @@ git -C "$repo" config anchor.reviewBackend editor
 o=$( cd "$repo" && PATH="$viewerbin:$bin:/usr/bin:/bin" \
      bash "$dispatch" --skill commit --probe 2>"$work/legacy.txt" )
 [ "$(key_of REVIEW_MODE "$o")" = diff ]            || fail "the superseded key must not move the mode"
-grep -q 'anchor.edit.tool' "$work/legacy.txt"   || fail "the keys that replaced it should be named on stderr"
-grep -q 'anchor.diff.tool' "$work/legacy.txt"   || fail "the keys that replaced it should be named on stderr"
+grep -q 'anchor.edit.tool' "$work/legacy.txt"   || fail "the key that replaced it should be named on stderr"
+grep -q 'diff reviews open in revdiff' "$work/legacy.txt" || fail "the viewer should be named on stderr"
 git -C "$repo" config --unset anchor.reviewBackend || true
 ok "mode: the superseded anchor.reviewBackend key does nothing, and says so"
 unset EDITOR_BUFFER_CAPTURE
@@ -540,6 +627,7 @@ unset EDITOR_BUFFER_CAPTURE
 # otherwise — only whether the shape it picked can actually open.
 cat > "$bin/revdiff" <<'EOF'
 #!/usr/bin/env bash
+[ "${1:-}" != --version ] || { echo "version: ${REVDIFF_STUB_VERSION:-v1.14.0}"; exit 0; }
 exit 0
 EOF
 chmod +x "$bin/revdiff"
@@ -664,6 +752,21 @@ r=$( cd "$repo" && PATH="$work/empty-bin:/usr/bin:/bin" TERM=xterm \
 [ -n "$r" ] || fail "a no-op EDITOR should not swallow git's compiled default"
 ok "resolve: a no-op EDITOR leaves the compiled default reachable"
 
+# A no-op core.editor is discounted the same way, and git's compiled default is
+# read past it: `git var GIT_EDITOR` reports a configured `true` as the editor,
+# and an empty one as no editor at all, so neither can be how the rung asks.
+git -C "$repo" config core.editor true
+for term in dumb xterm; do
+  r=$(resolve "$work/empty-bin" "$term")
+  [ -n "$r" ] || fail "a no-op core.editor should not hide git's compiled default (TERM=$term)"
+  case "$r" in true|:|*/true) fail "a no-op core.editor should be discounted, got '$r' (TERM=$term)" ;; esac
+done
+git -C "$repo" config --unset core.editor
+r=$(GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.editor GIT_CONFIG_VALUE_0=true \
+    resolve "$work/empty-bin" xterm)
+[ -n "$r" ] || fail "a no-op core.editor from \`git -c\` should not hide git's compiled default"
+ok "resolve: a no-op core.editor leaves the compiled default reachable"
+
 git -C "$repo" config core.editor "my-editor --wait"
 r=$(resolve "$codebin")
 [ "$r" = "my-editor --wait" ] || fail "core.editor should win over both new rungs, got '$r'"
@@ -744,5 +847,116 @@ ok "host: the gui window answers edit alone"
 [ "$(host_for edit gvim)" != gui ]               || fail "gvim without -f does not block"
 [ "$(host_for edit 'my-editor --hold')" != gui ] || fail "an unrecognized flag should not read as blocking"
 ok "host: the wait flag each known editor needs is what selects the gui host"
+
+# ====================== annotating instead of editing ======================
+# Quitting the editor with exit code 3 hands the draft to the diff viewer, for a
+# change the reviewer wants made rather than makes. The runner runs the command
+# for real, and the stub revdiff keeps the draft it was shown and answers with
+# $REVDIFF_STUB_OUTPUT.
+cat > "$bin/run-host.sh" <<'EOF'
+#!/usr/bin/env bash
+sh -c "$1"
+EOF
+chmod +x "$bin/run-host.sh"
+cat > "$viewerbin/revdiff" <<'EOF'
+#!/usr/bin/env bash
+[ "${1:-}" != --version ] || { echo "version: ${REVDIFF_STUB_VERSION:-v1.14.0}"; exit 0; }
+[ "${1:-}" != --dump-keys ] || exit 0
+for a in "$@"; do
+  case "$a" in
+    --output=*)      out="${a#--output=}" ;;
+    "--only=(context).md") ;;
+    --only=*)        cp "${a#--only=}" "$REVDIFF_NEW_CAPTURE" ;;
+  esac
+done
+[ -z "${REVDIFF_STUB_OUTPUT:-}" ] || printf '%s\n' "$REVDIFF_STUB_OUTPUT" > "$out"
+exit "${REVDIFF_STUB_RC:-0}"
+EOF
+chmod +x "$viewerbin/revdiff"
+export ANCHOR_EDITOR_LAUNCHER="$bin/stub-editor.sh" ANCHOR_HOST_RUNNER="$bin/run-host.sh"
+export REVDIFF_NEW_CAPTURE="$work/annotated.md" EDITOR_BUFFER_CAPTURE="$work/buffer.txt"
+# Helix gets the review's chords; the launcher stands in for it.
+git -C "$repo" config anchor.edit.tool hx
+
+o=$(EDITOR_STUB_MODE=replace EDITOR_STUB_TEXT='# Edited first' EDITOR_STUB_RC=3 \
+    REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT=$'## proposed.md:1 (+)\nsay which gateway' \
+    run --skill prepare-review --mode edit --files "$nothing" "$draft"); j=$(json_of "$o")
+# shellcheck disable=SC2016
+grep -q '│ `ZZ` approve' "$EDITOR_BUFFER_CAPTURE" || fail "the buffer should name the chord that approves: $(cat "$EDITOR_BUFFER_CAPTURE")"
+# shellcheck disable=SC2016
+grep -q '│ `ZQ` or `:cq` reject it (exit code 1)' "$EDITOR_BUFFER_CAPTURE" || fail "the buffer should name the chord and status that reject: $(cat "$EDITOR_BUFFER_CAPTURE")"
+# shellcheck disable=SC2016
+grep -q '│ `ZD` ask for changes in revdiff (saves, then exit code 3)' "$EDITOR_BUFFER_CAPTURE" || fail "the buffer should name the chord and status that switch: $(cat "$EDITOR_BUFFER_CAPTURE")"
+grep -q 'hide hints' "$EDITOR_BUFFER_CAPTURE"    || fail "the buffer should say how to hide the keys: $(cat "$EDITOR_BUFFER_CAPTURE")"
+[ "$(head -1 "$REVDIFF_NEW_CAPTURE")" = '# Edited first' ] || fail "the viewer should show the draft as saved: $(cat "$REVDIFF_NEW_CAPTURE")"
+[ "$(verdict_of "$o")" = changes-requested ]       || fail "a note in the viewer -> changes-requested: $o"
+[ "$(jq -r .mode <<<"$j")" = diff ]                || fail "the result is the viewer's: $j"
+[ "$(jq '.comments|length' <<<"$j")" = 1 ]         || fail "the note comes back as a comment: $j"
+[ "$(jq -r '.editedFields[0].edited' <<<"$j")" = '# Edited first' ] || fail "the edit made before switching rides back: $j"
+[ "$(jq -r '.editedFields[0].target' <<<"$j")" = description ] || fail "the edit is aimed at the artifact: $j"
+untouched "a switch the viewer sent back with notes"
+ok "annotate: exit 3 reopens the saved draft in the viewer, and its notes and the earlier edit both come back"
+
+# The switch hands the verdict to the viewer, so an approval there is an
+# approval of the draft as saved before the switch, and that is what the draft
+# file holds afterwards.
+d=$(draft_copy switched)
+o=$(EDITOR_STUB_MODE=replace EDITOR_STUB_TEXT='# Edited first' EDITOR_STUB_RC=3 \
+    REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT=$'## proposed.md:1 (+)\nlgtm' \
+    run --skill prepare-review --mode edit --files "$nothing" "$d"); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = approved ]                || fail "a lone lgtm in the viewer -> approved: $o"
+[ "$(jq -r '.editedFields[0].edited' <<<"$j")" = '# Edited first' ] || fail "the edit made before switching rides back: $j"
+[ "$(cat "$d")" = '# Edited first' ]               || fail "the approved edit should reach the draft file: $(cat "$d")"
+ok "annotate: an approval in the viewer writes the edit made before the switch over the draft file"
+
+o=$(EDITOR_STUB_MODE=quit EDITOR_STUB_RC=3 REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT='' \
+    run --skill prepare-review --mode edit --files "$nothing" "$draft" 2>/dev/null); j=$(json_of "$o")
+cmp -s "$REVDIFF_NEW_CAPTURE" "$draft"             || fail "an unsaved switch shows the draft as drafted: $(cat "$REVDIFF_NEW_CAPTURE")"
+untouched "a switch made without saving"
+[ "$(jq -r .raw.exitCode <<<"$j")" = undecided ]   || fail "a viewer quit with no notes chooses no verdict: $o"
+[ "$(jq '.editedFields|length' <<<"$j")" = 0 ]     || fail "nothing was edited: $j"
+ok "annotate: switching without saving shows the draft as drafted"
+
+git -C "$repo" config anchor.edit.hints false
+EDITOR_STUB_MODE=save run --skill prepare-review --mode edit --files "$nothing" "$draft" >/dev/null
+! grep -q 'ZQ\|ZD\|hide hints' "$EDITOR_BUFFER_CAPTURE" || fail "anchor.edit.hints=false drops the keys: $(cat "$EDITOR_BUFFER_CAPTURE")"
+grep -q 'quit with exit code 3, and the' "$EDITOR_BUFFER_CAPTURE" \
+  || fail "the switch itself stays when the keys are hidden: $(cat "$EDITOR_BUFFER_CAPTURE")"
+git -C "$repo" config --unset anchor.edit.hints
+ok "annotate: anchor.edit.hints=false drops the editor keys and keeps the switch"
+
+git -C "$repo" config anchor.diff.tool bogus-viewer
+EDITOR_STUB_MODE=save run --skill prepare-review --mode edit --files "$nothing" "$draft" >/dev/null 2>&1
+# shellcheck disable=SC2016
+grep -q '`ZD` ask for changes in revdiff' "$EDITOR_BUFFER_CAPTURE" || fail "the switch opens revdiff whatever anchor.diff.tool names: $(cat "$EDITOR_BUFFER_CAPTURE")"
+git -C "$repo" config --unset anchor.diff.tool
+git -C "$repo" config --unset anchor.edit.tool
+ok "annotate: the switch names revdiff whatever anchor.diff.tool names"
+
+# --- the real Vim and Neovim, driven headless through their chords -----------
+# The runner types $VIM_KEYS in normal mode after the maps load, so the chord
+# runs through the map edit.sh passes, not through the editor's built-in key.
+cat > "$bin/vim-keys.sh" <<'EOF'
+#!/usr/bin/env bash
+sh -c "$1 -c 'normal $VIM_KEYS'" </dev/null >/dev/null 2>&1
+EOF
+chmod +x "$bin/vim-keys.sh"
+for vimbin in vim nvim; do
+  if ! command -v "$vimbin" >/dev/null 2>&1; then
+    echo "ok - # SKIP $vimbin chords: $vimbin not installed"
+    continue
+  fi
+  vimed="$vimbin -u NONE -i NONE -N -n -es"
+  o=$(VIM_KEYS=ZZ GIT_EDITOR="$vimed" ANCHOR_EDITOR_LAUNCHER='' ANCHOR_HOST_RUNNER="$bin/vim-keys.sh" \
+      run --skill prepare-review --mode edit --files "$nothing" "$draft" 2>&1); j=$(json_of "$o")
+  [ "$(verdict_of "$o")" = approved ]            || fail "$vimbin: ZZ on an unchanged draft approves it: $o"
+  [ "$(jq '.editedFields|length' <<<"$j")" = 0 ] || fail "$vimbin: ZZ unchanged edits nothing: $j"
+  untouched "$vimbin: ZZ on an unchanged draft"
+  o=$(VIM_KEYS=ZQ GIT_EDITOR="$vimed" ANCHOR_EDITOR_LAUNCHER='' ANCHOR_HOST_RUNNER="$bin/vim-keys.sh" \
+      run --skill prepare-review --mode edit --files "$nothing" "$draft" 2>&1)
+  [ "$(verdict_of "$o")" = rejected ]            || fail "$vimbin: ZQ rejects: $o"
+  untouched "$vimbin: ZQ"
+  ok "$vimbin: ZZ approves a draft left unchanged, ZQ rejects it, and neither changes the draft file"
+done
 
 echo "# all checks passed"

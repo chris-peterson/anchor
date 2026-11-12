@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Read everything /anchor:merge decides on before it lands a change request —
-# the CR, whether the checkout matches it, the five gates, and the merge method
+# the CR, whether the checkout matches it, its gates, and the merge method
 # the forge's settings resolve to — in one pass, as a KEY=value block.
 #
 # Why a script (not skill prose): every gate is a deterministic read of a forge
@@ -41,14 +41,18 @@
 #   PIPELINE_ERROR=<text>       passed through when the pipeline was unreachable
 #   GATE_APPROVALS=<met|none|missing|changes-requested>
 #   GATE_APPROVALS_DETAIL=<e.g. "1 required, 0 left; approved by @ana">
+#   GATE_REVIEWS=<reviewed|unreviewed|none>  none: someone else's CR
+#   GATE_REVIEWS_DETAIL=<e.g. "2 of 5 commits never reviewed">
+#   UNREVIEWED=<json>           [{sha, subject}] for the commits no review
+#                               round has covered, per the CR's Review status
 #   GATE_THREADS=<resolved|open>
 #   GATE_THREADS_DETAIL=<e.g. "2 unresolved">
 #   THREADS=<json>              [{path, line, author, body}] for open threads
 #   GATE_BLOCKING=<gate|>       the first gate that isn't passing, empty when
 #                               none: state, local, draft, mergeable, pipeline,
-#                               approvals, threads. Reading stops at the first
-#                               one, except threads: open threads are the
-#                               author's call, so the method below is still read.
+#                               approvals, reviews, threads. Reading stops at
+#                               the first one, except reviews and threads: both
+#                               are the author's call, so the rest is still read.
 #
 #   The merge method, resolved from the forge's settings:
 #   MERGE_METHOD=<merge|rebase|squash|ff|rebase_merge>
@@ -75,6 +79,10 @@ here="$(dirname "${BASH_SOURCE[0]}")"
 source "$here/lib/resolve-context.sh"
 # shellcheck source=lib/forge-url.sh
 source "$here/lib/forge-url.sh"
+# shellcheck source=lib/tmpfile.sh
+source "$here/lib/tmpfile.sh"
+# shellcheck source=lib/review-status.sh
+source "$here/lib/review-status.sh"
 
 CTX_REPO=""
 cr=""
@@ -115,7 +123,7 @@ emit() { printf '%s=%s\n' "$1" "$2"; }
 # --- The CR -----------------------------------------------------------------
 
 if [[ "$forge" == github ]]; then
-  fields=number,url,title,state,isDraft,headRefOid,headRefName,baseRefName,mergeable,mergeStateStatus,reviewDecision,commits,statusCheckRollup
+  fields=number,url,title,state,isDraft,headRefOid,headRefName,baseRefName,baseRefOid,author,body,mergeable,mergeStateStatus,reviewDecision,commits,statusCheckRollup
   view=$(gh pr view ${cr:+"$cr"} --json "$fields" 2>&1) || die "could not read the CR" "$view"
   number=$(jq -r '.number' <<<"$view")
   cr_ref="#$number"
@@ -325,6 +333,51 @@ case "$approvals" in
   *) block approvals ;;
 esac
 
+# --- Review status ----------------------------------------------------------
+
+# The author's own record of which commits a review round has covered
+# (scripts/lib/review-status.sh). On someone else's CR it isn't theirs to keep.
+desc=$(anchor_tmpfile merge-gates-desc md)
+if [[ "$forge" == github ]]; then
+  author=$(jq -r '.author.login // empty' <<<"$view")
+  base_sha=$(jq -r '.baseRefOid' <<<"$view")
+  jq -r '.body // ""' <<<"$view" > "$desc"
+else
+  author=$(jq -r '.author.username // empty' <<<"$view")
+  base_sha=$(jq -r '.diff_refs.base_sha' <<<"$view")
+  jq -r '.description // ""' <<<"$view" > "$desc"
+fi
+self=$(anchor_forge_self "$forge") || die "could not read the signed-in user" "$self"
+unreviewed='[]'
+if [[ -n "$self" && "$self" == "$author" ]]; then
+  anchor_fetch_commit "$base_sha" \
+    || die "the CR's base commit is not in this checkout" "fetch $target_branch and re-run"
+  recorded=$(review_status_data "$desc") \
+    || die "could not read the CR's Review status section" "its opening comment holds data that isn't JSON"
+  rows=$(review_status_rows "$recorded" "$base_sha" "$head_sha")
+  unreviewed=$(jq -r '.[] | select(.rounds == 0) | .sha' <<<"$rows" | while read -r sha; do
+      jq -nc --arg sha "$sha" --arg s "$(git log -1 --format=%s "$sha")" '{sha: $sha, subject: $s}'
+    done | jq -sc .)
+  total=$(jq length <<<"$rows")
+  never=$(jq length <<<"$unreviewed")
+  if [[ "$never" -gt 0 ]]; then
+    emit GATE_REVIEWS unreviewed
+    emit GATE_REVIEWS_DETAIL "$never of $total commit$([[ "$total" == 1 ]] || echo s) never reviewed"
+  else
+    read_only=$(jq '[.[] | select(.kind == "read-through")] | length' <<<"$rows")
+    emit GATE_REVIEWS reviewed
+    if [[ "$read_only" -gt 0 ]]; then
+      emit GATE_REVIEWS_DETAIL "every commit reviewed, $read_only of $total last by read-through"
+    else
+      emit GATE_REVIEWS_DETAIL "every commit reviewed"
+    fi
+  fi
+else
+  emit GATE_REVIEWS none
+  emit GATE_REVIEWS_DETAIL "someone else's CR"
+fi
+emit UNREVIEWED "$unreviewed"
+
 # --- Review threads ---------------------------------------------------------
 
 if [[ "$forge" == github ]]; then
@@ -413,7 +466,9 @@ emit MERGE_SQUASH "$squash"
 emit MERGE_METHOD_LABEL "$label"
 emit MERGE_METHOD_SETTING "$setting"
 
-if [[ "$open" -gt 0 ]]; then
+if [[ "$(jq length <<<"$unreviewed")" -gt 0 ]]; then
+  emit GATE_BLOCKING reviews
+elif [[ "$open" -gt 0 ]]; then
   emit GATE_BLOCKING threads
 else
   emit GATE_BLOCKING ""
