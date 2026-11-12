@@ -41,9 +41,13 @@ mkdir -p "$bin"
 # box that REVDIFF_STUB_CHOOSE names (accept, reject, both, or empty for
 # none; accept when unset), as a reviewer choosing does, exiting 10 for it.
 # With $REVDIFF_STUB_EDIT, it writes that text over each file it shows but the
-# context file, as `e` in revdiff does.
+# context file, as `e` in revdiff does. With $REVDIFF_STUB_KEYS set, it runs the
+# after-command the launch would run in the pane (DIFF-49), typing those keys,
+# and records the after-command to $REVDIFF_AFTER_FILE.
 cat > "$bin/stub-host-runner.sh" <<'EOF'
 #!/usr/bin/env bash
+after=${2:-}
+[ -n "${REVDIFF_AFTER_FILE:-}" ] && printf '%s\n' "$after" > "$REVDIFF_AFTER_FILE"
 cmd=${1% 2>*}
 eval "set -- $cmd"
 env=()
@@ -82,6 +86,9 @@ if [ -n "${REVDIFF_TREE_CAPTURE:-}" ]; then
   git status --porcelain > "$REVDIFF_TREE_CAPTURE.status"
   pwd > "$REVDIFF_TREE_CAPTURE.pwd"
 fi
+if [ -n "$after" ] && [ -n "${REVDIFF_STUB_KEYS+x}" ]; then
+  printf '%s' "$REVDIFF_STUB_KEYS" | TERM=xterm sh -c "$after $rc" >/dev/null 2>&1
+fi
 exit "$rc"
 EOF
 chmod +x "$bin/stub-host-runner.sh"
@@ -95,6 +102,7 @@ export ANCHOR_HOST_RUNNER="$bin/stub-host-runner.sh"
 cat > "$bin/revdiff" <<'EOF'
 #!/usr/bin/env bash
 [ "${1:-}" != --version ] || { echo "version: ${REVDIFF_STUB_VERSION:-v1.14.0}"; exit 0; }
+[ "${1:-}" != --dump-theme ] || { printf '%s\n' 'color-accent = #bd93f9' 'color-diff-bg = #282a36'; exit 0; }
 [ "${1:-}" = --dump-keys ] && [ -z "${REVDIFF_STUB_NO_KEYS:-}" ] \
   && printf '%s\n' '# File/Hunk' 'map n next_item' 'map > next_hunk' 'map [ prev_hunk' \
        '# Annotations' 'map a confirm' 'map enter confirm' 'map A annotate_file' \
@@ -132,6 +140,31 @@ grep -q 'no verdict chosen' "$work/err.txt"         || fail "an undecided review
 [ "$(jq -r .capabilities.sideMarkers <<<"$j")" = true ] || fail "revdiff caps.sideMarkers"
 ok "revdiff: rc 0 -> undecided, no comments, completeness null"
 
+# DIFF-49: a review closed with nothing of the reviewer's asks in its own pane,
+# and the answer is the Review box choice it names. Enter alone stays on
+# Go back, and Esc (go back) leaves the review undecided here,
+# since the stub does not run the review again.
+o=$(REVDIFF_STUB_CHOOSE="" REVDIFF_AFTER_FILE="$work/after.txt" REVDIFF_STUB_KEYS=Z run --previous 2>"$work/err.txt"); j=$(json_of "$o")
+grep -q 'verdict-ask.sh' "$work/after.txt"           || fail "the launch should carry the pane's question: $(cat "$work/after.txt")"
+[ "$(verdict_of "$o")" = approved ]                  || fail "Approve in the pane should approve: $o"
+grep -q 'chose approve when the pane asked' "$work/err.txt" || fail "the approval should say where it came from: $(cat "$work/err.txt")"
+[ "$(jq '[.comments[] | select(.target == "verdict")] | length' <<<"$j")" = 0 ] \
+  || fail "the pane's choice should stay out of the comments: $(jq -c .comments <<<"$j")"
+o=$(REVDIFF_STUB_CHOOSE="" REVDIFF_STUB_KEYS=z run --previous 2>/dev/null)
+[ "$(verdict_of "$o")" = approved ]                  || fail "z in the pane should approve as Z does: $o"
+o=$(REVDIFF_STUB_CHOOSE="" REVDIFF_STUB_KEYS=q run --previous 2>/dev/null)
+[ "$(verdict_of "$o")" = rejected ]                  || fail "q in the box should reject as Q does: $o"
+o=$(REVDIFF_STUB_CHOOSE="" REVDIFF_STUB_KEYS=Q run --previous 2>/dev/null)
+[ "$(verdict_of "$o")" = rejected ]                  || fail "Q in the pane (the second of ZQ) should reject: $o"
+for keys in $'\e' $'\n' D a; do
+  o=$(REVDIFF_STUB_CHOOSE="" REVDIFF_STUB_KEYS="$keys" run --previous 2>/dev/null); j=$(json_of "$o")
+  [ "$(jq -r .raw.exitCode <<<"$j")" = undecided ]   || fail "$(printf %q "$keys") in the pane should leave it undecided: $o"
+done
+md=$'## a.txt:2 (+)\nuse a constant here'
+o=$(REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT="$md" REVDIFF_STUB_CHOOSE="" REVDIFF_STUB_KEYS=Z run --previous 2>/dev/null)
+[ "$(verdict_of "$o")" = changes-requested ]         || fail "a review with a note of the reviewer's should not ask: $o"
+ok "revdiff: an undecided close asks in the pane; Z, z, Q, and q choose; Enter, Esc, D, and a don't, and a note skips it"
+
 # rc 10 with a line annotation and a file-level annotation
 md=$'## a.txt:2 (+)\nuse a constant here\n\n## a.txt (file-level)\nsplit this file'
 export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT="$md"; o=$(REVDIFF_STUB_CHOOSE="" run --previous); j=$(json_of "$o")
@@ -155,6 +188,7 @@ o=$(REVDIFF_STUB_CHOOSE=accept REVDIFF_KEYS_CAPTURE="$work/keys.txt" run --skill
 grep -qxF 'unmap Q' "$work/keys.txt" || fail "Q should be unbound for the review: $(cat "$work/keys.txt")"
 ! grep -q 'discard_quit' "$work/keys.txt" || fail "revdiff applies unmaps first, so the binding itself is left out: $(cat "$work/keys.txt")"
 grep -qxF 'map a confirm' "$work/keys.txt" || fail "the review keeps the bindings revdiff has: $(cat "$work/keys.txt")"
+grep -qxF 'map Z quit' "$work/keys.txt" || fail "Z should quit, for the ZZ and ZQ chords: $(cat "$work/keys.txt")"
 o=$(REVDIFF_STUB_CHOOSE=reject run --skill commit --previous)
 [ "$(verdict_of "$o")" = rejected ] || fail "a note on Reject rejects: $o"
 o=$(REVDIFF_STUB_CHOOSE="accept reject" run --skill commit --previous 2>/dev/null); j=$(json_of "$o")
@@ -172,7 +206,7 @@ o=$(REVDIFF_STUB_CHOOSE=accept run --skill commit --previous); j=$(json_of "$o")
 o=$(REVDIFF_STUB_CHOOSE=reject run --skill commit --previous); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = rejected ] || fail "Reject with a note rejects: $o"
 REVDIFF_STUB_OUTPUT=""
-ok "revdiff: a note on Accept or Reject is the verdict, both or neither is undecided, and Q is unbound"
+ok "revdiff: a note on Accept or Reject is the verdict, both or neither is undecided, Q is unbound, and Z quits"
 
 # One note that says only a verdict word chooses, wherever it sits; among other
 # notes it is one more note.
@@ -313,6 +347,8 @@ export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT=$'## a.txt:2 (+)\nseeded'
 cp "$work/batch-table.md" "$repo/(context).md"
 o=$(REVDIFF_STUB_CHOOSE="" run --previous --annotations "$work/preload.md" 2>/dev/null); j=$(json_of "$o")
 [ "$(jq -r .raw.exitCode <<<"$j")" = undecided ] || fail "a batch returned as seeded, nothing chosen, is undecided: $o"
+o=$(REVDIFF_STUB_CHOOSE="" REVDIFF_STUB_KEYS=Z run --previous --annotations "$work/preload.md" 2>/dev/null)
+[ "$(verdict_of "$o")" = approved ] || fail "a batch returned as seeded asks in the pane, and Approve approves it: $o"
 cp "$work/batch-table.md" "$repo/(context).md"
 o=$(run --previous --annotations "$work/preload.md"); returned=$(sed -n 's/^REVIEW_RETURNED=//p' <<<"$o")
 [ "$(verdict_of "$o")" = approved ] || fail "Accept on a batch's table approves: $o"

@@ -1176,7 +1176,7 @@ this" nullability from SARIF's `notApplicable`.
 |---|---|---|---|
 | `approved` | a lone `approve` note, or a note on the Review box's `approve` line (DIFF-42), with no other note of the reviewer's but a plain yes | saved, changed or not | clean — proceed |
 | `changes-requested` | a note of the reviewer's, and none on the Review box (exit 10); or an `approve` choice with any other note, or with the draft edited (`approveIntent: true`) | — | blocking feedback to address |
-| `rejected` | a lone `reject` note, or a note on the Review box's `reject` line | exited 2 (`ZX`), or saved empty | the reviewer declined — nothing the review gates happens, and nothing falls back |
+| `rejected` | a lone `reject` note, or a note on the Review box's `reject` line | exited 1 (`ZQ`, `:cq`), or saved empty | the reviewer declined — nothing the review gates happens, and nothing falls back |
 | `incomplete` | — | — | not every hunk was reviewed; for a tool that tracks per-hunk review (`capabilities.perHunkReview`) |
 | `no-verdict` | exit 1, or `q` with no note of the reviewer's, or notes on both the `approve` and `reject` lines (`raw.exitCode` `undecided`) | closed without saving (`undecided`), or any other non-zero exit | no usable verdict — the cause (closed early, tool error, an aborted edit, or no verdict chosen) is read from `raw.exitCode` and `capabilities.producesVerdict` |
 
@@ -1281,9 +1281,11 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   rather than the absence of one, where a quit is also what an editor does when
   the reviewer walked away from it. The save shall be read from the buffer
   rather than from how the editor left, so a draft saved into a terminal that
-  went away afterwards is still the answer. An editor that exits 2 shall reject
-  whatever was saved (DIFF-44); one that exits non-zero otherwise (vim's `:cq`)
-  shall halt with `no-verdict`, since a failing editor exits the same way. Where
+  went away afterwards is still the answer. An editor that exits 1 shall reject
+  whatever was saved (DIFF-44), as git aborts on `:cq`; an editor that fails
+  exits 1 as well, and a rejection is the reading that leaves everything the
+  review gates undone. One that exits non-zero otherwise shall halt with
+  `no-verdict`. Where
   nothing was saved, the result shall name the cause rather
   than carry a numeric status — the reviewer left without saving, or the
   terminal it was drawing in went away, could not be opened, or there was none
@@ -1508,6 +1510,21 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   review needs revdiff and the fix is an install the user makes once. An older
   revdiff ignores the setting without an error, so a review run on one would let
   the reviewer step past notes and finish believing they had read them all.
+- **[DIFF-49]** When a revdiff review closes with nothing of the reviewer's (no
+  note, or only the preloaded notes returned as they were seeded), the system
+  shall ask for the verdict in the same pane before it closes: a box centered in
+  the pane offering Approve, Reject, and Go back. Approve and Reject shall read
+  as a note on the Review box's `approve` or `reject` line (DIFF-42), and
+  Go back shall open the same review again in that pane. The system shall bind
+  revdiff's `Z` to quit for the review, and the box shall take `Z` or `z` as Approve,
+  `Q` or `q` as Reject, and Esc as Go back, so `ZZ` and `ZQ` end a revdiff review as
+  they end an `edit` review in Helix or Vim (DIFF-44). Focus shall start on
+  Go back, Enter shall act only on the focused button, and of the keys typed
+  before the box draws only a lone `Z` or `Q` shall be kept, so a repeated quit
+  key or a stray Enter approves nothing. The reviewer who quits a review with
+  nothing to say is usually leaving the pane, and a question asked in chat
+  arrives after they have; asked in the pane, it reaches them before the pane
+  closes.
 - **[DIFF-30]** The system shall move the input focus to the split it opens. A
   split opened through the terminal's scripting interface is created without
   being selected, so the review draws in a pane the keyboard does not reach and
@@ -1589,14 +1606,15 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   nowhere to leave one.
 - **[DIFF-44]** Where an `edit` review opens in Helix or Vim, the system shall
   bind three chords for that review alone: `ZZ` to save and approve, writing the
-  buffer whether or not it changed, `ZX` to
-  exit 2 and reject, and `ZD` to save and exit 3 into `diff` mode (DIFF-39),
+  buffer whether or not it changed, `ZQ` to
+  exit 1 and reject, as `:cq` does, and `ZD` to save and exit 3 into `diff` mode (DIFF-39),
   keeping the reviewer's own configuration, and the buffer shall name each chord
   with the status it stands for while the editor's hints are on (CONFIG-21). An
   exit code typed at a prompt is an act nobody does by habit, so the three ways
   to end a review need keys as short as the save, and Vim's own `ZZ` sets the
-  shape. The switch is D for `diff` rather than R, which a reviewer thinking
-  "reject" reaches for.
+  shape. Reject is `ZQ` because Vim's own `ZQ` quits discarding the buffer,
+  which git reads as an abort for a fresh message; quitting without saving
+  (`:q!`) is the way to leave undecided. The switch is D for `diff`.
 - **[DIFF-45]** Where the reviewer edits a `--files` review's draft with
   revdiff's `e`, the system shall write the edit over the draft, return it as
   `editedFields`, and read an approval of it as `changes-requested` with
@@ -1654,8 +1672,10 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   on the `reject` line shall read as `rejected`; notes elsewhere
   and none on either line as `changes-requested`; and a review that leaves no
   note of the reviewer's, or a note on both lines, as `no-verdict` with
-  `raw.exitCode` `undecided`, which the caller asks about (Accept, Reject, or
-  reopen) rather than reading as approval or walking the fallback ladder. A
+  `raw.exitCode` `undecided`, which the review's pane asks about first
+  (DIFF-49) and the caller asks about (Accept, Reject, or reopen) when the pane
+  gets no answer, rather than reading as approval or walking the fallback
+  ladder. A
   review whose one note of the reviewer's says only `lgtm`, `ship it`,
   `approve`, or `accept` shall read as a note on the `approve` line, and one
   saying only `reject`, `stop`, `abort`, or `cancel` as a note on the `reject`

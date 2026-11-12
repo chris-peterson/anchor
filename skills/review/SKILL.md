@@ -459,7 +459,8 @@ key into the reply, since nobody should have to open the table to learn it:
 > doesn't change is in `(context).md` instead; answer it on its row the same
 > way. Then leave a
 > single note in `(context).md`, off the rows, saying `approve` to go ahead or
-> `reject` to stop the round, and quit with `q`.
+> `reject` to stop the round, and quit with `q`. With nothing to change, `ZZ`
+> goes ahead and `ZQ` stops the round.
 
 When it closes, read `REVIEW_RETURNED` from its output. `approved` and
 `changes-requested` both mean the review ran; the returned notes are the answer,

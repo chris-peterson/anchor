@@ -86,6 +86,7 @@ learn it:
 > `drop` on an item's note (or `no`, `skip`) to drop it. When you're done, leave a
 > single note in `(context).md`, off the rows, saying `approve` to send the items
 > as you left them or `reject` to stop with nothing published, then quit with `q`.
+> With nothing to change, `ZZ` sends the items as they are and `ZQ` stops.
 
 `rejected` publishes nothing: finish the batch and say so, with no error banner.
 `no-verdict` with `raw.exitCode` `undecided` means the reviewer quit without

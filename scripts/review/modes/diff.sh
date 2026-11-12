@@ -59,6 +59,13 @@
 #                                context, off its items, where a lone verdict
 #                                word decides a review of items (default: no
 #                                such place, so only the Review box does)
+#   diff_tool_untouched <rc> <out_file> <preload_file>
+#                                whether the review left nothing of the
+#                                reviewer's, run in the pane once the tool exits;
+#                                where it does, the pane asks for the verdict
+#                                (DIFF-49) (default: the pane asks nothing)
+#   diff_tool_palette <bin>     the tool's resolved colors as `key = #rrggbb`
+#                                lines, for the pane's question to draw in
 #
 # The statuses a *host* owns — an absent tool, no terminal, a pane that closed
 # before the tool reported — never reach the tool: they are not verdicts the
@@ -137,7 +144,7 @@ emit_review() {
   # and only the flag that carries it is the tool's. Plain text, since revdiff
   # highlights its description as markdown without rendering it, leaving `**`
   # and `#` on screen. The body is prose, so it follows the rows as a paragraph.
-  local desc_file out_file err_file body
+  local desc_file out_file err_file choice_file palette_file body
   desc_file=$(mktemp "${TMPDIR:-/tmp}/anchor-review-desc.XXXXXX")
   body=$(jq -r '.[] | select(.label == "body") | .value' <<<"$review_details_json")
   {
@@ -151,12 +158,21 @@ emit_review() {
   } > "$desc_file"
   out_file=$(mktemp "${TMPDIR:-/tmp}/anchor-review-out.XXXXXX")
   err_file=$(mktemp "${TMPDIR:-/tmp}/anchor-review-err.XXXXXX")
+  choice_file=$(mktemp -u "${TMPDIR:-/tmp}/anchor-review-choice.XXXXXX")
+  palette_file=$(mktemp "${TMPDIR:-/tmp}/anchor-review-palette.XXXXXX")
 
   ! declare -F diff_tool_before >/dev/null || diff_tool_before
 
-  local rc=0 cmd
+  local rc=0 cmd after=""
   cmd=$(diff_tool_command "$bin" "$out_file" "$err_file" "$desc_file")
-  anchor_host_run "$cmd" diff || rc=$?
+  if declare -F diff_tool_untouched >/dev/null; then
+    if declare -F diff_tool_palette >/dev/null && ! diff_tool_palette "$bin" > "$palette_file"; then
+      echo "review-diff.sh: could not read $review_tool's colors, so the pane's question draws in the terminal's own" >&2
+    fi
+    after="bash $(anchor_host_sq "$(dirname "${BASH_SOURCE[0]}")/../verdict-ask.sh") $(anchor_host_sq "$review_tool")"
+    after+=" $(anchor_host_sq "$out_file") $(anchor_host_sq "${review_annotations:-}") $(anchor_host_sq "$choice_file") $(anchor_host_sq "$palette_file")"
+  fi
+  anchor_host_run "$cmd" diff "" "$after" || rc=$?
 
   # A tool's warnings reach stderr on a successful review too, so the capture is
   # replayed only where the run actually failed.
@@ -172,7 +188,7 @@ emit_review() {
     else
       diff_unavailable "the review pane could not be opened" no-pane
     fi
-    rm -f "$out_file" "$err_file" "$desc_file"
+    rm -f "$out_file" "$err_file" "$desc_file" "$choice_file" "$palette_file"
     ! declare -F diff_tool_cleanup >/dev/null || diff_tool_cleanup
     return
   fi
@@ -230,6 +246,17 @@ emit_review() {
   answered=$(jq -c --argjson m "$marks" "$mark" <<<"$answered")
   returned=$(jq -c --argjson m "$marks" "$mark" <<<"$returned")
   verdict=$(diff_tool_verdict "$rc" "$answered")
+  # Asked in the pane after an undecided close, the reviewer's answer is the
+  # Review box choice it names (DIFF-49).
+  local asked=""
+  [[ ! -s "$choice_file" ]] || asked=$(cat "$choice_file")
+  if [[ "$verdict" == undecided && ( "$asked" == approve || "$asked" == reject ) ]]; then
+    local choice=accept
+    [[ "$asked" == approve ]] || choice=reject
+    echo "review-diff.sh: the review closed with no verdict chosen; the reviewer chose $asked when the pane asked" >&2
+    answered=$(jq -c --arg c "$choice" '. + [{body:$c, target:"verdict", file:null, startLine:null, endLine:null, side:null, raw:$c, choice:$c}]' <<<"$answered")
+    verdict=$(diff_tool_verdict "$rc" "$answered")
+  fi
   # An approval covers the text as drafted only when nothing came with it but a
   # plain yes: any other note is feedback the caller applies and shows again
   # before anything publishes (CONFIRM-08). A review of items reads each item's
@@ -263,7 +290,7 @@ emit_review() {
   [[ -z "${review_seeded:-}" && -z "${review_reply:-}" ]] || comments="$answered"
   [[ "$approve_intent" == false ]] || comments=$(jq -c 'map(select(.target != "verdict"))' <<<"$comments")
   if [[ "$verdict" == relaunch ]]; then
-    rm -f "$out_file" "$err_file" "$desc_file"
+    rm -f "$out_file" "$err_file" "$desc_file" "$choice_file" "$palette_file"
     ! declare -F diff_tool_cleanup >/dev/null || diff_tool_cleanup
     diff_relaunch "$(jq -c 'map(select(.target != "verdict"))' <<<"$answered")"
     return
@@ -299,7 +326,7 @@ emit_review() {
       raw:{exitCode:(if $name == "" then $rc else $name end)}
     }')
 
-  rm -f "$out_file" "$err_file" "$desc_file"
+  rm -f "$out_file" "$err_file" "$desc_file" "$choice_file" "$palette_file"
   ! declare -F diff_tool_cleanup >/dev/null || diff_tool_cleanup
   # The set of notes the reviewer left, kept beside the ones that were preloaded
   # so a caller compares the two from files rather than from this output line.

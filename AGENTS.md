@@ -19,7 +19,7 @@ just docs           # render the docs site and serve it locally
 
 just test           # every suite this platform runs, via tests/run-all.sh
 bash tests/<name>.test.sh                                  # one suite
-shellcheck hooks/*.sh scripts/*.sh scripts/review/modes/*.sh scripts/review/tools/*.sh scripts/review/hosts/*.sh tests/*.sh
+shellcheck hooks/*.sh scripts/*.sh scripts/review/*.sh scripts/review/modes/*.sh scripts/review/tools/*.sh scripts/review/hosts/*.sh tests/*.sh
 ```
 
 `tests/run-all.sh` discovers `tests/*.test.sh`, so a new suite needs no wiring in

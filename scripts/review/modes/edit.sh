@@ -33,7 +33,7 @@
 #   saved, changed or not -> approved; a changed artifact is written over the
 #                            artifact file the caller named and rides back in
 #                            editedFields
-#   exited 2 (`ZX`)       -> rejected, whatever was saved
+#   exited 1 (`ZQ`, `:cq`) -> rejected, whatever was saved
 #   saved emptied         -> rejected
 #   exited 3 (`ZD`)       -> the review reopens in `diff` mode on the draft as
 #                            saved, and returns that mode's verdict, carrying
@@ -41,9 +41,8 @@
 #                            and writing it back only where that verdict is
 #                            approved
 #   closed without saving -> no-verdict, `undecided`, for the caller to ask about
-#   exited non-zero otherwise (vim's `:cq`)
-#                         -> no-verdict, since a failing editor exits the same
-#                            way; never read as approval
+#   exited non-zero otherwise
+#                         -> no-verdict; never read as approval
 #
 # The artifact file is written only on approval, and only when the text changed,
 # so every other outcome leaves it byte for byte as the caller drafted it. The
@@ -68,7 +67,7 @@
 # lib/review-host.sh. Both have a second caller — the dispatcher's --probe, and
 # `diff` mode.
 #
-# Helix and Vim get the three answers as chords for the review (`ZZ`, `ZX`,
+# Helix and Vim get the three answers as chords for the review (`ZZ`, `ZQ`,
 # `ZD`, after Vim's own `ZZ`), so ending the review is a deliberate key pair
 # rather than an exit code typed at a prompt: Helix through a workspace
 # `.helix/config.toml` in the buffer's directory, which it merges over the
@@ -108,9 +107,9 @@ editor_context() {
   viewer=$(editor_viewer)
   if [[ "$chords" -eq 1 ]]; then
     cta="\`ZZ\` approve the text above the line, as saved
-\`ZX\` reject it (exit code $editor_rc_reject): nothing this review gates happens
+\`ZQ\` or \`:cq\` reject it (exit code $editor_rc_reject): nothing this review gates happens
 \`ZD\` ask for changes in $viewer (saves, then exit code $editor_rc_annotate)
-Quit without saving, and you're asked what to do.
+Quit without saving (\`:q!\`), and you're asked what to do.
 
 $(anchor_hints_off)"
   else
@@ -215,7 +214,7 @@ editor_open_args() {
   case "$(editor_name "$ed")" in
     hx|helix)
       mkdir -p "$dir/.helix"
-      printf '[keys.normal.Z]\nZ = ":write-quit"\nX = ":cquit %s"\nD = [":write", ":cquit %s"]\n' \
+      printf '[keys.normal.Z]\nZ = ":write-quit"\nQ = ":cquit %s"\nD = [":write", ":cquit %s"]\n' \
         "$editor_rc_reject" "$editor_rc_annotate" > "$dir/.helix/config.toml"
       printf -- '-w %s ' "$(anchor_host_sq "$dir")" ;;
     vi|vim|nvim)
@@ -223,7 +222,7 @@ editor_open_args() {
       # drafted is unmodified, so without this it would read as never saved.
       printf -- '-c %s -c %s -c %s ' \
         "$(anchor_host_sq "nnoremap <buffer> ZZ :wq<CR>")" \
-        "$(anchor_host_sq "nnoremap <buffer> ZX :cquit $editor_rc_reject<CR>")" \
+        "$(anchor_host_sq "nnoremap <buffer> ZQ :cquit $editor_rc_reject<CR>")" \
         "$(anchor_host_sq "nnoremap <buffer> ZD :write<Bar>cquit $editor_rc_annotate<CR>")" ;;
   esac
 }
@@ -233,8 +232,10 @@ editor_open_args() {
 # of them is quoted back to the user as an editor's exit code.
 editor_rc_no_host=123
 
-# The status a reviewer quits with to reject the draft.
-editor_rc_reject=2
+# The status a reviewer quits with to reject the draft: `:cq`'s, which git also
+# reads as "abort". An editor that fails exits 1 too, and reads as a rejection,
+# which leaves everything the review gates undone.
+editor_rc_reject=1
 
 # The status a reviewer quits with to annotate the draft in the diff viewer
 # rather than edit it: for a change they want made rather than make themselves.

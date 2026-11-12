@@ -18,7 +18,9 @@
 #                          empty in `diff`.
 #   review_host_run <cmd>  run the `sh` command string, returning the command's
 #                          own status — or one of the reserved statuses below,
-#                          where the host never got it on screen.
+#                          where the host never got it on screen. A host builds
+#                          its script with `anchor_host_launch_script`, which
+#                          carries the caller's after-command with it.
 #
 # Hosts are ranked most direct first (`anchor_review_hosts`). One ranking serves
 # both modes; a host that serves only one says so itself, in its own
@@ -168,6 +170,12 @@ anchor_host_read_rc() {
 #   * the locale, because these artifacts are markdown a TUI has to render.
 #   * EDITOR/VISUAL, because a viewer opens an editor of its own for a
 #     multi-line annotation.
+#
+# With an after-command (`anchor_host_after`), the script runs it in the same
+# pane once the command exits, passing the command's status as its last
+# argument, and runs the command again while it exits 0. The pane is still up
+# then, so whatever the after-command draws lands where the reviewer just was.
+anchor_host_after=""
 anchor_host_launch_script() {
   local cmd="$1" name value
   printf '#!/bin/sh\n'
@@ -177,19 +185,27 @@ anchor_host_launch_script() {
     value="${!name:-}"
     [[ -z "$value" ]] || printf 'export %s=%s\n' "$name" "$(anchor_host_sq "$value")"
   done
-  printf '%s\n' "$cmd"
-  printf 'rc=$?; printf %%s "$rc" > "$1.tmp" && mv -f "$1.tmp" "$1"\n'
+  if [[ -z "$anchor_host_after" ]]; then
+    printf '%s\n' "$cmd"
+    printf 'rc=$?\n'
+  else
+    printf 'while :; do\n%s\nrc=$?\n%s "$rc" || break\ndone\n' "$cmd" "$anchor_host_after"
+  fi
+  printf 'printf %%s "$rc" > "$1.tmp" && mv -f "$1.tmp" "$1"\n'
 }
 
 # Run the `sh` command string $1 in the best host for a $2-mode review of an
-# editor $3, and return the command's own status.
+# editor $3, and return the command's own status. $4 is an after-command for
+# the launch script to run in the same pane (see `anchor_host_launch_script`).
 anchor_host_run() {
   local cmd="$1" mode="${2:-diff}" editor="${3:-}" rc=0
+  anchor_host_after="${4:-}"
 
   # The seam the tests drive, and the escape hatch for a host anchor does not
-  # ship: a program taking the command string and returning its status.
+  # ship: a program taking the command string and the after-command, and
+  # returning the command's status.
   if [[ -n "${ANCHOR_HOST_RUNNER:-}" ]]; then
-    "$ANCHOR_HOST_RUNNER" "$cmd" || rc=$?
+    "$ANCHOR_HOST_RUNNER" "$cmd" "$anchor_host_after" || rc=$?
     return "$rc"
   fi
 

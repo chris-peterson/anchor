@@ -66,7 +66,7 @@ git config --global anchor.edit.tool hx        # drafts: three chords end the re
   which is what a batch of edits, an `/anchor:review` round, and a reply review
   are made of, and its Review box is where you choose the verdict.
 - **[helix](https://github.com/helix-editor/helix)** for `edit` reviews. `anchor`
-  binds `ZZ`, `ZX`, and `ZD` for the review, so approving, rejecting, and
+  binds `ZZ`, `ZQ`, and `ZD` for the review, so approving, rejecting, and
   switching to revdiff are each one key pair ([Ending a
   review](#ending-a-review)). Vim gets the same chords; another editor ends a
   review by saving or by its exit code.
@@ -356,10 +356,10 @@ text and a status, so you choose with a save or a chord.
 
 | You want to | `diff` (revdiff) | `edit` in Helix or Vim | `edit` in another editor |
 | --- | --- | --- | --- |
-| **Approve** | A single note saying `approve`, then `q`; to keep other notes as comments, put it on the `approve` line in `(context).md` | `ZZ` | Save and quit |
-| **Reject**: nothing the review gates happens | A single note saying `reject`, then `q` | `ZX` | Quit with exit code 2, or save an empty buffer |
+| **Approve** | `ZZ` with no notes of your own, or a single note saying `approve`, then `q`; to keep other notes as comments, put it on the `approve` line in `(context).md` | `ZZ` | Save and quit |
+| **Reject**: nothing the review gates happens | `ZQ` with no notes of your own, or a single note saying `reject`, then `q` | `ZQ`, or `:cq` | Quit with exit code 1, or save an empty buffer |
 | **Ask for changes** | Notes where they apply, with neither chosen, then `q` | `ZD`: saves and reopens the draft in revdiff to annotate | Save, then quit with exit code 3 |
-| **Leave without choosing** | `q` with no note of your own | Quit without saving | Quit without saving |
+| **Leave without choosing** | Notes on both the `approve` and `reject` lines, then `q`; with no note, `q` asks for a verdict, and Esc goes back into the review | Quit without saving | Quit without saving |
 | **Switch tools** | A note on **Relaunch in `<editor>`**, then `q`: the review starts over in your editor | `ZD`, as above | Exit code 3, as above |
 
 **Relaunch** is offered where the review carries a draft (a commit message, a
@@ -517,8 +517,9 @@ reads it and passes the path through as `--config`. See
 [revdiff's options](https://revdiff.com/docs.html#options) for the full list.
 
 **How a revdiff review ends.** `(context).md` has a Review box: leave a single
-note saying `approve` or `reject`, then quit with `q`. The
-rest, and how it compares with an editor review, is in [Ending a
+note saying `approve` or `reject`, then quit with `q`. With no notes of your
+own, `ZZ` approves and `ZQ` rejects: `Z` quits revdiff, and the second key
+answers the box that asks for a verdict. The rest, and how it compares with an editor review, is in [Ending a
 review](#ending-a-review). A review of one drafted file (a CR description, an
 issue body, release notes) opens the same way, in a scratch repo that holds the
 draft and `(context).md`.
@@ -622,7 +623,7 @@ git config --global core.editor hx
 ```
 
 **Saving is what approves the draft.** Save it — `ZZ` in helix, unchanged if it
-already reads right — and what you saved *is* the artifact. `ZX` rejects it, `ZD`
+already reads right — and what you saved *is* the artifact. `ZQ` (or `:cq`) rejects it, `ZD`
 switches to revdiff, and quitting without saving gets you asked which you meant
 ([Ending a review](#ending-a-review)).
 
@@ -685,14 +686,14 @@ The gateway drops idle connections, so the first call after …
 # ------------------------ >8 ------------------------
 # Do not modify or remove the line above.
 # Everything below the line above is ignored.
-# ╭─────────────────────────────────────────────────────────────────╮
-# │ `ZZ` approve the text above the line, as saved                  │
-# │ `ZX` reject it (exit code 2): nothing this review gates happens │
-# │ `ZD` ask for changes in revdiff (saves, then exit code 3)       │
-# │ Quit without saving, and you're asked what to do.               │
-# │                                                                 │
-# │ *Tell the agent "hide hints" to stop showing this box.*         │
-# ╰─────────────────────────────────────────────────────────────────╯
+# ╭──────────────────────────────────────────────────────────────────────────╮
+# │ `ZZ` approve the text above the line, as saved                           │
+# │ `ZQ` or `:cq` reject it (exit code 1): nothing this review gates happens │
+# │ `ZD` ask for changes in revdiff (saves, then exit code 3)                │
+# │ Quit without saving (`:q!`), and you're asked what to do.                │
+# │                                                                          │
+# │ *Tell the agent "hide hints" to stop showing this box.*                  │
+# ╰──────────────────────────────────────────────────────────────────────────╯
 ```
 
 **Asking for a change instead of making it.** Some drafts need a change you'd

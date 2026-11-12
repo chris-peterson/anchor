@@ -132,14 +132,16 @@ diff_tool_before() {
   repo_url=$(anchor_repo_web_url)
   [[ "$review_subject" != files ]] || revdiff_files_scratch
   revdiff_header "$repo" "$repo_url"
-  revdiff_unbind_discard
+  revdiff_review_keys
 }
 
 # The bindings this revdiff has (the user's own included), with every key for
-# discard_quit unbound. Where they can't be read, `Q` stays bound, and quitting
-# with it reads as no verdict chosen, which is asked about.
+# discard_quit unbound and `Z` bound to quit, so `ZZ` and `ZQ` quit into the
+# pane's question and answer it, as they approve and reject an `edit` review
+# in Helix or Vim (DIFF-49). Where the bindings can't be read, `Q` stays bound,
+# and quitting with it reads as no verdict chosen, which is asked about.
 # shellcheck disable=SC2154
-revdiff_unbind_discard() {
+revdiff_review_keys() {
   local keys
   if ! keys=$("$review_tool" --dump-keys); then
     echo "$review_tool --dump-keys failed, so Q stays bound in this review" >&2
@@ -148,8 +150,10 @@ revdiff_unbind_discard() {
   revdiff_keys=$(anchor_tmpfile anchor-revdiff-keys txt)
   # revdiff applies a file's unmaps before its maps, so the binding is left out
   # as well as unmapped: the unmap clears revdiff's default for that key.
-  awk '$1 == "map" && $3 == "discard_quit" { unmap = unmap "unmap " $2 "\n"; next } { print }
-       END { printf "%s", unmap }' <<<"$keys" > "$revdiff_keys"
+  awk '$1 == "map" && $3 == "discard_quit" { unmap = unmap "unmap " $2 "\n"; next }
+       $1 == "map" && $2 == "Z" { next }
+       { print }
+       END { printf "%s", unmap; print "map Z quit" }' <<<"$keys" > "$revdiff_keys"
 }
 
 revdiff_sgit() {
@@ -468,4 +472,34 @@ diff_tool_verdict() {
             fi ;;
     *)      printf 'undecided' ;;
   esac
+}
+
+# The colors revdiff resolved from the user's theme and config.
+diff_tool_palette() {
+  local -a args=(--dump-theme)
+  [[ -z "${REVDIFF_CONFIG:-}" || ! -f "${REVDIFF_CONFIG}" ]] || args=("--config=$REVDIFF_CONFIG" "${args[@]}")
+  "$1" "${args[@]}"
+}
+
+# Whether a review that exited <rc> left nothing of the reviewer's in <out_file>:
+# no notes at all, or only the notes <preload_file> seeded, each returned as it
+# was. Run in the review's pane, before the parse, so it compares the markdown
+# itself, block by block with whitespace collapsed as the parse's own match
+# does. Every review it passes is one diff_tool_verdict reads as undecided.
+diff_tool_untouched() {
+  local rc="$1" out_file="$2" preload_file="$3"
+  [[ "$rc" -eq 0 || "$rc" -eq 10 ]] || return 1
+  [[ -s "$out_file" ]] || return 0
+  [[ -n "$preload_file" && -s "$preload_file" ]] || return 1
+  # shellcheck disable=SC2016
+  local blocks='
+    function flush() {
+      if (h == "") return
+      gsub(/[ \t\r]+/, " ", b); sub(/^ /, "", b); sub(/ $/, "", b)
+      print h "\t" b
+    }
+    /^## / { flush(); h = $0; b = ""; next }
+    { b = b " " $0 }
+    END { flush() }'
+  [[ -z "$(comm -23 <(awk "$blocks" "$out_file" | sort -u) <(awk "$blocks" "$preload_file" | sort -u))" ]]
 }

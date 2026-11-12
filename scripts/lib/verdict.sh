@@ -37,7 +37,7 @@ anchor_review_box() {
   anchor_box "$(printf '%s\n' \
     ${keys:+"$keys"} ${keys:+''} \
     ${answer:+"$answer"} ${answer:+''} \
-    'When you are done, leave a single note here saying `approve` or `reject`, then quit with `q`:' \
+    'When you are done, leave a single note here saying `approve` or `reject`, then quit with `q`. With no notes of your own, `ZZ` approves and `ZQ` rejects:' \
     "$choices" \
     '' \
     ${others:+"$others"} ${others:+''} \

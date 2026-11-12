@@ -126,7 +126,7 @@ grep -qx '# Why this change' "$EDITOR_BUFFER_CAPTURE" || fail "markdown heading 
 grep -q '>8' "$EDITOR_BUFFER_CAPTURE"                 || fail "scissors line missing from buffer"
 grep -q 'Stale text' "$EDITOR_BUFFER_CAPTURE"         || fail "the diff against the prior file is not below the scissors"
 grep -q '^│ Save to approve' "$EDITOR_BUFFER_CAPTURE"  || fail "what saving does is outlined: $(cat "$EDITOR_BUFFER_CAPTURE")"
-grep -q 'To reject it, quit with exit code 2' "$EDITOR_BUFFER_CAPTURE" || fail "an editor with no chords names the reject status: $(cat "$EDITOR_BUFFER_CAPTURE")"
+grep -q 'To reject it, quit with exit code 1' "$EDITOR_BUFFER_CAPTURE" || fail "an editor with no chords names the reject status: $(cat "$EDITOR_BUFFER_CAPTURE")"
 ok "edit: buffer is artifact + scissors + the change under review"
 
 # The editor reads the name to pick its mode, so a markdown artifact opens under
@@ -245,12 +245,12 @@ o=$(run --skill prepare-review --mode edit --files "$prior" "$draft"); j=$(json_
 untouched "an emptied buffer"
 ok "edit: emptied buffer -> rejected, the draft file untouched"
 
-# --- exit 2 (ZX) -> rejected, whatever was saved ----------------------------
-o=$(EDITOR_STUB_MODE=replace EDITOR_STUB_RC=2 run --skill prepare-review --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
-[ "$(verdict_of "$o")" = rejected ] || fail "exit 2 -> $(verdict_of "$o"), want rejected"
+# --- exit 1 (ZQ, :cq) -> rejected, whatever was saved -----------------------
+o=$(EDITOR_STUB_MODE=replace EDITOR_STUB_RC=1 run --skill prepare-review --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = rejected ] || fail "exit 1 -> $(verdict_of "$o"), want rejected"
 [ "$(jq '.editedFields|length' <<<"$j")" = 0 ] || fail "a rejection edits nothing"
 untouched "a rejection after an edit"
-ok "edit: exit 2 -> rejected, an edit saved first left out of the draft file"
+ok "edit: exit 1 -> rejected, an edit saved first left out of the draft file"
 
 # --- quit without saving -> undecided, asked about --------------------------
 export EDITOR_STUB_MODE=quit
@@ -284,10 +284,10 @@ ok "edit: a GUI editor that returned without waiting names the flag it needs"
 
 # --- exited non-zero -> abort ----------------------------------------------
 # Saved first, so the status alone is what keeps the edit out of the draft file.
-export EDITOR_STUB_MODE=replace EDITOR_STUB_RC=1
+export EDITOR_STUB_MODE=replace EDITOR_STUB_RC=4
 o=$(run --skill prepare-review --mode edit --files "$prior" "$draft"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = no-verdict ]    || fail "editor failure -> want no-verdict"
-[ "$(jq -r .raw.exitCode <<<"$j")" = 1 ] || fail "raw.exitCode should carry the editor's status"
+[ "$(jq -r .raw.exitCode <<<"$j")" = 4 ] || fail "raw.exitCode should carry the editor's status"
 untouched "an editor that exited non-zero"
 ok "edit: non-zero editor exit -> no-verdict, status in raw.exitCode, the draft file untouched"
 unset EDITOR_STUB_RC
@@ -366,8 +366,8 @@ ok "edit: a paragraph removed and saved is gone from the --message-file message 
 # Anything short of approval leaves the message file as drafted.
 o=$(EDITOR_STUB_MODE=empty run --skill commit --mode edit --local --message-file "$msg"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = rejected ] || fail "an emptied message -> $(verdict_of "$o"), want rejected"
-o=$(EDITOR_STUB_RC=1 run --skill commit --mode edit --local --message-file "$msg"); j=$(json_of "$o")
-[ "$(verdict_of "$o")" = no-verdict ] || fail "a failed editor -> $(verdict_of "$o"), want no-verdict"
+o=$(EDITOR_STUB_RC=4 run --skill commit --mode edit --local --message-file "$msg"); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = no-verdict ] || fail "an editor exiting 4 -> $(verdict_of "$o"), want no-verdict"
 cmp -s "$msg" "$msg_orig" || fail "a review short of approval wrote the message file: $(cat "$msg")"
 ok "edit: an emptied or failed message review leaves the message file untouched"
 
@@ -849,7 +849,7 @@ ok "host: the gui window answers edit alone"
 ok "host: the wait flag each known editor needs is what selects the gui host"
 
 # ====================== annotating instead of editing ======================
-# Quitting the editor with exit code 2 hands the draft to the diff viewer, for a
+# Quitting the editor with exit code 3 hands the draft to the diff viewer, for a
 # change the reviewer wants made rather than makes. The runner runs the command
 # for real, and the stub revdiff keeps the draft it was shown and answers with
 # $REVDIFF_STUB_OUTPUT.
@@ -884,7 +884,7 @@ o=$(EDITOR_STUB_MODE=replace EDITOR_STUB_TEXT='# Edited first' EDITOR_STUB_RC=3 
 # shellcheck disable=SC2016
 grep -q '│ `ZZ` approve' "$EDITOR_BUFFER_CAPTURE" || fail "the buffer should name the chord that approves: $(cat "$EDITOR_BUFFER_CAPTURE")"
 # shellcheck disable=SC2016
-grep -q '│ `ZX` reject it (exit code 2)' "$EDITOR_BUFFER_CAPTURE" || fail "the buffer should name the chord and status that reject: $(cat "$EDITOR_BUFFER_CAPTURE")"
+grep -q '│ `ZQ` or `:cq` reject it (exit code 1)' "$EDITOR_BUFFER_CAPTURE" || fail "the buffer should name the chord and status that reject: $(cat "$EDITOR_BUFFER_CAPTURE")"
 # shellcheck disable=SC2016
 grep -q '│ `ZD` ask for changes in revdiff (saves, then exit code 3)' "$EDITOR_BUFFER_CAPTURE" || fail "the buffer should name the chord and status that switch: $(cat "$EDITOR_BUFFER_CAPTURE")"
 grep -q 'hide hints' "$EDITOR_BUFFER_CAPTURE"    || fail "the buffer should say how to hide the keys: $(cat "$EDITOR_BUFFER_CAPTURE")"
@@ -919,7 +919,7 @@ ok "annotate: switching without saving shows the draft as drafted"
 
 git -C "$repo" config anchor.edit.hints false
 EDITOR_STUB_MODE=save run --skill prepare-review --mode edit --files "$nothing" "$draft" >/dev/null
-! grep -q 'ZX\|ZD\|hide hints' "$EDITOR_BUFFER_CAPTURE" || fail "anchor.edit.hints=false drops the keys: $(cat "$EDITOR_BUFFER_CAPTURE")"
+! grep -q 'ZQ\|ZD\|hide hints' "$EDITOR_BUFFER_CAPTURE" || fail "anchor.edit.hints=false drops the keys: $(cat "$EDITOR_BUFFER_CAPTURE")"
 grep -q 'quit with exit code 3, and the' "$EDITOR_BUFFER_CAPTURE" \
   || fail "the switch itself stays when the keys are hidden: $(cat "$EDITOR_BUFFER_CAPTURE")"
 git -C "$repo" config --unset anchor.edit.hints
@@ -952,11 +952,11 @@ for vimbin in vim nvim; do
   [ "$(verdict_of "$o")" = approved ]            || fail "$vimbin: ZZ on an unchanged draft approves it: $o"
   [ "$(jq '.editedFields|length' <<<"$j")" = 0 ] || fail "$vimbin: ZZ unchanged edits nothing: $j"
   untouched "$vimbin: ZZ on an unchanged draft"
-  o=$(VIM_KEYS=ZX GIT_EDITOR="$vimed" ANCHOR_EDITOR_LAUNCHER='' ANCHOR_HOST_RUNNER="$bin/vim-keys.sh" \
+  o=$(VIM_KEYS=ZQ GIT_EDITOR="$vimed" ANCHOR_EDITOR_LAUNCHER='' ANCHOR_HOST_RUNNER="$bin/vim-keys.sh" \
       run --skill prepare-review --mode edit --files "$nothing" "$draft" 2>&1)
-  [ "$(verdict_of "$o")" = rejected ]            || fail "$vimbin: ZX rejects: $o"
-  untouched "$vimbin: ZX"
-  ok "$vimbin: ZZ approves a draft left unchanged, ZX rejects it, and neither changes the draft file"
+  [ "$(verdict_of "$o")" = rejected ]            || fail "$vimbin: ZQ rejects: $o"
+  untouched "$vimbin: ZQ"
+  ok "$vimbin: ZZ approves a draft left unchanged, ZQ rejects it, and neither changes the draft file"
 done
 
 echo "# all checks passed"
