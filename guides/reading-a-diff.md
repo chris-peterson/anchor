@@ -27,9 +27,10 @@ sees the file, and it's removed when the review closes.
 
 **Treat the notes already in the diff as anchor explaining itself.** They are
 anchor's, not a reviewer's: what it weighed, a constraint the code doesn't show,
-a spot it wants you to check. Delete one once you've read it, or write on it to
-push back. They leave with the review, so the commit message only has to say why
-the change exists.
+or an area to pay close attention to. Edit one to correct it or comment, and the
+edit goes back to the agent. Deleting one does nothing, so you can clear notes
+as you step through. They're ephemeral: they expire along with the review
+round, and none of their text goes into the code or the commit message.
 
 ## 3. Leave your own notes
 

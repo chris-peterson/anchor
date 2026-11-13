@@ -116,13 +116,13 @@ Requirement: UX-09 in [SPEC](/spec); [reading a diff](/guides/reading-a-diff).
 | --- | --- | --- |
 | why the code is this way | the code's lifetime | a comment, rarely |
 | why this change exists | the history | the commit message, the CR description |
-| why this line is this way, what was weighed, what to check | this review | a note on the line, gone when the review closes |
+| why this line is this way, what was weighed, what to check | this review | a note on the line, expiring with the review round |
 
 When `anchor` shows you a change it wrote, the reasoning you need to judge it
-arrives as notes on the lines it concerns, and leaves with the review. The
-commit message, the CR description, and the code keep only what stays true, so
-they stay short, and nothing in the permanent record narrates a decision to a
-reader who wasn't there for it.
+arrives as notes on the lines it concerns, and expires along with the review
+round. The commit message, the CR description, and the code keep only what stays
+true, so they stay short, and nothing in the permanent record narrates a
+decision to a reader who wasn't there for it.
 
 Requirement: UX-12 in [SPEC](/spec); [notes on your own changes](/guides/review-notes).
 
