@@ -4,7 +4,7 @@
 # Sourced, not executed.
 #
 #   anchor_backup_path <name> <ext>   -> <git-common-dir>/anchor/backups/<name>-<utc>-<pid>.<ext>
-#   anchor_backup_cr <n> <cr-url>     -> the path scripts/forge-backup.sh saved CR <n> to
+#   anchor_backup_cr <n> <cr-url>     -> saves CR <n> through scripts/forge-backup.sh; silent on success
 #
 # Under the git dir rather than a temp dir, so the copy outlives the session
 # that wrote it; the common dir, so every worktree of a repo keeps one set.
@@ -21,19 +21,12 @@ anchor_backup_path() {
 # without an approval step to match the item against. The saved CR has to be
 # <cr-url>, the one the caller read and is about to write; anything else means
 # the number reached a different CR, so the caller must not write. On a failed
-# read or a mismatch it prints the reason and returns 1.
+# read or a mismatch it prints the reason and returns 1; on success it prints
+# nothing, so the caller has no path to report.
 anchor_backup_cr() {
-  local out path url
-  if ! out=$(bash "$(dirname "${BASH_SOURCE[0]}")/../forge-backup.sh" --kind cr --id "$1" 2>&1); then
+  local out
+  if ! out=$(bash "$(dirname "${BASH_SOURCE[0]}")/../forge-backup.sh" --kind cr --id "$1" --expect-url "$2" 2>&1); then
     grep -v '^RESOLVED_VIA=' <<<"$out" | sed 's/^BACKUP_ERROR=//'
     return 1
   fi
-  path=$(sed -n 's/^BACKUP_PATH=//p' <<<"$out")
-  url=$(sed -n 's/^BACKUP_URL=//p' <<<"$out")
-  if [[ -z "$url" || "$url" != "$2" ]]; then
-    printf 'the backup saved %s, not %s, the CR about to be written; refusing the write (saved copy: %s)\n' \
-      "${url:-a CR with no url}" "$2" "$path"
-    return 1
-  fi
-  printf '%s\n' "$path"
 }

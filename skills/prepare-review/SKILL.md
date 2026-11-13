@@ -452,7 +452,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh" --write --body-file <DESC
   --status-section <CR_REVIEW_STATUS_PATH> --cr <CR_IID> [--repo <path>]
 ```
 
-The script puts the Review status section back on a copy of the draft, joined with whatever the CR holds now, and writes that copy, so `DESC_DRAFT_PATH` stays the text the author approved. Don't splice the section into the draft or write the description with `gh pr edit` / `glab api` yourself: the section is anchor's record, written without a prompt (CONFIRM-17), and this one call is what an allow rule names. It emits `CR_WRITTEN=1`, `STATUS_CARRIED=<0|1>`, and `CR_BACKUP_PATH`, the description the CR held before the write, saved under the repo's `.git/anchor/backups/`. A `CR_WRITE_ERROR=` line is either a refusal or a failure; surface it and stop. A refusal names a CR whose source branch isn't this checkout's, so its number didn't come from this branch's CR. A failure is an auth or forge error, surfaced the same way as `CR_CREATE_ERROR`.
+The script puts the Review status section back on a copy of the draft, joined with whatever the CR holds now, and writes that copy, so `DESC_DRAFT_PATH` stays the text the author approved. Don't splice the section into the draft or write the description with `gh pr edit` / `glab api` yourself: the section is anchor's record, written without a prompt (CONFIRM-17), and this one call is what an allow rule names. It emits `CR_WRITTEN=1` and `STATUS_CARRIED=<0|1>`, and saves the description it replaced without reporting where (FORGE-13). A `CR_WRITE_ERROR=` line is either a refusal or a failure; surface it and stop. A refusal names a CR whose source branch isn't this checkout's, so its number didn't come from this branch's CR. A failure is an auth or forge error, surfaced the same way as `CR_CREATE_ERROR`.
 
 Report the write as one line once **Label it and set the milestone** below has run — the CR URL, that the description landed, and what the metadata came out as. **No CR to write to** (`skip-deep-links`, or the user picked copy-only): print the body for them to paste into the web UI themselves.
 
@@ -473,10 +473,10 @@ Match the change against the descriptions the repo ships on its labels and apply
 When a label or a milestone is about to be set, save the whole CR first, since `--write` saved only its description. Skip this where nothing is set. The flags are in the cookbook's "Back up before an overwrite"; retarget it like the calls below:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/forge-backup.sh" --kind cr --id <CR_NUMBER|CR_IID> [--repo <path>]
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/forge-backup.sh" --kind cr --id <CR_NUMBER|CR_IID> --expect-url <CR_URL> [--repo <path>]
 ```
 
-Edit only when `BACKUP_URL` is `CR_URL`. On a mismatch, name the CR it saved and its `BACKUP_PATH`, and stop; on a `BACKUP_ERROR=` line, surface it and stop. Otherwise keep `BACKUP_PATH` for an undo and don't mention it.
+Edit on `BACKUP_SAVED=1`. A `BACKUP_ERROR=` line is a failed read or a backup of some other CR; surface it and stop.
 
 ```bash
 # GitHub

@@ -135,8 +135,9 @@ batch holds all of it.
 
 On `approved`, publish the `keep` and `edited` items, then finish the batch.
 Before each item that edits an existing issue, change request, or milestone,
-back it up as the forge cookbook's "Back up before an overwrite" describes, and
-publish it only when `BACKUP_URL` is the item's `url`. A reply or a new item has
+back it up as the forge cookbook's "Back up before an overwrite" describes,
+with the item's `url` as `--expect-url`, and publish it only on
+`BACKUP_SAVED=1`. A reply or a new item has
 nothing to back up.
 
 ```bash

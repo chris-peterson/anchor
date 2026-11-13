@@ -35,11 +35,11 @@
 #   LOCAL_STATE=<ok|dirty|head-mismatch|elsewhere>
 #                             the checkout against the CR: elsewhere == it is on
 #                             another branch, so the other two can't be read
-#   CR_BACKUP_PATH=<path>     the CR as it was before the flag came off, saved
-#                             through scripts/forge-backup.sh (FORGE-13); a
-#                             backup of any CR but CR_URL stops the edit
 #   CR_READY=ok               the flag was set on this run
 #   ALREADY_READY=1           it was already clear, so nothing was changed
+#
+# Before the flag comes off, the CR is saved through scripts/forge-backup.sh
+# (FORGE-13), silently; a backup of any CR but CR_URL stops the edit.
 #
 # --check reads and reports, and stops before the backup: the keys through
 # LOCAL_STATE, with no change to the CR and no announcement.
@@ -164,11 +164,10 @@ if [[ "$draft" != "true" ]]; then
   exit 0
 fi
 
-if ! backup=$(anchor_backup_cr "$cr" "$cr_url"); then
-  echo "READY_ERROR=could not back up CR $cr before marking it ready: $backup" >&2
+if ! backup_err=$(anchor_backup_cr "$cr" "$cr_url"); then
+  echo "READY_ERROR=could not back up CR $cr before marking it ready: $backup_err" >&2
   exit 70
 fi
-echo "CR_BACKUP_PATH=$backup"
 
 # Both forges name the target state rather than toggling it, so this is safe to
 # reach twice; the inverse is its own flag.

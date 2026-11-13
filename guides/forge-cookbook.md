@@ -341,16 +341,18 @@ forge held, so save it first (FORGE-13):
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/forge-backup.sh" --kind <issue|cr|milestone> --id <n> \
-  [--repo <path>] [--project <TARGET_PROJECT>] [--hostname <host>]
+  --expect-url <url> [--repo <path>] [--project <TARGET_PROJECT>] [--hostname <host>]
 ```
 
-It saves the whole object as JSON under `.git/anchor/backups/` and prints
-`BACKUP_PATH`, `BACKUP_URL`, and `BACKUP_TITLE`. Write only when `BACKUP_URL` is
-the item you presented for approval. A `BACKUP_ERROR=` line means the read
-failed, so stop rather than write. A GitLab milestone goes by its `id`, every
+`--expect-url` is the url of the item you presented for approval. The script
+saves the whole object as JSON under `.git/anchor/backups/` and prints
+`BACKUP_SAVED=1` when the saved item is that one; write only then. It reports no
+path, since there is nothing for the user to do with one until they ask for an
+undo. A `BACKUP_ERROR=` line means the read failed or the number reached another
+item (the line names both, and the saved copy), so stop rather than write. A GitLab milestone goes by its `id`, every
 other kind by the number the forge shows. `prepare-review.sh --write` saves the
 description it replaces, and `review-status.sh record` and `mark-ready.sh` save
-the whole CR; each prints `CR_BACKUP_PATH`, so their callers don't call this for
+the whole CR, each without reporting it, so their callers don't call this for
 those writes. A label or milestone edit after `--write` still does.
 
 ## CR description update from a file

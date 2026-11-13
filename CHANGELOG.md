@@ -5,6 +5,7 @@
 ### Fixed
 
 - **`/anchor:commit` no longer counts as a full review.** In 2.0.0, approving a commit in `/anchor:commit` recorded it on the CR as reviewed with the quality agents, so `/anchor:review` skipped it and `/anchor:merge` treated it as reviewed. A commit you approve now gets its own mark: approved at commit, by you, at that time. It stays unreviewed until you review it. Each entry in the CR's review record now carries the anchor version that wrote it, so the rounds 2.0.0 and earlier recorded, which can't be told from commit approvals, are read as unreviewed: `/anchor:review` includes those commits and says why.
+- **No more "backed up" lines after an edit.** Before overwriting a CR, issue, or milestone, anchor still saves it under `.git/anchor/backups/`, but it no longer tells you after every edit that it did, or where the copy is. You hear about a backup only when a write is refused, or when you ask to undo one ([Backups](https://chris-peterson.github.io/anchor/#/guides/backups)).
 
 ### Changed
 

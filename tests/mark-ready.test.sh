@@ -94,8 +94,9 @@ run --forge github --cr 128
 echo "$out" | grep -q '^CR_URL=https://github.com/o/r/pull/128$' || fail "wrong CR_URL: $out"
 echo "$out" | grep -q '^CR_READY=ok$' || fail "did not report the flag cleared: $out"
 grep -q '^gh pr ready 128$' "$CALL_LOG" || fail "did not run gh pr ready: $(cat "$CALL_LOG")"
-backup=$(sed -n 's/^CR_BACKUP_PATH=//p' <<<"$out")
-[[ "$backup" == */github/.git/anchor/backups/* ]] || fail "the draft CR should be saved under .git/anchor/backups: $out"
+backup=$(find "$work/github/.git/anchor/backups" -name 'cr-128-*' 2>/dev/null | sort | tail -n 1)
+[[ -f "$backup" ]] || fail "the draft CR should be saved under .git/anchor/backups: $out"
+echo "$out" | grep -q 'anchor/backups' && fail "a save that succeeds should not report its path: $out"
 jq -e '.isDraft == true' "$backup" >/dev/null || fail "the backup should hold the CR as a draft: $(cat "$backup")"
 echo "$out" | grep -q '^codes\.bridgeai\.anchor/cr\.ready {"uri":"https://github.com/o/r/pull/128"}$' \
   || fail "wrong announcement: $out"
@@ -109,7 +110,7 @@ echo "$out" | grep -q '^ALREADY_READY=1$' || fail "did not report already ready:
 echo "$out" | grep -q '^CR_READY=ok$' && fail "claimed to clear a clear flag: $out"
 grep -q 'pr ready' "$CALL_LOG" && fail "mutated an already-ready CR: $(cat "$CALL_LOG")"
 echo "$out" | grep -q 'cr\.ready' && fail "announced a transition that did not happen: $out"
-echo "$out" | grep -q '^CR_BACKUP_PATH=' && fail "backed up a CR it does not edit: $out"
+[[ -z "$(find "$work/github/.git/anchor/backups" -newer "$CR_JSON" -name 'cr-*' 2>/dev/null)" ]] || fail "backed up a CR it does not edit"
 ok "an already-ready CR is left alone, and announces nothing"
 
 # --- GitLab, a draft ---------------------------------------------------------
@@ -118,7 +119,7 @@ run --forge gitlab --cr 42
 [[ "$status" -eq 0 ]] || fail "non-zero on a GitLab draft: $status $err"
 echo "$out" | grep -q '^CR_READY=ok$' || fail "did not report the flag cleared: $out"
 grep -q '^glab mr update 42 --ready$' "$CALL_LOG" || fail "wrong glab call: $(cat "$CALL_LOG")"
-[[ -f "$(sed -n 's/^CR_BACKUP_PATH=//p' <<<"$out")" ]] || fail "the MR should be saved before the flag comes off: $out"
+[[ -n "$(find "$work/gitlab/.git/anchor/backups" -name 'cr-42-*' 2>/dev/null)" ]] || fail "the MR should be saved before the flag comes off: $out"
 echo "$out" | grep -q '"uri":"https://gitlab.example.com/g/r/-/merge_requests/42"' \
   || fail "wrong announcement: $out"
 ok "GitLab: the flag comes off with mr update --ready, read from web_url and draft"
@@ -157,7 +158,7 @@ for kv in FORGE=github CR_NUMBER=128 CR_REF=r#128 CR_STATE=open CR_DRAFT=true CR
 done
 grep -q '^gh pr view --json' "$CALL_LOG" || fail "the CR should be the branch's, not a named one: $(cat "$CALL_LOG")"
 grep -q 'pr ready' "$CALL_LOG" && fail "--check changed the CR: $(cat "$CALL_LOG")"
-echo "$out" | grep -q 'CR_BACKUP_PATH=\|cr\.ready' && fail "--check backed up or announced: $out"
+echo "$out" | grep -q 'cr\.ready' && fail "--check announced: $out"
 ok "--check reads the branch's CR off origin's forge and changes nothing"
 
 run

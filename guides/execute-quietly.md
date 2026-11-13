@@ -17,10 +17,10 @@ relaying the state it surfaced.
 
 Silence covers the *intermediate* objects: the `KEY=value` blocks, the gate
 outcomes, the diff you ran to check your own work. A backup is one of them:
-`BACKUP_PATH` and `CR_BACKUP_PATH` name anchor's undo store under
-`.git/anchor/backups/`, which stays put after the session and is no leftover to
-report or clean up. Name a backup only when a write is refused or the user asks
-to undo one. The finished artifact is the
+the helpers save the item under `.git/anchor/backups/` before an overwrite and
+report no path, because no one asked for an undo. Don't add a line saying the
+item was backed up, or where; name a backup only when a write is refused or the
+user asks to undo one. The finished artifact is the
 opposite. The commit message, the CR description, the drafted issue are what the
 user is there to decide on, and they have to actually reach the user — as text
 in your reply, or through a review tool that shows them properly.

@@ -20,14 +20,10 @@
 # Before the write, the CR is saved through scripts/forge-backup.sh (FORGE-13).
 # The section is written without an approval of its text (CONFIRM-17), so the
 # check is against the CR this script read: a backup of any other CR stops the
-# write.
+# write. A backup that succeeds is silent.
 #
 # Output lines (KEY=value, read from stdout):
 #   RESOLVED_VIA=<repo|cwd>
-#   CR_BACKUP_PATH=<path>      the CR as it was before the write, saved as JSON
-#                              under <git-common-dir>/anchor/backups/; only
-#                              on a run that writes the CR (not --local, not
-#                              STATUS_SKIPPED)
 #   STATUS_BASE_BRANCH=<name>  --local only: the branch the rows run from
 #   STATUS_RECORDED=<n>        commits given another round, or marked committed
 #                              with --kind commit; 0 when skipped
@@ -222,8 +218,7 @@ review_status_section "$data" > "$section"
 updated=$(anchor_tmpfile cr-review-status-desc md)
 review_status_splice "$desc" "$section" > "$updated"
 
-backup=$(anchor_backup_cr "$cr" "$cr_url") || die "could not back up the CR before writing it" "$backup"
-echo "CR_BACKUP_PATH=$backup"
+backup_err=$(anchor_backup_cr "$cr" "$cr_url") || die "could not back up the CR before writing it" "$backup_err"
 out=$(anchor_cr_write_description "$forge" "$cr" "$updated") || die "could not write the CR description" "$out"
 
 echo "STATUS_RECORDED=$(git rev-list --count --no-merges "$base..$head")"

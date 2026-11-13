@@ -4,25 +4,29 @@
 #
 # Why a script (not skill prose): the read is deterministic and differs per
 # forge and per kind, and a skill improvising it each time is a skill that
-# sometimes skips it. The skill runs this, checks BACKUP_URL is the item it
-# presented for approval, then writes.
+# sometimes skips it. The skill runs this with the url of the item it presented
+# for approval, and writes only on BACKUP_SAVED=1.
 #
 # The whole object is saved, not one field, because a single edit can change
 # the title, body, labels, milestone, and state together.
 #
 # Output lines (KEY=value, read from stdout):
 #   RESOLVED_VIA=<repo|cwd>
-#   BACKUP_PATH=<path>     the saved JSON, under <git-common-dir>/anchor/backups/
-#   BACKUP_URL=<web url>   the item as the forge names it
-#   BACKUP_TITLE=<title>
+#   BACKUP_SAVED=1         saved under <git-common-dir>/anchor/backups/, and the
+#                          item is the one --expect-url names
 #
-# On a read that fails (no such item, an auth error) it prints
-# BACKUP_ERROR=<message> and exits 1: the write it guards should not go ahead.
+# A save that succeeds reports no path: the copy is for an undo nobody has asked
+# for, and a path in the output is a path the caller relays (FORGE-13). An undo
+# finds the newest file for the item by name.
+#
+# On a read that fails (no such item, an auth error), or a saved item whose url
+# isn't --expect-url, it prints BACKUP_ERROR=<message> and exits 1: the write it
+# guards should not go ahead. A mismatch names both items and the saved copy.
 #
 # Exit codes: 0 saved · 1 the read or the save failed · 64 usage error
 #
 # Usage:
-#   forge-backup.sh --kind <issue|cr|milestone> --id <n> [--repo <path>]
+#   forge-backup.sh --kind <issue|cr|milestone> --id <n> --expect-url <url> [--repo <path>]
 #                   [--project <owner/name|group/project>] [--hostname <host>]
 #
 # --project names a project other than origin's; the forge is still origin's.
@@ -41,12 +45,14 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/backup.sh"
 CTX_REPO=""
 kind=""
 id=""
+expect_url=""
 project=""
 hostname=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --kind)     kind="${2:?--kind needs a value}"; shift 2 ;;
     --id)       id="${2:?--id needs a value}"; shift 2 ;;
+    --expect-url) expect_url="${2:?--expect-url needs a url}"; shift 2 ;;
     --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
     --project)  project="${2:?--project needs a path}"; shift 2 ;;
     --hostname) hostname="${2:?--hostname needs a host}"; shift 2 ;;
@@ -58,6 +64,7 @@ case "$kind" in
   *) echo "forge-backup.sh: --kind must be issue, cr, or milestone" >&2; exit 64 ;;
 esac
 [[ -n "$id" ]] || { echo "forge-backup.sh: --id is required" >&2; exit 64; }
+[[ -n "$expect_url" ]] || { echo "forge-backup.sh: --expect-url is required" >&2; exit 64; }
 
 ctx_resolve_repo
 echo "RESOLVED_VIA=$RESOLVED_VIA"
@@ -100,6 +107,10 @@ if ! path=$(anchor_backup_path "$name" json); then
 fi
 printf '%s\n' "$json" > "$path"
 
-echo "BACKUP_PATH=$path"
-echo "BACKUP_URL=$(jq -r '.url // .html_url // .web_url // empty' <<<"$json")"
-echo "BACKUP_TITLE=$(jq -r '.title // empty' <<<"$json")"
+url=$(jq -r '.url // .html_url // .web_url // empty' <<<"$json")
+if [[ -z "$url" || "$url" != "$expect_url" ]]; then
+  title=$(jq -r '.title // empty' <<<"$json")
+  echo "BACKUP_ERROR=the backup saved ${url:-a $kind with no url}${title:+ ($title)}, not $expect_url, the item about to be written; refusing the write (saved copy: $path)"
+  exit 1
+fi
+echo "BACKUP_SAVED=1"

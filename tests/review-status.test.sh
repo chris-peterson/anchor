@@ -17,6 +17,8 @@ status_sh="$here/../scripts/review-status.sh"
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok()   { echo "ok - $*"; }
 val()  { sed -n "s/^$1=//p" <<<"$out"; }
+# The newest backup in $repo whose name starts with <prefix>.
+newest_backup() { find "$repo/.git/anchor/backups" -name "$1-*" -print 2>/dev/null | sort | tail -n 1; }
 
 command -v jq >/dev/null || { echo "SKIP: jq not installed"; exit 0; }
 
@@ -114,8 +116,9 @@ head -n 1 "$fx/body.md" | grep -qx 'Why this change exists.' || fail "the descri
 [[ "$(table)" == "$(sha8 HEAD~2) 1 [me] approved
 $(sha8 HEAD~1) 1 [me] approved
 $(sha8 HEAD) 1 [me] approved" ]] || fail "first round table:"$'\n'"$(table)"
-backup=$(val CR_BACKUP_PATH)
-[[ "$backup" == */gh/.git/anchor/backups/* && -f "$backup" ]] || fail "the CR should be saved under .git/anchor/backups before the write: $out"
+backup=$(newest_backup cr-7)
+[[ -f "$backup" ]] || fail "the CR should be saved under .git/anchor/backups before the write: $out"
+grep -q 'anchor/backups' <<<"$out" && fail "a save that succeeds should not report its path: $out"
 [[ "$(jq -r .body "$backup")" == 'Why this change exists.' ]] || fail "the backup holds the description the write replaced: $(cat "$backup")"
 ok "a round over the whole CR gives every commit its first round, after saving the CR"
 
@@ -173,11 +176,12 @@ ok "a rebased commit keeps its rounds by patch-id; an amended one starts at none
 # out of draft.
 before=$(cat "$fx/body.md")
 gh_pr someone-else true
+skip_before=$(newest_backup cr-7)
 run --cr 7 --base "$main" --head HEAD --result approved
 [[ "$status" == 0 && "$(val STATUS_SKIPPED)" == draft && "$(val STATUS_RECORDED)" == 0 ]] \
   || fail "someone else's draft should be skipped: $out"
 [[ "$(cat "$fx/body.md")" == "$before" ]] || fail "someone else's draft should be untouched"
-[[ -z "$(val CR_BACKUP_PATH)" ]] || fail "a skipped CR is not written, so not backed up: $out"
+[[ "$(newest_backup cr-7)" == "$skip_before" ]] || fail "a skipped CR is not written, so not backed up: $out"
 gh_pr someone-else
 run --cr 7 --base HEAD~1 --head HEAD --result approved
 [[ "$status" == 0 && "$(val STATUS_RECORDED)" == 1 ]] || fail "someone else's ready CR with the section should be recorded: $out"
@@ -197,7 +201,7 @@ out="$(BACKUP_SERVES="$fx/other.json" bash "$status_sh" record --repo "$repo" --
 [[ "$status" -ne 0 ]] || fail "a backup of another CR should stop the write: $out"
 grep -q '^STATUS_ERROR=could not back up the CR.*pull/8, not .*pull/7.*refusing the write' <<<"$out" \
   || fail "the refusal should name both CRs: $out"
-[[ -z "$(val CR_BACKUP_PATH)" && -z "$(val STATUS_RECORDED)" ]] || fail "a refused write reports no backup or round: $out"
+[[ -z "$(val STATUS_RECORDED)" ]] || fail "a refused write reports no round: $out"
 [[ "$(cat "$fx/body.md")" == "$before" ]] || fail "a refused write leaves the description untouched"
 ok "a backup of a CR other than the one read refuses the write"
 
@@ -217,7 +221,7 @@ run --cr 12 --base "$main" --head HEAD --result approved
 [[ "$status" == 0 ]] || fail "gitlab record exited $status: $out"
 head -n 1 "$fx/body.md" | grep -q '^<!-- anchor:review-status {' || fail "an empty description should get just the section: $(cat "$fx/body.md")"
 [[ "$(table | wc -l | tr -d ' ')" == 3 ]] || fail "gitlab table:"$'\n'"$(table)"
-[[ -f "$(val CR_BACKUP_PATH)" && "$(jq -r .web_url "$(val CR_BACKUP_PATH)")" == */merge_requests/12 ]] \
+[[ -f "$(newest_backup cr-12)" && "$(jq -r .web_url "$(newest_backup cr-12)")" == */merge_requests/12 ]] \
   || fail "gitlab: the MR should be saved before the write: $out"
 ok "gitlab: the MR is saved, then the section is written through the MR API"
 

@@ -695,8 +695,9 @@ repo="$(make_repo gitlab.com gl-write-backup)"
 glab_mr_json "$(git -C "$repo" rev-parse HEAD)" true false
 jq --arg s "$section" '.description = "the prior text\n\n" + $s' "$CR_AFTER_CREATE" > "$CR_JSON"
 written=$(bash "$prepare_review_sh" --repo "$repo" --write --body-file "$draft" --cr 7)
-backup="$(key "$written" CR_BACKUP_PATH)"
-[[ -n "$backup" && -f "$backup" ]] || fail "--write should report where the prior description went: $written"
+backup="$(find "$repo/.git/anchor/backups" -name 'cr-7-*.md' 2>/dev/null | sort | tail -n 1)"
+[[ -n "$backup" && -f "$backup" ]] || fail "--write should save the prior description: $written"
+! grep -q 'anchor/backups' <<<"$written" || fail "--write should not report the backup's path: $written"
 [[ "$(cat "$backup")" == "the prior text
 
 $section" ]] || fail "the backup should hold the description as the CR had it: $(cat "$backup")"

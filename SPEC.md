@@ -1986,8 +1986,9 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   approval, or, for an edit made without one (the Review status section,
   CONFIRM-17; clearing a draft flag; adding labels or a milestone), the one the
   system read and is about to
-  write, and keep the file, naming its path only when the write is refused or
-  the user asks to undo it, so a
+  write, and keep the file, naming it only when the write is refused or the
+  user asks to undo it (a backup that succeeds is not reported, by the helper
+  that saved it or by the skill that called it), so a
   write that lands on the wrong target, or that the user regrets, can be put
   back without depending on the forge keeping an edit history.
 

@@ -175,7 +175,7 @@
 #                                         # back, after saving the one it replaces;
 #                                         # refuses a CR whose source branch isn't
 #                                         # the checkout's. Emits CR_WRITTEN,
-#                                         # CR_BACKUP_PATH, STATUS_CARRIED
+#                                         # STATUS_CARRIED; the backup is silent
 #
 # --repo cds into the target checkout so every git/gh/glab call below targets it
 # (see scripts/lib/resolve-context.sh); the emitted RESOLVED_VIA reports whether
@@ -491,7 +491,6 @@ if [[ "$do_write" -eq 1 ]]; then
   echo "CR_URL=$cr_url"
   echo "CR_IID=$cr_iid"
   echo "CR_WRITTEN=1"
-  echo "CR_BACKUP_PATH=$backup_path"
   echo "STATUS_CARRIED=$status_carried"
   exit 0
 fi

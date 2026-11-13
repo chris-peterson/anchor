@@ -43,8 +43,8 @@ as the forge cookbook's "Resolving a named target repo" describes).
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/mark-ready.sh" --forge <FORGE> --cr <CR_NUMBER> [--repo <checkout>]
 ```
 
-It reads the flag again rather than trusting Step 1, saves the CR under
-`.git/anchor/backups/` first, and announces `cr.ready`. `CR_READY=ok` is the
+It reads the flag again rather than trusting Step 1, saves the CR first
+(FORGE-13), and announces `cr.ready`. `CR_READY=ok` is the
 transition; `ALREADY_READY=1` means someone got there between the two calls, so
 say that rather than claiming this run did it.
 
