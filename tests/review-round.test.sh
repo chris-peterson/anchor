@@ -118,8 +118,8 @@ notes=$(val NOTES "$o")
 grep -qx '## a.txt:1 ( )' "$notes" || fail "item 1 sits above line 2, on unchanged line 1: $(cat "$notes")"
 grep -qx '## a.txt:8 ( )' "$notes" || fail "item 2 sits above its insertion: $(cat "$notes")"
 grep -qx '## a.txt:10 ( )' "$notes" || fail "item 3 sits above line 11, near the insertion: $(cat "$notes")"
-grep -qx '#3 rename-ten · important · proposed' "$notes" || fail "a proposal's header names its status"
-grep -qx '#1 upper-two · nit' "$notes" || fail "an applied item's header carries no status"
+grep -qx '💡 #3 rename-ten · important · proposed' "$notes" || fail "a proposal's header names its status"
+grep -qx '💡 #1 upper-two · nit' "$notes" || fail "an applied item's header carries no status"
 grep -qx 'Also: c.txt.' "$notes" || fail "an item's other sites are named in its one note: $(cat "$notes")"
 ! grep -q '^## c.txt' "$notes" || fail "a later site gets no note of its own: $(cat "$notes")"
 table="$root/(context).md"
@@ -158,7 +158,7 @@ o=$(round_cmd seed --dir "$dir" --pass items --items "$bad" || true)
 [[ "$(val ROUND_ERROR "$o")" == *"b.txt: not changed in this review"* ]] || fail "a whole-file note on an unchanged file should be refused: $o"
 jq '.items[2].sites = [{"file": "b.txt", "line": 1}]' "$items" > "$bad"
 o=$(round_cmd seed --dir "$dir" --pass items --items "$bad")
-grep -qF '### #3 rename-ten · important · proposed at `b.txt:' "$table" \
+grep -qF '### 💡 #3 rename-ten · important · proposed at `b.txt:' "$table" \
   || fail "a proposal on a file the pass doesn't change goes to the table: $(cat "$table")"
 jq '.items[0].sites = [{"file": "a.txt", "line": 99}]' "$items" > "$bad"
 o=$(round_cmd seed --dir "$dir" --pass items --items "$bad" || true)
@@ -172,8 +172,8 @@ ok "seed: a note revdiff would drop is refused before the review opens"
 # adds a note of their own.
 returned="$work/notes.returned.json"
 jq '[.[] | {body, target:(if .line then "line" else "file" end), file, startLine:.line, endLine:.line, side}]
-    | map(if (.body | startswith("#2")) and .file == "a.txt" then .body += "\nUse a constant instead." else . end)
-    | map(select(.body | startswith("#3") | not))
+    | map(if (.body | startswith("💡 #2")) and .file == "a.txt" then .body += "\nUse a constant instead." else . end)
+    | map(select(.body | startswith("💡 #3") | not))
     + [{body:"why not five?", target:"line", file:"a.txt", startLine:6, endLine:6, side:"new"}]' \
   "$dir/notes.json" > "$returned"
 o=$(round_cmd read --dir "$dir" --returned "$returned")
@@ -187,8 +187,8 @@ ok "read: kept, changed, a deleted note drops its item, and a note of your own i
 # A note's text replaced with a word is the answer: a drop word drops, a yes keeps,
 # and either way it is not read as a note of the reviewer's own.
 jq '[.[] | {body, target:"line", file, startLine:.line, endLine:.line, side}]
-    | map(if (.body | startswith("#1")) then .body = "drop"
-          elif (.body | startswith("#2")) then .body = ":thumbsup:"
+    | map(if (.body | startswith("💡 #1")) then .body = "drop"
+          elif (.body | startswith("💡 #2")) then .body = ":thumbsup:"
           else .body += "\n\ud83d\udc4d" end)' "$dir/notes.json" > "$returned.words"
 o=$(round_cmd read --dir "$dir" --returned "$returned.words")
 [[ "$(val DROP "$o")" == 1 && "$(val KEEP "$o")" == "2,3" && "$(val ADDED "$o")" == 0 ]] \
@@ -273,21 +273,45 @@ round_cmd record --dir "$dir" --id 2 >/dev/null
 [[ -z "$(git -C "$repo" status --porcelain)" ]] || fail "a worktree round must leave the checkout alone"
 
 wt_items="$work/wt-items.json"
-jq -n '{items:[{id:1, slug:"two-lines", severity:"nit", status:"applied", finding:"Adds x and y",
-  reason:"The list needs them.", sites:[{file:"a.txt", line:4}]}]}' > "$wt_items"
-round_cmd seed --dir "$dir" --pass whole --items "$wt_items" --title "Review of #9: Theirs" >/dev/null
+jq -n '{items:[{id:1, slug:"two-lines", severity:"suggestion", status:"applied", finding:"Adds x and y",
+  reason:"The list needs them.", sites:[{file:"a.txt", line:4}]},
+  {id:2, slug:"spell-out", severity:"suggestion", status:"applied", finding:"Spells out 9 and 10",
+  reason:"The rest are words.", sites:[{file:"a.txt", line:11}]},
+  {id:6, slug:"ask", severity:"suggestion", status:"proposed", finding:"Why five?",
+  reason:"Why spell out five?", sites:[{file:"a.txt", line:7}]}]}' > "$wt_items"
+o=$(round_cmd seed --dir "$dir" --pass items --items "$wt_items" --title "Review of #9: Theirs")
+[[ "$(val ROUND_FROM "$o")" == "$base" ]] || fail "a round on someone else's CR shows its items over the CR as written: $o"
+if ! { [[ "$(git -C "$root" rev-parse HEAD)" == "$head" ]] && git -C "$root" diff --quiet "$head" -- \
+       && ! grep -qx x "$root/a.txt" && grep -qx 'line 9' "$root/a.txt"; }; then
+  fail "the drafts are parked out of the tree, leaving the CR head: $(git -C "$root" diff "$head")"
+fi
+n1=$(jq -c '.[] | select(.id == 1)' "$dir/notes.json"); n2=$(jq -c '.[] | select(.id == 2)' "$dir/notes.json")
+[[ "$(jq -r '"\(.line) \(.side)"' <<<"$n1")" == "2 new" && "$(jq -r '"\(.line) \(.side)"' <<<"$n2")" == "8 new" ]] \
+  || fail "each parked note sits on the CR-head line its fix starts at, not the drafted tree's: $n1 $n2"
+jq -r .body <<<"$n2" | head -1 | grep -q '^💡 #2 spell-out · suggestion$' || fail "a suggestion's note is headed 💡: $n2"
+jq -r .body <<<"$n2" | grep -q '^Changes lines 9-10\. None of it is in this diff' \
+  || fail "the note says in words where the fix goes: $n2"
+! jq -r .body <<<"$n2" | grep -q 'line nine\|```' || fail "the note carries no code: $n2"
+jq -r .body <<<"$n1" | grep -q '^Adds lines after line 3\.' || fail "an insertion says where it goes: $n1"
+jq -r '.[] | select(.id == 6) | .body' "$dir/notes.json" | head -1 | grep -q '^💡 #6 ask · suggestion · proposed$' \
+  || fail "a proposal is headed 💡 too: $(cat "$dir/notes.json")"
+grep -q 'This diff is what ships' "$root/(context).md" || fail "the table says the diff is what ships: $(cat "$root/(context).md")"
+grep -q '| 2 | spell-out | suggestion | 💡 suggested |' "$root/(context).md" || fail "the table marks a fix as suggested, not in the diff: $(cat "$root/(context).md")"
 # shellcheck disable=SC2016
-boxed "$root/(context).md" | grep -qF -- '- `approve`: the agent drafts what you kept' \
-  || fail "a round on someone else's CR says Accept drafts posts: $(cat "$root/(context).md")"
+boxed "$root/(context).md" | grep -qF -- '- `approve`: the agent writes what you kept as suggestions' \
+  || fail "a round on someone else's CR says Accept writes suggestions: $(cat "$root/(context).md")"
 grep -q 'posts nothing until you approve' "$root/(context).md" \
   || fail "a round on someone else's CR posts nothing unapproved: $(cat "$root/(context).md")"
 grep -q '← prev' "$root/(context).md" || fail "the round names the keys: $(cat "$root/(context).md")"
 GIT_CONFIG_GLOBAL="$work/hints-off" git config --global anchor.hints false
-GIT_CONFIG_GLOBAL="$work/hints-off" round_cmd seed --dir "$dir" --pass whole --items "$wt_items" --title "Review of #9: Theirs" >/dev/null
+GIT_CONFIG_GLOBAL="$work/hints-off" round_cmd seed --dir "$dir" --pass items --items "$wt_items" --title "Review of #9: Theirs" >/dev/null
 ! grep -q '← prev\|hide hints' "$root/(context).md" || fail "anchor.hints=false drops the round's keys: $(cat "$root/(context).md")"
 grep -q '^╭─ Review ' "$root/(context).md" || fail "the round keeps the Review box: $(cat "$root/(context).md")"
-grep -q 'whole change request with the 1 item you kept' "$root/(context).md" || fail "the whole pass names the kept items, singular: $(cat "$root/(context).md")"
-ok "seed: a round on someone else's CR says what Accept drafts, and posts nothing unapproved"
+ok "seed: on someone else's CR the items pass shows the CR as it ships, each fix a 💡 note describing it in words"
+
+o=$(round_cmd seed --dir "$dir" --pass whole --items "$wt_items" || true)
+[[ "$(val ROUND_ERROR "$o")" == *"no whole pass"* ]] || fail "a worktree round refuses the whole pass: $o"
+ok "seed: a round on someone else's CR has no whole pass"
 
 o=$(round_cmd suggest --dir "$dir" --id 2 --forge github)
 s=$(val SUGGESTION "$o")
@@ -299,29 +323,27 @@ o=$(round_cmd suggest --dir "$dir" --id 1 --forge github)
 s=$(val SUGGESTION "$o")
 [[ "$(jq -r '"\(.startLine)-\(.endLine)"' <<<"$s")" == "3-3" ]] || fail "an insertion anchors on the line before it: $s"
 [[ "$(jq -r .block <<<"$s")" == $'```suggestion\nline 3\nx\ny\n```' ]] || fail "insertion block carries that line: $s"
-ok "suggest: a one-hunk fix becomes a suggestion numbered at the CR head, per forge"
+ok "suggest: a parked fix still becomes a suggestion numbered at the CR head, per forge"
+
+# The items pass diffs from the merge base, so a note on a removed line is the
+# CR diff's old side, and a kept note keeps its item.
+jq '[.[] | {body, target:"line", file, startLine:.line, endLine:.line, side}]' "$dir/notes.json" > "$returned"
+r=$(val ROUND_READ "$(round_cmd read --dir "$dir" --returned "$returned")")
+[[ "$(jq -r '[.items[] | "\(.id):\(.decision)"] | join(",")' "$r")" == "1:keep,2:keep,6:keep" ]] \
+  || fail "a 💡 note left as seeded keeps its item: $(jq -c '[.items[] | {id, decision}]' "$r")"
+[[ "$(jq -r '[.items[].notes[] | "\(.line) \(.crLine)"] | join(",")' "$r")" == "2 2,8 8,6 6" ]] \
+  || fail "a parked note's line is already the CR head's: $(jq -c '[.items[].notes]' "$r")"
+o=$(round_cmd revert --dir "$dir" --id 2)
+if ! { [[ "$(val REVERTED "$o")" == 2 && ! -e "$dir/items/2.patch" ]] && git -C "$root" diff --quiet "$head" --; }; then
+  fail "dropping a parked item drops its patch and leaves the tree alone: $o"
+fi
+ok "read: a parked note is read on the CR head, and dropping it drops its patch"
 
 printf 'more\n' >> "$root/b.txt"; sed -i.bak 's/^line 1$/line one/' "$root/a.txt"; rm -f "$root/a.txt.bak"
 round_cmd record --dir "$dir" --id 3 >/dev/null
 o=$(round_cmd suggest --dir "$dir" --id 3 --forge github)
 [[ "$(val SUGGESTIBLE "$o")" == 0 ]] || fail "a two-file fix is not a suggestion: $o"
 ok "suggest: a fix across files stays a thread"
-
-# a proposal noted above worktree line 8 sits on line 7, which is head line 5
-# once item 1's two inserted lines are taken out; a note on an inserted line
-# has no head line at all
-cat > "$items" <<'EOF'
-{"items": [{"id": 4, "slug": "p", "severity": "consider", "status": "proposed",
-  "finding": "f", "reason": "r", "sites": [{"file": "a.txt", "line": 8}]},
-  {"id": 5, "slug": "q", "severity": "consider", "status": "proposed",
-  "finding": "g", "reason": "s", "sites": [{"file": "a.txt", "line": 6}]}]}
-EOF
-round_cmd seed --dir "$dir" --pass whole --items "$items" >/dev/null
-jq '[.[] | {body, target:"line", file, startLine:.line, endLine:.line, side}]' "$dir/notes.json" > "$returned"
-r=$(val ROUND_READ "$(round_cmd read --dir "$dir" --returned "$returned")")
-[[ "$(jq -r '[.items[].notes[] | "\(.line) \(.crLine)"] | join(",")' "$r")" == "7 5,5 null" ]] \
-  || fail "worktree line 7 is head line 5, and inserted line 5 has none: $(jq -c '[.items[].notes]' "$r")"
-ok "read: a note's line maps back to the CR head past the round's own insertions"
 
 round_cmd finish --dir "$dir" >/dev/null
 [[ ! -e "$root" ]] || fail "finish should remove the worktree"
@@ -353,8 +375,8 @@ fnotes=$(val NOTES "$o"); ftable="$far/(context).md"
 grep -qx '## app.sh:6 ( )' "$fnotes" || fail "a note near a change stays put: $(cat "$fnotes")"
 grep -qx '## app.sh:17 ( )' "$fnotes" || fail "a note far from every change stays on its line: $(cat "$fnotes")"
 grep -qx '## other.sh (file-level)' "$fnotes" || fail "a whole-file note stays on its file: $(cat "$fnotes")"
-! grep -q '^#4 ' "$fnotes" || fail "a note in an unchanged file is not in the diff: $(cat "$fnotes")"
-grep -qF "### #4 elsewhere · suggestion · proposed at \`untouched.sh:2\`" "$ftable" || fail "the unchanged file's note is in the table: $(cat "$ftable")"
+! grep -q '^💡 #4 ' "$fnotes" || fail "a note in an unchanged file is not in the diff: $(cat "$fnotes")"
+grep -qF "### 💡 #4 elsewhere · suggestion · proposed at \`untouched.sh:2\`" "$ftable" || fail "the unchanged file's note is in the table: $(cat "$ftable")"
 grep -qx '>    2  u2' "$ftable" || fail "the table quotes the line the note concerns: $(cat "$ftable")"
 row4=$(grep -n '^| 4 ' "$ftable" | cut -d: -f1)
 jq --argjson n "$row4" '[.[] | {body, target:(if .line == null then "file" else "line" end), file, startLine:.line, endLine:.line, side}]
@@ -431,7 +453,7 @@ o=$(round_cmd seed --dir "$tdir" --pass items --items "$work/tp-items.json")
 [[ "$(cut -f3 "$tdir/changed.tsv" | sort -nu | tr '\n' ' ')" == "3 10 " ]] \
   || fail "the items pass holds only the drafts, not the CR's own row 20: $(cat "$tdir/changed.tsv")"
 # The reviewer drops item 2 and edits a line of their own in the review.
-jq '[.[] | {body, target:"line", file, startLine:.line, endLine:.line, side}] | map(select(.body | startswith("#2") | not))' \
+jq '[.[] | {body, target:"line", file, startLine:.line, endLine:.line, side}] | map(select(.body | startswith("💡 #2") | not))' \
   "$tdir/notes.json" > "$work/tp-ret1.json"
 sed -i.bak 's/^row 1$/row one/' "$tp/m.txt"; rm -f "$tp/m.txt.bak"
 o=$(round_cmd read --dir "$tdir" --returned "$work/tp-ret1.json")

@@ -907,8 +907,10 @@ two are not equally specified: GitHub documents `subject_type: file` (with `line
 then not required), while GitLab lists `file` among `position_type`'s allowed
 values without saying what the rest of the position must hold. Using one and not
 the other would make the same review render differently depending on where the
-CR lives, so `/anchor:review` anchors to lines and routes everything else into
-the summary comment.
+CR lives, so `/anchor:review` anchors to lines and posts nothing else: a comment
+with no line to sit on isn't one the author can act on (REVIEW-08, REVIEW-39).
+The one comment not on a line is the overall comment the user writes
+themselves.
 
 ## List unresolved review threads
 

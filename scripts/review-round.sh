@@ -25,6 +25,16 @@
 # land with the kept fixes in it. Each pass gets its own table and notes;
 # `finish` reads every pass's answers.
 #
+# On someone else's CR (a worktree round) nothing the round drafts will ship:
+# a kept fix posts as a suggestion the author may or may not take. So the items
+# pass there never shows a draft as code in the diff. Seeding it parks the
+# drafts: each applied item's note is placed on the CR-head line its fix
+# starts at, headed 💡, and carries the fix as text, and the worktree goes back
+# to the CR head, so the diff is the change as its author wrote it, which is
+# what ships. The recorded patches stay, so `suggest` still turns each into a
+# suggestion. There is no whole pass on a worktree round: the CR with
+# someone else's fixes in it is not a change anyone will merge.
+#
 # Rounds are counted. The first `start` writes a ledger (ROUND_LEDGER) holding
 # the size of the CR's own diff; each later `start` given that ledger is the next
 # round, and each `finish` appends what its round did: the items by status, what
@@ -65,7 +75,8 @@
 # would go on (proposed), numbered in the tree as it now stands; an old-side line
 # is numbered in the pass's base (the CR head, or the merge base). A site with no
 # line is a note on the whole file. A line in a file the pass doesn't change goes
-# in the table instead.
+# in the table instead. On a worktree round's items pass, an applied item's sites
+# are taken from its recorded patch instead, numbered in the CR head.
 #
 # Output is KEY=value lines on stdout. A failure prints ROUND_ERROR=<message>
 # and exits non-zero rather than leaving a half-written round.
@@ -149,6 +160,63 @@ need_dir() {
 # Where a line of the round's tree sits in the CR head, or `null` for a line a
 # round edit wrote.
 map_line() { anchor_items_follow_line "$root" "$(state lastTree)" "$(state head)" "$1" "$2" null; }
+
+# Whether the round's drafts were parked out of the tree for a suggestions-only
+# items pass (a worktree round).
+parked() { [[ "$(jq -r '.parked // ""' "$dir/round.json")" == 1 ]]; }
+
+# Item <id>'s recorded change alone on top of the CR head, as a diff with
+# <context> lines of context, so its lines are numbered as the CR's reader sees
+# them rather than after the round's other edits. Returns 1 where it doesn't
+# apply to the head on its own (it depends on another item's edit).
+item_on_head() {
+  local idx head_sha rc=0
+  idx=$(anchor_tmpfile anchor-round-item idx)
+  head_sha=$(state head)
+  GIT_INDEX_FILE="$idx" git -C "$root" read-tree "$head_sha"
+  if GIT_INDEX_FILE="$idx" git -C "$root" apply --cached "$dir/items/$1.patch" 2>/dev/null; then
+    GIT_INDEX_FILE="$idx" git -C "$root" -c core.quotePath=false diff --cached -U"$2" --no-color --no-renames "$head_sha"
+  else
+    rc=1
+  fi
+  rm -f "$idx"
+  return "$rc"
+}
+
+# A parked item's sites, one per hunk of its fix on the CR head, as a JSON
+# array: the first line the fix replaces, or the line an insertion follows. A
+# hunk in a file the fix adds has no line in the CR head, so it gets no site.
+parked_sites() {
+  awk '
+    /^--- / { old = ($2 == "/dev/null") ? "" : substr($2, 3) }
+    /^@@ / && old != "" {
+      split($2, o, ","); a = substr(o[1], 2) + 0
+      print old "\t" (a > 0 ? a : 1)
+    }' | jq -Rsc 'split("\n") | map(select(length > 0) | split("\t") | {file: .[0], line: (.[1] | tonumber), side: "new"})'
+}
+
+# A parked item's fix, as the words its note carries: where it would change the
+# CR, never the code. Code in a note reads badly beside the diff, and the user
+# reads each suggestion's exact text in the batch of comments that will post.
+parked_text() {
+  local hunks="$1" files count a b
+  files=$(grep -c '^+++ ' <<<"$hunks" || true)
+  count=$(grep -c '^@@ ' <<<"$hunks" || true)
+  if [[ "$files" -eq 1 && "$count" -eq 1 ]] && ! grep -q '^[-+][-+][-+] /dev/null' <<<"$hunks"; then
+    read -r a b < <(sed -n 's/^@@ -\([0-9]*\)\(,\([0-9]*\)\)\{0,1\} .*/\1 \3/p' <<<"$hunks")
+    b=${b:-1}
+    if [[ "$b" -eq 0 ]]; then
+      printf 'Adds lines after line %s.' "$a"
+    elif [[ "$b" -eq 1 ]]; then
+      printf 'Changes line %s.' "$a"
+    else
+      printf 'Changes lines %s-%s.' "$a" "$((a + b - 1))"
+    fi
+  else
+    printf 'Changes %s places across %s file%s.' "$count" "$files" "$([[ "$files" -eq 1 ]] || echo s)"
+  fi
+  printf ' None of it is in this diff; its code is in the comments you approve before anything posts.'
+}
 
 # The ledger's rounds as a markdown table, one row per round.
 trend_table() {
@@ -258,8 +326,12 @@ revert)
   need_dir
   [[ -n "$id" ]] || { echo "review-round.sh revert needs --id" >&2; exit 64; }
   [[ -s "$dir/items/$id.patch" ]] || die "item $id has no recorded change to revert"
-  git -C "$root" apply -R "$dir/items/$id.patch" 2>"$dir/revert.err" \
-    || die "item $id no longer reverts cleanly: $(head -1 "$dir/revert.err"); a later item edited the same lines"
+  # A parked draft is no longer in the tree; dropping it is dropping its patch.
+  # One redrafted since the park is, and comes out as usual.
+  if ! parked || git -C "$root" apply -R --check "$dir/items/$id.patch" 2>/dev/null; then
+    git -C "$root" apply -R "$dir/items/$id.patch" 2>"$dir/revert.err" \
+      || die "item $id no longer reverts cleanly: $(head -1 "$dir/revert.err"); a later item edited the same lines"
+  fi
   rm -f "$dir/items/$id.patch"
   set_state lastTree "$(snapshot)"
   echo "REVERTED=$id"
@@ -273,6 +345,9 @@ seed)
     whole) from=$(state diffBase) ;;
     *) echo "review-round.sh seed needs --pass read, items, or whole" >&2; exit 64 ;;
   esac
+  [[ "$pass" != whole || "$(state place)" != worktree ]] \
+    || die "a round on someone else's CR has no whole pass: its fixes post as suggestions, so the CR with them in it is not what ships"
+  [[ "$pass" != items || "$(state place)" != worktree ]] || from=$(state diffBase)
   if [[ "$pass" == read && -z "$items" ]]; then
     items="$dir/read-items.json"
     echo '{"items":[]}' > "$items"
@@ -285,6 +360,49 @@ seed)
     || die "the read pass shows the change as written; seed it before any item is recorded"
   stash_pass
   set_state pass "$pass"
+  set_state from "$from"
+  if [[ "$pass" == items && "$(state place)" == worktree ]]; then
+    # Park the drafts: each applied item's fix moves into its note, and the
+    # tree goes back to the CR head, so the diff is what ships.
+    parked_items="$dir/items.parked.json"
+    cp "$items" "$parked_items"
+    for pid in $(jq -r '.items[] | select(.status == "applied") | .id' "$items"); do
+      [[ -s "$dir/items/$pid.patch" ]] || continue
+      if hunks=$(item_on_head "$pid" 0); then
+        sites=$(parked_sites <<<"$hunks")
+        text=$(parked_text "$hunks")
+      else
+        sites='[]'
+        text="Builds on another item's fix. None of it is in this diff; its code is in the comments you approve before anything posts."
+      fi
+      jq --argjson id "$pid" --argjson s "$sites" --arg t "$text" \
+        '.items |= map(if .id == $id then .sites = $s | .reason = (.reason + "\n\n" + $t) else . end)' \
+        "$parked_items" > "$parked_items.tmp"
+      mv "$parked_items.tmp" "$parked_items"
+    done
+    # Every other site was numbered in the tree with the drafts in it; once
+    # they're out, it is numbered in the CR head.
+    while IFS=$'\t' read -r ii si f l; do
+      [[ -n "$ii" ]] || continue
+      jq --argjson i "$ii" --argjson s "$si" --argjson l "$(anchor_items_follow_line "$root" "$now" "$(state head)" "$f" "$l")" \
+        '.items[$i].sites[$s].line = $l' "$parked_items" > "$parked_items.tmp"
+      mv "$parked_items.tmp" "$parked_items"
+    done < <(jq -r --slurpfile o "$items" '
+      [$o[0].items[] | select(.status == "applied") | .id] as $applied
+      | .items | to_entries[] | select(.value.id | IN($applied[]) | not) | .key as $i
+      | .value.sites | to_entries[] | select(.value.line != null and (.value.side // "new") == "new")
+      | "\($i)\t\(.key)\t\(.value.file)\t\(.value.line)"' "$parked_items")
+    # Everything the round drafted comes out at once, files it added included;
+    # the tree was checked to be the last recorded one above.
+    if [[ "$now" != "$(state startTree)" ]]; then
+      git -C "$root" diff --binary --no-renames "$(state startTree)" "$now" | git -C "$root" apply -R \
+        || die "could not take the drafts out of the review worktree at $root"
+    fi
+    set_state lastTree "$(state startTree)"
+    set_state parked 1
+    items="$parked_items"
+    now=$(snapshot)
+  fi
   lines="$dir/changed.tsv"
   anchor_items_changed_lines "$root" "$from" "$now" > "$lines"
   rows=$(jq -r '.items[] | .id as $id | .sites | to_entries[]
@@ -323,7 +441,7 @@ seed)
     | [$it[0].items[] as $i
        | ($anchors | map(select(.id == $i.id)) | sort_by(.k) | first) as $s
        | select($s != null)
-       | ("#\($i.id) \($i.slug) · \($i.severity)" + ($i | status_tag)
+       | ((if $i.from == "you" then "" else "💡 " end) + "#\($i.id) \($i.slug) · \($i.severity)" + ($i | status_tag)
           + (if $i.from == "you" then " · your note" else "" end)) as $head
        | ($i.sites[1:] | map("\(.file)\(if .line then ":\(.line)" else "" end)")) as $also
        | {id:$i.id, file:$s.file, line:$s.line,
@@ -358,19 +476,32 @@ seed)
   n_yours=$(jq '[.items[] | select(.from == "you")] | length' "$items")
   plural=$([[ "$n_items" == 1 ]] || echo s)
   if [[ "$pass" == read ]]; then
-    about="This is the change request as written, before \`/anchor:review\` has drafted anything. Read it and
+    about="**This diff is the change request as written.**
+This is the change request as written, before \`/anchor:review\` has drafted anything. Read it and
 leave a note on anything you'd change: each note becomes an item, and the agent drafts the fix.
 While you read, the quality agents examine the same diff; what they find joins your notes in
 the items pass, which shows only the drafted fixes."
+  elif [[ "$pass" == items ]] && parked; then
+    yours=""
+    [[ "$n_yours" == 0 ]] || yours=" ($n_yours from your notes)"
+    about="**This diff is what ships: the change request as its author wrote it.** None of the fixes
+\`/anchor:review\` suggests is in it. Each is a 💡 note on the line it's about, saying in words
+what it would change, so the author's change and the agent's suggestions never mix. The code
+of each suggestion comes after this, in the comments you approve before anything posts.
+$n_items item$plural for you$yours: $n_applied with a suggested fix, $(( n_items - n_applied )) without code.
+What you keep posts on the change request as a suggestion or a comment for its author to
+take or leave, and only once you approve the exact text."
   elif [[ "$pass" == items ]]; then
     yours=""
     [[ "$n_yours" == 0 ]] || yours=" ($n_yours from your notes)"
-    about="\`/anchor:review\` read this change request and has $n_items item$plural for you$yours: $n_applied drafted in the
+    about="**This diff is only what the agent drafted, not the change itself.**
+\`/anchor:review\` read this change request and has $n_items item$plural for you$yours: $n_applied drafted in the
 tree, $(( n_items - n_applied )) without code. This diff holds only those drafts, from the change request's head,
 so each item is decided on its own; the whole change comes next, with what you kept in it.
 Each item is a note in the diff and a row in the table below."
   else
-    about="This is the whole change request with the $n_items item$plural you kept from \`/anchor:review\` in it,
+    about="**This diff is what will land: the change request with the fixes you kept in it.**
+This is the whole change request with the $n_items item$plural you kept from \`/anchor:review\` in it,
 as it will land. Each kept item is a note in the diff and a row in the table below."
   fi
   n=$(state n)
@@ -378,6 +509,8 @@ as it will land. Each kept item is a note in the diff and a row in the table bel
 This is round $n: it looks only at what round $(( n - 1 ))'s commit changed."
   if [[ "$pass" == read ]]; then
     accept="the agent drafts a fix for each of your notes and each finding the quality agents confirm, then opens those drafts for you to decide"
+  elif [[ "$pass" == items ]] && parked; then
+    accept="the agent writes what you kept as suggestions and comments on the change request, and posts nothing until you approve the text"
   elif [[ "$pass" == items ]]; then
     accept="the agent takes out what you dropped and makes the changes you asked for, then opens the whole change with the fixes you kept"
   elif [[ "$(state place)" == in-place ]]; then
@@ -393,7 +526,7 @@ This is round $n: it looks only at what round $(( n - 1 ))'s commit changed."
     [[ -z "$branch" ]] || where+=" on \`$branch\`"
   fi
   [[ -z "$cr_url" ]] || where+=" · [change request]($cr_url)"
-  sizes=$({ [[ "$pass" == read ]] || git -C "$root" diff --numstat --no-renames "$(state startTree)" "$now" | anchor_size_row "this round"
+  sizes=$({ [[ "$pass" == read ]] || parked || git -C "$root" diff --numstat --no-renames "$(state startTree)" "$now" | anchor_size_row "this round"
     size_rows "$(state ledger)"
   } | anchor_size_stack current)
   where+="
@@ -418,7 +551,7 @@ note besides \`approve\` means you found nothing to change." \
         "$threads" >> "$root/$TABLE"
     fi
   else
-    jq -r '.items[] | "| \(.id) | \(.slug) | \(.severity) | \({applied:"in the diff", proposed:"proposed", issue:"file an issue", leave:"leave it"}[.status]) | \(.finding | gsub("\\|"; "\\|") | gsub("\n"; " ")) |"' "$items" \
+    jq -r --arg applied "$(if parked; then echo "💡 suggested"; else echo "in the diff"; fi)" '.items[] | "| \(.id) | \(.slug) | \(.severity) | \({applied:$applied, proposed:"proposed", issue:"file an issue", leave:"leave it"}[.status]) | \(.finding | gsub("\\|"; "\\|") | gsub("\n"; " ")) |"' "$items" \
       | anchor_items_table "${title:-Review of a change request}" "$about
 This file, \`(context).md\`, is the guide to the review; it leaves the tree when
 the review closes.
@@ -471,7 +604,7 @@ read)
   # CR diff's new side; in the read and whole passes it is the merge base, the
   # CR diff's old side.
   base_side=old
-  [[ "$(state pass)" != items ]] || base_side=new
+  [[ "$(jq -r '.from // ""' "$dir/round.json")" != "$(state head)" ]] || base_side=new
   mapped=$(jq -c '.[]' "$returned" | while IFS= read -r c; do
     f=$(jq -r '.file // ""' <<<"$c"); l=$(jq -r '.startLine // ""' <<<"$c"); sd=$(jq -r '.side // "new"' <<<"$c")
     cr="null" crs="null"
@@ -490,7 +623,7 @@ read)
     --arg hasedits "$([[ -s "$dir/user-edits.patch" ]] && echo 1 || echo 0)" "$ANCHOR_ITEMS_JQ"'
     def num: if . == null then null else (ltrimstr("#") | tonumber? // null) end;
     def numrows: rowmap | map(.id |= num) | map(select(.id != null));
-    def tag: (.body | split("\n")[0] | capture("^#(?<n>[0-9]+) ") | .n | tonumber)? // null;
+    def tag: (.body | split("\n")[0] | capture("^(💡 )?#(?<n>[0-9]+) ") | .n | tonumber)? // null;
     ($table0 | numrows) as $r0 | ($table | numrows) as $r1
     | ($table | split("\n")) as $tl
     | ($ret | map(select(.file != $tname))) as $codenotes
@@ -542,16 +675,8 @@ suggest)
   [[ -n "$id" && -n "$forge" ]] || { echo "review-round.sh suggest needs --id and --forge" >&2; exit 64; }
   [[ -s "$dir/items/$id.patch" ]] || die "item $id has no recorded change"
   not_one() { echo "SUGGESTIBLE=0"; echo "SUGGEST_REASON=$1"; exit 0; }
-  # The item alone on top of the CR head, so its lines are numbered as the CR's
-  # reader sees them rather than after the round's other edits.
-  idx=$(anchor_tmpfile anchor-round-suggest idx)
   head_sha=$(state head)
-  GIT_INDEX_FILE="$idx" git -C "$root" read-tree "$head_sha"
-  if ! GIT_INDEX_FILE="$idx" git -C "$root" apply --cached "$dir/items/$id.patch" 2>/dev/null; then
-    rm -f "$idx"; not_one "it depends on another item's edit to the same lines"
-  fi
-  hunks=$(GIT_INDEX_FILE="$idx" git -C "$root" -c core.quotePath=false diff --cached -U0 --no-color --no-renames "$head_sha")
-  rm -f "$idx"
+  hunks=$(item_on_head "$id" 0) || not_one "it depends on another item's edit to the same lines"
   files=$(grep -c '^+++ ' <<<"$hunks" || true)
   count=$(grep -c '^@@ ' <<<"$hunks" || true)
   [[ "$files" -eq 1 && "$count" -eq 1 ]] || not_one "it changes $count hunks across $files files; a suggestion replaces one run of lines"

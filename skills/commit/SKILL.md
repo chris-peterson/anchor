@@ -272,7 +272,7 @@ The message file already exists: the one from Step 3, holding the reviewer's edi
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/commit.sh" --mode new --message-file <path> --reviewed-index <REVIEW_INDEX> --path <p> [--path <p>...] [--staged-path <p>...]
 ```
 
-**Hold the push when the user asked to.** When the user asked to look at the commit before it goes out, or to commit now and push later, add `--no-push` to `--mode new` or `--mode amend`. The helper commits, prints `COMMIT_SHA`, `BRANCH`, and `PUSHED=held`, and pushes nothing. Report `Committed <COMMIT_SHA> on <BRANCH>, not pushed`, and that `/anchor:commit` with nothing staged pushes it when they're ready: that run reviews the unpushed commits and pushes them with `--mode push-existing`. A held commit has no review round to record and no pipeline to watch, so the review record below and Step 7 don't run. `--no-push` on `--mode push-existing`, or beside `--force-with-lease`, exits 64.
+**Hold the push when the user asked to.** When the user asked to look at the commit before it goes out, or to commit now and push later, add `--no-push` to `--mode new` or `--mode amend`. The helper commits, prints `COMMIT_SHA`, `BRANCH`, and `PUSHED=held`, and pushes nothing. Report `Committed <COMMIT_SHA> on <BRANCH>, not pushed`, and that `/anchor:commit` with nothing staged pushes it when they're ready: that run reviews the unpushed commits and pushes them with `--mode push-existing`. A held commit has no commit review to record and no pipeline to watch, so the review record below and Step 7 don't run. `--no-push` on `--mode push-existing`, or beside `--force-with-lease`, exits 64.
 
 **A force-push is its own question.** The review's verdict approves the change, not a rewrite of the remote branch, so whenever the push after the verdict is a force-push, ask before launching `commit.sh`. Use `AskUserQuestion` (header `Force-push`), and name the branch and why its history moved:
 
@@ -295,13 +295,15 @@ Two more refusals come from `commit.sh` itself, and both stop the flow:
 
 Read the helper's stdout — `COMMIT_SHA`, `BRANCH`, `PUSH_MODE`, and `PUSHED=ok` on success (`PUSHED=held` with `--no-push`, above). Report the outcome and nothing more — `Committed <COMMIT_SHA>, pushed to <BRANCH>`. If the push is rejected (non-fast-forward, protected branch, auth), `commit.sh` leaves git's error on stderr and exits non-zero; surface that and stop rather than retrying or force-pushing without the lease.
 
-**Record the review** (COMMIT-25). When `CR_REF` names a CR and `PUSHED=ok` follows a new commit or a squash, the Step 5 review covered that commit, so it gets a round in the CR's Review status section:
+**Record the commit review** (COMMIT-25). When `CR_REF` names a CR and `PUSHED=ok` follows a new commit or a squash, the user approved that commit in Step 5, so mark it in the CR's Review status section as approved at commit:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-status.sh" record --cr <the number in CR_REF> --base '<COMMIT_SHA>^' --head <COMMIT_SHA> --result approved
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-status.sh" record --cr <the number in CR_REF> --base '<COMMIT_SHA>^' --head <COMMIT_SHA> --result approved --kind commit
 ```
 
-On someone else's CR it writes only where the description already has the section and the CR is out of draft; `STATUS_SKIPPED` is a finished call. **With no CR yet** (`CR_REF` empty) on a branch other than the default, the round goes to the local record instead, and `/anchor:prepare-review` carries it into the CR it opens: pass `--local` in place of `--cr <n>`. A `STATUS_ERROR` leaves the commit as it is: say what it reported in one line and go on.
+**`--kind commit` is not optional.** A look at one commit before it lands is not the review `/anchor:review` makes, with the whole change read and the quality agents examining it; recording it as one would let that review skip the commit. The mark keeps who approved the commit and when, the commit stays unreviewed, and `/anchor:review` asks whether to look at it again.
+
+On someone else's CR it writes only where the description already has the section and the CR is out of draft; `STATUS_SKIPPED` is a finished call. **With no CR yet** (`CR_REF` empty) on a branch other than the default, the mark goes to the local record instead, and `/anchor:prepare-review` carries it into the CR it opens: pass `--local` in place of `--cr <n>`. A `STATUS_ERROR` leaves the commit as it is: say what it reported in one line and go on.
 
 **The forge's own "create a pull request" link is not the handoff.** Pushing a new branch makes GitHub print a `Create a pull request for '<branch>'` URL, and GitLab prints its `merge_requests/new` equivalent; both are in the push output you just read. Don't relay either one. That URL opens the forge's web form, which lands the CR non-draft, with the project template's checklist intact and no Review guide — the shape `/anchor:prepare-review` exists to replace (`${CLAUDE_PLUGIN_ROOT}/rules/use-forge-clis.md`). Where the next step comes up, name the skill: **`/anchor:prepare-review` opens the CR against the branch this just pushed.**
 

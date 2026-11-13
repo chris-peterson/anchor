@@ -103,6 +103,7 @@ cat > "$bin/revdiff" <<'EOF'
 #!/usr/bin/env bash
 [ "${1:-}" != --version ] || { echo "version: ${REVDIFF_STUB_VERSION:-v1.14.0}"; exit 0; }
 [ "${1:-}" != --dump-theme ] || { printf '%s\n' 'color-accent = #bd93f9' 'color-diff-bg = #282a36'; exit 0; }
+[ "${1:-}" != --help ] || { [ -z "${REVDIFF_STUB_MARKER:-}" ] || echo '      --annotation-marker=        prefix shown before annotation lines'; exit 0; }
 [ "${1:-}" = --dump-keys ] && [ -z "${REVDIFF_STUB_NO_KEYS:-}" ] \
   && printf '%s\n' '# File/Hunk' 'map n next_item' 'map > next_hunk' 'map [ prev_hunk' \
        '# Annotations' 'map a confirm' 'map enter confirm' 'map A annotate_file' \
@@ -400,7 +401,7 @@ printf '{"notes":[{"file":"a.txt","line":3,"note":"three closes the list"}]}\n' 
 xmsg="$work/xmsg.txt"; printf 'Add three\n' > "$xmsg"
 [ "$(sed -n 's/^REVIEW_PRELOADS=//p' <<<"$(run --skill commit --probe --local)")" = 1 ] || fail "revdiff preloads notes"
 export REVDIFF_ARGS_FILE="$work/x.args" REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT
-REVDIFF_STUB_OUTPUT=$(printf '## a.txt:2 ( )\nthree closes the list\n')
+REVDIFF_STUB_OUTPUT=$(printf '## a.txt:2 ( )\n🤖 three closes the list\n')
 o=$(REVDIFF_TREE_CAPTURE="$work/x" run --skill commit --local --message-file "$xmsg" --path a.txt --notes "$xin")
 xnotes=$(sed -n 's/^--annotations=//p' "$REVDIFF_ARGS_FILE")
 [ -n "$xnotes" ] || fail "--notes not preloaded: $(cat "$REVDIFF_ARGS_FILE")"
@@ -414,6 +415,10 @@ REVDIFF_STUB_OUTPUT=$(sed 's/three closes the list/why not four?/' "$xnotes")
 o=$(REVDIFF_STUB_CHOOSE="" run --skill commit --local --message-file "$xmsg" --path a.txt --notes "$xin"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = changes-requested ] || fail "an edited note is feedback: $o"
 [ "$(jq -r '.comments[0].body' <<<"$j")" = 'why not four?' ] || fail "the edited note comes back: $j"
+! grep -q -- '--annotation-marker' "$REVDIFF_ARGS_FILE" || fail "a revdiff without the flag isn't passed it: $(cat "$REVDIFF_ARGS_FILE")"
+REVDIFF_STUB_OUTPUT=""
+REVDIFF_STUB_MARKER=1 run --skill commit --local --message-file "$xmsg" --path a.txt --notes "$xin" >/dev/null
+grep -qx -- '--annotation-marker=' "$REVDIFF_ARGS_FILE" || fail "revdiff's own marker is turned off, so each note's 🤖 or 💡 is its marker: $(cat "$REVDIFF_ARGS_FILE")"
 unset REVDIFF_ARGS_FILE
 ok "--notes: notes ride with the header, and only an edited note is feedback"
 

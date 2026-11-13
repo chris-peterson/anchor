@@ -312,6 +312,14 @@ diff_tool_command() {
   # --annotations from the command line only.
   [[ -z "${review_annotations:-}" ]] || args+=("--annotations=$review_annotations")
   [[ "${review_untracked:-0}" -ne 1 ]] || args+=(--untracked)
+  # No global marker: each note anchor seeds opens with its own, 🤖 for the
+  # agent describing its change and 💡 for an action it suggests
+  # (guides/review-notes.md), and revdiff's marker is one for every note. Only
+  # where the installed revdiff has the flag, which is render-only and never
+  # reaches the notes it writes back.
+  if "$bin" --help 2>&1 | grep -q -- '--annotation-marker='; then
+    args+=("--annotation-marker=")
+  fi
 
   if [[ "$diff_staged" -eq 1 ]]; then
     args+=(--staged)

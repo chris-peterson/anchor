@@ -255,6 +255,12 @@ own_pr "Why.
 run
 expect GATE_REVIEWS reviewed "a read-through counts as reviewed"
 expect GATE_REVIEWS_DETAIL "every commit reviewed, 1 of 1 last by read-through" "the detail names read-through rounds"
+own_pr "Why.
+<!-- anchor:review-status {\"$patch\":{\"committed\":{\"by\":[\"me\"],\"at\":\"2026-11-12T10:00:00Z\"}}} -->"
+run
+expect GATE_REVIEWS reviewed "a commit approved when it was made has been looked at"
+expect GATE_BLOCKING "" "a commit approved at commit doesn't ask"
+expect GATE_REVIEWS_DETAIL "every commit reviewed, 1 of 1 only when committed" "the detail names commits only approved at commit"
 ok "github: an own CR's unreviewed commits ask before the merge, and reviewed ones pass"
 gh_pr
 printf '{"mergeCommitAllowed":false,"squashMergeAllowed":true,"rebaseMergeAllowed":true}' > "$fx/gh-repo.json"

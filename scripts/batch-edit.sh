@@ -18,7 +18,7 @@
 #
 # The items file `start` reads, written by the skill:
 #   {"items": [{"id": "<what the table calls it, e.g. an issue or thread number>",
-#               "file": "<path in the batch tree, e.g. issues/<n>.md, or issues/<repo>/<n>.md
+#               "file": "<path in the batch tree, e.g. issues/<n>.md, or <repo>/issues/<n>.md
 #                        in a batch across repos>",
 #               "current": "<file holding the text as it stands; omit for a new item>",
 #               "proposed": "<file holding the drafted text>",
@@ -60,13 +60,19 @@ TABLE="(context).md"
 
 # Each item sits in the directory for its kind, and the table groups its rows
 # under that kind's heading, in this order.
-KINDS=(milestones issues change_requests replies)
+KINDS=(milestones issues change_requests replies comments)
+# An item's kind is its file's first directory, or its second in a batch across
+# repos, where the first is the repo (<repo>/issues/<n>.md).
+# shellcheck disable=SC2016  # $p and $k are jq variables
+KINDS_JQ='def kinds: ["milestones","issues","change_requests","replies","comments"];
+  def kind_of: split("/") as $p | if ($p[0] | IN(kinds[])) then $p[0] else ($p[1] // "") end;'
 kind_heading() {
   case "$1" in
     milestones) echo "Milestones" ;;
     issues) echo "Issues" ;;
     change_requests) echo "Change requests" ;;
     replies) echo "Replies" ;;
+    comments) echo "Review comments" ;;
     *) return 1 ;;
   esac
 }
@@ -134,7 +140,10 @@ start)
     case "/$file/" in
       */../*|//*) errors+=("item $iid $file: the file must be a relative path inside the batch") ;;
     esac
-    kind_heading "${file%%/*}" >/dev/null || errors+=("item $iid $file: the file must sit in one of ${KINDS[*]/%//}")
+    kind=${file%%/*}
+    kind_heading "$kind" >/dev/null || { kind=${file#*/}; kind=${kind%%/*}; }
+    [[ "$file" == */* ]] && kind_heading "$kind" >/dev/null \
+      || errors+=("item $iid $file: the file must sit in one of ${KINDS[*]/%//}")
     [[ -r "$proposed" ]] || { errors+=("item $iid: the proposed text $proposed is not readable"); continue; }
     cur_header=""
     if [[ -n "$current" ]]; then
@@ -149,19 +158,21 @@ start)
   [[ -z "$dupes" ]] || errors+=("ids used more than once: $dupes")
   dupes=$(jq -r '[.items[].file] | group_by(.) | map(select(length > 1) | .[0]) | join(", ")' "$items")
   [[ -z "$dupes" ]] || errors+=("files used more than once: $dupes")
-  # A batch across repos names each item's repo below its kind
-  # (issues/<repo>/<number>.md), read from the item's url: the path before the forge's
-  # own segment (/-/ on GitLab, /issues/ or /pull/ on GitHub) ends in the repo.
+  # A batch across repos roots each item at its repo, then its kind
+  # (<repo>/issues/<number>.md), so the tree groups by project. The repo is read
+  # from the item's url: the path before the forge's own segment (/-/ on GitLab,
+  # /issues/ or /pull/ on GitHub) ends in the repo.
   repo_of='def repo: sub("^[a-z]+://[^/]+/"; "") | sub("/-/.*$"; "")
     | sub("/(issues|pull|pulls|milestone|milestones|merge_requests|discussions)(/.*)?$"; "")
     | split("/") | last;'
   if [[ "$(jq -r "$repo_of"' [.items[].url // empty | repo] | unique | length' "$items")" -gt 1 ]]; then
     while IFS=$'\x1f' read -r iid file want; do
-      errors+=("item $iid $file: the batch spans repos, so the file names its repo below its kind: $want")
-    done < <(jq -r "$repo_of"' .items[] | (.url // "" | if . == "" then "" else repo end) as $r
+      errors+=("item $iid $file: the batch spans repos, so the file sits under its repo, then its kind: $want")
+    done < <(jq -r "$KINDS_JQ$repo_of"' .items[] | (.url // "" | if . == "" then "" else repo end) as $r
       | (.file | split("/")) as $p
-      | select(($p | length) < 3 or ($r != "" and $p[1] != $r))
-      | ([$p[0], (if $r == "" then "<repo>" else $r end)] + (if ($p | length) < 3 then $p[1:] else $p[2:] end) | join("/")) as $want
+      | (if ($p[0] | IN(kinds[])) then $p else $p[1:] end) as $rest
+      | select(($p[0] | IN(kinds[])) or ($p | length) < 3 or ($r != "" and $p[0] != $r))
+      | ([if $r == "" then "<repo>" else $r end] + $rest | join("/")) as $want
       | [(.id | tostring), .file, $want] | join("\u001f")' "$items")
   fi
   if [[ ${#errors[@]} -gt 0 ]]; then
@@ -240,14 +251,14 @@ start)
        | ($i.id | tostring) as $id
        | (if $id | test("^[0-9]+$") then "#" + $id else $id end) as $name
        | (if $titles[$i.file] != "" then $titles[$i.file] else ($i.summary // $i.file) end) as $label
-       | ((if $label == $id then $name else "\($name) · \($label)" end)
+       | ("🤖 " + (if $label == $id then $name else "\($name) · \($label)" end)
           + (if $i.url then "\n\($i.url)" else "" end)) as $head
        | {id:($i.id|tostring), file:$i.file, line:null, marker:"file", side:"new",
           body:([$head] + $filenotes | join("\n\n"))},
          ($notes | to_entries[] | select(.value.line != null) as $n
           | ($anchors | map(select(.file == $i.file and .k == $n.key)) | first) as $s
           | {id:($i.id|tostring), file:$i.file, line:$s.line, marker:$s.marker,
-             side:(if $s.marker == "-" then "old" else "new" end), body:$n.value.body})]
+             side:(if $s.marker == "-" then "old" else "new" end), body:("🤖 " + $n.value.body)})]
   ' > "$dir/notes.json"
   anchor_items_notes_md "$dir/notes.json" > "$dir/notes.md"
 
@@ -266,7 +277,7 @@ $(anchor_review_box --answer "Answer each item on its note or its row:
   revdiff "every item goes out as you left or answered it, and one you asked to change is redrafted for another batch" "stop, and nothing publishes")
 "
     for kind in "${KINDS[@]}"; do
-      rows=$(jq -r --arg k "$kind/" '.items[] | select(.file | startswith($k))
+      rows=$(jq -r --arg k "$kind" "$KINDS_JQ"'.items[] | select(.file | kind_of == $k)
         | "| \(.id | tostring | gsub("\\|"; "\\|")) | \(.file) | \(if .current then "" else "new: " end)\(.summary // "" | gsub("\\|"; "\\|") | gsub("\n"; " ")) | \(if .url then "[link](\(.url))" else "" end) |"' "$items")
       [[ -n "$rows" ]] || continue
       printf '## %s\n' "$(kind_heading "$kind")"

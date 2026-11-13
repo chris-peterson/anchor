@@ -166,7 +166,7 @@ jq -n --slurpfile r "$replies" --slurpfile c "$comments" --rawfile a "$anchors" 
        line:(if .[4] == "" then null else (.[4]|tonumber) end), where:.[5]})) as $anchors
   | [$r[0].replies | sort_by(.comment)[] as $x
      | ($anchors | map(select(.id == $x.comment)) | sort_by(.k)) as $mine
-     | ("#\($x.comment) · \($x.status | outcome)") as $head
+     | ("🤖 #\($x.comment) · \($x.status | outcome)") as $head
      | $mine | to_entries[] | .value as $s
      | {id:$x.comment, file:$s.file, line:$s.line, marker:$s.marker, where:$s.where,
         body:($head + "\n" + (if .key == 0

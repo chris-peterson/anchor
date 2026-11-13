@@ -248,10 +248,13 @@ behavior, not an independent authority — review them against the source.
   the pending changeset against the empty tree and shall offer no squash, since
   there is nothing to amend.
 - **[COMMIT-25]** When a commit the review covered is pushed to a branch with a
-  CR, the system shall give that commit a round in the CR's Review status
-  section (REVIEW-31), on someone else's CR under the conditions REVIEW-32 sets;
-  pushed to a branch other than the default with no CR, it shall give the commit
-  a round in the local record (REVIEW-36).
+  CR, the system shall mark that commit in the CR's Review status section
+  (REVIEW-31) as approved at commit, with who approved it and when, on someone
+  else's CR under the conditions REVIEW-32 sets; pushed to a branch other than
+  the default with no CR, it shall mark the commit in the local record
+  (REVIEW-36). The mark shall not count as a review round. A look at one
+  increment before it lands is not the review the user sets out to make, and
+  counting it as one lets that review skip the commit.
 - **[COMMIT-26]** Where the user asked to review or hold a commit before it goes
   out, the system shall commit (a new commit or an amend) without pushing,
   report the commit's sha, and say that a later push-existing run (COMMIT-05)
@@ -532,17 +535,22 @@ ready.
 - **[REVIEW-07]** When the review closes, the system shall treat a note the user
   added as a finding of their own and carry its wording verbatim, rather than as
   feedback blocking the flow.
-- **[REVIEW-08]** The system shall place each finding at the narrowest location
-  that carries it — the line, else the method or hunk, else the changeset — and
-  shall fold a finding it cannot anchor to a line, including a line outside every
-  hunk of the diff, into the summary comment rather than dropping it. If the forge
+- **[REVIEW-08]** The system shall anchor each comment to the line of the CR's
+  diff that carries it, and shall not post a finding it cannot anchor to a line,
+  including one on a line outside every hunk of the diff: it shall say the
+  finding won't post, and the post shall refuse a findings document that still
+  holds one. A comment with no line to sit on is the agent's commentary, not a
+  request the author can act on. If the forge
   refuses a write partway, then the system shall report what already posted. The
   system shall anchor a reviewer's note to the side of the CR's diff its line
   belongs to: a line of the CR head on the new side, a line of the CR base on the
   old side, whichever pass the note was left in.
 - **[REVIEW-09]** The system shall obtain the user's approval of the exact text
-  of every thread and of the summary comment before posting any of them, and
-  shall present that text as the rendering the post is built from.
+  of every comment, and of the overall comment where the user wrote one, before
+  posting any of them, as a batch review (one file per comment) however few
+  there are, and shall never print the comments in the reply and ask whether to
+  post them all or one at a time. A reply holding the comments is scrollback the
+  user approves without reading.
 - **[REVIEW-10]** Where the user declines to post, the system shall report the
   review as complete and local, rather than as an abandoned flow.
 - **[REVIEW-11]** The system shall pin the CR head SHA when it fetches the diff,
@@ -550,9 +558,9 @@ ready.
   comment anchors to a line the reviewed diff no longer has. If the re-read
   fails, then the system shall report the forge's error text, so that an
   authentication failure can be routed as one.
-- **[REVIEW-12]** The system shall post either every approved finding at once or
-  one named finding at a time, batching the whole-review case into a single
-  forge submission where the forge provides one.
+- **[REVIEW-12]** The system shall post every approved comment at once, as a
+  single forge submission where the forge provides one, and where the forge
+  refuses a write partway shall post the rest one named comment at a time.
 - **[REVIEW-13]** The system shall not record a forge review verdict — approving
   or requesting changes as a CR state — and shall report that act as the user's,
   naming the invocation.
@@ -594,7 +602,10 @@ ready.
   the CR head to the round's tree holding the drafts alone, where the user keeps,
   changes, or drops each item; then, with the dropped drafts reverted and the
   changes made, the whole pass, a diff from the range's base holding the CR with
-  the kept fixes in it, seeded with a note per kept item. An item drafted from a
+  the kept fixes in it, seeded with a note per kept item. On someone else's CR
+  the items pass is the CR as written instead, and there is no whole pass
+  (REVIEW-22). Each pass's table shall open by saying whether its diff is the
+  change as written, the agent's drafts alone, or the change as it will land. An item drafted from a
   note the user left in the read pass shall say so in its note. A draft read inside a
   large CR's diff is hard to tell from the change it comments on, so each item is
   decided before the change is judged as it will land. A note on a line of a file
@@ -611,7 +622,13 @@ ready.
   the round's edits in a worktree at the CR head, leaving the user's checkout
   untouched, and shall post a kept applied item whose change is one run of lines
   as a suggestion and any other kept item as a thread, each anchored to the line
-  it maps to in the CR head.
+  it maps to in the CR head. It shall never show a drafted fix as code in the
+  diff the user reviews: the items pass shall diff the CR as its author wrote
+  it, each fix described in words in its item's note, headed 💡 and placed on
+  the CR-head line it starts at, its code shown only in the batch of comments
+  (REVIEW-09), and the round shall have no whole
+  pass. The user is reviewing what ships, and a fix ships only if the author
+  takes it.
 - **[REVIEW-23]** When no finding clears the review-qualities template's bar and
   the user left no note in the read pass, the system shall say so in one line and treat the review as complete: nothing posts
   on someone else's CR, and a self-review goes straight to the handoff.
@@ -646,9 +663,12 @@ ready.
 - **[REVIEW-28]** Before any finding becomes an item, the system shall judge the
   examination's candidates once, as a whole: drop one it can't confirm or that
   the code already prevents, merge ones a single change resolves, classify each
-  as critical (merging as written breaks behavior, loses data, exposes
-  something, or fails a deploy) or suggestion (it would change what the author
-  does), drop a suggestion that wouldn't, fold into each fix what the fix would
+  as critical (worth halting the deploy: merging as written breaks behavior,
+  loses data, exposes something, or fails a deploy) or suggestion (small and
+  easy to correct now: a typo, documentation that contradicts the code, an
+  inconsistent name), drop one that is neither however true it is (a
+  preference, a change as easy to make later), phrase each as *suggest X so
+  that Y*, fold into each fix what the fix would
   itself draw, and score the change's risk from 1 to 5. It shall aim at no
   number of findings, and shall say how many candidates came back and how many
   survived. Independent lenses each find something; without one judgment over
@@ -666,9 +686,16 @@ ready.
 - **[REVIEW-31]** Where the CR is the user's own, the system shall keep a Review
   status section in its description: one HTML comment the forge doesn't render,
   carrying for each of the CR's commits how many review rounds it has been in,
-  who reviewed it, and the latest round's result and kind: `agent-assisted` when
-  quality agents examined the range, `read-through` when only the reviewer read
-  it. The section is anchor's
+  who reviewed it, the latest round's result, time, and kind, and who approved
+  it at commit and when (COMMIT-25), each round and mark with the version of
+  anchor that wrote it. The record outlives the plugin that wrote it, so the
+  version is what lets a later reader tell an entry a bug or an older shape
+  wrote; a round without one predates the commit mark and shall be read as
+  unreviewed (REVIEW-33). The kind says how the round was made:
+  `agent-assisted` when the reviewer read the range and quality agents examined
+  it, `read-through` when only the reviewer read it, `agents-only` when the
+  agents examined it and the reviewer decided their findings without reading it
+  again. The section is anchor's
   record, not the author's prose, and the skills that read it (`/anchor:review`,
   `/anchor:merge`) are where a person sees it, so the description shows nothing
   for it. It shall key
@@ -679,16 +706,22 @@ ready.
 - **[REVIEW-32]** When a review round reaches its verdict, the system shall
   give every commit in the reviewed range another round, by the reviewer, with
   the result `changes-requested` when the round kept an item and `approved` when
-  it kept none, and the kind `read-through` when the reviewer went on without
-  the quality agents' findings (REVIEW-35), `agent-assisted` otherwise. A
-  read-through counts as a review; its kind keeps it from passing for one the
-  agents examined. A round the user stops records nothing. On someone else's CR it
+  it kept none, and the kind the user chose for it (REVIEW-38), `read-through`
+  where the reviewer went on without the quality agents' findings (REVIEW-35).
+  A read-through counts as a review; its kind keeps it from passing for one the
+  agents examined. Where a self-review round's fixes land as a commit, that
+  commit shall get a `read-through` round: the user read it in full in the
+  whole pass. A round the user stops records nothing. On someone else's CR it
   shall record only where the description already has the section and the CR is
   out of draft: keeping the section is the author opting in, and a draft is the
   author saying the change isn't ready for review.
 - **[REVIEW-33]** When a review starts, the system shall read which commits the
   Review status section records as unreviewed: on the user's own CR, those no
-  round covered; on someone else's, those the user hasn't reviewed. It shall
+  round covered; on someone else's, those the user hasn't reviewed. A commit
+  only approved at commit (COMMIT-25), or whose rounds carry no version
+  (REVIEW-31), is unreviewed, and the review shall say how many of the range's
+  commits the user approved that way and over what span of time, and how many
+  an earlier anchor recorded, recommending the agents alone where that is all of them. It shall
   review a reviewed commit again only where the user asked for the whole CR.
   Where some commits are unreviewed, it shall review the range from the oldest
   of them to the head without asking, and say how many it skipped. Where none is
@@ -708,9 +741,9 @@ ready.
   ends with the session, so without the record the next review raises what the
   user already declined.
 - **[REVIEW-35]** When the first round of a review starts, the system shall open
-  the range in revdiff as written, before anything is drafted, listing the CR's
-  open review threads beside it, and shall run the quality examination at the
-  same time. A note the user leaves there shall become an item with the user's
+  the range in revdiff as written at once, before anything is drafted or asked,
+  listing the CR's open review threads beside it, and shall run the quality
+  examination at the same time where the user chooses the agents (REVIEW-38). A note the user leaves there shall become an item with the user's
   wording, exempt from the judgment of the agents' candidates (REVIEW-28). The
   system shall draft nothing in the tree while that pass is open. If the pass
   closes before the examination finishes, the system shall ask whether to wait
@@ -733,6 +766,23 @@ ready.
   commits (REVIEW-36) from the same base. The predecessor's commits are under
   review in their own CR, and a self-review that covered them again would raise
   that CR's findings on this branch.
+- **[REVIEW-38]** Before the quality agents run, and before another round or
+  another pass over the same change opens, the system shall ask the user, in
+  this invocation, and shall run nothing the user didn't choose. The question
+  about the agents shall be asked once the read pass (REVIEW-35) is open, so
+  reading never waits on it, and shall offer running them while the user reads,
+  running them in place of the read, or none; the offer of another round shall
+  say that it runs the agents again. A review spends tokens by the agent and by
+  the round, so a review that loops on its own spends more than the user meant
+  to.
+- **[REVIEW-39]** The system shall post a comment only where it asks the author
+  to change a line or to explain one, anchored to that line (REVIEW-08). It
+  shall not draft or post a summary of the review, praise, agreement with
+  another reviewer, *lgtm*, or any comment with no line to sit on. An overall
+  comment is the user's to write: the batch of comments (REVIEW-09) shall hold a
+  place for one, which posts as the user wrote it and posts nothing left as it
+  was. A comment the author can't act on costs them the time to read it, under
+  the user's name.
 
 ### FEEDBACK — Resolve feedback
 
@@ -937,11 +987,12 @@ step after `prepare-review` opens the CR and `resolve-feedback` clears its threa
   and announcement, and the local cleanup through another, rather than through
   per-field forge and git commands the skill composes on each run.
 - **[MERGE-19]** Where the CR is the user's own and its Review status section
-  (REVIEW-31) shows a commit with no review round, the system shall list those
+  (REVIEW-31) shows a commit nobody has looked at (no review round, and not
+  approved at commit), the system shall list those
   commits and confirm before merging, offering to hand off to `/anchor:review`.
   Reading the gates shall go on past it, as past open threads (MERGE-10). Where
-  every commit is reviewed, it shall say how many were last reviewed by a
-  read-through (REVIEW-31).
+  every commit has been looked at, it shall say how many were approved only at
+  commit and how many were last reviewed by a read-through (REVIEW-31).
 
 ### RELEASE — Release
 
@@ -2122,6 +2173,15 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   the change exists, or why the code is the way it is. Reasoning with no
   transient home lands in the permanent record, where it narrates a decision to
   readers who weren't there for it and makes the record long.
+- **[UX-13]** Every note the system seeds into a review shall open with a marker
+  saying what kind of note it is: 🤖 where the agent describes (context on its
+  own change, an answer to the reviewer's note, what a batch item is), 💡 where
+  it suggests an action for the user to take (an item to keep or drop, a comment
+  to post). A note in the user's own words carries neither. Where the review
+  tool has a single marker of its own for every note, the system shall turn it
+  off, and shall take its marker back off a note the reviewer returns. One
+  marker for every note can't tell the reviewer which notes ask something of
+  them.
 
 ### CONFIRM — Approval before publishing
 

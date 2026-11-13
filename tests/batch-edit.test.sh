@@ -87,27 +87,30 @@ ok "start: a text that opens like a header but never closes one is refused, and 
 
 jq '.items[1].file = "notes/8.md" | .items[2].file = "(context).md"' "$items" > "$bad"
 o=$(b start --items "$bad" || true)
-[[ "$(grep -c 'the file must sit in one of milestones/ issues/ change_requests/ replies/' <<<"$o")" == 2 ]] \
+[[ "$(grep -c 'the file must sit in one of milestones/ issues/ change_requests/ replies/ comments/' <<<"$o")" == 2 ]] \
   || fail "an item outside its kind's directory, the table among them, should be refused: $o"
 ok "start: an item outside the directory for its kind is refused"
 
-# Items from two repos name each one's repo below its kind, read from its url.
+# Items from two repos sit under each one's repo, then its kind, read from its url.
 jq '.items[0].url = "https://github.com/o/beacon/issues/55" | .items[1].url = "https://gitlab.example.com/g/sub/anchor/-/issues/8"
     | .items[0].id = "beacon#55" | .items[1].id = "anchor#8"' "$items" > "$bad"
 o=$(b start --items "$bad" || true)
-[[ "$o" == *"item beacon#55 issues/7.md: the batch spans repos, so the file names its repo below its kind: issues/beacon/7.md"* ]] \
+[[ "$o" == *"item beacon#55 issues/7.md: the batch spans repos, so the file sits under its repo, then its kind: beacon/issues/7.md"* ]] \
   || fail "an item across repos with no repo in its path should be refused: $o"
-[[ "$o" == *"item anchor#8 issues/8.md: "*"issues/anchor/8.md"* ]] || fail "each item gets its own repo: $o"
-[[ "$o" == *"item r1 replies/1.md: "*"replies/<repo>/1.md"* ]] || fail "an item with no url still needs a repo: $o"
-jq '.items[0].file = "issues/anchor/7.md" | .items[1].file = "issues/anchor/8.md" | .items[2].file = "replies/anchor/1.md"' "$bad" > "$bad.2"
+[[ "$o" == *"item anchor#8 issues/8.md: "*"anchor/issues/8.md"* ]] || fail "each item gets its own repo: $o"
+[[ "$o" == *"item r1 replies/1.md: "*"<repo>/replies/1.md"* ]] || fail "an item with no url still needs a repo: $o"
+jq '.items[0].file = "anchor/issues/7.md" | .items[1].file = "anchor/issues/8.md" | .items[2].file = "anchor/replies/1.md"' "$bad" > "$bad.2"
 o=$(b start --items "$bad.2" || true)
-[[ "$o" == *"issues/anchor/7.md: "*"issues/beacon/7.md"* && "$(grep -c BATCH_ERROR <<<"$o")" == 1 ]] \
-  || fail "only the item named under the wrong repo should be refused: $o"
-jq '.items[0].file = "issues/beacon/7.md"' "$bad.2" > "$bad.3"
+[[ "$o" == *"anchor/issues/7.md: "*"beacon/issues/7.md"* && "$(grep -c BATCH_ERROR <<<"$o")" == 1 ]] \
+  || fail "only the item under the wrong repo should be refused: $o"
+jq '.items[0].file = "beacon/issues/7.md"' "$bad.2" > "$bad.3"
 o=$(b start --items "$bad.3")
-[[ -z "$(val BATCH_ERROR "$o")" ]] || fail "items named under their repos should start: $o"
+[[ -z "$(val BATCH_ERROR "$o")" ]] || fail "items under their repos should start: $o"
+if ! { grep -q '^| beacon#55 | beacon/issues/7.md |' "$(val TABLE "$o")" && grep -q '^## Replies$' "$(val TABLE "$o")"; }; then
+  fail "rows under a repo still group by their kind: $(cat "$(val TABLE "$o")")"
+fi
 b finish --dir "$(val BATCH_DIR "$o")" >/dev/null
-ok "start: a batch across repos names each item's repo in its path"
+ok "start: a batch across repos roots each item at its repo, then its kind"
 
 jq '.items[1].id = "#" | .items[2].id = ""' "$items" > "$bad"
 o=$(b start --items "$bad" || true)
@@ -128,11 +131,11 @@ notes=$(val NOTES "$o")
 grep -qx '## issues/7.md:7 (+)' "$notes" || fail "a note sits above its line, on the added side: $(cat "$notes")"
 grep -qx '## issues/7.md (file-level)' "$notes" || fail "an item's opening note sits on its file: $(cat "$notes")"
 grep -qx '## replies/1.md (file-level)' "$notes" || fail "a new item's opening note sits on its file: $(cat "$notes")"
-grep -qxF '#7 · Retry uploads on 503' "$notes" || fail "an item opens with a note naming it by its title: $(cat "$notes")"
+grep -qxF '🤖 #7 · Retry uploads on 503' "$notes" || fail "an item opens with a note naming it by its title: $(cat "$notes")"
 grep -qxF 'https://example.com/issues/7' "$notes" || fail "the opening note links the item"
 grep -qxF "Labels follow the repo's set." "$notes" || fail "a file note folds in under the opening note"
 [[ "$(grep -c '^## issues/7.md' "$notes")" == 2 ]] || fail "the item's own file notes fold into its opening note: $(cat "$notes")"
-grep -qxF 'r1 · Reply on deploy.sh:42' "$notes" || fail "a new item with no header is named by its summary: $(cat "$notes")"
+grep -qxF '🤖 r1 · Reply on deploy.sh:42' "$notes" || fail "a new item with no header is named by its summary: $(cat "$notes")"
 grep -qx '## replies/1.md:1 (+)' "$notes" || fail "a note on line 1 of a new file sits on line 1, added: $(cat "$notes")"
 table=$(val TABLE "$o")
 [[ "$table" == "$root/(context).md" ]] || fail "table path: $table"
@@ -186,7 +189,7 @@ ok "read: a new note changes an item, an edited file is the reviewer's text, and
 
 # An edited seeded note, a note on a row, and a note off the rows.
 row8=$(grep -n '^| 8 ' "$table" | cut -d: -f1)
-jq --argjson n "$row8" 'map(if .file == "issues/7.md" and (.body | startswith("#7 ")) then .body = "Labels: drop uploader." else . end)
+jq --argjson n "$row8" 'map(if .file == "issues/7.md" and (.body | startswith("🤖 #7 ")) then .body = "Labels: drop uploader." else . end)
     | map(select(.body != "say which release"))
     + [{body:"close it as not planned", target:"line", file:"(context).md", startLine:$n, endLine:$n, side:"new"},
        {body:"hold all of these until Monday", target:"line", file:"(context).md", startLine:1, endLine:1, side:"new"}]' \
@@ -207,7 +210,7 @@ o=$(b read --dir "$dir" --returned "$work/returned.4.json")
 ok "read: deleting a seeded note leaves the item kept"
 
 # A note answered with a word: a drop word drops the item, a yes keeps it.
-jq 'map(if .file == "issues/7.md" and (.body | startswith("#7 ")) then .body = "drop"
+jq 'map(if .file == "issues/7.md" and (.body | startswith("🤖 #7 ")) then .body = "drop"
         elif .file == "issues/8.md" then .body = "lgtm" else . end)' "$work/returned.json" > "$work/returned.words.json"
 o=$(b read --dir "$dir" --returned "$work/returned.words.json")
 [[ ",$(val DROP "$o")," == *",7,"* && "$(val KEEP "$o")" == 8 ]] || fail "answer words in a batch: $o"
@@ -228,8 +231,8 @@ dir=$(val BATCH_DIR "$o"); table=$(val TABLE "$o")
 [[ -n "$dir" ]] || fail "an id starting with # should start: $o"
 grep -qF '| #4 | issues/7.md |' "$table" || fail "row #4: $(cat "$table")"
 grep -qF '| a\|b | issues/8.md |' "$table" || fail "an id's | is escaped: $(cat "$table")"
-grep -qxF '#4 · Retry uploads on 503' "$(val NOTES "$o")" || fail "an id already starting with # is not prefixed again"
-grep -qxF 'Reply on deploy.sh:42' "$(val NOTES "$o")" || fail "an id that is the item's title names it once: $(cat "$(val NOTES "$o")")"
+grep -qxF '🤖 #4 · Retry uploads on 503' "$(val NOTES "$o")" || fail "an id already starting with # is not prefixed again"
+grep -qxF '🤖 Reply on deploy.sh:42' "$(val NOTES "$o")" || fail "an id that is the item's title names it once: $(cat "$(val NOTES "$o")")"
 jq '[.[] | {body, target:(if .line then "line" else "file" end), file, startLine:.line, endLine:.line, side}]' \
   "$dir/notes.json" > "$work/returned.5.json"
 o=$(b read --dir "$dir" --returned "$work/returned.5.json")

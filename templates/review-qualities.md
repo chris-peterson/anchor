@@ -37,15 +37,27 @@ The description says what the author is trying to do. Treat it as the goal, not
 a claim to audit: the intended change is not a defect. If the intent itself
 looks mistaken, say so once, as a finding on the change as a whole.
 
-A finding is one of two kinds:
+A finding is one of two kinds, and nothing else is a finding:
 
-- **Critical**: merging as written produces incorrect behavior, data loss, a
-  security exposure, or a failed deploy. If you are unsure it clears that bar,
-  it is a suggestion. Missing tests, error handling for states the code already
-  prevents, naming, formatting, and consistency are never critical.
-- **Suggestion**: a change that would alter what the author or a reviewer
-  actually does. Preference, naming, and consistency with no functional
-  consequence are not suggestions; leave them out.
+- **Critical**: worth halting the deploy until it's resolved. Merging as
+  written produces incorrect behavior, data loss, a security exposure, or a
+  failed deploy. If you are unsure it clears that bar, it isn't critical.
+  Missing tests, error handling for states the code already prevents, naming,
+  formatting, and consistency are never critical.
+- **Suggestion**: small and easy to correct now, while the author has the
+  change open: a typo, documentation that contradicts the code, a name that's
+  inconsistent with its neighbors. The fix is a line or two the author can take
+  as written.
+
+Anything else doesn't clear the bar, however true it is: a preference, a change
+with no consequence, a refactor that is as easy to make later as now. Leave it
+out. A review should raise only a few things, each worth the author's time to
+read.
+
+Phrase each finding the way a reviewer writes a comment on a forge: **suggest
+X so that Y**, the change and what it buys. A question is *why X?* or *what
+happens when Y?*, asked only where the answer decides whether something is
+wrong.
 
 Report only what you confirmed. If the surrounding code already prevents a
 failure mode you considered, say nothing about it. "Might", "could", "appears

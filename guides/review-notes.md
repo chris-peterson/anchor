@@ -22,6 +22,28 @@ to the one reader it is for, so the permanent text can stay short.
 - **A changeset with nothing to ask about gets no notes.** The count follows the
   questions a reader would have, not the size of the diff.
 
+## How a note is marked
+
+Every note anchor seeds opens with an emoji saying what kind of note it is (UX-13).
+The scripts that write notes add it, so a skill writing note text never types
+one:
+
+| Marker | For | Written by |
+| --- | --- | --- |
+| 🤖 | the agent describing: context on its own change, the answer to a reviewer's note, what a batch item is | `lib/change-notes.sh` (`--notes`), `review-reply.sh`, `batch-edit.sh` |
+| 💡 | a suggested action for the human: an item to keep or drop, a comment to post | `review-round.sh` |
+
+A note from the user's own words (a read-pass note turned into an item) carries
+neither. revdiff's global marker is off (`--annotation-marker=`, where the
+installed revdiff has it), since it is one marker for every note and these are
+two kinds. The marker is display only: a reviewer's answer comes back without a
+leading 🤖, and a 💡 item is still read by its `#<id>`.
+
+A 💡 note reads the way a reviewer writes a comment on a forge: *Suggest X so
+that Y*. Its code isn't in the note, where it renders badly; on someone else's
+CR it reaches the user in the batch of comments that will post, as the forge's
+suggestion block.
+
 ## Where it goes
 
 On the changed line it explains, usually the first line of its hunk. A note

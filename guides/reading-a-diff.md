@@ -32,6 +32,18 @@ edit goes back to the agent. Deleting one does nothing, so you can clear notes
 as you step through. They're ephemeral: they expire along with the review
 round, and none of their text goes into the code or the commit message.
 
+**The first character of a note says whose it is and what it asks of you:**
+
+| Opens with | It is | What you do |
+| --- | --- | --- |
+| 🤖 | anchor describing its own change, or answering one of your notes | read it; write on it only to question or correct it |
+| 💡 | a suggestion: something anchor thinks you should do, such as keep a fix or post a comment | keep it, change it, or drop it |
+| nothing | a note you wrote | nothing |
+
+revdiff's own marker (💬 by default) is turned off for anchor's reviews, so the
+emoji at the start of the note is the only one. Your own notes show no marker
+unless you type one.
+
 ## 3. Leave your own notes
 
 **Annotate only what you have something to say about.** When you send a commit

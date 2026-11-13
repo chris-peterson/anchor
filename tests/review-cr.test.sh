@@ -261,7 +261,7 @@ grep -q '^+one$' "$(key "$out" REVIEW_STATUS_DIFF_PATH)" || fail "review status:
 ok "an own CR with no Review status section has every commit unreviewed"
 
 patch=$(git -C "$repo" show --format= "$head" | git patch-id --stable | cut -d' ' -f1)
-jq --arg p "$patch" '.description = "Why this exists.\n\n<!-- anchor:review-status {\"\($p)\":{\"rounds\":2,\"result\":\"approved\",\"notes\":[\"declined to split the parser\"]}} -->\n"' \
+jq --arg p "$patch" '.description = "Why this exists.\n\n<!-- anchor:review-status {\"\($p)\":{\"rounds\":2,\"result\":\"approved\",\"v\":\"2.1.0\",\"notes\":[\"declined to split the parser\"]}} -->\n"' \
   "$CR_JSON" > "$CR_JSON.new"
 mv "$CR_JSON.new" "$CR_JSON"
 out=$(bash "$review_cr_sh" 7 --repo "$repo")
@@ -271,10 +271,30 @@ out=$(bash "$review_cr_sh" 7 --repo "$repo")
   || fail "review status: the recorded decisions reach the review: $out"
 ok "a commit the section records is reviewed, and its decisions reach the review"
 
+# --- A commit approved only when /anchor:commit made it is still unreviewed --
+jq --arg p "$patch" '.description = "Why.\n\n<!-- anchor:review-status \({($p): {committed: {by: ["reviewer"], at: "2026-11-12T10:00:00Z"}}} | tojson) -->\n"' \
+  "$CR_JSON" > "$CR_JSON.new"
+mv "$CR_JSON.new" "$CR_JSON"
+out=$(bash "$review_cr_sh" 7 --repo "$repo")
+[[ "$(key "$out" REVIEW_STATUS_UNREVIEWED)" == 1 ]] || fail "review status: a commit approval is not a review: $out"
+[[ "$(key "$out" REVIEW_STATUS_COMMITTED)" == 1 ]] || fail "review status: the commit approval is counted: $out"
+[[ "$(key "$out" REVIEW_STATUS_COMMITTED_FIRST)" == 2026-11-12T10:00:00Z && "$(key "$out" REVIEW_STATUS_COMMITTED_LAST)" == 2026-11-12T10:00:00Z ]] \
+  || fail "review status: the commit approvals' time range: $out"
+ok "a commit approved only when it was made stays unreviewed, with when it was approved"
+
+# --- A round with no version predates the commit mark, so it isn't trusted ---
+jq --arg p "$patch" '.description = "Why.\n\n<!-- anchor:review-status \({($p): {rounds: 1, by: ["reviewer"], result: "approved", kind: "agent-assisted"}} | tojson) -->\n"' \
+  "$CR_JSON" > "$CR_JSON.new"
+mv "$CR_JSON.new" "$CR_JSON"
+out=$(bash "$review_cr_sh" 7 --repo "$repo")
+[[ "$(key "$out" REVIEW_STATUS_UNREVIEWED)" == 1 && "$(key "$out" REVIEW_STATUS_UNVERSIONED)" == 1 ]] \
+  || fail "review status: a round with no version reads as unreviewed and is counted as unversioned: $out"
+ok "a round recorded before rounds carried a version is read as unreviewed, and counted"
+
 # --- Someone else's CR: a commit is reviewed once you reviewed it -------------
 for by in '["ana"]' '["ana","reviewer"]'; do
   gl_cr_json "$head" "$base" contributor opened false
-  jq --arg p "$patch" --argjson by "$by" '.description = "Why.\n\n<!-- anchor:review-status \({($p): {rounds: 1, by: $by, result: "approved"}} | tojson) -->\n"' \
+  jq --arg p "$patch" --argjson by "$by" '.description = "Why.\n\n<!-- anchor:review-status \({($p): {rounds: 1, by: $by, result: "approved", v: "2.1.0"}} | tojson) -->\n"' \
     "$CR_JSON" > "$CR_JSON.new"
   mv "$CR_JSON.new" "$CR_JSON"
   out=$(bash "$review_cr_sh" 7 --repo "$repo")

@@ -10,7 +10,7 @@
 #
 #   {
 #     "cr":       {"url": "…", "headSha": "…"},
-#     "summary":  "markdown prose — the overall read",
+#     "summary":  "the reviewer's own overall comment, verbatim; empty for none",
 #     "comments": [
 #       {"body": "…", "target": "line", "file": "src/x.js",
 #        "startLine": 42, "endLine": 42, "side": "new", "origin": "reviewer"}
@@ -18,13 +18,17 @@
 #   }
 #
 # `target: "line"` with a file and a start line inside one of the diff's hunks
-# is anchorable and posts as an inline thread. Everything else — a `file` or
-# `changeset` target, or a line outside every hunk, which the forge would reject
-# — folds into the summary comment rather than being dropped. The hunks come
-# from --diff, the range's unified diff review-cr.sh wrote, so the preview and
-# the post sort the findings the same way. GitHub could carry a file-level comment natively (`subject_type:
-# file`) and GitLab lists `position_type: file` without specifying it, so
-# anchoring only lines keeps the two forges saying the same thing.
+# is anchorable and posts as an inline thread. Nothing else posts. A comment is
+# a request for a change or a question about a line, so one with no line to sit
+# on (a `file` or `changeset` target, or a line outside every hunk, which the
+# forge would reject) is not one: the preview lists it as not posted, and --post
+# refuses a findings file that still holds one, rather than folding it into a
+# comment of the agent's own. The hunks come from --diff, the range's unified
+# diff review-cr.sh wrote, so the preview and the post sort the findings the
+# same way.
+#
+# The summary is the reviewer's overall comment, written by them and posted as
+# they wrote it. Nothing is added to it, and an empty one posts nothing.
 #
 # Head-SHA guard: `cr.headSha` was pinned by review-cr.sh when the diff was
 # fetched. A CR whose author pushes mid-review moves the lines out from under
@@ -123,23 +127,11 @@ anchored=$(jq -c --argjson hunks "$hunks" "[.comments[] | select($anchorable)]" 
 loose=$(jq -c --argjson hunks "$hunks" "[.comments[] | select($anchorable | not)]" "$findings")
 anchored_count=$(jq 'length' <<<"$anchored")
 
-# The summary body is the prose plus every finding that could not be anchored,
-# each named with its file so the author can still find what it is about. It is
-# a pure function of the findings file, so it is rendered once here and every
-# consumer — the preview, the standalone comment, the batched review's body —
-# reads that one string rather than re-rendering and risking a disagreement.
-summary=$(jq -r --argjson loose "$loose" '
-  (.summary // "") as $prose
-  | ($loose | map(
-      "- " + (if (.file // "") != ""
-               then "**" + .file + (if (.startLine // 0) > 0 then ":" + (.startLine|tostring) else "" end) + "** — "
-               else "" end) + .body
-    ) | join("\n")) as $rest
-  | if $rest == "" then $prose
-    else ($prose | if . == "" then "" else . + "\n\n" end)
-         + "**Not anchored to a line:**\n\n" + $rest
-    end
-' "$findings")
+# The summary body is read once here, so every consumer (the preview, the
+# standalone comment, the batched review's body) reads the same string.
+summary=$(jq -r '.summary // ""' "$findings")
+loose_count=$(jq 'length' <<<"$loose")
+loose_list=$(jq -r 'map((.file // "the change") + (if (.startLine // 0) > 0 then ":" + (.startLine|tostring) else "" end)) | join(", ")' <<<"$loose")
 
 # --- Preview ------------------------------------------------------------------
 
@@ -152,9 +144,15 @@ if [[ "$mode" == preview ]]; then
   else
     jq -r 'to_entries[] | "### \(.key + 1). \(.value.file):\(.value.startLine)\(if (.value.endLine // .value.startLine) != .value.startLine then "-" + ((.value.endLine)|tostring) else "" end) (\(.value.side // "new"))\n\n\(.value.body)\n"' <<<"$anchored"
   fi
-  echo "## Summary comment"
+  echo "## Overall comment"
   echo
   if [[ -z "$summary" ]]; then echo "_none_"; else printf '%s\n' "$summary"; fi
+  if [[ "$loose_count" -gt 0 ]]; then
+    echo
+    echo "## Not posted: no line to anchor to ($loose_count)"
+    echo
+    jq -r '.[] | "- \(.file // "the change")\(if (.startLine // 0) > 0 then ":" + (.startLine|tostring) else "" end): \(.body | split("\n")[0])"' <<<"$loose"
+  fi
   exit 0
 fi
 
@@ -162,6 +160,9 @@ fi
 
 [[ -n "$forge" && -n "$project" && -n "$cr_iid" ]] \
   || { echo "review-post.sh: --post needs --forge, --project, and --cr" >&2; exit 64; }
+
+[[ "$loose_count" -eq 0 ]] \
+  || fail "unanchored: $loose_count finding(s) have no line in the diff to sit on ($loose_list); a comment asks for a change or a clarification about a line, so take them out of the findings rather than posting them"
 
 pinned=$(jq -r '.cr.headSha // ""' "$findings")
 [[ -n "$pinned" ]] || fail "findings file carries no cr.headSha — re-run review-cr.sh rather than posting against an unpinned diff"

@@ -287,7 +287,10 @@ emit_review() {
   # An approval sent back for its notes keeps only the notes, which a reply
   # review answers one by one.
   local comments="$returned"
-  [[ -z "${review_seeded:-}" && -z "${review_reply:-}" ]] || comments="$answered"
+  # A reviewer who writes on one of those notes keeps its 🤖 marker in their
+  # answer; the marker is the agent's, not their words, so it comes off.
+  [[ -z "${review_seeded:-}" && -z "${review_reply:-}" ]] \
+    || comments=$(jq -c 'map(.body |= sub("^🤖\\s*"; "") | if .raw then .raw |= sub("^🤖\\s*"; "") else . end)' <<<"$answered")
   [[ "$approve_intent" == false ]] || comments=$(jq -c 'map(select(.target != "verdict"))' <<<"$comments")
   if [[ "$verdict" == relaunch ]]; then
     rm -f "$out_file" "$err_file" "$desc_file" "$choice_file" "$palette_file"

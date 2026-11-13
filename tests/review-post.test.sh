@@ -108,19 +108,22 @@ findings="$work/findings.json"
 cat > "$findings" <<'EOF'
 {
   "cr": {"url": "https://example/7", "headSha": "headsha1"},
-  "summary": "The rename reads well; the cache key is the part worth a second look.",
+  "summary": "Thanks, I'd like a second pair of eyes on the cache key before this lands.",
   "comments": [
     {"body": "Dropping the tenant here means two tenants share an entry.",
      "target": "line", "file": "src/cache.js", "startLine": 42, "endLine": 42,
      "side": "new", "origin": "reviewer"},
     {"body": "This whole block only runs when the flag is off.",
      "target": "line", "file": "src/flag.js", "startLine": 10, "endLine": 14,
-     "side": "old", "origin": "agent"},
-    {"body": "Nothing covers the new branch.", "target": "changeset", "origin": "reviewer"},
-    {"body": "Reads as dead code now.", "target": "file", "file": "src/legacy.js", "origin": "agent"}
+     "side": "old", "origin": "agent"}
   ]
 }
 EOF
+# The same review with two findings that have no line in the diff to sit on.
+loose="$work/loose.json"
+jq '.comments += [{"body": "Nothing covers the new branch.", "target": "changeset", "origin": "reviewer"},
+                  {"body": "Reads as dead code now.", "target": "file", "file": "src/legacy.js", "origin": "agent"}]' \
+  "$findings" > "$loose"
 
 # The range's diff: src/cache.js new lines 40-45, src/flag.js old lines 8-15.
 diffp="$work/range.diff"
@@ -135,15 +138,24 @@ diff --git a/src/flag.js b/src/flag.js
 @@ -8,8 +8,2 @@ if (flag) {
 EOF
 
-# --- Preview: anchorable findings numbered, the rest folded into the summary --
-preview=$(bash "$review_post_sh" --preview --findings "$findings" --diff "$diffp")
+# --- Preview: anchorable findings numbered, the rest listed as not posted -----
+preview=$(bash "$review_post_sh" --preview --findings "$loose" --diff "$diffp")
 [[ "$preview" == *"Inline threads (2)"* ]] || fail "preview: expected 2 inline threads"
 [[ "$preview" == *"src/cache.js:42"* ]]    || fail "preview: missing the single-line anchor"
 [[ "$preview" == *"src/flag.js:10-14"* ]]  || fail "preview: missing the multi-line range"
-[[ "$preview" == *"Nothing covers the new branch."* ]] || fail "preview: changeset finding dropped"
-[[ "$preview" == *"**src/legacy.js** — Reads as dead code now."* ]] \
-  || fail "preview: file-target finding not named with its file"
-ok "preview: anchors what it can and folds the rest into the summary (REVIEW-08)"
+[[ "$(sed -n '/^## Overall comment/,/^## /p' <<<"$preview")" != *"Nothing covers"* ]] \
+  || fail "preview: a finding with no line must not fold into the overall comment: $preview"
+grep -q '^## Not posted: no line to anchor to (2)' <<<"$preview" || fail "preview: the unanchored findings are listed as not posted: $preview"
+grep -q '^- src/legacy.js: Reads as dead code now.' <<<"$preview" || fail "preview: an unanchored finding is named with its file: $preview"
+ok "preview: anchors what it can, and lists what has no line as not posted (REVIEW-08)"
+
+reset_logs
+rc=0
+out=$(bash "$review_post_sh" --post --findings "$loose" --diff "$diffp" \
+        --forge github --project example/repo --cr 7 2>/dev/null) || rc=$?
+[[ $rc -ne 0 && "$(key "$out" POST_ERROR)" == unanchored:*"src/legacy.js"* ]] || fail "a finding with no line refuses the post: $out"
+[[ ! -s "$CALL_LOG" ]] || fail "nothing is posted when a finding has no line: $(cat "$CALL_LOG")"
+ok "post: a findings file holding a finding with no line is refused before anything posts"
 
 # --- GitHub: the whole review posts as one submission ------------------------
 reset_logs
@@ -167,10 +179,10 @@ ok "GitHub: batches the review into one submission (REVIEW-12)"
 [[ "$(jq -r '.comments[1].line' "$PAYLOAD_LOG")" == 14 ]] || fail "GitHub: multi-line line should be the last"
 ok "GitHub: never records a verdict, and maps old/new onto LEFT/RIGHT"
 
-# The review body is the previewed summary, byte for byte (REVIEW-14).
-[[ "$(jq -r '.body' "$PAYLOAD_LOG")" == *"Nothing covers the new branch."* ]] \
-  || fail "GitHub: the review body is not the rendered summary"
-ok "GitHub: the posted summary is the previewed one (REVIEW-14)"
+# The review body is the reviewer's overall comment, byte for byte (REVIEW-14).
+[[ "$(jq -r '.body' "$PAYLOAD_LOG")" == "$(jq -r .summary "$findings")" ]] \
+  || fail "GitHub: the review body is not the reviewer's overall comment: $(jq -r .body "$PAYLOAD_LOG")"
+ok "GitHub: the posted overall comment is the reviewer's, verbatim (REVIEW-14)"
 
 # --- GitHub: --index posts exactly one finding -------------------------------
 reset_logs
@@ -270,18 +282,18 @@ out=$(bash "$review_post_sh" --post --findings "$empty" --diff "$diffp" \
 [[ "$(key "$out" POSTED_SUMMARY)" == 1 ]] || fail "empty: the summary should still post"
 ok "a review with no inline findings still lands its summary"
 
-# --- a line outside every hunk folds into the summary (REVIEW-08) -------------
-# The forge rejects a thread on a line the diff doesn't show, and a rejection
-# would stop the post. Sorting it out up front keeps the finding, in the summary.
+# --- a line outside every hunk is not posted (REVIEW-08) ----------------------
+# The forge rejects a thread on a line the diff doesn't show, and a comment
+# with no line to sit on is not one anchor posts.
 outside="$work/outside.json"
 jq '.comments += [{"body": "Far from the change.", "target": "line",
       "file": "src/cache.js", "startLine": 400, "endLine": 400, "side": "new"}]' \
   "$findings" > "$outside"
 preview=$(bash "$review_post_sh" --preview --findings "$outside" --diff "$diffp")
 grep -q '^## Inline threads (2)' <<<"$preview" || fail "the out-of-hunk line should not be an inline thread: $preview"
-grep -q 'src/cache.js:400.*Far from the change' <<<"$preview" \
-  || fail "the out-of-hunk finding should fold into the summary, named with its line: $preview"
-ok "a line outside every hunk folds into the summary, in the preview and the post alike"
+grep -q '^- src/cache.js:400: Far from the change' <<<"$preview" \
+  || fail "the out-of-hunk finding is listed as not posted, named with its line: $preview"
+ok "a line outside every hunk is listed as not posted"
 
 # --- a forge failure partway through says what already landed ---------------
 reset_logs

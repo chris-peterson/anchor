@@ -85,7 +85,7 @@ anchor_change_notes_place() {
        | ($anchors[] | select(.k == $k)) as $s
        | {file:$n.file, line:$s.line, marker:$s.marker,
           side:(if $s.marker == "-" then "old" else "new" end),
-          body:($n.note | gsub("^\\s+|\\s+$"; ""))}]' "$in" > "$dir/notes.json"
+          body:("🤖 " + ($n.note | gsub("^\\s+|\\s+$"; "")))}]' "$in" > "$dir/notes.json"
   # A note on an unchanged line explains the change it sits beside, so one more
   # than this many lines from every change in its file is refused.
   local near=3 far
@@ -109,7 +109,7 @@ anchor_change_notes_place() {
       "## Notes on unchanged files",
       "These are about files this change leaves alone, so they are here rather than in the diff, which would open each file in full.",
       (sort_by(.k)[] | "### `\(.where)`", (if .excerpt then (.excerpt | rtrimstr("\n")) else empty end),
-         ($n[0].notes[.k].note | gsub("^\\s+|\\s+$"; "")))' "$quoted" > "$dir/notes-context.md"
+         ("🤖 " + ($n[0].notes[.k].note | gsub("^\\s+|\\s+$"; ""))))' "$quoted" > "$dir/notes-context.md"
   fi
   rm -f "$lines" "$anchors" "$quoted"
   printf '%s\n' "$dir/notes.md"

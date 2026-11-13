@@ -29,7 +29,8 @@
 #                              on a run that writes the CR (not --local, not
 #                              STATUS_SKIPPED)
 #   STATUS_BASE_BRANCH=<name>  --local only: the branch the rows run from
-#   STATUS_RECORDED=<n>        commits given another round; 0 when skipped
+#   STATUS_RECORDED=<n>        commits given another round, or marked committed
+#                              with --kind commit; 0 when skipped
 #   STATUS_SKIPPED=<reason>    nothing was written, on someone else's CR:
 #                              no-section (its description has none) or draft
 #   STATUS_UNREVIEWED=<n>      commits on the CR still at no rounds
@@ -41,8 +42,14 @@
 # authentication failure is marked STATUS_AUTH=1 so the caller asks for fresh
 # credentials instead of retrying.
 #
-# --kind is `agent-assisted` (the default) when quality agents examined the
-# range, `read-through` when only the reviewer read it.
+# --kind is how /anchor:review made the round: `agent-assisted` (the default)
+# when the reviewer read the range and quality agents examined it,
+# `read-through` when only the reviewer read it, `agents-only` when the agents
+# examined it and the reviewer decided their findings without reading it again.
+# `commit` is /anchor:commit's review of the commit it just made: no round, but
+# a `committed` mark with the reviewer and the time, which a later review reads
+# to ask whether to look again (scripts/lib/review-status.sh). It takes only
+# --result approved and no --note.
 #
 # --note records a decision the review made (one per flag), on the newest commit
 # the round reviewed; the wording is the caller's.
@@ -54,7 +61,7 @@
 # branch. /anchor:prepare-review carries those rounds into the CR it opens.
 #
 # Usage:
-#   review-status.sh record (--cr <n> | --local) --base <sha> --head <sha> --result <approved|changes-requested> [--kind <agent-assisted|read-through>] [--note <text>]... [--repo <path>]
+#   review-status.sh record (--cr <n> | --local) --base <sha> --head <sha> --result <approved|changes-requested> [--kind <agent-assisted|read-through|agents-only|commit>] [--note <text>]... [--repo <path>]
 
 set -euo pipefail
 
@@ -72,7 +79,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib/backup.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/lib/stack.sh"
 
 usage() {
-  echo "usage: review-status.sh record (--cr <n> | --local) --base <sha> --head <sha> --result <approved|changes-requested> [--kind <agent-assisted|read-through>] [--note <text>]... [--repo <path>]" >&2
+  echo "usage: review-status.sh record (--cr <n> | --local) --base <sha> --head <sha> --result <approved|changes-requested> [--kind <agent-assisted|read-through|agents-only|commit>] [--note <text>]... [--repo <path>]" >&2
   exit 64
 }
 
@@ -97,7 +104,7 @@ while [[ $# -gt 0 ]]; do
     --base)   base="${2:?--base needs a sha}"; shift 2 ;;
     --head)   head="${2:?--head needs a sha}"; shift 2 ;;
     --result) result="${2:?--result needs a verdict}"; shift 2 ;;
-    --kind)   kind="${2:?--kind needs agent-assisted or read-through}"; shift 2 ;;
+    --kind)   kind="${2:?--kind needs agent-assisted, read-through, agents-only, or commit}"; shift 2 ;;
     --repo)   CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
     *) usage ;;
   esac
@@ -109,8 +116,14 @@ case "$result" in
   *) echo "review-status.sh: --result must be approved or changes-requested, got: $result" >&2; exit 64 ;;
 esac
 case "$kind" in
-  agent-assisted|read-through) ;;
-  *) echo "review-status.sh: --kind must be agent-assisted or read-through, got: $kind" >&2; exit 64 ;;
+  agent-assisted|read-through|agents-only) ;;
+  commit)
+    [[ "$result" == approved ]] \
+      || { echo "review-status.sh: --kind commit records an approved commit review; got --result $result" >&2; exit 64; }
+    [[ ${#notes[@]} -eq 0 ]] \
+      || { echo "review-status.sh: --kind commit takes no --note; a commit review records no decisions" >&2; exit 64; }
+    ;;
+  *) echo "review-status.sh: --kind must be agent-assisted, read-through, agents-only, or commit, got: $kind" >&2; exit 64 ;;
 esac
 
 ctx_resolve_repo

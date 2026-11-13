@@ -43,8 +43,9 @@
 #   GATE_APPROVALS_DETAIL=<e.g. "1 required, 0 left; approved by @ana">
 #   GATE_REVIEWS=<reviewed|unreviewed|none>  none: someone else's CR
 #   GATE_REVIEWS_DETAIL=<e.g. "2 of 5 commits never reviewed">
-#   UNREVIEWED=<json>           [{sha, subject}] for the commits no review
-#                               round has covered, per the CR's Review status
+#   UNREVIEWED=<json>           [{sha, subject}] for the commits nobody has
+#                               looked at, per the CR's Review status: no review
+#                               round, and no approval when /anchor:commit made it
 #   GATE_THREADS=<resolved|open>
 #   GATE_THREADS_DETAIL=<e.g. "2 unresolved">
 #   THREADS=<json>              [{path, line, author, body}] for open threads
@@ -355,7 +356,9 @@ if [[ -n "$self" && "$self" == "$author" ]]; then
   recorded=$(review_status_data "$desc") \
     || die "could not read the CR's Review status section" "its opening comment holds data that isn't JSON"
   rows=$(review_status_rows "$recorded" "$base_sha" "$head_sha")
-  unreviewed=$(jq -r '.[] | select(.rounds == 0) | .sha' <<<"$rows" | while read -r sha; do
+  # A commit approved when /anchor:commit made it has been looked at, so it
+  # doesn't ask; the detail says how many have had nothing more than that.
+  unreviewed=$(jq -r '.[] | select(.rounds == 0 and .committed == null) | .sha' <<<"$rows" | while read -r sha; do
       jq -nc --arg sha "$sha" --arg s "$(git log -1 --format=%s "$sha")" '{sha: $sha, subject: $s}'
     done | jq -sc .)
   total=$(jq length <<<"$rows")
@@ -364,13 +367,13 @@ if [[ -n "$self" && "$self" == "$author" ]]; then
     emit GATE_REVIEWS unreviewed
     emit GATE_REVIEWS_DETAIL "$never of $total commit$([[ "$total" == 1 ]] || echo s) never reviewed"
   else
-    read_only=$(jq '[.[] | select(.kind == "read-through")] | length' <<<"$rows")
+    read_only=$(jq '[.[] | select(.rounds > 0 and .kind == "read-through")] | length' <<<"$rows")
+    at_commit=$(jq '[.[] | select(.rounds == 0)] | length' <<<"$rows")
+    detail="every commit reviewed"
+    [[ "$at_commit" -eq 0 ]] || detail+=", $at_commit of $total only when committed"
+    [[ "$read_only" -eq 0 ]] || detail+=", $read_only of $total last by read-through"
     emit GATE_REVIEWS reviewed
-    if [[ "$read_only" -gt 0 ]]; then
-      emit GATE_REVIEWS_DETAIL "every commit reviewed, $read_only of $total last by read-through"
-    else
-      emit GATE_REVIEWS_DETAIL "every commit reviewed"
-    fi
+    emit GATE_REVIEWS_DETAIL "$detail"
   fi
 else
   emit GATE_REVIEWS none

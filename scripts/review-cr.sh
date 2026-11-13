@@ -71,6 +71,17 @@
 #   REVIEW_STATUS_FROM=<sha>     the oldest one's parent: the base of a review
 #                                that takes in every unreviewed commit
 #   REVIEW_STATUS_DIFF_PATH=<path>  the diff from REVIEW_STATUS_FROM to the head
+#   REVIEW_STATUS_COMMITTED=<n>  how many of the unreviewed commits the user
+#                                approved when /anchor:commit made them (on
+#                                their own CR, anyone did): a look, but not a
+#                                review, so they stay unreviewed and the skill
+#                                asks whether to read them again
+#   REVIEW_STATUS_UNVERSIONED=<n> how many of the unreviewed commits have rounds
+#                                only from before rounds carried the anchor
+#                                version (`v`), which also counted a commit
+#                                approval as a round; read as unreviewed
+#   REVIEW_STATUS_COMMITTED_FIRST=<ISO time>  the earliest of those approvals;
+#   REVIEW_STATUS_COMMITTED_LAST=<ISO time>   the latest; both empty with none
 #
 #   On any CR whose description has the section:
 #   REVIEW_DECISIONS_PATH=<path> the decisions earlier reviews recorded there, as
@@ -377,8 +388,17 @@ review_status_notes "$recorded" > "$decisions_path"
 echo "REVIEW_DECISIONS_PATH=$decisions_path"
 
 rows=$(review_status_rows "$recorded" "$cr_base" "$cr_head")
+# A round with no version was written before rounds carried one, when
+# /anchor:commit's review was recorded as a full round, so it can't be told from
+# a real one: the commit is read as unreviewed, and counted apart so the skill
+# can say why.
 unreviewed=$(jq -c --arg me "$self" --argjson own "$is_own" \
-  '[.[] | select(if $own == 1 then .rounds == 0 else (.by | index([$me])) == null end) | .sha]' <<<"$rows")
+  '[.[] | select((if $own == 1 then .rounds == 0 else (.by | index([$me])) == null end) or .v == "") | .sha]' <<<"$rows")
+unversioned=$(jq --argjson u "$unreviewed" '[.[] | select(.rounds > 0 and .v == "" and (.sha | IN($u[])))] | length' <<<"$rows")
+# The unreviewed commits the user already looked at when committing them.
+committed=$(jq -c --arg me "$self" --argjson own "$is_own" --argjson u "$unreviewed" \
+  '[.[] | select(.sha | IN($u[])) | .committed | select(. != null)
+    | select($own == 1 or (.by | index([$me])) != null) | .at] | sort' <<<"$rows")
 oldest=$(jq -r '.[0] // empty' <<<"$unreviewed")
 from="" status_diff=""
 if [[ -n "$oldest" ]]; then
@@ -392,3 +412,7 @@ echo "REVIEW_STATUS_OLDEST=$oldest"
 echo "REVIEW_STATUS_LATEST=$(jq -r '.[-1] // empty' <<<"$unreviewed")"
 echo "REVIEW_STATUS_FROM=$from"
 echo "REVIEW_STATUS_DIFF_PATH=$status_diff"
+echo "REVIEW_STATUS_COMMITTED=$(jq length <<<"$committed")"
+echo "REVIEW_STATUS_UNVERSIONED=$unversioned"
+echo "REVIEW_STATUS_COMMITTED_FIRST=$(jq -r '.[0] // empty' <<<"$committed")"
+echo "REVIEW_STATUS_COMMITTED_LAST=$(jq -r '.[-1] // empty' <<<"$committed")"

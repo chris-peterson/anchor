@@ -27,11 +27,12 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/batch-edit.sh" start --items <items.json> --
 ```
 
 - **`file`** is the item's path in the batch tree, in the directory for its
-  kind (`milestones/`, `issues/`, `change_requests/`, `replies/`) and named as
+  kind (`milestones/`, `issues/`, `change_requests/`, `replies/`, `comments/`) and named as
   `templates/batch-items.md` gives it. The table groups its rows by that
   directory, and the script refuses an item outside them. In a batch whose
-  items span repos, the repo's name sits below the kind
-  (`issues/<repo>/<number>.md`), and the `id` names it too (`<repo>#<number>`),
+  items span repos, the path starts at the repo instead
+  (`<repo>/issues/<number>.md`), so the tree groups by project and then by
+  kind, and the `id` names it too (`<repo>#<number>`),
   since two repos can both have an issue with the same number. The script reads
   each item's repo from its `url` and refuses a path that leaves it out.
 - **`current`** is omitted for an item that doesn't exist yet. It shows as a

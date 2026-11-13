@@ -1,11 +1,25 @@
 #!/usr/bin/env bash
 # The Review status section of a CR description: each commit on the CR, how many
-# review rounds it has been in, who reviewed it, the result and kind of the
-# latest one, and the decisions a review recorded on it. A round's kind is
-# `agent-assisted` when quality agents examined the range and `read-through` when
-# only the reviewer read it. A review of a
-# range gives every commit in it another round, so a commit reviewed on its own
-# and again as part of the whole change counts both.
+# review rounds it has been in, who reviewed it, the result, kind, and time of
+# the latest one, and the decisions a review recorded on it. A round is an
+# intentional review, through /anchor:review, and its kind says how it was made:
+# `agent-assisted` when the reviewer read the range and quality agents examined
+# it, `read-through` when only the reviewer read it, and `agents-only` when the
+# agents examined it and the reviewer decided their findings without reading the
+# range again. A review of a range gives every commit in it another round, so a
+# commit reviewed on its own and again as part of the whole change counts both.
+#
+# Every round, and every commit mark, carries `v`: the anchor version that wrote
+# it. The record outlives the plugin that wrote it, so a reader meeting data a
+# later version shaped differently, or one that a bug wrote wrong, can tell which
+# entries to read which way. An entry with no `v` was written by 2.0.0 or
+# earlier, which recorded /anchor:commit's review as an agent-assisted round.
+#
+# The look a commit gets when /anchor:commit makes it is not a round. It is
+# recorded apart, as `committed: {by, at}`: the bar for an incremental commit is
+# not the bar for a review the user set out to make, so it neither counts as one
+# nor lets a later review skip the commit. /anchor:review reads it to say when
+# the user last looked at a commit, and asks rather than assuming either way.
 #
 # A commit is keyed by its patch-id, not its sha: a rebase that leaves its change
 # as it was keeps its rounds, and an amend that changes it starts again at none.
@@ -17,17 +31,22 @@
 #
 #   review_status_data <description file>
 #                         the recorded rounds as {"<key>": {rounds, by, result,
-#                         kind, notes}}; {} for a description without the section
+#                         kind, at, committed, notes}}; {} for a description
+#                         without the section
 #   review_status_rows <data json> <base> <head>
 #                         the commits in <base>..<head>, oldest first, as
-#                         [{sha, key, rounds, by, result, kind, notes}], 0 rounds
-#                         where unrecorded. A round recorded without a kind reads
-#                         as agent-assisted
+#                         [{sha, key, rounds, by, result, kind, at, v, committed,
+#                         notes}], 0 rounds where unrecorded and `committed` null
+#                         where no commit review was recorded. A round recorded
+#                         without a kind reads as agent-assisted, and one
+#                         recorded without a time has `at` empty
 #   review_status_add <data json> <base> <head> <result> <kind> <reviewer> [<note>...]
 #                         the data with every commit in <base>..<head> given
 #                         another round by <reviewer> whose result is <result>
-#                         and kind is <kind>, and each <note> added to the
-#                         newest of them
+#                         and kind is <kind>, timed now, and each <note> added
+#                         to the newest of them. Kind `commit` gives no round:
+#                         it marks each commit `committed` by <reviewer> now,
+#                         and takes no notes
 #   review_status_notes <data json>
 #                         every note recorded, on any commit, as a JSON array
 #   review_status_section <data json>
@@ -56,6 +75,13 @@
 
 REVIEW_STATUS_MARK="anchor:review-status"
 
+# The version of anchor writing a record, from the plugin's own manifest.
+review_status_version() {
+  local manifest
+  manifest="$(dirname "${BASH_SOURCE[0]}")/../../.claude-plugin/plugin.json"
+  jq -r '.version // "unknown"' "$manifest" 2>/dev/null || echo unknown
+}
+
 # One "<sha> <key>" line per commit, oldest first. A commit with no diff has no
 # patch-id, so its sha is its key.
 review_status_keys() {
@@ -80,24 +106,36 @@ review_status_rows() {
     [inputs | split(" ") | {sha: .[0], key: .[1]}
      | . + {rounds: ($d[.key].rounds // 0), by: ($d[.key].by // []), result: ($d[.key].result // ""),
             kind: (if ($d[.key].rounds // 0) == 0 then "" else ($d[.key].kind // "agent-assisted") end),
+            at: (if ($d[.key].rounds // 0) == 0 then "" else ($d[.key].at // "") end),
+            v: (if ($d[.key].rounds // 0) == 0 then "" else ($d[.key].v // "") end),
+            committed: ($d[.key].committed // null),
             notes: ($d[.key].notes // [])}]'
 }
 
 # A decision is about the change as the round saw it, so it rides on the newest
-# commit the round reviewed.
+# commit the round reviewed. A commit review is kept apart from the rounds, so
+# neither the round count nor the reviewers a later review reads move for it.
 review_status_add() {
-  local data="$1" from="$2" to="$3" result="$4" kind="$5" reviewer="$6"
+  local data="$1" from="$2" to="$3" result="$4" kind="$5" reviewer="$6" now ver
   shift 6
+  now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  ver=$(review_status_version)
   review_status_keys "$from" "$to" | jq -Rnc --argjson d "$data" --arg r "$result" --arg kind "$kind" --arg w "$reviewer" \
-    --args '[inputs | split(" ")[1]] as $keys
-    | reduce $keys[] as $k ($d;
-        (.[$k].by // []) as $by
-        | .[$k] = (.[$k] + {rounds: ((.[$k].rounds // 0) + 1),
-                            by: (if ($by | index([$w])) then $by else $by + [$w] end),
-                            result: $r, kind: $kind}))
-    | if ($keys | length) > 0 and ($ARGS.positional | length) > 0
-      then .[$keys[-1]].notes = ((.[$keys[-1]].notes // []) + $ARGS.positional)
-      else . end' "$@"
+    --arg now "$now" --arg ver "$ver" --args '[inputs | split(" ")[1]] as $keys
+    | if $kind == "commit" then
+        reduce $keys[] as $k ($d;
+          (.[$k].committed.by // []) as $by
+          | .[$k].committed = {by: (if ($by | index([$w])) then $by else $by + [$w] end), at: $now, v: $ver})
+      else
+        reduce $keys[] as $k ($d;
+          (.[$k].by // []) as $by
+          | .[$k] = (.[$k] + {rounds: ((.[$k].rounds // 0) + 1),
+                              by: (if ($by | index([$w])) then $by else $by + [$w] end),
+                              result: $r, kind: $kind, at: $now, v: $ver}))
+        | if ($keys | length) > 0 and ($ARGS.positional | length) > 0
+          then .[$keys[-1]].notes = ((.[$keys[-1]].notes // []) + $ARGS.positional)
+          else . end
+      end' "$@"
 }
 
 review_status_notes() {

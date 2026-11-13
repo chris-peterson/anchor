@@ -245,3 +245,32 @@ run --cr 12 --base HEAD~1 --head HEAD --result approved --kind read-through
 [[ "$(recorded | jq -r '.[-1].kind')" == read-through && "$(recorded | jq -r '.[0].kind')" == agent-assisted ]] \
   || fail "--kind lands on the commits the round reviewed: $(recorded)"
 ok "record --kind marks a read-through round"
+
+# A commit review (/anchor:commit's look at the commit it made) is not a round:
+# it marks the commit committed, by whom and when, and leaves it unreviewed.
+printf 'e\n' > "$repo/e.txt"
+git -C "$repo" add e.txt
+git -C "$repo" commit --quiet -m "add e"
+run --cr 12 --base HEAD~1 --head HEAD --result approved --kind commit
+[[ "$status" == 0 && "$(val STATUS_RECORDED)" == 1 ]] || fail "a commit review exited $status: $out"
+row=$(recorded | jq -c '.[-1]')
+[[ "$(jq -c '[.rounds, .kind, .by, .committed.by]' <<<"$row")" == '[0,"",[],["me"]]' ]] \
+  || fail "a commit review gives no round, only the committed mark: $row"
+jq -re '.committed.at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")' <<<"$row" >/dev/null \
+  || fail "the committed mark is timed in UTC: $row"
+[[ "$(val STATUS_UNREVIEWED)" == 1 ]] || fail "a commit only approved at commit is still unreviewed: $out"
+run --cr 12 --base HEAD~1 --head HEAD --result approved --kind agents-only
+row=$(recorded | jq -c '.[-1]')
+[[ "$(jq -c '[.rounds, .kind, .committed.by]' <<<"$row")" == '[1,"agents-only",["me"]]' ]] \
+  || fail "a review after the commit counts as the first round and keeps the committed mark: $row"
+jq -re '.at | test("Z$")' <<<"$row" >/dev/null || fail "a round is timed: $row"
+want_v=$(jq -r .version "$here/../.claude-plugin/plugin.json")
+[[ "$(jq -r '"\(.v) \(.committed.v)"' <<<"$row")" == "$want_v $want_v" ]] \
+  || fail "a round and a commit mark carry the anchor version that wrote them: $row"
+ok "a commit review marks the commit committed, timed, without counting a round"
+
+run --cr 12 --base HEAD~1 --head HEAD --result changes-requested --kind commit
+[[ "$status" == 64 ]] || fail "a commit review records only an approval, got $status: $out"
+run --cr 12 --base HEAD~1 --head HEAD --result approved --kind commit --note "a decision"
+[[ "$status" == 64 ]] || fail "a commit review records no decisions, got $status: $out"
+ok "a commit review takes only an approval and no note"
