@@ -23,8 +23,10 @@ change.
 ```bash
 claude plugin marketplace add chris-peterson/claude-marketplace
 claude plugin install anchor@chris-peterson
-brew install umputun/apps/revdiff   # every diff review opens in revdiff 1.14 or later
 ```
+
+Every diff review opens in revdiff 1.14 or later; install it from
+[its install page](https://github.com/umputun/revdiff#installation) (on Windows, under WSL).
 
 ## Getting started
 

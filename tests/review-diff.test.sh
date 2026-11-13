@@ -579,7 +579,7 @@ o=$( cd "$repo" && REVDIFF_STUB_VERSION=v1.13.2 bash "$dispatch" --previous 2>"$
 grep -q 'revdiff 1.13.2 is older than 1.14.0' "$work/err.txt" || fail "the refusal names both versions: $(cat "$work/err.txt")"
 o=$( cd "$repo" && REVDIFF_STUB_VERSION=v1.13.2 bash "$dispatch" --skill review --tool revdiff --probe )
 grep -qx 'REVIEW_AVAILABLE=0' <<<"$o"            || fail "the probe reports an old revdiff unavailable: $o"
-grep -q '^REVIEW_UNUSABLE=revdiff 1.13.2 is older than 1.14.0.*brew upgrade' <<<"$o" || fail "the probe says why: $o"
+grep -q '^REVIEW_UNUSABLE=revdiff 1.13.2 is older than 1.14.0.*upgrade from https://github.com/umputun/revdiff#installation' <<<"$o" || fail "the probe says why: $o"
 o=$( cd "$repo" && REVDIFF_STUB_VERSION=dev bash "$dispatch" --skill review --tool revdiff --probe )
 grep -q "^REVIEW_UNUSABLE=revdiff's version is unreadable (version: dev)" <<<"$o" || fail "an unreadable version is refused, not guessed: $o"
 o=$( cd "$repo" && REVDIFF_STUB_VERSION=v1.14.0-005f319 bash "$dispatch" --skill review --tool revdiff --probe )
@@ -793,14 +793,14 @@ ok "tool: a key naming another viewer prints one line saying it is ignored, and 
 o=$(pb "$system_path")
 grep -qx 'REVIEW_TOOL=revdiff' <<<"$o"  || fail "no revdiff -> still names revdiff, got: $o"
 grep -qx 'REVIEW_AVAILABLE=0' <<<"$o"   || fail "no revdiff -> want AVAILABLE=0, got: $o"
-grep -qx 'REVIEW_UNUSABLE=revdiff is not installed (brew install umputun/apps/revdiff)' <<<"$o" \
+grep -qxF 'REVIEW_UNUSABLE=revdiff is not installed (install it from https://github.com/umputun/revdiff#installation)' <<<"$o" \
   || fail "no revdiff -> the probe names the install, got: $o"
 grep -qx 'REVIEW_MODE=diff' <<<"$o"     || fail "no revdiff -> the mode stays diff, got: $o"
 export REVDIFF_ARGS_FILE="$work/absent-args.txt"; rm -f "$REVDIFF_ARGS_FILE"
 o=$(launch "$system_path"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = no-verdict ]         || fail "no revdiff -> want no-verdict, got: $o"
 [ "$(jq -r .raw.exitCode <<<"$j")" = absent ] || fail "no revdiff -> raw.exitCode absent, got: $j"
-grep -q 'revdiff is not installed (brew install umputun/apps/revdiff)' "$work/launch.err" \
+grep -qF 'revdiff is not installed (install it from https://github.com/umputun/revdiff#installation)' "$work/launch.err" \
   || fail "no revdiff -> the launch names the install: $(cat "$work/launch.err")"
 [ ! -e "$REVDIFF_ARGS_FILE" ]                 || fail "no revdiff -> nothing opened"
 unset REVDIFF_ARGS_FILE

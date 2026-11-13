@@ -191,8 +191,8 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill review --tool revdif
 ```
 
 `REVIEW_AVAILABLE=0` stops the review here. Say that `/anchor:review` needs
-revdiff 1.14 or later (`brew install umputun/apps/revdiff`, or
-https://revdiff.com). When the probe printed `REVIEW_UNUSABLE`, relay that line,
+revdiff 1.14 or later, from its install page
+(https://github.com/umputun/revdiff#installation). When the probe printed `REVIEW_UNUSABLE`, relay that line,
 which names the installed version and the upgrade. Otherwise, when `revdiff` is
 on `PATH`, say that there is nowhere in this session to open it (see the
 configuring guide's "Where a review opens"). Nothing has been examined or

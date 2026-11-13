@@ -14,7 +14,7 @@ answer, not a way to get past the missing one.
 A missing or too-old revdiff is not one of these. The probe reports it as
 `REVIEW_UNUSABLE`, and the launch as `no-verdict` with `raw.exitCode` `absent`
 or `unusable`: every `diff` review needs revdiff, so the review stops there,
-names the install (`brew install umputun/apps/revdiff`) or the upgrade, and
+points to [revdiff's install page](https://github.com/umputun/revdiff#installation) to install or upgrade it, and
 publishes nothing. The ladder is for a review revdiff could run but this session
 can't show.
 

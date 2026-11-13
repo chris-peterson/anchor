@@ -127,8 +127,8 @@ New tools usually open with a configuration page. There is
 first commit.
 
 - **No revdiff?** Every diff review opens in revdiff, so without it the review
-  stops before it opens, names `brew install umputun/apps/revdiff`, and
-  publishes nothing. It does not ask *"you saw the diff, approve?"*, which would
+  stops before it opens, points to
+  [revdiff's install page](https://github.com/umputun/revdiff#installation), and publishes nothing. It does not ask *"you saw the diff, approve?"*, which would
   turn a missing tool into your sign-off.
 - **No editor set?** It uses `core.editor` and git's own chain, the same editor
   `git commit` would have opened.

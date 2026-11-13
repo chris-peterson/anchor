@@ -9,12 +9,12 @@
 
 ## What you need
 
-revdiff 1.14 or later. Install it from
-[its install page](https://github.com/umputun/revdiff#installation): Homebrew on
-macOS or Linux, a `.deb` or `.rpm`, or `go install`.
+revdiff 1.14 or later, from
+[its install page](https://github.com/umputun/revdiff#installation).
 
-On Windows, diff reviews need a macOS or Linux terminal: revdiff publishes no
-Windows build, and a diff review opens in tmux, iTerm2, or agterm.
+On Windows, diff reviews run
+[under WSL](https://github.com/umputun/revdiff/issues/66#issuecomment-6297017707):
+install revdiff's Linux package there.
 
 ## 1. Start at `(context).md`
 
@@ -56,9 +56,8 @@ In an editor review, <kbd>Z</kbd><kbd>D</kbd> switches to revdiff, and exit 1,
 Vim's `:cq`, rejects. Quitting with `:q!` makes the agent ask whether to accept,
 reject, or reopen. revdiff can relaunch the review in your editor.
 
-Editor reviews work in Git Bash with an editor that waits: Notepad,
-`code --wait`, `subl -w`. The <kbd>Z</kbd><kbd>Z</kbd> chords are Helix and Vim
-only.
+Editor reviews work in Git Bash with an editor that waits, such as Notepad or
+`code --wait`.
 
 ## Several edits at once
 

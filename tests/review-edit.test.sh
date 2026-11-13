@@ -589,7 +589,7 @@ o=$(probe_hosted --skill commit --probe)
 [ "$(key_of REVIEW_MODE "$o")" = diff ]          || fail "a missing revdiff should never flip the mode to edit"
 [ "$(key_of REVIEW_TOOL "$o")" = revdiff ]       || fail "revdiff stays named"
 [ "$(key_of REVIEW_AVAILABLE "$o")" = 0 ]        || fail "a missing revdiff cannot open"
-key_of REVIEW_UNUSABLE "$o" | grep -q 'brew install umputun/apps/revdiff' \
+key_of REVIEW_UNUSABLE "$o" | grep -qF 'install it from https://github.com/umputun/revdiff#installation' \
   || fail "the probe names the install: $o"
 ok "probe: a missing revdiff is reported with its install, and never becomes edit mode"
 

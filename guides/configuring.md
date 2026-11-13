@@ -53,11 +53,11 @@ set.
 
 ## Recommended setup :id=recommended-setup
 
-revdiff is required for `diff` reviews. helix is the editor the `edit` reviews
-are built around:
+revdiff is required for `diff` reviews; install it from
+[its install page](https://github.com/umputun/revdiff#installation) (on Windows, under WSL). helix is the
+editor the `edit` reviews are built around:
 
 ```bash
-brew install umputun/apps/revdiff helix
 git config --global anchor.edit.tool hx        # drafts: three chords end the review
 ```
 
@@ -151,9 +151,9 @@ verdict ends in "you saw it, approve?", which is a rubber stamp rather than a
 review.
 
 `anchor` needs revdiff 1.14 or later. Where revdiff is missing or older, a
-`diff` review stops before it opens, names the install
-(`brew install umputun/apps/revdiff`) or the upgrade
-(`brew upgrade umputun/apps/revdiff`), and publishes nothing. It runs revdiff
+`diff` review stops before it opens, points to
+[revdiff's install page](https://github.com/umputun/revdiff#installation) to install or upgrade it, and
+publishes nothing. It runs revdiff
 with stop-at-annotations, so `]` stops at a note on a whole file or on an
 unchanged line as well as at each change, and reaching the last change means you
 have passed every note. Older versions ignore that setting.

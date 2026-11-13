@@ -28,7 +28,8 @@
 # see the consumer.
 # shellcheck disable=SC2034
 diff_tool_caps='{"producesVerdict":true,"perHunkReview":false,"editableCommitMessage":false,"editableDescription":false,"sideMarkers":true,"preloadsAnnotations":true,"showsUntracked":true}'
-diff_tool_install_hint='brew install umputun/apps/revdiff'
+revdiff_install_page='https://github.com/umputun/revdiff#installation'
+diff_tool_install_hint="install it from $revdiff_install_page"
 
 # 1.14 added stop-at-annotations, which makes `]` stop at a note outside a hunk.
 # An older revdiff ignores the variable and steps past those notes, so it is
@@ -40,8 +41,8 @@ diff_tool_unusable() {
   local out version have need
   out=$("$1" --version 2>&1) || true
   if [[ ! "$out" =~ ([0-9]+)\.([0-9]+)\.([0-9]+) ]]; then
-    printf "revdiff's version is unreadable (%s); anchor needs %s or later (brew upgrade umputun/apps/revdiff)" \
-      "$(head -1 <<<"$out")" "$revdiff_min_version"
+    printf "revdiff's version is unreadable (%s); anchor needs %s or later (upgrade from %s)" \
+      "$(head -1 <<<"$out")" "$revdiff_min_version" "$revdiff_install_page"
     return 0
   fi
   version="${BASH_REMATCH[0]}"
@@ -49,8 +50,8 @@ diff_tool_unusable() {
   [[ "$revdiff_min_version" =~ ([0-9]+)\.([0-9]+)\.([0-9]+) ]]
   need=$(printf '%d%04d%04d' "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}")
   (( 10#$have < 10#$need )) || return 1
-  printf 'revdiff %s is older than %s, the first whose ] stops at every review note (brew upgrade umputun/apps/revdiff)' \
-    "$version" "$revdiff_min_version"
+  printf 'revdiff %s is older than %s, the first whose ] stops at every review note (upgrade from %s)' \
+    "$version" "$revdiff_min_version" "$revdiff_install_page"
 }
 
 # The review's header also goes in the file tree, as a file at the root of the
