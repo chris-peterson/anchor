@@ -187,7 +187,9 @@ to find yours. Once the fixes are in and the tests pass:
 
    Give `sites` (the lines the reply is about, as the tree now stands, each
    with its `line`) for a change; leave them out for an answer, and it sits
-   under the line the comment was on. A comment on the commit message or the
+   under the line the comment was on. A reply with several sites is one note,
+   on the first, naming the rest, so put the line the reviewer should read
+   first. A comment on the commit message or the
    whole changeset is answered in the `(context).md` table. Placement follows
    "Put each note where the reader is already looking", above.
 2. **Seed it** with the `--path` list the review will get:

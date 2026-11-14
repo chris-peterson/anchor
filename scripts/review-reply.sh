@@ -158,42 +158,69 @@ if [[ ${#errors[@]} -gt 0 ]]; then
 fi
 
 # The notes, in revdiff's markdown and as JSON the review compares its returned
-# notes against. A reply's first site carries it; later ones point back to it.
+# notes against. One note per reply, on its first site, naming the others: a
+# note at each site that only points back to the first fills the annotation
+# list with copies of one #N, which reads as notes left over from earlier rounds.
+#
+# Each reply is numbered in the order revdiff lists it, by path and then line,
+# with the replies the diff has no line for numbered after them, so the
+# annotation list and the table both count up from #1. The number is the
+# reply's own; the reviewer's comment is still named by its position (.id).
 jq -n --slurpfile r "$replies" --slurpfile c "$comments" --rawfile a "$anchors" '
   def outcome: {answered:"answered", done:"🏁 as asked", different:"⚠️ done differently"}[.];
   ($a | split("\n") | map(select(length > 0) | split("\t")
     | {id:(.[0]|tonumber), k:(.[1]|tonumber), file:.[2], marker:.[3],
        line:(if .[4] == "" then null else (.[4]|tonumber) end), where:.[5]})) as $anchors
-  | [$r[0].replies | sort_by(.comment)[] as $x
+  | [$r[0].replies[] as $x
      | ($anchors | map(select(.id == $x.comment)) | sort_by(.k)) as $mine
-     | ("🤖 #\($x.comment) · \($x.status | outcome)") as $head
-     | $mine | to_entries[] | .value as $s
+     | select($mine | length > 0)
+     | $mine[0] as $s
      | {id:$x.comment, file:$s.file, line:$s.line, marker:$s.marker, where:$s.where,
-        body:($head + "\n" + (if .key == 0
-               then "You asked: \($c[0][$x.comment - 1].body)\n\n\($x.reply)"
-               else "Part of #\($x.comment); the reply is on its first note, at \($mine[0].where)." end))}]
+        also:($mine[1:] | map(.where)), status:$x.status, reply:$x.reply}]
+  | sort_by([.file, (.line // 0), .id]) | to_entries
+  | map(.value + {n:(.key + 1)}
+        | . + {body:("🤖 #\(.n) · \(.status | outcome)\nYou asked: \($c[0][.id - 1].body)\n\n\(.reply)"
+                     + (if (.also | length) > 0 then "\n\nAlso at: \(.also | join(", "))" else "" end))}
+        | del(.status, .reply))
 ' > "$state/notes.json"
 anchor_items_notes_md "$state/notes.json" > "$state/notes.md"
 
-# The context file's half: every note in a table, then in full the replies the
-# diff has no line for, each quoting the lines it is about where it has some.
-jq -r --slurpfile n "$state/notes.json" --slurpfile c "$comments" --slurpfile q "$quoted" '
+# Every reply with its number, the placed ones first in their diff order.
+order=$(jq -c --slurpfile n "$state/notes.json" '
+  ($n[0] | map({key:(.id | tostring), value:.n}) | from_entries) as $placed
+  | ([.replies[].comment | select(($placed[tostring]) == null)] | sort) as $rest
+  | $placed + ($rest | to_entries | map({key:(.value | tostring), value:(.key + 1 + ($placed | length))}) | from_entries)
+' "$replies")
+
+# The context file's half. The table goes at its head (reply-head.md), so the
+# numbers are in view as it opens; the replies the diff has no line for go at its
+# end (reply.md), each quoting the lines it is about where it has some.
+jq -r --slurpfile n "$state/notes.json" --slurpfile c "$comments" --slurpfile q "$quoted" --argjson o "$order" '
   def outcome: {answered:"answered", done:"🏁 as asked", different:"⚠️ done differently"}[.];
   def cell: gsub("\n"; " ") | gsub("\\|"; "\\|");
-  (.replies | sort_by(.comment)) as $rs
+  (.replies | sort_by($o[.comment | tostring])) as $rs
+  | ([$rs[] | .comment as $i | select([$n[0][] | select(.id == $i)] | length == 0)] | length) as $off
   | "# Reply to your review",
-    "Your notes from the last review, and what I did with each. The diff shows only what changed after you closed that review, and each reply sits in it on the line it is about, opening with what you asked. A reply about a file with no change since then is below the table instead, with the lines it is about. Leave a note on a reply to answer it.",
+    "What I did with each of your notes; each reply is on its line in the diff\(if $off > 0 then ", or at the end of this file" else "" end). Leave a note on one to answer it.",
     "| # | you asked | what I did | where |",
     ($rs[] | . as $x
-      | ([$n[0][] | select(.id == $x.comment)] | first | .where // null) as $w
+      | ([$n[0][] | select(.id == $x.comment)] | first) as $note
+      | ($note.where // null) as $w
       | ([$q[] | select(.id == $x.comment)] | first | .where // null) as $qw
-      | "| \($x.comment) | \($c[0][$x.comment - 1].body | split("\n")[0] | cell) | \($x.status | outcome) | \(if $w then "`\($w)`" elif $qw then "below, `\($qw)`" else "below" end) |"),
-    ($rs[] | . as $x | select([$n[0][] | select(.id == $x.comment)] | length == 0)
-      | ([$q[] | select(.id == $x.comment)] | first) as $qx
-      | "## #\($x.comment) · \($x.status | outcome)",
-        (if $qx then "`\($qx.where)`, unchanged since your review:" else empty end),
-        (if $qx.excerpt then ($qx.excerpt | rtrimstr("\n")) else empty end),
-        "You asked: \($c[0][$x.comment - 1].body)", "", $x.reply)
+      | "| \($o[$x.comment | tostring]) | \($c[0][$x.comment - 1].body | split("\n")[0] | cell) | \($x.status | outcome) | \(if $w then ([$w] + ($note.also // []) | map("`\(.)`") | join(", ")) elif $qw then "end of file, `\($qw)`" else "end of file" end) |")
+' "$replies" > "$state/reply-head.md"
+jq -r --slurpfile n "$state/notes.json" --slurpfile c "$comments" --slurpfile q "$quoted" --argjson o "$order" '
+  def outcome: {answered:"answered", done:"🏁 as asked", different:"⚠️ done differently"}[.];
+  [.replies | sort_by($o[.comment | tostring])[] | . as $x | select([$n[0][] | select(.id == $x.comment)] | length == 0)] as $off
+  | if ($off | length) == 0 then empty else
+      "# Replies with no line in the diff",
+      ($off[] | . as $x
+        | ([$q[] | select(.id == $x.comment)] | first) as $qx
+        | "## #\($o[$x.comment | tostring]) · \($x.status | outcome)",
+          (if $qx then "`\($qx.where)`, unchanged since your review:" else empty end),
+          (if $qx.excerpt then ($qx.excerpt | rtrimstr("\n")) else empty end),
+          "You asked: \($c[0][$x.comment - 1].body)", "", $x.reply)
+    end
 ' "$replies" > "$state/reply.md"
 
 echo "REPLY_STATE=$state"

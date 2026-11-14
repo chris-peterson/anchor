@@ -365,11 +365,13 @@ check.
 - **[PREPARE-06]** If local state does not match the CR head, then the system shall
   surface the mismatch and stop rather than draft.
 - **[PREPARE-06a]** Where the mismatch is an uncommitted working tree, the system
-  shall report that changes are uncommitted and must be committed first, and
-  nothing else. The author knows what they changed and why it is not committed
-  yet, so a diagnosis of how the tree got dirty, and an argument for why a
-  description cannot be drafted against it, is prose to read past to reach the one
-  action available.
+  shall chain into the commit flow, as it does for a branch with no commit yet,
+  and gather the changeset again once that flow has committed and pushed; where
+  that flow commits nothing, it shall report that changes are uncommitted and
+  stop. Running the CR step on uncommitted work says the work is meant for the
+  CR, and stopping there leaves the author to run the commit and then this flow
+  again by hand. The commit flow stages only the paths the session changed, so a
+  co-resident session's files stay out of the CR.
 - **[PREPARE-07]** Before drafting, the system shall resolve open questions (why,
   audience, scope, ordering, verification gaps) with the user rather than park
   them in the description.
@@ -1662,15 +1664,23 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
 - **[DIFF-37]** Where a local-changes review returns `changes-requested` in a
   tool that can preload notes, the system shall keep the changeset as the review
   closed, and shall re-open the review on what changed after that point, with a
-  reply to every comment the reviewer left: on the line it concerns, opening with
-  what the reviewer asked and saying whether it was answered, done as asked, or
-  done differently, and listed together at the head of the review's context file.
+  reply to every comment the reviewer left: one note per comment, on the line it
+  concerns (the first of them, naming the others, where it concerns several),
+  opening with what the reviewer asked and saying whether it was answered, done
+  as asked, or done differently, and listed together at the head of the review's
+  context file under a one-line instruction. Each reply shall be numbered in the
+  order the review tool lists it, by path and then line, the replies with no
+  line in the diff numbered after them and written out at the end of that file.
   The system shall refuse to seed a reply round that leaves a comment unanswered,
   and shall read a reply returned as seeded, or deleted, as read rather than as
   feedback. A reviewer whose notes are questions otherwise has to find the
   answers in the conversation, and re-showing the whole changeset leaves them to
   work out which lines answered them and whether each request was carried out or
-  reasoned away.
+  reasoned away. A note at each further line that only points back to the first
+  lists one comment's number over and over, which reads as notes carried over
+  from earlier rounds; numbers out of order in the tool's list, or a table pushed
+  below the box and the message, leave the reviewer hunting for the row a note
+  belongs to.
 - **[DIFF-38]** Where a review's context file gives the size of the change, the
   system shall draw it as bars, and where the review re-opens as a reply
   (DIFF-37), shall stack the size of each pass on that one scale, newest first:
@@ -1731,7 +1741,8 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   the choices. The commit, the caller's own details, and the body follow every
   instruction. A review round's and a batch's table shall carry the same box,
   with how to answer an item (keep, change, drop) in place of what other notes
-  do.
+  do. A reply review (DIFF-37) shall put its table of replies between the size
+  and the box.
   Every terminal draws solid box lines joined. A reviewer coming back to a
   review cold reads what and how big it is first, a reviewer who knows how a
   review works skips the box, the hide line sits in the one box it shrinks, and

@@ -220,15 +220,11 @@ git diff origin/<BASE_BRANCH>...HEAD
 
 ### Act on `STATE`
 
-The deep links you'll generate point at specific lines of the *current* CR diff, so drafting against stale state ships a description that renders against content the reviewer can't see. `STATE=match` → proceed. Otherwise stop and surface — *do not* draft:
+The deep links you'll generate point at specific lines of the *current* CR diff, so drafting against stale state ships a description that renders against content the reviewer can't see. `STATE=match` → proceed. Otherwise *do not* draft until it is:
 
-- **`dirty`** — uncommitted changes in the working tree. Say exactly that and stop:
-
-  > Uncommitted changes detected — commit them first, then re-run.
-
-  Nothing else. The user knows what they changed and why it isn't committed, so a diagnosis of *how* the tree got dirty, and an explanation of why a description can't be drafted against it, is a paragraph they have to read to reach the one word they need (`commit`). Offer to chain into `/anchor:commit` if they want it.
+- **`dirty`** — uncommitted changes in the working tree. Running prepare-review on them says they're meant for the CR, so chain into `/anchor:commit` exactly as `NEEDS_COMMIT=1` does (see "Get to a reviewable, pushed commit"): it stages the paths this session changed, commits (amending or adding a commit as its squash gate decides), and pushes. Then re-gather. Don't ask first and don't explain how the tree got dirty; the commit's own review is where the user approves. If none of the dirty paths are ones this session changed, they're another session's work: say the tree has uncommitted changes this session didn't make and stop. If the re-gather still reports `dirty` — the user declined the commit, or it left paths uncommitted — say so in one line and stop; don't loop.
 - **`head-mismatch`** — local HEAD ≠ CR head: the user's expected push hasn't landed, or you're on the wrong branch. Common cause: a force-push blocked by a hook, or a no-op push because the working tree was never committed. Surface the SHA mismatch (`LOCAL_HEAD_SHA` vs `CR_HEAD_SHA`) and ask.
-- **`dirty+head-mismatch`** — lead with the uncommitted-changes line above; the push is the same fix, so don't report the SHA mismatch as a second problem to solve.
+- **`dirty+head-mismatch`** — handle as `dirty`; `/anchor:commit` pushes, which is the same fix, so don't report the SHA mismatch as a second problem. If the re-gather still reports `head-mismatch`, handle that as above.
 
 State drift between conversation belief and repo reality is silent and expensive. The script's read-only state check catches it; missing it ships a broken description.
 

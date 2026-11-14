@@ -598,7 +598,7 @@ else
     diff_range="$local_base"
     header_mode="local"
     if [[ -n "$review_reply" ]]; then
-      [[ -s "$review_reply/reviewed" && -f "$review_reply/notes.json" && -f "$review_reply/reply.md" ]] || {
+      [[ -s "$review_reply/reviewed" && -f "$review_reply/notes.json" && -f "$review_reply/reply-head.md" && -f "$review_reply/reply.md" ]] || {
         echo "review-diff.sh: --reply needs a state dir review-reply.sh has seeded: $review_reply" >&2; exit 66; }
       [[ -z "$review_annotations$review_notes" ]] || { echo "review-diff.sh: --reply brings its own notes; drop --annotations and --notes" >&2; exit 64; }
       [[ ${#staged_paths[@]} -eq 0 ]] || {

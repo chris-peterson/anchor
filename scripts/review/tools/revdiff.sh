@@ -100,9 +100,10 @@ revdiff_context_path() {
   revdiff_context_slot
 }
 
-# The line of the context file the reply starts on, set by diff_tool_before; 0
-# when the review carries none.
-revdiff_reply_from=0
+# The lines of the context file a reply holds, as a JSON array of [first, last]
+# ranges, set by diff_tool_before: its table at the head, and the replies with no
+# line in the diff at the end. Empty when the review carries none.
+revdiff_reply_lines='[]'
 
 # One header detail, by label; empty when the review has none.
 # shellcheck disable=SC2154
@@ -226,11 +227,13 @@ revdiff_relaunch_editor() {
 # the change come
 # last, below every instruction: the commit, details anchor doesn't place (a
 # caller's own --detail) as `label: value`, the body, then the agent's notes on
-# unchanged files, or a reply's table and answers. The popup copy stays plain
-# text.
+# unchanged files, or the replies a reply review has no line in the diff for.
+# A reply's table is the exception: it sits under the size, ahead of the box, so
+# the numbers its notes carry are on screen when the file opens. The popup copy
+# stays plain text.
 # shellcheck disable=SC2016,SC2154
 revdiff_header() {
-  local repo="$1" repo_url="$2" path exclude body where line label value next sha url
+  local repo="$1" repo_url="$2" path exclude body where line label value next sha url from
   path=$(revdiff_context_path) || return 0
   next=$(revdiff_detail next)
   exclude=$(git rev-parse --path-format=absolute --git-path info/exclude)
@@ -263,6 +266,15 @@ revdiff_header() {
       printf '%s\n' "$value"
     fi
     printf '\n'
+  } > "$path"
+  # A reply's table goes at the head, ahead of the Review box and the message,
+  # so its numbers are in view when the file opens.
+  if [[ -n "${review_reply:-}" && -s "$review_reply/reply-head.md" ]]; then
+    from=$(awk 'END { print NR + 1 }' "$path")
+    { cat "$review_reply/reply-head.md"; printf '\n'; } >> "$path"
+    revdiff_reply_lines=$(jq -c --argjson a "$from" --argjson b "$(awk 'END { print NR }' "$path")" '. + [[$a, $b]]' <<<"$revdiff_reply_lines")
+  fi
+  {
     anchor_review_box "$review_tool" "${next:-approve this review}" "stop, and nothing this review gates happens" "$(revdiff_relaunch_editor)"
     printf '\n'
     value=$(revdiff_detail commit)
@@ -281,10 +293,11 @@ revdiff_header() {
     [[ -z "$body" ]] || printf '\n%s\n' "$body"
     [[ -z "${review_notes_md:-}" || ! -s "${review_notes_md%.md}-context.md" ]] \
       || cat "${review_notes_md%.md}-context.md"
-  } > "$path"
-  if [[ -n "${review_reply:-}" ]]; then
-    revdiff_reply_from=$(awk 'END { print NR + 1 }' "$path")
+  } >> "$path"
+  if [[ -n "${review_reply:-}" && -s "$review_reply/reply.md" ]]; then
+    from=$(awk 'END { print NR + 1 }' "$path")
     cat "$review_reply/reply.md" >> "$path"
+    revdiff_reply_lines=$(jq -c --argjson a "$from" '. + [[$a, 1e9]]' <<<"$revdiff_reply_lines")
   fi
 }
 
@@ -407,7 +420,7 @@ diff_tool_comments() {
   fi
   vlines=$(anchor_verdict_lines "$(git rev-parse --show-toplevel)/$REVDIFF_CONTEXT_FILE" \
     | jq -Rn '[inputs | split("\t") | {key:.[1], value:.[0]}] | from_entries')
-  jq -Rs --arg ctx "$ctx" --arg ctxtext "$ctx_text" --arg mtarget "$target" --argjson reply "$revdiff_reply_from" \
+  jq -Rs --arg ctx "$ctx" --arg ctxtext "$ctx_text" --arg mtarget "$target" --argjson reply "$revdiff_reply_lines" \
     --arg cfile "$REVDIFF_CONTEXT_FILE" --argjson vlines "$vlines" '
     def parse_header:
       if test("\\(file-level\\)$") then
@@ -445,7 +458,7 @@ diff_tool_comments() {
         | if .file == $cfile and .target == "line" and $choice != null then
             .file = null | .target = "verdict" | .choice = $choice
           elif $ctx == "" or .file != $ctx then .
-          else (if $reply > 0 and (.startLine // 0) >= $reply then "changeset" else $mtarget end) as $t
+          else ((.startLine // 0) as $s | if any($reply[]; $s >= .[0] and $s <= .[1]) then "changeset" else $mtarget end) as $t
             | .file = null | .target = $t
             | if .startLine then . as $c
                 | .quote = ($ctxtext | split("\n") | .[$c.startLine - 1 : $c.endLine] | join("\n"))
