@@ -34,9 +34,8 @@ one:
 | 💡 | a suggested action for the human: an item to keep or drop, a comment to post | `review-round.sh` |
 
 A note from the user's own words (a read-pass note turned into an item) carries
-neither. revdiff's global marker is off (`--annotation-marker=`, where the
-installed revdiff has it), since it is one marker for every note and these are
-two kinds. The marker is display only: a reviewer's answer comes back without a
+neither. revdiff's global marker is off (`--annotation-marker=`), since it is
+one marker for every note and these are two kinds. The marker is display only: a reviewer's answer comes back without a
 leading 🤖, and a 💡 item is still read by its `#<id>`.
 
 A 💡 note reads the way a reviewer writes a comment on a forge: *Suggest X so
