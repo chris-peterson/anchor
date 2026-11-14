@@ -110,7 +110,8 @@ commit, which is what makes the manifest at the tag report the version the tag
 names. The publish step is the dispatch:
 
 ```bash
-gh workflow run <RELEASE_WORKFLOW> -f <RELEASE_DISPATCH_BUMP_INPUT>=<level>
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/release-publish.sh" \
+  --dispatch <RELEASE_WORKFLOW> --input <RELEASE_DISPATCH_BUMP_INPUT>=<level>
 ```
 
 Pass the level by the name the workflow declares rather than assuming `bump` —

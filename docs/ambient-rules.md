@@ -10,6 +10,12 @@ re-injects them after context compaction.
 This page shows exactly what gets injected, so you can see what installing
 anchor adds to your sessions.
 
+A rule only asks. Where an agent ignoring one would publish something under your
+name, a `PreToolUse` hook also blocks the command and names the skill to use
+instead. So far that covers publishing a release: a direct `gh release create`,
+`glab release create`, or release-workflow dispatch is blocked and redirected to
+`/anchor:release`, which runs the same publish after you confirm it.
+
 ---
 
 [rewrite-history-through-anchor](rules/rewrite-history-through-anchor.md ':include')

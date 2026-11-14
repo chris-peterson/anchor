@@ -37,7 +37,9 @@ follow-up fix).
   and writes notes describing each change's effect on someone *using* the project.
   A generated body is the costlier mistake of the two: where a workflow proxies the
   release body into the changelog, it permanently lands a list of unrelated prior
-  CRs there.
+  CRs there. A release-workflow dispatch (`gh workflow run … -f bump=<level>`) is
+  the same publish. A hook denies these raw calls; when it does, invoke the skill
+  rather than handing the command to the user to run with `!`.
 
 The moment work needs a PR/MR body, an issue body, or release notes, hand off to
 the skill rather than improvising the `create` inline. Editing or querying an

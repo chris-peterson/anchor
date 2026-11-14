@@ -524,7 +524,10 @@ The publish step for the `dispatch-triggered` model (see
 `guides/release-models.md`): the workflow derives the version, tags, and
 publishes, so the only thing to get right here is the input name. It comes from
 the recon block's `RELEASE_DISPATCH_BUMP_INPUT` — a workflow is free to call it
-anything, and `bump` is a convention rather than a contract:
+anything, and `bump` is a convention rather than a contract. `/anchor:release`
+runs it through `scripts/release-publish.sh --dispatch`; anchor's `PreToolUse`
+hook denies the raw call on a release workflow, so the invocation below is what
+the script runs, not a step to take by hand:
 
 ```bash
 # GitHub — one -f per input. The workflow file is named by path or by basename;
@@ -559,7 +562,9 @@ documenting a path the four inferred models don't cover.
 ## Publish a release
 
 Creating a release is the publish step for the `release-triggered` and
-`tag-triggered` models (see `guides/release-models.md`). Pass the notes by file —
+`tag-triggered` models (see `guides/release-models.md`). `/anchor:release` runs
+it through `scripts/release-publish.sh --release`, and anchor's `PreToolUse` hook
+denies a raw `release create`. Pass the notes by file —
 they are multi-line prose, and the body is what a release-triggered workflow
 proxies into the changelog verbatim:
 

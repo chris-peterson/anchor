@@ -1,5 +1,12 @@
 # Source of record for anchor's hooks — shipyard generates hooks.json.
+#
+# route-to-skill.sh takes `Bash`, because the forge mutations it routes are
+# shell commands; every other tool call never reaches it.
 hooks:
   - event: SessionStart
     command: 'bash "${CLAUDE_PLUGIN_ROOT}/hooks/emit-rules.sh"'
     description: Emits the plugin's ambient rules into the agent's context.
+  - event: PreToolUse
+    matcher: Bash
+    command: 'bash "${CLAUDE_PLUGIN_ROOT}/hooks/route-to-skill.sh"'
+    description: Denies a raw forge mutation an anchor skill owns and names the skill, starting with a release publish.

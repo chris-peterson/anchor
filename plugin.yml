@@ -193,7 +193,8 @@ suite:
       use-forge-clis: Drive forge operations through `gh` / `glab`
     hooks:
       emit-rules: SessionStart — Emits the plugin's ambient rules into the agent's context.
-      hooks: 'Hook wiring: SessionStart→emit-rules.'
+      hooks: 'Hook wiring: SessionStart→emit-rules; PreToolUse→route-to-skill (Bash).'
+      route-to-skill: PreToolUse — Denies a raw forge mutation an anchor skill owns and names the skill, starting with a release publish.
   # <<< shipyard:describe <<<
   examples:
     - label: "/anchor:commit"

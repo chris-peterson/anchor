@@ -1077,6 +1077,13 @@ established before anything is proposed or written.
   shall retitle it to the new version rather than insert a new section above it.
 - **[RELEASE-19]** The system shall not cascade from a merge into a release;
   `/anchor:merge` shall name `release` as the next step without invoking it.
+- **[RELEASE-20]** The system shall publish — create the forge release, or
+  dispatch the release workflow — through a single script rather than an inline
+  `gh` / `glab` call, and shall ask the publish confirmation (RELEASE-13,
+  RELEASE-04a) as its own question once the notes have landed, not read it from
+  an approval of the notes or their commit. If that publish is denied, then the
+  system shall report the denial and stop rather than hand the raw command to the
+  user to run.
 
 ### ISSUES — Issues
 
@@ -2067,6 +2074,14 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
 - **[RULE-05]** While deciding whether a history rewrite is safe, the system shall
   read push state and the CR draft flag fresh at the moment of the rewrite
   rather than from an earlier turn.
+- **[RULE-06]** When a Bash call is about to run a raw forge mutation that an
+  `anchor` skill owns, the system shall deny it through a `PreToolUse` hook with a
+  reason that opens with a stable per-rule marker and names the skill and the
+  script that skill publishes through. The script's own call shall pass, as
+  shall read-only calls and mutations no skill owns. Covered so far: a release
+  publish — `gh` / `glab release create`, `gh workflow run` on a release workflow
+  (named as one, or passed a semver level), and the API writes that do either —
+  routed to `/anchor:release`. The remaining mutations are #142.
 
 ### UX — Interaction discipline
 

@@ -298,11 +298,19 @@ On `yes`, publish — the notes by file, never `--generate-notes` (a generated b
 lands unrelated prior CRs in the changelog the workflow writes). The two models
 publish differently:
 
-- **`release-triggered`** — create the forge release with the notes as its body
-  (the cookbook's "Publish a release"). Creating it makes the tag. Leave the
+- **`release-triggered`** — create the forge release with the notes as its body,
+  through the publish script (a raw `release create` is denied by anchor's hook):
+
+  ```bash
+  bash "${CLAUDE_PLUGIN_ROOT}/scripts/release-publish.sh" \
+    --release v<X.Y.Z> --notes-file <RELEASE_NOTES_PATH>
+  ```
+
+  Creating it makes the tag, and `RELEASE_URL` is the release, read back from
+  the forge. Leave the
   target at its default, the default branch's tip, which the recon block has
   already established HEAD to be (`RELEASE_ON_DEFAULT=1`, `RELEASE_UNPUSHED=0`);
-  reach for `--target` / `--ref` only to tag a different commit, and pass the
+  reach for `--target` only to tag a different commit, and pass the
   full 40-char sha there, because GitHub rejects an abbreviated one.
 - **`tag-triggered`** — the tag *is* the trigger: annotate it with the notes and
   push it as its own step (`git tag -a v<X.Y.Z> -F <RELEASE_NOTES_PATH>` then
@@ -354,12 +362,22 @@ them in a commit — reviewed there, like `bump-commit`, which is why
    > that derives `v1.8.0`, retitles the changelog section, commits, tags that
    > commit, and publishes. Proceed? `[yes / no]`
 
-5. **Dispatch it**, passing the level by the input's own declared name — the
-   recon block resolved it, so don't assume `bump`:
+   Ask it as its own question, after the notes commit has landed. An approval
+   of the notes, or of the commit that carries them, is not this approval.
+
+5. **Dispatch it** through the publish script, passing the level by the input's
+   own declared name — the recon block resolved it, so don't assume `bump`:
 
    ```bash
-   gh workflow run <RELEASE_WORKFLOW> -f <RELEASE_DISPATCH_BUMP_INPUT>=<level>
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/release-publish.sh" \
+     --dispatch <RELEASE_WORKFLOW> --input <RELEASE_DISPATCH_BUMP_INPUT>=<level>
    ```
+
+   `RUN_URL` is the run to watch. A raw `gh workflow run` on a release workflow
+   is denied by anchor's own hook, which is what keeps this step inside the
+   skill; if the script's call is denied too, report that and stop. Never hand
+   the raw command to the user to run with `!`: it skips this confirmation and
+   the follow-through below.
 
    Where `RELEASE_DISPATCH_INPUTS` lists inputs beyond the level, ask rather than
    leaving a required one unset — a dispatch missing one fails before the run
