@@ -141,8 +141,8 @@ grep -q 'no verdict chosen' "$work/err.txt"         || fail "an undecided review
 ok "revdiff: rc 0 -> undecided, no comments, completeness null"
 
 # DIFF-49: a review closed with nothing of the reviewer's asks in its own pane,
-# and the answer is the Review box choice it names. Enter alone stays on
-# Go back, and Esc (go back) leaves the review undecided here,
+# and the answer is the Review box choice it names. Focus starts on Approve,
+# so Enter approves, and Esc (go back) leaves the review undecided here,
 # since the stub does not run the review again.
 o=$(REVDIFF_STUB_CHOOSE="" REVDIFF_AFTER_FILE="$work/after.txt" REVDIFF_STUB_KEYS=Z run --previous 2>"$work/err.txt"); j=$(json_of "$o")
 grep -q 'verdict-ask.sh' "$work/after.txt"           || fail "the launch should carry the pane's question: $(cat "$work/after.txt")"
@@ -156,14 +156,25 @@ o=$(REVDIFF_STUB_CHOOSE="" REVDIFF_STUB_KEYS=q run --previous 2>/dev/null)
 [ "$(verdict_of "$o")" = rejected ]                  || fail "q in the box should reject as Q does: $o"
 o=$(REVDIFF_STUB_CHOOSE="" REVDIFF_STUB_KEYS=Q run --previous 2>/dev/null)
 [ "$(verdict_of "$o")" = rejected ]                  || fail "Q in the pane (the second of ZQ) should reject: $o"
-for keys in $'\e' $'\n' D a; do
+o=$(REVDIFF_STUB_CHOOSE="" REVDIFF_STUB_KEYS=$'\n' run --previous 2>/dev/null)
+[ "$(verdict_of "$o")" = approved ]                  || fail "Enter on the box's starting focus should approve as Z does: $o"
+o=$(REVDIFF_STUB_CHOOSE="" REVDIFF_STUB_KEYS=$'\e[C\n' run --previous 2>/dev/null)
+[ "$(verdict_of "$o")" = rejected ]                  || fail "Right then Enter should reject: $o"
+# A click on Reject (press and release over it) rejects, and a press dragged
+# off the button chooses nothing. At 80x24 the box's buttons sit on row 12,
+# Approve in columns 21-31 and Reject in 35-44.
+o=$(LINES=24 COLUMNS=80 REVDIFF_STUB_CHOOSE="" REVDIFF_STUB_KEYS=$'\e[<0;38;12M\e[<0;38;12m' run --previous 2>/dev/null)
+[ "$(verdict_of "$o")" = rejected ]                  || fail "a click on Reject should reject: $o"
+o=$(LINES=24 COLUMNS=80 REVDIFF_STUB_CHOOSE="" REVDIFF_STUB_KEYS=$'\e[<0;25;12M\e[<0;25;20m' run --previous 2>/dev/null); j=$(json_of "$o")
+[ "$(jq -r .raw.exitCode <<<"$j")" = undecided ]     || fail "a press dragged off Approve should choose nothing: $o"
+for keys in $'\e' D a; do
   o=$(REVDIFF_STUB_CHOOSE="" REVDIFF_STUB_KEYS="$keys" run --previous 2>/dev/null); j=$(json_of "$o")
   [ "$(jq -r .raw.exitCode <<<"$j")" = undecided ]   || fail "$(printf %q "$keys") in the pane should leave it undecided: $o"
 done
 md=$'## a.txt:2 (+)\nuse a constant here'
 o=$(REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT="$md" REVDIFF_STUB_CHOOSE="" REVDIFF_STUB_KEYS=Z run --previous 2>/dev/null)
 [ "$(verdict_of "$o")" = changes-requested ]         || fail "a review with a note of the reviewer's should not ask: $o"
-ok "revdiff: an undecided close asks in the pane; Z, z, Q, and q choose; Enter, Esc, D, and a don't, and a note skips it"
+ok "revdiff: an undecided close asks in the pane; Z, z, Enter, Q, q, and a click choose; Esc, D, a, and a dragged press don't, and a note skips it"
 
 # rc 10 with a line annotation and a file-level annotation
 md=$'## a.txt:2 (+)\nuse a constant here\n\n## a.txt (file-level)\nsplit this file'

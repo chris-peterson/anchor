@@ -1605,15 +1605,20 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
 - **[DIFF-49]** When a revdiff review closes with nothing of the reviewer's (no
   note, or only the preloaded notes returned as they were seeded), the system
   shall ask for the verdict in the same pane before it closes: a box centered in
-  the pane offering Approve, Reject, and Go back. Approve and Reject shall read
+  the pane asking "Approve this change?" and offering Approve, Reject, and
+  Go back. Approve and Reject shall read
   as a note on the Review box's `approve` or `reject` line (DIFF-42), and
   Go back shall open the same review again in that pane. The system shall bind
   revdiff's `Z` to quit for the review, and the box shall take `Z` or `z` as Approve,
   `Q` or `q` as Reject, and Esc as Go back, so `ZZ` and `ZQ` end a revdiff review as
   they end an `edit` review in Helix or Vim (DIFF-44). Focus shall start on
-  Go back, Enter shall act only on the focused button, and of the keys typed
-  before the box draws only a lone `Z` or `Q` shall be kept, so a repeated quit
-  key or a stray Enter approves nothing. The reviewer who quits a review with
+  Approve and Enter shall act on the focused button, so Enter answers as `Z`
+  does, and of the keys typed before the box draws only a lone `Z` or `Q` shall
+  be kept, so a repeated quit key or an Enter typed ahead of the box approves
+  nothing. A click shall choose a button: the press focusing it and the release
+  over the same button acting, so a press dragged off a button chooses nothing.
+  The box shall draw on the terminal's alternate screen, so closing it leaves
+  nothing of it in the pane's scrollback. The reviewer who quits a review with
   nothing to say is usually leaving the pane, and a question asked in chat
   arrives after they have; asked in the pane, it reaches them before the pane
   closes.

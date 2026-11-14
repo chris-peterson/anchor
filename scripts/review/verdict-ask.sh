@@ -16,10 +16,12 @@
 # `Z` approves and `Q` rejects, the second half of an `edit` review's `ZZ`
 # and `ZQ` in Helix or Vim, which with the review's `Z` bound to quit work here
 # too, and `z` and `q` answer as well once the box is up. Esc goes back into
-# the review. Focus starts on Go back and Enter acts
-# only on the focused button, and of the keys typed before the box drew only a
-# lone `Z` or `Q` is kept, so a second `q` or a stray Enter never approves
-# anything.
+# the review. Focus starts on Approve and Enter acts on the focused button,
+# so Enter answers as `Z` does. Of the keys typed before the box drew only a
+# lone `Z` or `Q` is kept, so a second `q` or an Enter typed ahead of the box
+# never approves anything. A click on a button chooses it: the press focuses
+# it and the release over the same button acts, so a press dragged off a button
+# chooses nothing.
 set -u
 
 tool="$1" out_file="$2" preload_file="$3" choice_file="$4" palette_file="$5" rc="$6"
@@ -53,8 +55,11 @@ base="${RESET}${c_panel}"
 labels=("Approve" "Reject" "Go back")
 keys=(Z Q Esc)
 values=(approve reject rereview)
-focus=2
+focus=0
 w=60 h=9
+# Each button's first and last screen column (1-based, as the mouse reports
+# them) and the row they sit on, set by draw for a click to be matched against.
+bx0=() bx1=() by=0 pressed=""
 
 # Print <text> at <row> <col>; <text> carries its own styling.
 at() { printf '%s[%d;%dH%s' "$ESC" $(($1 + 1)) $(($2 + 1)) "$3"; }
@@ -70,7 +75,7 @@ button() {
 }
 
 draw() {
-  local rows cols top left i inner=$((w - 2)) hr blank btns hint
+  local rows cols top left i inner=$((w - 2)) hr blank btns hint title
   rows=$(tput lines) cols=$(tput cols)
   top=$(( (rows - h) / 2 )) left=$(( (cols - w) / 2 ))
   (( top >= 0 )) || top=0
@@ -85,15 +90,50 @@ draw() {
   done
   at $((top + h - 1)) "$left" "${base}${c_accent}╰${hr}╯"
 
-  at $((top + 2)) $((left + 4)) "${base}${c_accent}${ESC}[1mNo verdict chosen${base}"
-  at $((top + 3)) $((left + 4)) "${base}${c_normal}The review closed without one."
+  title="Approve this change?"
+  at $((top + 2)) $((left + (w - ${#title}) / 2)) "${base}${c_accent}${ESC}[1m${title}${base}"
 
-  btns=""
-  for i in 0 1 2; do btns+="$(button "$i")   "; done
-  at $((top + 5)) $((left + (w - 40) / 2)) "$btns"
+  local x=$((left + (w - 40) / 2)) n
+  btns="" by=$((top + 4))
+  for i in 0 1 2; do
+    btns+="$(button "$i")   "
+    n=$((${#keys[$i]} + ${#labels[$i]} + 3))
+    bx0[i]=$((x + 1)) bx1[i]=$((x + n))
+    x=$((x + n + 3))
+  done
+  at "$by" $((left + (w - 40) / 2)) "$btns"
+  by=$((by + 1))
 
   hint="${c_key}←→${c_muted} move  ${c_key}enter${c_muted} choose"
-  at $((top + 7)) $((left + (w - 21) / 2)) "${base}${hint}"
+  at $((top + 6)) $((left + (w - 21) / 2)) "${base}${hint}"
+}
+
+# The button under the mouse report <col> <row>, or nothing.
+button_at() {
+  local i
+  (( $2 == by )) || return 1
+  for i in 0 1 2; do
+    if (( $1 >= bx0[i] && $1 <= bx1[i] )); then printf '%s' "$i"; return 0; fi
+  done
+  return 1
+}
+
+# Read the rest of an SGR mouse report (`ESC [ < b ; x ; y M|m`) and act on a
+# left-button press or release over a button; wheel and other buttons do nothing.
+mouse() {
+  local c report="" b x y i
+  while IFS= read -rsn1 -t 0.05 c; do
+    [[ "$c" == [Mm] ]] && break
+    report+="$c"
+  done
+  IFS=';' read -r b x y <<<"$report"
+  [[ "$b" == 0 && -n "$x" && -n "$y" ]] || return 0
+  i=$(button_at "$x" "$y") || { pressed=""; return 0; }
+  if [[ "$c" == M ]]; then
+    focus=$i pressed=$i; draw
+  elif [[ "$pressed" == "$i" ]]; then
+    finish "${values[$i]}"
+  fi
 }
 
 finish() {
@@ -105,9 +145,13 @@ finish() {
   exit 1
 }
 
-trap 'printf "%s" "$RESET"; tput cnorm; tput clear' EXIT
+# The box draws on the alternate screen, so closing it hands the pane back as
+# it was rather than leaving the box in the scrollback above what runs next.
+trap 'printf "%s%s[?1006l%s[?1000l" "$RESET" "$ESC" "$ESC"; tput cnorm; tput rmcup' EXIT
 trap draw WINCH
+tput smcup
 tput civis
+printf '%s[?1000h%s[?1006h' "$ESC" "$ESC"
 early="" key=""
 if [[ -t 0 ]]; then while IFS= read -rsn1 -t 0.05 key; do early+="$key"; done; fi
 case "$early" in
@@ -127,6 +171,7 @@ while :; do
       case "$rest" in
         "[C") focus=$(( (focus + 1) % 3 )); draw ;;
         "[D") focus=$(( (focus + 2) % 3 )); draw ;;
+        "[<") mouse ;;
         "")   finish rereview ;;
       esac ;;
   esac

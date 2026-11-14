@@ -54,7 +54,8 @@ looked, with an answer to each of your notes.
 
 > [!WARNING]
 > Quitting with <kbd>q</kbd> and nothing of your own no longer approves. A box
-> in the same pane asks Approve, Reject, or Go back, with focus on Go back.
+> in the same pane asks "Approve this change?" with Approve, Reject, and Go back,
+> focus on Approve, so <kbd>Enter</kbd> approves. You can click a button too.
 > <kbd>Q</kbd> does nothing.
 
 **End the review with a chord or a note.** With nothing to say,
