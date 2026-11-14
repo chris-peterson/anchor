@@ -1,0 +1,129 @@
+name: Repro windows revdiff
+
+# Throwaway: checks the claims in a Windows user's pre-2.0 revdiff notes against
+# a real Windows runner. Every step continues on error so one run answers all.
+
+on:
+  push:
+    branches: [repro-windows-revdiff]
+
+permissions:
+  contents: read
+
+jobs:
+  repro:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 3
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: false
+
+      - name: env
+        continue-on-error: true
+        run: |
+          go version
+          uname -a
+          echo "jq: $(command -v jq) $(jq --version 2>&1)"
+          echo "vi: $(command -v vi)  vim: $(command -v vim)  nano: $(command -v nano)"
+          cmd //c "where vi vim nano" || true
+          echo "TMPDIR=${TMPDIR:-} TEMP=${TEMP:-}"
+
+      - name: "C1 go install app/revdiff@v1.15.0: name and --version"
+        continue-on-error: true
+        run: |
+          go install github.com/umputun/revdiff/app/revdiff@v1.15.0
+          ls "$(go env GOPATH)/bin"
+          "$(go env GOPATH)/bin/revdiff.exe" --version
+
+      - name: "C2 go install app@v1.13.0 (notes' version): name and --version"
+        continue-on-error: true
+        run: |
+          d=$(mktemp -d); GOBIN="$d" go install github.com/umputun/revdiff/app@v1.13.0
+          ls "$d"; "$d"/*.exe --version
+
+      - name: "C3 go build from a tagged shallow clone (notes' recipe, v1.15.0 path)"
+        continue-on-error: true
+        run: |
+          d=$(mktemp -d)
+          git clone -q --branch v1.15.0 --depth 1 https://github.com/umputun/revdiff.git "$d/src"
+          go build -C "$d/src" -o "$d/revdiff-built.exe" ./app/revdiff
+          "$d/revdiff-built.exe" --version
+
+      - name: "C4 --help flag style, and anchor's --annotation-marker= probe"
+        continue-on-error: true
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          revdiff --help > help.txt 2>&1 || true
+          head -25 help.txt
+          echo '--- annotation lines:'
+          grep -n -i 'annotation' help.txt || true
+          if revdiff --help 2>&1 | grep -q -- '--annotation-marker='; then
+            echo "ANCHOR_MARKER_PROBE=found"
+          else
+            echo "ANCHOR_MARKER_PROBE=missed"
+          fi
+
+      - name: "C5 does revdiff accept --flag form on Windows"
+        continue-on-error: true
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          revdiff --dump-keys | head -5; echo "dump-keys rc=${PIPESTATUS[0]}"
+          revdiff --dump-theme | head -3; echo "dump-theme rc=${PIPESTATUS[0]}"
+          revdiff --annotation-marker= --version; echo "marker flag rc=$?"
+          revdiff /annotation-marker: /version; echo "slash form rc=$?"
+
+      - name: "C6 how a POSIX temp path reaches revdiff (MSYS conversion)"
+        continue-on-error: true
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          f=$(mktemp "${TMPDIR:-/tmp}/anchor-desc.XXXXXX"); echo hi > "$f"
+          echo "bash path: $f"
+          revdiff "--description-file=$f" --dump-config 2>&1 | grep -i -n 'description' || echo "(no description key in dump-config)"
+          REVDIFF_CONFIG="$f" revdiff --dump-config 2>&1 | head -3
+
+      - name: "C7 anchor 2.0 probe on Windows with a real revdiff and a runner"
+        continue-on-error: true
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          r=$(mktemp -d)/runner.sh
+          printf '#!/bin/sh\nexit 0\n' > "$r"; chmod +x "$r"
+          ANCHOR_HOST_RUNNER="$r" bash scripts/review-diff.sh --skill review --probe HEAD~1..HEAD
+
+      - name: "C8 anchor 2.0 launch: command string and after-command a runner receives"
+        continue-on-error: true
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          d=$(mktemp -d)
+          cat > "$d/runner.sh" <<'EOF'
+          #!/bin/sh
+          printf '%s\n' "$#" > "$CAP/argc"
+          printf '%s\n' "$1" > "$CAP/cmd"
+          printf '%s\n' "${2:-}" > "$CAP/after"
+          exit 0
+          EOF
+          chmod +x "$d/runner.sh"
+          CAP="$d" ANCHOR_HOST_RUNNER="$d/runner.sh" bash scripts/review-diff.sh --skill review HEAD~1..HEAD || echo "launch rc=$?"
+          echo "--- argc: $(cat "$d/argc")"; echo "--- cmd:"; cat "$d/cmd"; echo "--- after:"; cat "$d/after"
+          grep -q -- '--annotation-marker=' "$d/cmd" && echo "CMD_HAS_MARKER=1" || echo "CMD_HAS_MARKER=0"
+
+      - name: "C9 cmd start /wait: does a new console open on a runner, and is the exit status returned"
+        continue-on-error: true
+        timeout-minutes: 2
+        run: |
+          cmd //c "start \"anchor test\" /wait bash.exe -c \"exit 7\""; echo "start/wait rc=$?"
+          cmd //c "start \"anchor test\" /wait cmd /c exit 7 & echo errorlevel=%ERRORLEVEL%"
+
+      - name: "C10 revdiff with no console (what a pipe-only host gives it)"
+        continue-on-error: true
+        timeout-minutes: 2
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          timeout 20 revdiff HEAD~1 HEAD < /dev/null > out.txt 2> err.txt; echo "rc=$?"
+          echo "--- stderr:"; head -c 1500 err.txt; echo; echo "--- stdout bytes: $(wc -c < out.txt)"
