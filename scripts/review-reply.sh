@@ -179,7 +179,7 @@ jq -n --slurpfile r "$replies" --slurpfile c "$comments" --rawfile a "$anchors" 
         also:($mine[1:] | map(.where)), status:$x.status, reply:$x.reply}]
   | sort_by([.file, (.line // 0), .id]) | to_entries
   | map(.value + {n:(.key + 1)}
-        | . + {body:("🤖 #\(.n) · \(.status | outcome)\nYou asked: \($c[0][.id - 1].body)\n\n\(.reply)"
+        | . + {body:("🤖 #\(.n) · \(.status | outcome)\n\(if .status == "answered" then "❓ " else "You asked: " end)\($c[0][.id - 1].body)\n\n\(.reply)"
                      + (if (.also | length) > 0 then "\n\nAlso at: \(.also | join(", "))" else "" end))}
         | del(.status, .reply))
 ' > "$state/notes.json"
@@ -219,7 +219,7 @@ jq -r --slurpfile n "$state/notes.json" --slurpfile c "$comments" --slurpfile q 
         | "## #\($o[$x.comment | tostring]) · \($x.status | outcome)",
           (if $qx then "`\($qx.where)`, unchanged since your review:" else empty end),
           (if $qx.excerpt then ($qx.excerpt | rtrimstr("\n")) else empty end),
-          "You asked: \($c[0][$x.comment - 1].body)", "", $x.reply)
+          (if $x.status == "answered" then "❓ " else "You asked: " end) + $c[0][$x.comment - 1].body, "", $x.reply)
     end
 ' "$replies" > "$state/reply.md"
 

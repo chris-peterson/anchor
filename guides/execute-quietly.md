@@ -149,13 +149,16 @@ about them.
 >
 > **Answers:**
 >
-> 2. Fargate bills per task-second, and this job runs every minute, so the
+> 2. ❓ why not Fargate for this?
+>
+>    Fargate bills per task-second, and this job runs every minute, so the
 >    always-on container is cheaper at this volume.
 >
 > Now: pulling `DAILY_MAX` from one module, then re-running the review.
 
 **Answer the questions first.** A comment that asks something is answered in
-that same message, under **Answers**, numbered to its row, before you start on
+that same message, under **Answers**, numbered to its row and repeating the
+question after ❓, before you start on
 any fix. The reviewer asked because they wanted to know, and an answer given
 after the fixes, or only inside the next review, lands after a stretch of work
 they've scrolled past. Before the next review opens, post the answers again,

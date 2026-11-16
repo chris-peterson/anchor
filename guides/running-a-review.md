@@ -205,11 +205,13 @@ to find yours. Once the fixes are in and the tests pass:
 3. **Re-open the review with `--reply <REVIEW_STATE>` added**, its
    `--message-file` and `--path` list unchanged. Post the `answered` replies
    again in the message that launches it, above the manifest, under
-   **Answers**, numbered as the reply table numbers them. You gave them when the
+   **Answers**, numbered as the reply table numbers them, each question after ❓
+   with its answer under it. You gave them when the
    feedback came in (`execute-quietly.md`), but the fixes since have scrolled
    them away.
 
-Each reply opens with *You asked:* and the comment, and `(context).md` opens
+Each reply opens with the comment: after ❓ where the reply answers a question,
+after *You asked:* otherwise, and `(context).md` opens
 with a table of every comment and what became of it. A reply the reviewer
 leaves as it is, or deletes, is read. One they edit, or a new note, is feedback,
 and the verdict says which. Another `changes-requested` prints the next

@@ -1675,7 +1675,8 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   closed, and shall re-open the review on what changed after that point, with a
   reply to every comment the reviewer left: one note per comment, on the line it
   concerns (the first of them, naming the others, where it concerns several),
-  opening with what the reviewer asked and saying whether it was answered, done
+  opening with what the reviewer asked (after ❓ where the reply answers a
+  question) and saying whether it was answered, done
   as asked, or done differently, and listed together at the head of the review's
   context file under a one-line instruction. Each reply shall be numbered in the
   order the review tool lists it, by path and then line, the replies with no
@@ -2208,7 +2209,7 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
 - **[UX-14]** Where review feedback asks the agent a question, the system shall
   answer it in the message that echoes the feedback back, before starting on
   any other comment, and shall post the answers again in the message that opens
-  the next review. A reviewer asks because they want to know now; an answer
+  the next review, each under its question marked ❓. A reviewer asks because they want to know now; an answer
   given after the fixes, or only inside the next review, sits under work they
   have already scrolled past.
 - **[UX-10]** Where a note's line is in a file the review would otherwise leave

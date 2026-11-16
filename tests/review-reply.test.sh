@@ -111,7 +111,8 @@ s=$( cd "$repo" && bash "$seed" --state "$state" --replies "$work/replies.json" 
 [ "$(key NOTE_COUNT "$s")" = 2 ] || fail "two replies have a line: $s"
 [ "$(key IN_CONTEXT_ONLY "$s")" = 2 ] || fail "the subject reply and the unchanged file's reply have no line: $s"
 grep -qxF '## a.txt:2 ( )' "$state/notes.md" || fail "a reply near a change sits where the note was: $(cat "$state/notes.md")"
-grep -qxF 'You asked: why uppercase?' "$state/notes.md" || fail "a reply opens with what was asked: $(cat "$state/notes.md")"
+grep -qxF '❓ why uppercase?' "$state/notes.md" || fail "an answer opens with the question, marked ❓: $(cat "$state/notes.md")"
+grep -qxF 'You asked: rename b1 to beta' "$state/notes.md" || fail "a reply to a request opens with what was asked: $(cat "$state/notes.md")"
 grep -qxF '## b.txt:1 (+)' "$state/notes.md" || fail "a reply about a changed line sits on it: $(cat "$state/notes.md")"
 grep -qxF '🤖 #2 · 🏁 as asked' "$state/notes.md" || fail "a reply is headed with what became of the note: $(cat "$state/notes.md")"
 grep -qF '| 3 | shorter subject | ⚠️ done differently | end of file |' "$state/reply-head.md" || fail "the reply table: $(cat "$state/reply-head.md")"
@@ -125,6 +126,7 @@ grep -qxF '>    5  c5' "$state/reply.md" || fail "the excerpt marks the line ask
 { grep -qxF '     2  c2' "$state/reply.md" && grep -qxF '     8  c8' "$state/reply.md"; } || fail "the excerpt carries three lines either side: $(cat "$state/reply.md")"
 ! grep -qxF '     1  c1' "$state/reply.md" || fail "the excerpt stops three lines out: $(cat "$state/reply.md")"
 grep -qxF 'It closes the list.' "$state/reply.md" || fail "the quoted reply is written out: $(cat "$state/reply.md")"
+grep -qxF '❓ what is c5 for?' "$state/reply.md" || fail "an answer off the diff opens with the question, marked ❓: $(cat "$state/reply.md")"
 ok "review-reply.sh answers a note in an unchanged file in the context file, quoting the lines it is about"
 
 # The same question, with c.txt now changed 15 lines below it: the file is in the
