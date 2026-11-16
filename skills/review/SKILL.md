@@ -28,14 +28,13 @@ Authorship picks where the result goes:
 | someone else's | **review** | a worktree at the CR head, in a temp directory | a suggestion or a thread, posted once the user approves the exact text |
 | the user's own (`IS_OWN_CR=1`) | **self-review** | the user's checkout, on the CR's branch | part of the round's commit, made through `/anchor:commit`; nothing posts |
 
-**On someone else's CR, nothing the review drafts is shown as code in the
-change.** The user is reviewing what will ship, and a fix the agent drafted
-ships only if the author takes it. So the items pass there diffs the CR as its
-author wrote it, each fix is described in words in its item's note headed 💡,
-its code held back for the batch of comments in Step 8,
-and there is no whole pass: the CR with someone else's fixes in it is not a
-change anyone will merge. `review-round.sh seed` does this on a worktree round
-(REVIEW-22).
+**On someone else's CR, the items pass shows the suggested fixes and nothing
+else.** The user has already read the change in the read pass, and a fix the
+agent drafted ships only if the author takes it. So the items pass diffs from
+the CR head: every line in it is a suggestion, as code, with a 💡 note on it
+saying why. The user drops one by deleting its note or replying no. There is no
+whole pass: the CR with someone else's fixes in it is not a change anyone will
+merge (REVIEW-22).
 
 **Every examination is the user's call** (REVIEW-38). A review spends tokens by
 the agent and by the round, so the quality agents run, and another round or
@@ -430,10 +429,11 @@ others, and what turns a fix on someone else's CR into a suggestion. Run the
 project's tests over the kept items before the whole pass (Step 7), not over
 every draft.
 
-On someone else's CR the drafts are the agent's working, not something to show
-as code: Step 5's seed parks them, so the user sees the CR as its author wrote
-it and each fix described in words in a 💡 note. Write the reason of an applied
-item as what the fix would improve, since its code isn't beside it there.
+Commit to each fix: draft the change you would make, not a note about a change
+you might make. The items pass is where the user decides, and a suggestion they
+can see as code is one they can take or drop at a glance; a fix described only
+in words makes them do the drafting in their head. Keep each fix to the lines it
+needs, so it reads as one suggestion, and write its reason as what it improves.
 
 ## Step 5: Seed the items pass
 
@@ -448,13 +448,9 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-round.sh" seed --dir <ROUND_DIR> --pa
 Keep `ROUND_FROM`: it is the base the pass's revdiff opens on (the CR head for
 this pass, the merge base for the whole pass).
 
-**On someone else's CR the seed parks the drafts** (REVIEW-22): it says in
-each applied item's 💡 note where the fix would change the CR (in words: code
-in a note reads badly in revdiff), places that note on the
-CR-head line the fix starts at, numbers the other sites in the CR head, and
-takes the drafts back out of the worktree. `ROUND_FROM` is then the merge base,
-so the pass shows the CR as it ships with every suggestion beside it, never in
-it. The recorded patches stay, so `suggest` and `revert` work as before.
+On someone else's CR the pass is the same diff from the CR head (REVIEW-22):
+the drafts in the worktree, each applied item's 💡 note on its drafted lines,
+and none of the CR's own change, which the user read in the read pass.
 
 Each item's **sites** are the lines it touches, numbered in the tree as it now
 stands: the first line of each edit for an applied item, or the line the change
@@ -511,14 +507,13 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill review --tool revdif
 In the items pass on your own CR the diff runs from the CR head to the round's
 tree, so it holds the drafts and nothing of the CR's own change, with
 `(context).md` at the root of the file tree and `--untracked` adding any file a
-draft creates. On someone else's CR it runs from the merge base to the CR head:
-the change as it ships, with the drafts parked in their notes.
+draft creates. On someone else's CR it is the same: only the suggested fixes.
 
 **The manifest** opens by saying which of the two the diff is, in those words,
 since a reviewer who can't tell the change from the agent's suggestion can't
 review either: on your own CR *this diff is only the agent's drafts; the whole
-change follows*, on someone else's *this diff is what ships, the CR as its
-author wrote it; each 💡 note is a suggestion and none of them is in the diff*.
+change follows*, on someone else's *this diff is only the fixes the agent
+suggests, not the CR itself; drop one by deleting its note or replying no*.
 Then the CR, the round number from round 2 on, its author, the items by status
 (`3 drafted, 2 without code`), and how to answer.
 From round 2 on, add the trend table `review-round.sh trend --ledger

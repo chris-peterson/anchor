@@ -627,13 +627,14 @@ ready.
   the round's edits in a worktree at the CR head, leaving the user's checkout
   untouched, and shall post a kept applied item whose change is one run of lines
   as a suggestion and any other kept item as a thread, each anchored to the line
-  it maps to in the CR head. It shall never show a drafted fix as code in the
-  diff the user reviews: the items pass shall diff the CR as its author wrote
-  it, each fix described in words in its item's note, headed 💡 and placed on
-  the CR-head line it starts at, its code shown only in the batch of comments
-  (REVIEW-09), and the round shall have no whole
-  pass. The user is reviewing what ships, and a fix ships only if the author
-  takes it.
+  it maps to in the CR head. The items pass shall diff from the CR head, so it
+  shows the drafted fixes as code and none of the CR's own change, each with
+  its item's note headed 💡 on its drafted lines, and the round shall have no
+  whole pass. The user has read the change in the read pass, so showing it
+  again buries the suggestions, and a note revdiff places on a line the diff
+  doesn't change is one the reviewer can pass without seeing; a fix ships only
+  if the author takes it, so the CR with the fixes in it is not a change anyone
+  will merge.
 - **[REVIEW-23]** When no finding clears the review-qualities template's bar and
   the user left no note in the read pass, the system shall say so in one line and treat the review as complete: nothing posts
   on someone else's CR, and a self-review goes straight to the handoff.

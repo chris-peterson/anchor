@@ -49,6 +49,16 @@ Every Partial row is tracked in #179, and the SANITIZE rows in #153.
 
 ## Audit history
 
+### 2026-11-16 — Show only the suggestions on someone else's CR (REVIEW-22 amended)
+
+STATUS.md updated: no new IDs; REVIEW-22 amended. Parking the drafts into 💡
+notes on the CR diff showed the reviewer the change they had just read, and a
+note on a line the CR didn't touch was one revdiff could skip past, so the
+suggestions went unseen. The worktree round's items pass now diffs from the CR
+head, as a self-review's does: the drafts as code, each with its 💡 note, and no
+whole pass — `scripts/review-round.sh` (`seed`, `revert`),
+`skills/review/SKILL.md` Steps 4–6, `tests/review-round.test.sh`.
+
 ### 2026-11-16 — Take a named path literally (COMMIT-04 amended)
 
 STATUS.md updated: no new IDs; COMMIT-04 amended. Every helper scoped git to the
