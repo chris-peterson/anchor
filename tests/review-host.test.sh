@@ -232,4 +232,20 @@ if command -v python3 >/dev/null 2>&1; then
   ok "agterm: a named session with a live socket selects the agterm host"
 fi
 
+# --- iTerm2 keeps a split's command on its profile, so Cmd+D in the review pane
+# runs it again. The command runs the review once; any replay is a plain shell,
+# never a second review writing the first one's result.
+# shellcheck disable=SC2016  # the stub's own $1, expanded when it runs
+printf '#!/bin/sh\necho "review $1" >> "%s/iterm2-runs"\n' "$work" > "$work/iterm2-launch"
+printf '#!/bin/sh\necho shell >> "%s/iterm2-runs"\n' "$work" > "$work/iterm2-shell"
+chmod +x "$work/iterm2-launch" "$work/iterm2-shell"
+pane_cmd=$(bash -c "source '$here/../scripts/lib/review-host.sh'
+                    source '$here/../scripts/review/hosts/iterm2.sh'
+                    iterm2_pane_command \"\$1\" \"\$2\"" _ "$work/iterm2-launch" "$work/iterm2-sentinel")
+eval "SHELL='$work/iterm2-shell' $pane_cmd"
+eval "SHELL='$work/iterm2-shell' $pane_cmd"
+[ "$(cat "$work/iterm2-runs")" = "$(printf 'review %s\nshell' "$work/iterm2-sentinel")" ] \
+  || fail "a replayed review pane should open a shell, not a second review: $(cat "$work/iterm2-runs")"
+ok "iterm2: the pane runs the review once, and a split of it (Cmd+D) opens a plain shell"
+
 echo "PASS: review-host"

@@ -151,6 +151,8 @@ set -euo pipefail
 #         way a popup or an overlay over it does.
 # shellcheck source=lib/resolve-context.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
+# shellcheck source=lib/forge-url.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/forge-url.sh"
 # shellcheck source=lib/review-editor.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/review-editor.sh"
 # shellcheck source=lib/review-host.sh
@@ -655,7 +657,7 @@ else
     expect_consumed "${@:2}"
   fi
 
-  repo=$(basename "$(git rev-parse --show-toplevel)")
+  repo=$(anchor_repo_name)
   branch=$(git symbolic-ref --quiet --short HEAD || git rev-parse --short HEAD)
 
   review_specs=()

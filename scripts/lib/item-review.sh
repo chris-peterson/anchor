@@ -103,9 +103,17 @@ anchor_items_anchor() {
 }
 
 # The notes JSON ({file, line, marker, body}) as the markdown revdiff preloads.
+# revdiff holds one note per place (a file, or a line and side in it), and a
+# second note preloaded there replaces the first, so notes sharing a place go
+# out as one, their bodies in order, where the place first comes up.
 anchor_items_notes_md() {
-  jq -r '.[] | (if .marker == "file" then "## \(.file) (file-level)" else "## \(.file):\(.line) (\(.marker))" end)
-         + "\n" + (.body | gsub("\n## "; "\n ## ")) + "\n"' "$1"
+  jq -r 'reduce .[] as $n ([];
+           ([$n.file, $n.marker, $n.line]) as $at
+           | (map(.at) | index([$at])) as $i
+           | if $i == null then . + [{at:$at, n:$n, bodies:[$n.body]}] else .[$i].bodies += [$n.body] end)
+         | .[] | .n as $n
+         | (if $n.marker == "file" then "## \($n.file) (file-level)" else "## \($n.file):\($n.line) (\($n.marker))" end)
+           + "\n" + (.bodies | join("\n\n") | gsub("\n## "; "\n ## ")) + "\n"' "$1"
 }
 
 # The table file opens with a title and how to answer.

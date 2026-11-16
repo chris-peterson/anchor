@@ -409,6 +409,10 @@ seed)
     | [$id, .key, .value.file, (.value.line // ""), (.value.side // "new")] | map(tostring) | join("\u001f")' "$items")
   anchors="$dir/anchors.tsv"; : > "$anchors"
   errors=()
+  # Each note's place in the diff, as `<file>\t<marker>\t<line>\t<id>` lines.
+  # revdiff keeps one note per place, and a second preloaded there replaces the
+  # first, which the read would then take as an item the reviewer dropped.
+  placed=""
   # A unit separator, not a tab: tabs are IFS whitespace, so an empty line field
   # would collapse into the next one.
   while IFS=$'\x1f' read -r iid k file line side; do
@@ -419,10 +423,18 @@ seed)
       continue
     fi
     if [[ -z "$line" ]]; then
-      printf '%s\t%s\t%s\tfile\t\n' "$iid" "$k" "$file" >> "$anchors"; continue
-    fi
-    if ! at=$(anchor_items_anchor "$lines" "$root" "$now" "$file" "$line" "$side"); then
+      at=$'file\t'
+    elif ! at=$(anchor_items_anchor "$lines" "$root" "$now" "$file" "$line" "$side"); then
       errors+=("#$iid $file:$line: $at"); continue
+    fi
+    # A note on an unchanged line of an unchanged file goes to the table, not the diff.
+    if [[ "$k" == 0 ]] && { [[ "$at" != " "$'\t'* ]] || anchor_items_file_changed "$lines" "$file"; }; then
+      other=$(awk -F'\t' -v p="$file"$'\t'"$at" '$1 "\t" $2 "\t" $3 == p { print $4; exit }' <<<"$placed")
+      if [[ -n "$other" ]]; then
+        errors+=("#$iid $file${line:+:$line}: shares its note's place with #$other, and revdiff keeps one note per place; move one")
+        continue
+      fi
+      placed+="$file"$'\t'"$at"$'\t'"$iid"$'\n'
     fi
     printf '%s\t%s\t%s\t%s\n' "$iid" "$k" "$file" "$at" >> "$anchors"
   done <<<"$rows"

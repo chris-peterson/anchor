@@ -115,7 +115,9 @@ edit, or reads back as something they wrote. More chat feedback before the
 review closes gets the same short acknowledgement and joins the pile.
 
 A request to stop showing the keys a review lists ("hide hints", "hide diff
-hints", "dismiss the hints") isn't feedback on the change: run
+hints", "dismiss the hints") isn't feedback on the change, and neither is a note
+the reviewer leaves on the Review box's own instructions ("hide this", "remove
+me", "close"), which comes back as `REVIEW_HIDE_HINTS=diff`: run
 `git config --global anchor.hints false`, say so in a line, and leave the
 review open. A request naming one mode ("hide the revdiff hints") sets that
 mode's key, `anchor.diff.hints` or `anchor.edit.hints`, instead.
@@ -134,6 +136,10 @@ last lines carry:
 
 - `REVIEW_VERDICT`: `approved`, `changes-requested`, `rejected`,
   `incomplete`, or `no-verdict`.
+- `REVIEW_HIDE_HINTS=diff`, only where the reviewer left a note on the Review
+  box's instructions. It is neither a comment nor a choice: run
+  `git config --global anchor.diff.hints false`, say so in a line, and act on
+  the verdict as if the note weren't there.
 - `REVIEW_OUTPUT`: compact JSON carrying `verdict`, `mode`, `tool`,
   `comments[]`, `editedFields[]`, `approveIntent`, `capabilities`, and `raw` (the
   DIFF contract in `SPEC.md`). Each comment is `{body, target, file?, startLine?, endLine?,
@@ -197,7 +203,11 @@ to find yours. Once the fixes are in and the tests pass:
    `REPLY_ERROR` line names a comment with no reply, or a site revdiff can't
    show; fix the file and seed again.
 3. **Re-open the review with `--reply <REVIEW_STATE>` added**, its
-   `--message-file` and `--path` list unchanged.
+   `--message-file` and `--path` list unchanged. Post the `answered` replies
+   again in the message that launches it, above the manifest, under
+   **Answers**, numbered as the reply table numbers them. You gave them when the
+   feedback came in (`execute-quietly.md`), but the fixes since have scrolled
+   them away.
 
 Each reply opens with *You asked:* and the comment, and `(context).md` opens
 with a table of every comment and what became of it. A reply the reviewer

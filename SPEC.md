@@ -1512,7 +1512,11 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   indistinguishable from one that never opened. Where the host addresses a
   session rather than a terminal application, it shall be selected on whether the
   calling session can be named. The same answer shall serve the probe (DIFF-17)
-  and the launch so the two cannot disagree.
+  and the launch so the two cannot disagree. Where the host gives a pane split
+  from the review's pane the review's own command, as iTerm2 does, the system
+  shall run the review only in the pane it opened and give any such split the
+  user's shell, since a second review writes the first one's result and a user
+  splitting a pane wants a terminal.
 - **[DIFF-25a]** The system shall resolve that host independently of the review's
   mode, from one ranked set, so `edit` and `diff` reach equally far. A host is a
   place to draw a program the reviewer reads and types into, and which program it
@@ -1735,7 +1739,9 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   doesn't read as editing the commit message, and it is the way back from the
   viewer that `ZD` (DIFF-44) is the way into it.
 - **[DIFF-40]** Where a `diff` review's context file states what quitting does,
-  the system shall put where the change sits (the repo and the base, as links)
+  the system shall put where the change sits (the repo and the base, as links;
+  the repo named as `origin` names it, else for the main checkout, never for a
+  linked worktree's directory, which is named for the worktree)
   and the change's size directly under the title, the base as `@` and its
   link; then the instructions, in one Review box drawn in solid lines with its
   name in the top edge and a blank line on either side: one key for each of the
@@ -1964,6 +1970,11 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   prose around them explains what the reviewer already knows. The keys and that
   prose help a
   reviewer new to the tool and repeat themselves on every review after that.
+  Where the reviewer leaves a note on the Review box's own text in a `diff`
+  review, other than on a choice, the system shall read it as a request to hide
+  the hints for that mode, report it apart from the comments and the verdict,
+  and say so in the box's last line, since a note is how a reviewer marks any
+  other text in the diff they want gone.
 
 ### FORGE — Forge integration & output
 
@@ -2187,7 +2198,19 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   on the line reads like a comment in any other code review. So that a reviewer
   stepping from change to change with `]` reaches every note, a note on a whole
   file or on a line no change is near among them, the system shall run revdiff
-  with stop-at-annotations (DIFF-48).
+  with stop-at-annotations (DIFF-48). revdiff keeps one note per place (a
+  file, or a line and side in it), and a note preloaded where one already sits
+  replaces it, so where two notes land in one place the system shall seed them
+  as one note carrying both; and where the review reads its notes back one per
+  item (a review round), it shall instead refuse to seed the second, naming
+  both, since a note the reviewer never saw would read back as an item they
+  dropped.
+- **[UX-14]** Where review feedback asks the agent a question, the system shall
+  answer it in the message that echoes the feedback back, before starting on
+  any other comment, and shall post the answers again in the message that opens
+  the next review. A reviewer asks because they want to know now; an answer
+  given after the fixes, or only inside the next review, sits under work they
+  have already scrolled past.
 - **[UX-10]** Where a note's line is in a file the review would otherwise leave
   out, because nothing in it changed, the system shall put the note in the
   review's context file, quoting the lines it concerns with three lines either

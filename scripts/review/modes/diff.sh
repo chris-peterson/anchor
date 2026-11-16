@@ -193,8 +193,12 @@ emit_review() {
     return
   fi
 
-  local returned verdict
+  local returned verdict hide_hints
   returned=$(diff_tool_comments "$out_file" "$desc_file")
+  # A note on the Review box's own instructions is the reviewer dismissing them,
+  # as they would any text in the diff: neither feedback nor a choice (CONFIG-21).
+  hide_hints=$(jq -r 'any(.[]; .target == "hints")' <<<"$returned")
+  returned=$(jq -c 'map(select(.target != "hints"))' <<<"$returned")
   # revdiff returns every preloaded note it still holds, so a note returned as
   # it was preloaded is not the reviewer answering, and a review that returns
   # only those has said nothing.
@@ -338,6 +342,7 @@ emit_review() {
     printf '%s\n' "$returned" > "$returned_file"
     echo "REVIEW_RETURNED=$returned_file"
   fi
+  [[ "$hide_hints" != true ]] || echo "REVIEW_HIDE_HINTS=diff"
   echo "REVIEW_VERDICT=$verdict"
   echo "REVIEW_OUTPUT=$out"
 }

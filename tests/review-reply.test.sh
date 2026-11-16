@@ -164,6 +164,21 @@ s=$( cd "$repo" && bash "$seed" --state "$state" --replies "$work/order.json" --
 s=$( cd "$repo" && bash "$seed" --state "$state" --replies "$work/replies.json" --path a.txt --path b.txt --path c.txt )
 ok "review-reply.sh numbers the replies in the order the diff shows them"
 
+# revdiff holds one note per place (a file, or a line and side in it), and a
+# second note preloaded there replaces the first. Two replies that land in one
+# place are one note carrying both, or the reviewer never sees the first.
+jq '.replies[0].sites = [{"file": "b.txt"}] | .replies[1].sites = [{"file": "b.txt"}]' "$work/replies.json" > "$work/shared-file.json"
+s=$( cd "$repo" && bash "$seed" --state "$state" --replies "$work/shared-file.json" --path a.txt --path b.txt --path c.txt )
+[ "$(grep -c '^## b.txt (file-level)$' "$state/notes.md")" = 1 ] || fail "two replies on one file are one note: $(cat "$state/notes.md")"
+{ grep -qxF '🤖 #1 · answered' "$state/notes.md" && grep -qxF '🤖 #2 · 🏁 as asked' "$state/notes.md"; } \
+  || fail "the shared note carries both replies: $(cat "$state/notes.md")"
+jq '.replies[0].sites = [{"file": "b.txt", "line": 1}]' "$work/replies.json" > "$work/shared-line.json"
+s=$( cd "$repo" && bash "$seed" --state "$state" --replies "$work/shared-line.json" --path a.txt --path b.txt --path c.txt )
+[ "$(grep -c '^## b.txt:1 (+)$' "$state/notes.md")" = 1 ] || fail "two replies on one line are one note: $(cat "$state/notes.md")"
+[ "$(grep -c '^🤖 #' "$state/notes.md")" = 2 ] || fail "the shared line's note carries both replies: $(cat "$state/notes.md")"
+s=$( cd "$repo" && bash "$seed" --state "$state" --replies "$work/replies.json" --path a.txt --path b.txt --path c.txt )
+ok "review-reply.sh puts replies that share a place in one note, since revdiff keeps one note per place"
+
 # --- the reply review ------------------------------------------------------
 export REVDIFF_ARGS_FILE="$work/args" REVDIFF_ENV_FILE="$work/env" REVDIFF_CONTEXT_CAPTURE="$work/context"
 export REVDIFF_STUB_OUTPUT; REVDIFF_STUB_OUTPUT=$(cat "$state/notes.md")

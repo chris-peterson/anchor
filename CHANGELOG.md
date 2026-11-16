@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **A reply to a note on a whole file no longer goes missing in the re-review.** revdiff keeps one note per place, a file or a line in it, and when two of anchor's replies landed in the same place, the second replaced the first. That happened most often with a note you left on a whole file, which left the table in `(context).md` pointing at a reply that wasn't there. Replies that share a place now arrive as one note carrying both. In a `/anchor:review` round, where each finding is read back from its own note, two findings in one place are refused before the review opens, so a finding you never saw can't read back as one you dropped.
+- **A review from a worktree names the repo, not the worktree.** The `repo:` line in a review's header, and the editor buffer name in an `edit` review, came from the checkout's directory, which in a linked worktree is named for the worktree, often after its branch. They now use the project name from `origin`, or the main checkout's directory when there is no `origin`. revdiff's own `project` line still shows the directory, since revdiff reads that itself.
+- **A note on the Review box's instructions hides them.** In a revdiff review, a note such as "hide this" or "close" on the box's key list or instructions used to come back as feedback on your commit message. It now turns the hints off (`anchor.diff.hints false`), the agent says so in a line, and the note doesn't count as feedback or as a choice. The box's last line says so.
+- **Cmd+D in a review pane opens a shell, not a second review.** iTerm2 gives a split the command of the pane it was split from, so Cmd+D in anchor's review pane started a second copy of the review. That copy wrote to the same result file as the first, so answering its verdict prompt closed the real review too. The review now runs only in the pane anchor opened for it, and splitting that pane gives you your login shell.
+- **Your questions get answered first.** When a review comes back with a question among your notes, the agent now answers it in the same message that lists your feedback, before it starts on any fix, and posts the answers again just before the next review opens, so they aren't lost behind the work in between.
+
 ## 2.0.1
 
 ### Fixed

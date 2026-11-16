@@ -127,10 +127,10 @@ revdiff_size() {
 
 # shellcheck disable=SC2154
 diff_tool_before() {
-  local repo repo_url top
+  local repo repo_url
   # Read where the review was asked from, before a --files review leaves it.
   repo=$(revdiff_detail repo)
-  if [[ -z "$repo" ]] && top=$(git rev-parse --show-toplevel 2>/dev/null); then repo=$(basename "$top"); fi
+  if [[ -z "$repo" ]] && git rev-parse --show-toplevel >/dev/null 2>&1; then repo=$(anchor_repo_name); fi
   repo_url=$(anchor_repo_web_url)
   [[ "$review_subject" != files ]] || revdiff_files_scratch
   revdiff_header "$repo" "$repo_url"
@@ -455,7 +455,9 @@ diff_tool_comments() {
       )
     | [.[]
         | ($vlines[(.startLine // 0) | tostring] // null) as $choice
-        | if .file == $cfile and .target == "line" and $choice != null then
+        | if .file == $cfile and .target == "line" and $choice == "hints" then
+            .file = null | .target = "hints"
+          elif .file == $cfile and .target == "line" and $choice != null then
             .file = null | .target = "verdict" | .choice = $choice
           elif $ctx == "" or .file != $ctx then .
           else ((.startLine // 0) as $s | if any($reply[]; $s >= .[0] and $s <= .[1]) then "changeset" else $mtarget end) as $t

@@ -61,6 +61,19 @@ end run
 APPLESCRIPT
 }
 
+# The command the review pane runs, as one string iTerm2 splits on its own
+# quoting. iTerm2 keeps a split's command on the new pane's profile, so a split
+# of the review pane (Cmd+D) runs it again: the first run claims the review, and
+# any later one opens the user's shell, never a second review writing the first
+# one's result, whose verdict box would close the real review with it.
+iterm2_pane_command() {
+  local claim="$2.claim" sh
+  # shellcheck disable=SC2016  # expanded by the pane's sh, from its own argv
+  sh='mkdir "$3" 2>/dev/null && [ -x "$1" ] && exec "$1" "$2"; exec "${SHELL:-/bin/sh}" -l'
+  printf '/bin/sh -c %s anchor-review %s %s %s' "$(anchor_host_sq "$sh")" \
+    "$(anchor_host_sq "$1")" "$(anchor_host_sq "$2")" "$(anchor_host_sq "$claim")"
+}
+
 # Reads the reserved statuses and the launch-script writer the dispatcher
 # defines; shellcheck lints a host standalone, since the dispatcher builds its
 # path at run time and cannot be followed across.
@@ -95,10 +108,10 @@ review_host_run() {
   # place its own label format puts it. The copy is attempted, not required: the
   # pane is already running the review by the time it happens, and an error
   # there would be reported as a split that never opened.
-  pane=$(osascript - "${ITERM_SESSION_ID##*:}" "$launch" "$sentinel" <<'APPLESCRIPT' 2>&1
+  pane=$(osascript - "${ITERM_SESSION_ID##*:}" "$(iterm2_pane_command "$launch" "$sentinel")" <<'APPLESCRIPT' 2>&1
 on run argv
     set targetId to item 1 of argv
-    set cmd to quoted form of (item 2 of argv) & " " & quoted form of (item 3 of argv)
+    set cmd to item 2 of argv
     tell application id "com.googlecode.iterm2"
         repeat with w in windows
             repeat with t in tabs of w
@@ -133,7 +146,7 @@ APPLESCRIPT
     # No pane means the command never ran, so say so instead of waiting on a
     # sentinel nothing will write.
     echo "review-diff.sh: could not split the iTerm2 session: $pane" >&2
-    rm -f "$sentinel" "$launch"
+    rm -f "$sentinel" "$launch"; rmdir "$sentinel.claim" 2>/dev/null || true
     return "$anchor_host_rc_no_pane"
   }
 
@@ -141,6 +154,6 @@ APPLESCRIPT
   # Close the pane, so finishing returns the layout the review borrowed rather
   # than leaving a dead shell in the split.
   iterm2_pane_close "$pane"
-  rm -f "$sentinel" "$launch"
+  rm -f "$sentinel" "$launch"; rmdir "$sentinel.claim" 2>/dev/null || true
   return "$rc"
 }

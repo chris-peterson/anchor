@@ -72,6 +72,7 @@ for c in ${REVDIFF_STUB_CHOOSE-accept}; do
   case "$c" in
     accept) pat='- `approve`:' ;;
     reject) pat='- `reject`:' ;;
+    hide) pat='Leave a note on this line to shrink' ;;
     *) pat="- **$(printf '%s' "${c:0:1}" | tr '[:lower:]' '[:upper:]')${c:1}" ;;
   esac
   n=$(grep -n -F -- "$pat" "(context).md" 2>/dev/null | head -1 | cut -d: -f1)
@@ -282,6 +283,21 @@ rm -f "$repo/(context).md"
 unset REVDIFF_STUB_CHOOSE; REVDIFF_STUB_OUTPUT=""
 ok "revdiff: a lone lgtm or stop anywhere chooses, an approving word among other notes sends them back with approveIntent, neither on a preloaded note, and in a review of items only on the shared table"
 
+# A note on the Review box's instructions is the reviewer dismissing them, the
+# way they would any other text in the diff: not feedback on the change, and no
+# verdict. The review says to hide the hints, and the choice still decides.
+export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT=""
+export REVDIFF_STUB_CHOOSE="hide accept"; o=$(run --previous); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = approved ] || fail "a note on the box's instructions is not feedback: $o"
+[ "$(sed -n 's/^REVIEW_HIDE_HINTS=//p' <<<"$o")" = diff ] || fail "a note on the box's instructions asks to hide the hints: $o"
+[ "$(jq '[.comments[] | select(.target == "hints")] | length' <<<"$j")" = 0 ] || fail "the dismissal is not among the comments: $j"
+REVDIFF_STUB_CHOOSE="hide"; o=$(run --previous 2>/dev/null)
+[ "$(jq -r .raw.exitCode <<<"$(json_of "$o")")" = undecided ] || fail "a dismissal alone chooses nothing: $o"
+REVDIFF_STUB_CHOOSE="accept"; o=$(run --previous)
+! grep -q '^REVIEW_HIDE_HINTS=' <<<"$o" || fail "a review with no note on the instructions hides nothing: $o"
+unset REVDIFF_STUB_CHOOSE; REVDIFF_STUB_OUTPUT=""
+ok "revdiff: a note on the Review box's instructions hides the hints, and is neither feedback nor a verdict"
+
 # removed-side marker (-)
 md=$'## a.txt:2 (-)\nthis deletion looks wrong'
 export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT="$md"; o=$(run --previous); j=$(json_of "$o")
@@ -311,7 +327,7 @@ grep -qF -- '│ `a` to the current line' "$cap.context" || fail "(context).md s
 # shellcheck disable=SC2016
 grep -qF -- '│ `A` to the current file' "$cap.context" || fail "(context).md should name one key to annotate a file: $(cat "$cap.context")"
 # shellcheck disable=SC2016
-[ "$(sed -n '/^╭─ Review /,/^╰/p' "$cap.context" | grep '^│' | tail -1 | sed 's/ *│$//')" = '│ *Tell the agent "hide hints" to shrink this box to the choices.*' ] \
+[ "$(sed -n '/^╭─ Review /,/^╰/p' "$cap.context" | grep '^│' | tail -1 | sed 's/ *│$//')" = '│ *Leave a note on this line to shrink this box to its choices.*' ] \
   || fail "(context).md should say how to hide the keys: $(cat "$cap.context")"
 # shellcheck disable=SC2016
 grep -qxF -- '`repo` on `main`' "$cap.context"         || fail "(context).md should say where the change sits: $(cat "$cap.context")"
@@ -854,6 +870,21 @@ grep -qE '^  repo: +repo$' "$REVDIFF_DESC_CAPTURE" \
   || fail "trailing --repo reviewed the wrong checkout: $(cat "$REVDIFF_DESC_CAPTURE")"
 unset REVDIFF_DESC_CAPTURE
 ok "context: --repo after the mode retargets the review (TARGET-09)"
+
+# A linked worktree's directory is named for the worktree, often its branch; the
+# header names the repo, from origin where it has one, else the main checkout.
+git -C "$repo" worktree add --quiet -b wt-branch "$work/wt-branch" HEAD
+export REVDIFF_DESC_CAPTURE="$work/desc.md"
+o=$( cd "$work/wt-branch" && bash "$dispatch" --previous )
+grep -qE '^  repo: +repo$' "$REVDIFF_DESC_CAPTURE" || fail "a worktree's review names the repo, not the worktree: $(cat "$REVDIFF_DESC_CAPTURE")"
+git -C "$work/wt-branch" remote add origin git@github.com:someone/the-project.git
+o=$( cd "$work/wt-branch" && bash "$dispatch" --previous )
+grep -qE '^  repo: +the-project$' "$REVDIFF_DESC_CAPTURE" || fail "the repo is named as origin names it: $(cat "$REVDIFF_DESC_CAPTURE")"
+git -C "$repo" remote remove origin
+git -C "$repo" worktree remove --force "$work/wt-branch"
+git -C "$repo" branch --quiet -D wt-branch
+unset REVDIFF_DESC_CAPTURE
+ok "context: a review from a linked worktree names the repo, not the worktree's directory"
 
 # a value that looks like a context flag stays a value
 o=$( cd "$other" && bash "$dispatch" --previous --repo "$repo" --title '--repo' )

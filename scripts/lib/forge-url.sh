@@ -75,6 +75,22 @@ anchor_cr_reference() {
   printf '%s%s%s%s\n' "${path##*/}" "$gap" "$mark" "$n"
 }
 
+# The repo's name, for a header a person reads: the project `origin` names, else
+# the directory of the main checkout. Not the checkout's own directory, which in
+# a linked worktree is named for the worktree (often the branch), not the repo.
+anchor_repo_name() {
+  local url name common
+  url=$(git remote get-url origin 2>/dev/null || true)
+  name="${url%/}"; name="${name%.git}"; name="${name##*[/:]}"
+  if [[ -z "$name" ]] && common=$(git rev-parse --git-common-dir 2>/dev/null); then
+    common=$(cd "$common" 2>/dev/null && pwd -P) || common=""
+    if [[ "${common##*/}" == .git ]]; then name="${common%/.git}"; name="${name##*/}"
+    else name="${common##*/}"; name="${name%.git}"; fi
+  fi
+  [[ -n "$name" ]] || name=$(basename "$(git rev-parse --show-toplevel 2>/dev/null)")
+  printf '%s\n' "$name"
+}
+
 anchor_repo_web_url() {
   local url host path port_or_path
   url=$(git remote get-url origin 2>/dev/null || true)

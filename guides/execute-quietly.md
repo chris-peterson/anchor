@@ -145,9 +145,22 @@ about them.
 > | # | Where | Comment | Action |
 > |---|-------|---------|--------|
 > | 1 | `pricing.js:42` | "DAILY_MAX is defined here and in fare.js — use one source" | fix + amend |
-> | 2 | changeset | "why not Fargate for this?" | reply, no code change |
+> | 2 | changeset | "why not Fargate for this?" | answer, no code change |
+>
+> **Answers:**
+>
+> 2. Fargate bills per task-second, and this job runs every minute, so the
+>    always-on container is cheaper at this volume.
 >
 > Now: pulling `DAILY_MAX` from one module, then re-running the review.
+
+**Answer the questions first.** A comment that asks something is answered in
+that same message, under **Answers**, numbered to its row, before you start on
+any fix. The reviewer asked because they wanted to know, and an answer given
+after the fixes, or only inside the next review, lands after a stretch of work
+they've scrolled past. Before the next review opens, post the answers again,
+above the manifest, so they are on screen when the reviewer goes back into the
+review.
 
 This covers only the human comments the verdict carried — *how* you obtained the
 verdict (launching the tool, reading its output) stays silent under "Delegating

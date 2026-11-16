@@ -17,8 +17,10 @@
 #   anchor_verdict_lines <file>
 #                         where the choices sit in <file>, as `accept\t<n>`,
 #                         `reject\t<n>`, and `relaunch\t<n>`, one line for each
-#                         row a choice wraps onto; nothing for a file without
-#                         the box
+#                         row a choice wraps onto, and each other row of the
+#                         box's own text as `hints\t<n>`: a note there is the
+#                         reviewer dismissing the instructions; nothing for a
+#                         file without the box
 
 ANCHOR_REVIEW_BOX_TITLE="Review"
 
@@ -41,7 +43,7 @@ anchor_review_box() {
     "$choices" \
     '' \
     ${others:+"$others"} ${others:+''} \
-    '*Tell the agent "hide hints" to shrink this box to the choices.*')" \
+    '*Leave a note on this line to shrink this box to its choices.*')" \
     "$ANCHOR_REVIEW_BOX_TITLE"
 }
 
@@ -57,6 +59,7 @@ anchor_verdict_lines() {
       else if (index(row, "- **Relaunch in ") == 1) choice = "relaunch"
       else if (substr(row, 1, 2) != "  " || row ~ /^ *│$/) choice = ""
       if (choice != "") print choice "\t" NR
+      else if (row !~ /^ *│$/) print "hints\t" NR
     }
   ' "$1"
 }

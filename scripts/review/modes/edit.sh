@@ -82,6 +82,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/../../lib/review-host.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/../../lib/tmpfile.sh"
 # shellcheck source=../../lib/callout.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../../lib/callout.sh"
+# shellcheck source=../../lib/forge-url.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../../lib/forge-url.sh"
 # shellcheck source=../../lib/hints.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../../lib/hints.sh"
 
@@ -181,9 +183,10 @@ editor_buffer_name() {
     printf '%s.%s' "$files_name" "$(editor_buffer_ext "$1")"
     return
   fi
-  if repo=$(git rev-parse --show-toplevel 2>/dev/null); then
+  if git rev-parse --show-toplevel >/dev/null 2>&1; then
+    repo=$(anchor_repo_name)
     branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
-    where="${repo##*/}@${branch//\//-}"
+    where="${repo}@${branch//\//-}"
   fi
   if [[ "$1" == commit-message ]]; then
     printf '%s/COMMIT_EDITMSG' "${where:-commit}"

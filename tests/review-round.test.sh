@@ -163,6 +163,14 @@ grep -qF '### 💡 #3 rename-ten · important · proposed at `b.txt:' "$table" \
 jq '.items[0].sites = [{"file": "a.txt", "line": 99}]' "$items" > "$bad"
 o=$(round_cmd seed --dir "$dir" --pass items --items "$bad" || true)
 [[ "$(val ROUND_ERROR "$o")" == *"a.txt:99: not a line of the file"* ]] || fail "a site past the end should be refused: $o"
+# revdiff keeps one note per place, so a second item there would replace the
+# first, and the read would take the item the reviewer never saw as dropped.
+jq '.items[2].sites = [{"file": "a.txt", "line": 2}]' "$items" > "$bad"
+o=$(round_cmd seed --dir "$dir" --pass items --items "$bad" || true)
+[[ "$(val ROUND_ERROR "$o")" == *"#3 a.txt:2: shares its note's place with #1"* ]] || fail "two items in one place should be refused: $o"
+jq '.items[0].sites = [{"file": "c.txt"}]' "$items" > "$bad"
+o=$(round_cmd seed --dir "$dir" --pass items --items "$bad" || true)
+[[ "$(val ROUND_ERROR "$o")" == *"#2 c.txt: shares its note's place with #1"* ]] && fail "only an item's first site gets a note, so a later one shares no place: $o"
 round_cmd seed --dir "$dir" --pass items --items "$items" >/dev/null
 ok "seed: a note revdiff would drop is refused before the review opens"
 
