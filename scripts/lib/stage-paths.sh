@@ -9,8 +9,14 @@
 # it changed and nothing else moves.
 #
 # Paths are **repo-root-relative**, and every pathspec below is root-anchored
-# (`:/`, `:(exclude,top)`) so a caller in a subdirectory means the same thing as
-# one at the top. An absolute path is refused rather than converted: matching it
+# (`:(top,literal)`, `:(exclude,top,literal)`) so a caller in a subdirectory means
+# the same thing as one at the top. The long form, never the short `:/<path>`:
+# git reads the characters after that `:` as magic signatures, and it reserves
+# ASCII punctuation for magic not yet defined, so `:/_sidebar.md` is fatal
+# ("Unimplemented pathspec magic '_'"). `literal` because a path is a name the
+# caller changed, never a glob — `app/[id]/page.tsx` names one file. The same
+# form is used by every helper that scopes a diff to a caller's paths
+# (lib/change-notes.sh, lib/item-review.sh, review-reply.sh). An absolute path is refused rather than converted: matching it
 # back against the root is exactly where macOS's /var vs /private/var skew turns a
 # staged file into a silently missing one.
 
@@ -52,7 +58,7 @@ anchor_stage_paths() {
   local p st line
   local -a specs=()
   for p in "$@"; do
-    st="$(git status --porcelain -- ":/$p")"
+    st="$(git status --porcelain -- ":(top,literal)$p")"
     if [[ -z "$st" ]]; then
       echo "$caller: --path names nothing changed: $p" >&2
       return 65
@@ -60,7 +66,7 @@ anchor_stage_paths() {
     # A directory pathspec reports a line per entry; one unstaged entry is enough.
     while IFS= read -r line; do
       if [[ "${line:1:1}" != " " ]]; then
-        specs+=(":/$p")
+        specs+=(":(top,literal)$p")
         break
       fi
     done <<< "$st"
@@ -84,7 +90,7 @@ anchor_refuse_partly_staged() {
         *) echo "$caller: $p is partly staged; pass --staged-path $p to commit only its staged hunks, or stage the rest and pass --path" >&2
            return 67 ;;
       esac
-    done < <(git status --porcelain -- ":/$p")
+    done < <(git status --porcelain -- ":(top,literal)$p")
   done
 }
 
@@ -97,7 +103,7 @@ anchor_require_staged() {
   anchor_reject_absolute "$caller" "$@" || return $?
   local p
   for p in "$@"; do
-    if git diff --cached --quiet -- ":/$p"; then
+    if git diff --cached --quiet -- ":(top,literal)$p"; then
       echo "$caller: --staged-path has nothing staged: $p" >&2
       return 65
     fi
@@ -132,7 +138,7 @@ anchor_rename_sources() {
 anchor_diff_specs() {
   local p
   while IFS= read -r p; do
-    [[ -n "$p" ]] && printf ':/%s\n' "$p"
+    [[ -n "$p" ]] && printf ':(top,literal)%s\n' "$p"
   done <<< "${diff_paths:-}"
 }
 
@@ -146,7 +152,7 @@ anchor_index_digest() {
   git rev-parse --verify --quiet HEAD >/dev/null || base=$(git hash-object -t tree /dev/null)
   local -a specs=()
   local p
-  for p in "$@"; do specs+=(":/$p"); done
+  for p in "$@"; do specs+=(":(top,literal)$p"); done
   git diff --cached --no-renames --no-abbrev --raw "$base" -- "${specs[@]+"${specs[@]}"}" \
     | git hash-object --stdin
 }
@@ -171,10 +177,10 @@ anchor_review_snapshot() {
     for p in "$@"; do
       while IFS= read -r line; do
         if [[ -n "$line" && "${line:1:1}" != " " ]]; then
-          GIT_INDEX_FILE="$idx" git add -A -- ":/$p"
+          GIT_INDEX_FILE="$idx" git add -A -- ":(top,literal)$p"
           break
         fi
-      done < <(GIT_INDEX_FILE="$idx" git status --porcelain -- ":/$p")
+      done < <(GIT_INDEX_FILE="$idx" git status --porcelain -- ":(top,literal)$p")
     done
   fi
   tree=$(GIT_INDEX_FILE="$idx" git write-tree)
@@ -204,7 +210,7 @@ anchor_local_base() {
 anchor_other_staged_count() {
   local p
   local -a specs=(':/')
-  for p in "$@"; do specs+=(":(exclude,top)$p"); done
+  for p in "$@"; do specs+=(":(exclude,top,literal)$p"); done
   git diff --cached --name-only -- "${specs[@]}" | grep -c . || true
 }
 
@@ -213,5 +219,5 @@ anchor_other_staged_count() {
 # the caller named no paths, and the caller decides what that means.
 anchor_commit_pathspecs() {
   local p
-  for p in "$@"; do printf ':/%s\n' "$p"; done
+  for p in "$@"; do printf ':(top,literal)%s\n' "$p"; done
 }

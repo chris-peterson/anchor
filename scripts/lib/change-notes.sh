@@ -34,7 +34,7 @@ anchor_change_notes_place() {
   root=$(git rev-parse --show-toplevel)
   dir=$(anchor_tmpdir anchor-change-notes)
   now=$(anchor_review_snapshot "$@")
-  for p in "$@"; do specs+=(":/$p"); done
+  for p in "$@"; do specs+=(":(top,literal)$p"); done
   lines="$dir/changed.tsv"
   anchor_items_changed_lines "$root" "$(anchor_local_base)" "$now" "${specs[@]+"${specs[@]}"}" > "$lines"
 

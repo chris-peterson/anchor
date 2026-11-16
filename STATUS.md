@@ -49,6 +49,17 @@ Every Partial row is tracked in #179, and the SANITIZE rows in #153.
 
 ## Audit history
 
+### 2026-11-16 — Take a named path literally (COMMIT-04 amended)
+
+STATUS.md updated: no new IDs; COMMIT-04 amended. Every helper scoped git to the
+caller's paths with the short pathspec form `:/<path>`, and git reads the
+characters after that `:` as magic signatures, reserving ASCII punctuation, so a
+path starting with `_`, `-`, or `!` was fatal (exit 128) in
+`commit-preflight.sh`, the `--local` review, and `commit.sh`. The helpers now
+build `:(top,literal)<path>`, which also stops a bracketed name matching as a
+glob — `scripts/lib/{stage-paths,change-notes,item-review}.sh`,
+`scripts/review-reply.sh`, `tests/pathspec-punctuation.test.sh`.
+
 ### 2026-11-16 — Review-loop fixes from testing (UX-14; UX-09, DIFF-40, CONFIG-21, DIFF-25 amended)
 
 STATUS.md updated: +1 ID (UX-14, Covered), 390 → 391; UX-09, DIFF-40, CONFIG-21, and DIFF-25 amended. A reply round put a

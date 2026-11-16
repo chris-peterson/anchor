@@ -60,7 +60,7 @@ anchor_items_file_changed() {
 # changed above it. A line a change rewrote follows to the first line of what
 # replaced it, or prints `null` when <rewritten> is `null`.
 anchor_items_follow_line() {
-  git -C "$1" -c core.quotePath=false diff -U0 --no-color --no-renames "$2" "$3" -- ":/$4" \
+  git -C "$1" -c core.quotePath=false diff -U0 --no-color --no-renames "$2" "$3" -- ":(top,literal)$4" \
     | awk -v L="$5" -v rewritten="${6:-first}" '
       /^@@ / {
         split($2, o, ","); split($3, n, ",")

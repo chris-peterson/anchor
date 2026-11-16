@@ -87,7 +87,7 @@ fi
 reviewed=$(cat "$state/reviewed")
 now=$(anchor_review_snapshot "${paths[@]+"${paths[@]}"}")
 specs=()
-for p in "${paths[@]+"${paths[@]}"}"; do specs+=(":/$p"); done
+for p in "${paths[@]+"${paths[@]}"}"; do specs+=(":(top,literal)$p"); done
 lines="$state/changed.tsv"
 anchor_items_changed_lines "$root" "$reviewed" "$now" "${specs[@]+"${specs[@]}"}" > "$lines"
 

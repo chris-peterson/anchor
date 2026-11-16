@@ -127,7 +127,10 @@ behavior, not an independent authority — review them against the source.
   shared by more than one agent session, so a whole-tree add stages another
   session's in-flight work, which then reaches the review and the commit under a
   message that does not describe it — invisibly, since the diffstat and the diff
-  both read as one changeset.
+  both read as one changeset. A named path is relative to the repo root and is
+  taken literally, whatever character it starts with or contains: a docsify
+  `_sidebar.md` names that file, and `app/[id]/page.tsx` names one file, not a
+  glob.
 - **[COMMIT-04a]** If a named path has no change at all, then the system shall
   stop rather than stage the rest. The caller named a file it believes it
   changed, so a typo or a path relative to the wrong root would otherwise drop
