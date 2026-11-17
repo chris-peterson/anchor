@@ -207,6 +207,12 @@ Context.
   | ![Before](before-login.png) | ![After](after-login.png) |
   ```
 
+- **Leave no gaps; repeat an image rather than explain it.** A reviewer reads
+  the table row by row, and a cell holding prose ("same as above", "unchanged",
+  a pointer to another row) breaks that comparison. When a cell's screenshot is
+  identical to one in another cell, put the same image in both. Text belongs
+  in a cell only when there is no image to show.
+
 Screenshots start as local files; the markdown needs them at a hosted URL before
 the write, or the description ships broken images.
 
