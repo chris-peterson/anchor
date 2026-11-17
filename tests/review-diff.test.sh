@@ -177,6 +177,21 @@ o=$(REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT="$md" REVDIFF_STUB_CHOOSE="" REVDIFF_
 [ "$(verdict_of "$o")" = changes-requested ]         || fail "a review with a note of the reviewer's should not ask: $o"
 ok "revdiff: an undecided close asks in the pane; Z, z, Enter, Q, q, and a click choose; Esc, D, a, and a dragged press don't, and a note skips it"
 
+# The box runs under whatever `bash` is first on PATH, which on a Mac without a
+# newer one is /bin/bash 3.2, and its `read -t` takes whole seconds only. Where
+# this machine has a 3.x /bin/bash, the keys that arrive as an escape sequence
+# are answered under it too, so a Mac with a newer bash on PATH still checks it.
+if [[ -x /bin/bash ]] && [[ "$(/bin/bash -c 'echo "${BASH_VERSINFO[0]}"')" == 3 ]]; then
+  mkdir -p "$work/bash3"; ln -sf /bin/bash "$work/bash3/bash"
+  o=$(PATH="$work/bash3:$PATH" REVDIFF_STUB_CHOOSE="" REVDIFF_STUB_KEYS=$'\e[C\n' run --previous 2>/dev/null)
+  [ "$(verdict_of "$o")" = rejected ]                || fail "Right then Enter should reject under bash 3: $o"
+  o=$(PATH="$work/bash3:$PATH" LINES=24 COLUMNS=80 REVDIFF_STUB_CHOOSE="" REVDIFF_STUB_KEYS=$'\e[<0;38;12M\e[<0;38;12m' run --previous 2>/dev/null)
+  [ "$(verdict_of "$o")" = rejected ]                || fail "a click on Reject should reject under bash 3: $o"
+  o=$(PATH="$work/bash3:$PATH" REVDIFF_STUB_CHOOSE="" REVDIFF_STUB_KEYS=$'\e' run --previous 2>/dev/null); j=$(json_of "$o")
+  [ "$(jq -r .raw.exitCode <<<"$j")" = undecided ]   || fail "Esc should still go back under bash 3: $o"
+  ok "revdiff: under bash 3.2, an arrow key and a click still choose, and Esc still goes back"
+fi
+
 # rc 10 with a line annotation and a file-level annotation
 md=$'## a.txt:2 (+)\nuse a constant here\n\n## a.txt (file-level)\nsplit this file'
 export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT="$md"; o=$(REVDIFF_STUB_CHOOSE="" run --previous); j=$(json_of "$o")

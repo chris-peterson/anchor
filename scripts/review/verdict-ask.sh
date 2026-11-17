@@ -33,6 +33,29 @@ diff_tool_untouched "$rc" "$out_file" "$preload_file" || exit 1
 ESC=$'\e'
 RESET="${ESC}[0m"
 
+# How long to wait for the rest of an escape sequence or a mouse report. The
+# box runs under whatever `bash` is first on PATH, and on a Mac without a newer
+# one that is /bin/bash 3.2, whose `read -t` takes whole seconds only: a
+# fractional timeout fails the read outright, so every arrow key and click read
+# as a lone Esc. A sequence's bytes arrive together, so the whole second there
+# is spent only after a lone Esc, before the box goes back.
+if (( BASH_VERSINFO[0] >= 4 )); then seq_wait=0.02 mouse_wait=0.05; else seq_wait=1 mouse_wait=1; fi
+
+# Keys typed before the box drew, read without waiting for more. Under bash 3.2
+# a whole-second `read -t` would hold the box back a second every time, so the
+# terminal's own timer (`time 1`, a tenth of a second) bounds the read instead.
+read_early() {
+  if (( BASH_VERSINFO[0] >= 4 )); then
+    while IFS= read -rsn1 -t 0.05 key; do early+="$key"; done
+    return
+  fi
+  local saved
+  saved=$(stty -g)
+  stty -icanon -echo min 0 time 1
+  early=$(dd bs=64 count=1 2>/dev/null)
+  stty "$saved"
+}
+
 # The palette's color for <key> as an SGR parameter, for `38;` (foreground) or
 # `48;` (background) to lead; empty for a key the palette doesn't carry.
 color() {
@@ -122,7 +145,7 @@ button_at() {
 # left-button press or release over a button; wheel and other buttons do nothing.
 mouse() {
   local c report="" b x y i
-  while IFS= read -rsn1 -t 0.05 c; do
+  while IFS= read -rsn1 -t "$mouse_wait" c; do
     [[ "$c" == [Mm] ]] && break
     report+="$c"
   done
@@ -153,7 +176,7 @@ tput smcup
 tput civis
 printf '%s[?1000h%s[?1006h' "$ESC" "$ESC"
 early="" key=""
-if [[ -t 0 ]]; then while IFS= read -rsn1 -t 0.05 key; do early+="$key"; done; fi
+if [[ -t 0 ]]; then read_early; fi
 case "$early" in
   Z) finish approve ;;
   Q) finish reject ;;
@@ -167,7 +190,7 @@ while :; do
     "")  finish "${values[$focus]}" ;;
     $'\t') focus=$(( (focus + 1) % 3 )); draw ;;
     $'\e')
-      IFS= read -rsn2 -t 0.02 rest || rest=""
+      IFS= read -rsn2 -t "$seq_wait" rest || rest=""
       case "$rest" in
         "[C") focus=$(( (focus + 1) % 3 )); draw ;;
         "[D") focus=$(( (focus + 2) % 3 )); draw ;;
