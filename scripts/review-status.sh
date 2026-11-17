@@ -184,7 +184,7 @@ esac
 
 if [[ -z "$self" || "$self" != "$author" ]]; then
   skipped=""
-  if ! grep -q "<!-- $REVIEW_STATUS_MARK " "$desc"; then
+  if ! review_status_has "$desc"; then
     skipped=no-section
   elif [[ "$draft" == true ]]; then
     skipped=draft
@@ -211,6 +211,9 @@ fi
 recorded=$(review_status_data "$desc") \
   || { echo "STATUS_ERROR=the CR's Review status section holds data that isn't JSON; fix or delete its opening comment" >&2; exit 65; }
 data=$(review_status_add "$recorded" "$base" "$head" "$result" "$kind" "$self" "${notes[@]+"${notes[@]}"}")
+# Every commit on the CR goes under the sha it has now, not just the ones this
+# round reviewed, so a rebase leaves no entry under a sha the CR no longer has.
+data=$(review_status_rekey "$data" "$cr_base" "$tip")
 rows=$(anchor_tmpfile cr-review-status-rows json)
 review_status_rows "$data" "$cr_base" "$tip" > "$rows"
 section=$(anchor_tmpfile cr-review-status-section md)

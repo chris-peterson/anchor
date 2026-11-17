@@ -92,7 +92,9 @@ recorded() { (cd "$repo" && review_status_rows "$(review_status_data "$fx/body.m
 table() { recorded | jq -r '.[] | "\(.sha[0:8]) \(.rounds) [\(.by | join(", "))] \(if .rounds == 0 then "not reviewed" else .result end)"'; }
 # One commit's notes, joined.
 notes_of() { recorded | jq -r --arg s "$1" '.[] | select(.sha[0:8] == $s) | .notes | join("; ")'; }
-sections() { grep -c '^<!-- anchor:review-status {' "$fx/body.md"; }
+sections() { grep -c '^<!-- anchor:review-status$' "$fx/body.md"; }
+# The section with its comment's first and last lines taken off.
+unwrapped() { sed -n '/^<!-- anchor:review-status$/,/^-->$/p' "$fx/body.md" | sed '1d;$d'; }
 sha8() { git -C "$repo" rev-parse --short=8 "$1"; }
 
 # --- GitHub -----------------------------------------------------------------
@@ -111,8 +113,12 @@ run --cr 7 --base "$main" --head HEAD --result approved
 [[ "$(val STATUS_RECORDED)" == 3 ]] || fail "a whole-CR round counts every commit: $out"
 [[ "$(val STATUS_UNREVIEWED)" == 0 ]] || fail "nothing should be left unreviewed: $out"
 head -n 1 "$fx/body.md" | grep -qx 'Why this change exists.' || fail "the description above the section should survive: $(cat "$fx/body.md")"
-[[ "$(sections)" == 1 && "$(tail -n 1 "$fx/body.md")" == '<!-- anchor:review-status {'* ]] \
-  || fail "the section should be appended as one comment line: $(cat "$fx/body.md")"
+[[ "$(sections)" == 1 && "$(tail -n 1 "$fx/body.md")" == '-->' ]] \
+  || fail "the section should be appended as one comment: $(cat "$fx/body.md")"
+[[ "$(unwrapped | jq -c 'keys_unsorted')" == "$(git -C "$repo" rev-list --reverse "$main..HEAD" | jq -Rnc '[inputs]')" ]] \
+  || fail "the comment without its first and last lines is JSON keyed by each commit's sha, oldest first: $(cat "$fx/body.md")"
+[[ "$(unwrapped | sed -n 2p)" == "\"$(git -C "$repo" rev-parse HEAD~2)\": {\"patch\":"* && "$(unwrapped | wc -l | tr -d ' ')" == 5 ]] \
+  || fail "each commit is one line of the section: $(cat "$fx/body.md")"
 [[ "$(table)" == "$(sha8 HEAD~2) 1 [me] approved
 $(sha8 HEAD~1) 1 [me] approved
 $(sha8 HEAD) 1 [me] approved" ]] || fail "first round table:"$'\n'"$(table)"
@@ -135,8 +141,8 @@ run --cr 7 --base HEAD~2 --head HEAD --result approved --note "declined to refac
 [[ "$(notes_of "$(sha8 HEAD)")" == 'declined to refactor the uploader; kept a|b --> as is' ]] \
   || fail "the notes ride on the newest commit the round reviewed: $(cat "$fx/body.md")"
 [[ -z "$(notes_of "$(sha8 HEAD~1)")" ]] || fail "an older commit in the round gets no note: $(cat "$fx/body.md")"
-data_line=$(grep '^<!-- anchor:review-status ' "$fx/body.md")
-[[ "$data_line" == *' -->' && "${data_line%' -->'}" != *'-->'* ]] \
+unwrapped | jq -e . >/dev/null || fail "the section unwrapped is JSON: $(cat "$fx/body.md")"
+[[ "$(unwrapped | grep -c -- '-->')" == 0 ]] \
   || fail "a note's --> can't close the data comment early: $(cat "$fx/body.md")"
 [[ "$(review_status_notes "$(review_status_data "$fx/body.md")")" == '["declined to refactor the uploader","kept a|b --> as is"]' ]] \
   || fail "the notes read back as written: $(review_status_data "$fx/body.md")"
@@ -149,7 +155,7 @@ git -C "$repo" commit --quiet -m "add d"
 printf 'after the section\n' >> "$fx/body.md"
 run --cr 7 --base HEAD~1 --head HEAD --result approved
 [[ "$(table | tail -n 1)" == "$(sha8 HEAD) 1 [me] approved" ]] || fail "the new commit should get its round:"$'\n'"$(table)"
-sed -n '/^<!-- anchor:review-status {/,$p' "$fx/body.md" | grep -qx 'after the section' || fail "text after the section should survive: $(cat "$fx/body.md")"
+sed -n '/^-->$/,$p' "$fx/body.md" | grep -qx 'after the section' || fail "text after the section should survive: $(cat "$fx/body.md")"
 ok "a commit added later is recorded on its own, and text after the section survives"
 
 # Rebase onto a moved main: the shas change and the patches don't.
@@ -170,7 +176,11 @@ $(sha8 HEAD~2) 2 [me] approved
 $(sha8 HEAD~1) 4 [me] approved
 $(sha8 HEAD) 0 [] not reviewed" ]] || fail "after rebase and amend:"$'\n'"$(table)"
 [[ "$(val STATUS_UNREVIEWED)" == 1 ]] || fail "the amended commit is unreviewed: $out"
-ok "a rebased commit keeps its rounds by patch-id; an amended one starts at none"
+[[ "$(unwrapped | jq -r 'keys_unsorted[-3:] | join(" ")')" == "$(git -C "$repo" rev-list --reverse "$main..HEAD~1" | paste -sd ' ' -)" ]] \
+  || fail "the rebased commits' entries move to their new shas: $(cat "$fx/body.md")"
+[[ "$(unwrapped | jq '[.[] | .patch] | group_by(.) | map(length) | max')" == 1 ]] \
+  || fail "a rebased commit leaves no copy under the sha it had: $(cat "$fx/body.md")"
+ok "a rebased commit keeps its rounds and moves to its new sha; an amended one starts at none"
 
 # Someone else's CR: written to only where it already has the section and is
 # out of draft.
@@ -211,6 +221,19 @@ run --cr 7 --base HEAD --head "$main" --result approved
 [[ "$status" == 65 ]] || fail "a base that isn't an ancestor of head should exit 65, got $status: $out"
 ok "a bad result or range is refused"
 
+# A section written by 2.0.1 or earlier: one line, keyed by patch-id, with a CRLF a
+# web edit left. It reads the same, and the next write moves it to the new shape.
+gh_pr
+head_patch=$(git -C "$repo" show --format= HEAD | git patch-id --stable | cut -d' ' -f1)
+printf 'Why.\r\n\r\n<!-- anchor:review-status {"%s":{"rounds":2,"by":["ana"],"result":"approved","v":"2.0.1"}} -->\r\n' "$head_patch" > "$fx/body.md"
+[[ "$(table | tail -n 1)" == "$(sha8 HEAD) 2 [ana] approved" ]] || fail "a patch-id keyed section reads by patch-id:"$'\n'"$(table)"
+run --cr 7 --base HEAD~1 --head HEAD --result approved
+[[ "$status" == 0 && "$(sections)" == 1 ]] || fail "a write over the old shape exited $status: $out $(cat "$fx/body.md")"
+grep -q 'anchor:review-status {' "$fx/body.md" && fail "the old one-line section should be replaced, not kept: $(cat "$fx/body.md")"
+[[ "$(unwrapped | jq -c --arg s "$(git -C "$repo" rev-parse HEAD)" '[keys_unsorted, .[$s].rounds, .[$s].by]')" == "[[\"$(git -C "$repo" rev-parse HEAD)\"],3,[\"ana\",\"me\"]]" ]] \
+  || fail "the old entry moves under the commit's sha and keeps counting: $(cat "$fx/body.md")"
+ok "a section from 2.0.1 or earlier is read by patch-id and rewritten under shas"
+
 # --- GitLab -----------------------------------------------------------------
 
 new_repo gl "https://gitlab.com/acme/widget.git"
@@ -219,7 +242,7 @@ jq -n --arg b "$main" '{author: {username: "me"}, diff_refs: {base_sha: $b}, web
 : > "$fx/body.md"
 run --cr 12 --base "$main" --head HEAD --result approved
 [[ "$status" == 0 ]] || fail "gitlab record exited $status: $out"
-head -n 1 "$fx/body.md" | grep -q '^<!-- anchor:review-status {' || fail "an empty description should get just the section: $(cat "$fx/body.md")"
+head -n 1 "$fx/body.md" | grep -qx '<!-- anchor:review-status' || fail "an empty description should get just the section: $(cat "$fx/body.md")"
 [[ "$(table | wc -l | tr -d ' ')" == 3 ]] || fail "gitlab table:"$'\n'"$(table)"
 [[ -f "$(newest_backup cr-12)" && "$(jq -r .web_url "$(newest_backup cr-12)")" == */merge_requests/12 ]] \
   || fail "gitlab: the MR should be saved before the write: $out"

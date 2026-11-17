@@ -704,9 +704,15 @@ ready.
   again. The section is anchor's
   record, not the author's prose, and the skills that read it (`/anchor:review`,
   `/anchor:merge`) are where a person sees it, so the description shows nothing
-  for it. It shall key
-  each commit by its patch-id, so a rebase that leaves a commit's change as it
-  was keeps its rounds and an amend that changes it starts at none. A session's
+  for it. Inside the comment, the data shall be a JSON object on its own lines,
+  one commit to a line, so the comment's first and last lines come off to leave
+  JSON. It shall key each commit by its sha and record its patch-id beside it,
+  and read a commit with no entry under its sha from the entry with its
+  patch-id, so a rebase that leaves a commit's change as it was keeps its rounds
+  and an amend that changes it starts at none; a write moves each of the CR's
+  commits to the sha it has now. A section written on one line and keyed by
+  patch-id, as 2.0.1 and earlier wrote it, shall be read the same way and
+  rewritten in this shape at the next write. A session's
   round ledger ends with the session; a review of one new commit on top of
   several others leaves no trace there of which ones were never reviewed.
 - **[REVIEW-32]** When a review round reaches its verdict, the system shall

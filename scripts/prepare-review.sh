@@ -636,6 +636,9 @@ if [[ "$on_default" -eq 0 ]] && git rev-parse --verify --quiet "origin/${base_br
   local_rounds=$(review_status_pick "$local_data" "$branch_base" HEAD)
   cr_rounds=$(review_status_data "$review_status_path") \
     || { echo "PREPARE_ERROR=the CR's Review status section holds data that isn't JSON; fix or delete its opening comment" >&2; exit 1; }
+  # Both sides under the branch's current shas, so a commit the CR recorded
+  # before a rebase is the same key the local record has for it.
+  cr_rounds=$(review_status_rekey "$cr_rounds" "$branch_base" HEAD)
   if jq -e --argjson cr "$cr_rounds" 'keys - ($cr | keys) | length > 0' <<<"$local_rounds" >/dev/null; then
     review_status_section "$(jq -c --argjson cr "$cr_rounds" '. + $cr' <<<"$local_rounds")" > "$review_status_path"
   fi

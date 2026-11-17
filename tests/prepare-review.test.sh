@@ -628,7 +628,11 @@ written=$(bash "$prepare_review_sh" --repo "$repo" --write --body-file "$draft" 
 
 redrafted prose
 
-$section" ]] || fail "the section should follow the redrafted prose: $(cat "$WRITTEN_BODY")"
+<!-- anchor:review-status
+{
+\"k\": {\"rounds\":1,\"result\":\"approved\"}
+}
+-->" ]] || fail "the section should follow the redrafted prose, a commit to a line: $(cat "$WRITTEN_BODY")"
 [[ "$(cat "$draft")" == "## Context
 
 redrafted prose" ]] || fail "the reviewed draft should be left as approved: $(cat "$draft")"
@@ -640,8 +644,8 @@ jq '.body = "prose\n\n<!-- anchor:review-status {\"k\":{\"rounds\":2,\"result\":
   "$CR_AFTER_CREATE" > "$CR_JSON"
 written=$(bash "$prepare_review_sh" --repo "$repo" --write --body-file "$draft" \
   --status-section "$(key "$out" CR_REVIEW_STATUS_PATH)" --cr 7)
-grep -q '"late":{"rounds":1' "$WRITTEN_BODY" || fail "a round recorded since recon should survive: $(cat "$WRITTEN_BODY")"
-grep -q '"k":{"rounds":2' "$WRITTEN_BODY" || fail "the CR's own count wins over the carried one: $(cat "$WRITTEN_BODY")"
+grep -q '^"late": {"rounds":1' "$WRITTEN_BODY" || fail "a round recorded since recon should survive: $(cat "$WRITTEN_BODY")"
+grep -q '^"k": {"rounds":2' "$WRITTEN_BODY" || fail "the CR's own count wins over the carried one: $(cat "$WRITTEN_BODY")"
 jq '.body = "prose"' "$CR_AFTER_CREATE" > "$CR_JSON"
 empty_section="$work/empty-section.md"
 : > "$empty_section"
@@ -659,7 +663,7 @@ written=$(bash "$prepare_review_sh" --repo "$repo" --write --body-file "$draft" 
 [[ "$(key "$written" CR_WRITTEN)" == 1 ]] || fail "GitLab --write should report the write: $written"
 grep -qF 'glab api -X PUT projects/:fullpath/merge_requests/7 ' "$CALL_LOG" \
   || fail "GitLab writes through the API PUT: $(cat "$CALL_LOG")"
-[[ "$(tail -n 1 "$WRITTEN_BODY")" == "$section" ]] || fail "GitLab's write carries the section: $(cat "$WRITTEN_BODY")"
+[[ "$(tail -n 3 "$WRITTEN_BODY" | head -n 1)" == '"k": {"rounds":1,"result":"approved"}' ]] || fail "GitLab's write carries the section: $(cat "$WRITTEN_BODY")"
 ok "--write lands the description on GitLab through the API"
 
 # A write lands only on the CR the checkout's branch backs. CR numbers are shared
@@ -711,21 +715,22 @@ ok "--write backs up the description it replaces"
 repo="$(make_repo github.com gh-local-record)"
 : > "$CR_JSON"
 patch=$(git -C "$repo" show --format= HEAD | git patch-id --stable | cut -d' ' -f1)
+sha=$(git -C "$repo" rev-parse HEAD)
 mkdir -p "$repo/.git/anchor"
 jq -n --arg p "$patch" '{($p): {rounds: 1, by: ["me"], result: "approved", kind: "agent-assisted"},
   "elsewhere": {rounds: 2, by: ["me"], result: "approved"}}' > "$repo/.git/anchor/review-status.json"
 out=$(bash "$prepare_review_sh" --repo "$repo")
 [[ "$(key "$out" CR_PENDING)" == 1 ]] || fail "expected a pending CR: $out"
 section_file="$(key "$out" CR_REVIEW_STATUS_PATH)"
-grep -q "\"$patch\":{\"rounds\":1" "$section_file" || fail "a pending CR's section carries the branch's rounds: $(cat "$section_file")"
+grep -q "^\"$sha\": {\"patch\":\"$patch\",\"rounds\":1" "$section_file" || fail "a pending CR's section carries the branch's rounds: $(cat "$section_file")"
 ! grep -q elsewhere "$section_file" || fail "another branch's commits stay out of the section: $(cat "$section_file")"
 
 gh_pr_json "$(git -C "$repo" rev-parse HEAD)" OPEN
 jq '.body = "prose\n\n<!-- anchor:review-status {\"k\":{\"rounds\":3,\"result\":\"approved\"}} -->\n"' "$CR_AFTER_CREATE" > "$CR_JSON"
 out=$(bash "$prepare_review_sh" --repo "$repo" --cr 7)
 section_file="$(key "$out" CR_REVIEW_STATUS_PATH)"
-grep -q '"k":{"rounds":3' "$section_file" || fail "an existing section keeps its rounds: $(cat "$section_file")"
-grep -q "\"$patch\":{\"rounds\":1" "$section_file" || fail "an existing section gains the local rounds: $(cat "$section_file")"
+grep -q '^"k": {"rounds":3' "$section_file" || fail "an existing section keeps its rounds: $(cat "$section_file")"
+grep -q "^\"$sha\": {\"patch\":\"$patch\",\"rounds\":1" "$section_file" || fail "an existing section gains the local rounds: $(cat "$section_file")"
 ok "the local record's rounds for the branch's commits are carried into the section"
 
 repo="$(make_repo gitlab.com gl-state-explicit)"
