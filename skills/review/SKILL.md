@@ -344,7 +344,9 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-round.sh" read --dir <ROUND_DIR> --re
 
 `rejected` stops the review: stop the agents still running (`TaskStop`), finish
 the round (Step 9), and record nothing. The undecided and failed cases are
-handled as in Step 6. Otherwise the user's `added` notes, and any `tableNotes`,
+handled as in Step 6. Otherwise answer the user's `questions` first ("Answer
+the user's questions", below); one whose answer turns up a defect makes it an
+item with `"from": "you"`. The user's `added` notes, and any `tableNotes`,
 are their own findings: each becomes an item with `"from": "you"`, its reason
 the note's wording verbatim. They skip the judgment below, since the user
 already made it. `userEdits` is read per
@@ -524,7 +526,8 @@ key into the reply, since nobody should have to open the table to learn it:
 > Delete it, or answer `drop` / `no`, to drop it. Write anything else to change
 > it, and add a note of your own for anything new. A note on a file this pass
 > doesn't change is in `(context).md` instead; answer it on its row the same
-> way. Then leave a
+> way. Ask anything in a note: I answer a question before going on, and a
+> question never posts. Then leave a
 > single note in `(context).md`, off the rows, saying `approve` to go ahead or
 > `reject` to stop the round, and quit with `q`. With nothing to change, `ZZ`
 > goes ahead and `ZQ` stops the round.
@@ -548,7 +551,8 @@ to open it again or stop. Nothing about the round is lost by stopping; finish it
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-round.sh" read --dir <ROUND_DIR> --returned <REVIEW_RETURNED>
 ```
 
-`ROUND_READ` is the item-by-item answer. Act on each decision:
+`ROUND_READ` is the item-by-item answer. Answer its `questions` first ("Answer
+the user's questions", below), then act on each decision:
 
 | Decision | Meaning | Act |
 |---|---|---|
@@ -692,7 +696,8 @@ Step 8), in id order, each at the line it maps to in the CR head:
   the diff (a `crLine` of `null`, a note about a file or the change as a whole)
   doesn't post.
 - **An added note** posts verbatim at its `crLine` with `side` set to its
-  `crSide`, `origin: "reviewer"`. One the user left in `(context).md` rather
+  `crSide`, `origin: "reviewer"`. A question isn't one: the read keeps it out of
+  `added`, and it was answered, not posted. One the user left in `(context).md` rather
   than on a line is theirs: offer it as their overall comment in the batch,
   seeded with their words, rather than posting it as a finding.
 - **`issue` and `leave` items** don't post. Offer `/anchor:issue` for each
@@ -742,7 +747,8 @@ The manifest says these are the comments that will post on the CR, each a file
 holding its exact text, and that `comments/overall.md` is where the user writes
 an overall comment if they want one; nothing posts there otherwise.
 
-Read the answer back as the guide says, then:
+Read the answer back as the guide says, answering its `questions` first
+("Answer the user's questions", below), then:
 
 - `keep` and `edited` comments go into the findings file with the item's `body`
   as their `body`; `drop` takes one out. `change` redrafts it into another
@@ -770,6 +776,42 @@ findings file; take it out and post again. Any other `POST_ERROR` is the forge
 refusing a write partway: `POSTED_INLINE` and `POSTED_SUMMARY` say what landed,
 so post the rest with `--index <n>` (or `--index summary`) rather than
 re-posting everything.
+
+## Answer the user's questions
+
+Every read-back prints `QUESTIONS` and lists them in `questions`: the notes
+that ask something (a `?` ending a sentence anywhere in them, outside code),
+each with the `item` it was asked on (or `null`) and where it sits. A question is for you, whoever it seems to be addressed to. The user
+just asks; working out the answer is your job (REVIEW-40). Before acting on
+anything else the read returned:
+
+1. **Answer each one for real.** Read the code, run the command, look up the
+   tag or the docs, and say what you found, not a restatement of the draft.
+   Where you can't settle it, say so and what would. Where only the CR's author
+   could know (someone else's CR), say that, and offer to ask them: the question
+   becomes a comment in the batch (Step 8), whose text the user approves like
+   any other.
+2. **Act on what the answer changes**, and say which: nothing (the draft
+   stands, and why); the item's reason (the author will likely ask the same, so
+   the answer goes into it); the fix (revert, redraft, record again); or the
+   item drops (the question showed it was wrong). A note that asks something
+   and also asks for a change gets both: the answer, and the change, made as
+   it would be for any note.
+3. **Show the answers before anything opens.** In chat under **Answers**, each
+   as ❓ the question verbatim, the answer under it, then what it changed, and
+   again above the next pass's manifest. Write them to an answers file
+   (`$(mktemp -u /tmp/review-answers.XXXXXX).json`, in the shape
+   `scripts/review-round.sh` documents) and add `--answers <file>` to the next
+   pass's `seed`, so its `(context).md` carries them too. With no later revdiff
+   pass (the batch, or the end of the review), the batch's manifest or the
+   report carries them.
+
+A question never posts as itself, never becomes an item on its own, and is not
+feedback. revdiff reports `changes-requested` for any note, so read the pass by
+what else came back: when `CHANGE`, `DROP`, `ADDED`, `tableNotes`, and
+`userEdits` are all empty, the pass is `approved` once its questions are
+answered, unless an answer changed a fix, and then the changed fix is what the
+next pass shows.
 
 ## Step 9: Finish the round
 

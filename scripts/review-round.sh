@@ -53,6 +53,7 @@
 #   review-round.sh record  --dir <round> --id <n>
 #   review-round.sh revert  --dir <round> --id <n>
 #   review-round.sh seed    --dir <round> --pass <read|items|whole> --items <items.json> [--title <heading, e.g. Review of <CR ref>: <CR title>>] [--cr-url <url>]
+#                           [--answers <answers.json>]
 #                           (--pass read takes no --items, and lists the CR's open review threads given --threads <OPEN_FEEDBACK_PATH>)
 #   review-round.sh read    --dir <round> --returned <notes.returned.json>
 #   review-round.sh suggest --dir <round> --id <n> --forge <github|gitlab>
@@ -73,6 +74,15 @@
 # is numbered in the pass's base (the CR head, or the merge base). A site with no
 # line is a note on the whole file. A line in a file the pass doesn't change goes
 # in the table instead.
+#
+# The answers file `seed --answers` reads, written by the skill, answers the
+# questions the last pass's notes asked (REVIEW-40), in the order `read` listed
+# them:
+#   {"answers": [{"question": "<the note, verbatim>", "answer": "<the answer, and
+#                 what it changed>", "file": "<path>", "line": <n>}]}
+# `file` and `line` say where the question was asked, and are left out for one
+# asked in the table. The answers go in the table under the item rows, each
+# quoted, so a reviewer reads them before anything else in the pass.
 #
 # Output is KEY=value lines on stdout. A failure prints ROUND_ERROR=<message>
 # and exits non-zero rather than leaving a half-written round.
@@ -105,7 +115,7 @@ cmd="${1:-}"
 shift
 
 CTX_REPO=""
-dir="" base="" head="" place="" next="" id="" items="" returned="" forge="" title="" ledger="" cr_url="" pass="" threads=""
+dir="" base="" head="" place="" next="" id="" items="" returned="" forge="" title="" ledger="" cr_url="" pass="" threads="" answers=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)      CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
@@ -124,6 +134,7 @@ while [[ $# -gt 0 ]]; do
     --ledger)    ledger="${2:?--ledger needs a file}"; shift 2 ;;
     --pass)      pass="${2:?--pass needs read, items, or whole}"; shift 2 ;;
     --threads)   threads="${2:?--threads needs a file}"; shift 2 ;;
+    --answers)   answers="${2:?--answers needs a file}"; shift 2 ;;
     *) echo "review-round.sh: unknown argument: $1" >&2; exit 64 ;;
   esac
 done
@@ -306,6 +317,10 @@ seed)
   fi
   [[ -n "$items" && -r "$items" ]] || { echo "review-round.sh seed needs a readable --items file" >&2; exit 64; }
   [[ -z "$threads" || -r "$threads" ]] || { echo "review-round.sh seed: --threads file not readable: $threads" >&2; exit 64; }
+  [[ -z "$answers" || -r "$answers" ]] || { echo "review-round.sh seed: --answers file not readable: $answers" >&2; exit 64; }
+  if [[ -n "$answers" ]] && ! jq -e '.answers | type == "array" and all(.[]; (.question | type == "string") and (.answer | type == "string"))' "$answers" >/dev/null 2>&1; then
+    die "--answers needs {\"answers\": [{\"question\", \"answer\"}]}: $answers"
+  fi
   now=$(snapshot)
   [[ "$now" == "$(state lastTree)" ]] || die "the tree changed since the last record; record or revert that change before seeding the notes"
   [[ "$pass" != read || "$now" == "$(state startTree)" ]] \
@@ -459,8 +474,9 @@ the review closes.
 $where
 
 $(anchor_review_box --answer "Leave a note on any line you'd change, or anywhere in this file for the change
-as a whole. Say what you want; you don't need to write the fix. Closing with no
-note besides \`approve\` means you found nothing to change." \
+as a whole. Say what you want; you don't need to write the fix. A note that asks
+something is a question: the agent answers it before going on, and it never posts.
+Closing with no note besides \`approve\` means you found nothing to change." \
   revdiff "$accept" "stop the review, and nothing is committed or posted")
 " > "$root/$TABLE"
     if [[ -n "$threads" ]] && [[ "$(jq length "$threads")" -gt 0 ]]; then
@@ -482,10 +498,22 @@ $(anchor_review_box --answer "Answer each item on its note in the diff, or on it
 - **Keep it**: leave the note as it is.
 - **Change it**: write what you want instead.
 - **Drop it**: delete the note, or answer \`drop\`. A fix in the tree comes back out.
-- **Something new**: add a note of your own anywhere." \
+- **Something new**: add a note of your own anywhere.
+- **Ask**: a note with a question in it is answered before going on, and never posts." \
   revdiff "$accept" "stop the round, and nothing is committed or posted")
 " \
         "| # | slug | severity | proposal | finding |" > "$root/$TABLE"
+  fi
+  # Each answer is quoted, so no line of it starts a table row the read would
+  # take for an item's.
+  if [[ -n "$answers" ]] && [[ "$(jq '.answers | length' "$answers")" -gt 0 ]]; then
+    jq -r '"## Answers to your questions",
+      "The agent'"'"'s answer to each question your notes asked in the last pass. Leave a note on one that leaves something open.",
+      (.answers[] | "",
+        "### ❓ " + (.question | gsub("\n"; " ")) + (if .file then " (`\(.file)\(if .line then ":\(.line)" else "" end)`)" else "" end),
+        "",
+        (.answer | rtrimstr("\n") | split("\n") | map(if . == "" then ">" else "> " + . end) | join("\n")))' \
+      "$answers" >> "$root/$TABLE"
   fi
   if [[ -s "$dir/far.jsonl" ]]; then
     jq -rs '"## Notes on unchanged files",
@@ -502,6 +530,7 @@ $(anchor_review_box --answer "Answer each item on its note in the diff, or on it
   echo "NOTES=$dir/notes.md"
   echo "TABLE=$root/$TABLE"
   echo "NOTE_COUNT=$(jq length "$dir/notes.json")"
+  echo "ANSWER_COUNT=$(if [[ -n "$answers" ]]; then jq '.answers | length' "$answers"; else echo 0; fi)"
   echo "ROUND_FROM=$from"
   ;;
 
@@ -563,7 +592,8 @@ read)
               returned:($b.body // null),
               crLine:($b.crLine // null), crSide:($b.crSide // null),
               verdict:(if $b == null then "drop" else ($b.body | answer($m.body)) end)}
-           | .changed = (.verdict == "change")] as $notes
+           | .changed = (.verdict == "change")
+           | .asked = (if .verdict == "question" then (.returned | said($m.body)) else null end)] as $notes
         | ($far | map(select(.id == $i.id))
            | map({file, line, side, seeded:.body, returned:null, crLine,
                   crSide:(if .crLine == null then null else "new" end), verdict:"same", changed:false, far:true})) as $farnotes
@@ -571,6 +601,8 @@ read)
         | ($rownotes | map(answer(""))) as $rowsaid
         | {id:$i.id, slug:$i.slug, severity:$i.severity, status:$i.status,
            row:$now, rowNotes:[$rownotes[] | select(answer("") == "change")], notes:($notes + $farnotes),
+           asked:([$notes[] | select(.asked != null) | {body:.asked, file, line:.line, side, crLine, crSide}]
+                  + [$rownotes[] | select(answer("") == "question") | {body:., file:null, line:null, side:null, crLine:null, crSide:null}]),
            decision:(if ($notes | any(.verdict == "drop")) or ($rowsaid | any(. == "drop")) then "drop"
                      else decision($now;
                                    ($notes | any(.changed)) or rowedited($was; $now) or ($rowsaid | any(. == "change"));
@@ -581,10 +613,20 @@ read)
                | {body, file, startLine, endLine, side, target, crLine, crSide}],
        tableNotes: [$tnotes[] | select(.rowId == null) | .body],
        userEdits: (if $hasedits == "1" then $edits else null end)}
+    # A question is for the agent to answer, not a finding (REVIEW-40): it
+    # leaves `added` and `tableNotes` for `questions`, each with the item it was
+    # asked on, if any.
+    | .questions = ([.added[] | select(.body | asks) | {item:null} + .]
+                    + [.tableNotes[] | select(asks) | {item:null, body:., file:$tname}]
+                    + [.items[] | .id as $id | .asked[] | {item:$id} + .])
+    | .added |= map(select(.body | asks | not))
+    | .tableNotes |= map(select(asks | not))
+    | .items |= map(del(.asked))
   ' > "$dir/read.json"
   echo "ROUND_READ=$dir/read.json"
   anchor_items_decisions "$dir/read.json" keep change drop
   jq -r '"ADDED=\(.added|length)",
+         "QUESTIONS=\(.questions|length)",
          "USER_EDITS=\(if .userEdits then 1 else 0 end)"' "$dir/read.json"
   # The reviewer's edit stays in the tree as theirs, so the next record holds
   # only the agent's change and the next pass seeds over it.

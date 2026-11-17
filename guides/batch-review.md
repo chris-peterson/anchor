@@ -131,6 +131,17 @@ into the next round with the `change` items rather than published as changed,
 since the reviewer approved the text they saw. A note that asks to hold the
 batch holds all of it.
 
+A note that asks something (a `?` ending a sentence anywhere in it, outside
+code) is a question for you, whoever it seems to be for, and is
+in `questions` (each with the `item` it was asked on, or `null`) rather than in
+`notes`, `rowNotes`, or `general`: it changes no item's decision. Answer each one
+before acting on anything else, for real (read the code, check the fact) and
+saying where you aren't sure, then say what the answer changed, if anything.
+Post the answers in chat under **Answers**, each as ❓ the question verbatim
+with the answer under it. A batch whose only notes were questions is approved
+once they're answered, unless an answer changes an item, which then goes into
+the next round as a `change` (REVIEW-40).
+
 ## Publish, then go again for what changed
 
 On `approved`, publish the `keep` and `edited` items, then finish the batch.

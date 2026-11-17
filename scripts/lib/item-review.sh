@@ -149,6 +149,10 @@ anchor_items_decisions() {
 #   rowof($tl) the id of the row a returned table note sits on, in table lines $tl
 #   rowedited  whether a row's text changed, ignoring whitespace
 #   decision   drop for a deleted row, change for any feedback, else $otherwise
+#   asks       whether a note's text asks something: a `?` ends a sentence in
+#              it, outside a code span, so a question followed by more text
+#              counts and a URL's `?a=b` or a ternary in backticks doesn't
+#   said($s)   the lines a returned note adds to the note $s seeded where it sits
 # shellcheck disable=SC2016
 ANCHOR_ITEMS_JQ='
   def norm: gsub("\\s+"; " ") | sub("^ "; "") | sub(" $"; "");
@@ -166,10 +170,16 @@ ANCHOR_ITEMS_JQ='
                    "wontfix", "won\u0027t fix", "-1", "\ud83d\udc4e", ":thumbsdown:", "\u274c");
   def keepword: IN("ok", "okay", "yes", "y", "apply", "keep", "lgtm", "sure", "fine",
                    "+1", "\ud83d\udc4d", ":thumbsup:", "\u2705", "ship it", "do it");
+  # A question is for the agent, whoever the reviewer meant it for: the agent
+  # answers it before the review goes on, and it is never a finding (REVIEW-40).
+  def asks: gsub("`[^`]*`"; "") | test("\\?(\\s|$)");
+  def said($seeded): (split("\n") - ($seeded | split("\n"))) | map(select(test("\\S"))) | join("\n");
   # What a returned note says about the note seeded where it sits: the lines the
   # reviewer added, read as an answer. A bare drop word drops, a bare yes keeps,
-  # anything else is feedback, and nothing added leaves it as seeded.
+  # a question is a question, anything else is feedback, and nothing added
+  # leaves it as seeded.
   def answer($seeded):
-    ((split("\n") - ($seeded | split("\n"))) | map(select(test("\\S"))) | join(" ") | answerwords) as $a
-    | if $a == "" then "same" elif ($a | dropword) then "drop" elif ($a | keepword) then "keep" else "change" end;
+    said($seeded) as $t | ($t | gsub("\n"; " ") | answerwords) as $a
+    | if $a == "" then "same" elif ($a | dropword) then "drop" elif ($a | keepword) then "keep"
+      elif ($t | asks) then "question" else "change" end;
 '

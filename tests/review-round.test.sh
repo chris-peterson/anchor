@@ -182,7 +182,7 @@ returned="$work/notes.returned.json"
 jq '[.[] | {body, target:(if .line then "line" else "file" end), file, startLine:.line, endLine:.line, side}]
     | map(if (.body | startswith("💡 #2")) and .file == "a.txt" then .body += "\nUse a constant instead." else . end)
     | map(select(.body | startswith("💡 #3") | not))
-    + [{body:"why not five?", target:"line", file:"a.txt", startLine:6, endLine:6, side:"new"}]' \
+    + [{body:"make this five", target:"line", file:"a.txt", startLine:6, endLine:6, side:"new"}]' \
   "$dir/notes.json" > "$returned"
 o=$(round_cmd read --dir "$dir" --returned "$returned")
 [[ "$(val KEEP "$o")" == 1 && "$(val CHANGE "$o")" == 2 && "$(val DROP "$o")" == 3 && "$(val ADDED "$o")" == 1 ]] \
@@ -202,6 +202,48 @@ o=$(round_cmd read --dir "$dir" --returned "$returned.words")
 [[ "$(val DROP "$o")" == 1 && "$(val KEEP "$o")" == "2,3" && "$(val ADDED "$o")" == 0 ]] \
   || fail "answer words: $o"
 ok "read: a note answered with drop drops its item, and one answered with a yes keeps it"
+
+# A note that asks something is a question for the agent, wherever it sits: on
+# an item's note it leaves the item as it was, and on its own line or in the
+# table it is not a note of the reviewer's own (REVIEW-40).
+row2=$(grep -n '^| 2 ' "$table" | cut -d: -f1)
+jq --argjson n "$row2" '[.[] | {body, target:"line", file, startLine:.line, endLine:.line, side}]
+    | map(if (.body | startswith("💡 #1")) then .body += "\nwhy not a constant?  " else . end)
+    + [{body:"hmm... why not 6.1.1? the tag would pick up fixes", target:"line", file:"a.txt", startLine:6, endLine:6, side:"new"},
+       {body:"does this hold on Windows?", target:"line", file:"(context).md", startLine:1, endLine:1, side:"new"},
+       {body:"is this one needed?", target:"line", file:"(context).md", startLine:$n, endLine:$n, side:"new"},
+       {body:"make it six, as https://x.test/a?page=2 does with `a ? b : c`", target:"line", file:"a.txt", startLine:7, endLine:7, side:"new"}]' \
+  "$dir/notes.json" > "$returned.asks"
+o=$(round_cmd read --dir "$dir" --returned "$returned.asks")
+r=$(val ROUND_READ "$o")
+[[ "$(val KEEP "$o")" == "1,2,3" && -z "$(val CHANGE "$o")" ]] || fail "a question on an item leaves it as it was: $o"
+[[ "$(val QUESTIONS "$o")" == 4 && "$(val ADDED "$o")" == 1 ]] || fail "questions apart from the notes of the reviewer's own: $o"
+[[ "$(jq -r '.added[0].body' "$r")" == "make it six, as https://x.test/a?page=2 does with \`a ? b : c\`" &&"$(jq '.tableNotes | length' "$r")" == 0 ]] \
+  || fail "a question is neither an added note nor a table note: $(jq -c '{added, tableNotes}' "$r")"
+[[ "$(jq -c '[.questions[] | [.item, .body]]' "$r")" == '[[null,"hmm... why not 6.1.1? the tag would pick up fixes"],[null,"does this hold on Windows?"],[1,"why not a constant?  "],[2,"is this one needed?"]]' ]] \
+  || fail "each question with the item it was asked on: $(jq -c .questions "$r")"
+[[ "$(jq '.questions[0].crLine' "$r")" == 6 && "$(jq -r '.questions[2].file' "$r")" == a.txt ]] \
+  || fail "a question keeps where it was asked: $(jq -c .questions "$r")"
+ok "read: a note that asks something, anywhere in it, is a question for the agent; a ? in a URL or code isn't"
+
+# The next pass opens with the answers, quoted under the rows, so an answer that
+# holds a table adds no row the read would take for an item's.
+jq -n '{answers: [{question: "hmm... why not 6.1.1?", file: "a.txt", line: 6,
+                   answer: "The tag moves; the SHA does not.\n\n| pin | moves |\n|---|---|\n| tag | yes |\nNothing changed."},
+                  {question: "does this hold on Windows?", answer: "Not sure: nothing here runs there, so only the author can say."}]}' > "$work/answers.json"
+o=$(round_cmd seed --dir "$dir" --pass items --items "$items" --answers "$work/answers.json")
+[[ "$(val ANSWER_COUNT "$o")" == 2 ]] || fail "seed --answers counts the answers: $o"
+sed -n '/^## Answers to your questions$/,$p' "$table" > "$work/answers.md"
+grep -qxF "### ❓ hmm... why not 6.1.1? (\`a.txt:6\`)" "$work/answers.md" || fail "each answer under its question and where it was asked: $(cat "$table")"
+grep -qxF '> | tag | yes |' "$work/answers.md" || fail "the answer is quoted: $(cat "$work/answers.md")"
+grep -qxF '### ❓ does this hold on Windows?' "$work/answers.md" || fail "a question from the table has no place: $(cat "$work/answers.md")"
+o=$(round_cmd read --dir "$dir" --returned <(jq '[.[] | {body, target:"line", file, startLine:.line, endLine:.line, side}]' "$dir/notes.json"))
+[[ "$(val KEEP "$o")" == "1,2,3" && -z "$(val DROP "$o")" ]] || fail "the answers add no rows: $o"
+jq '.answers[0] |= del(.answer)' "$work/answers.json" > "$work/answers.bad.json"
+o=$(round_cmd seed --dir "$dir" --pass items --items "$items" --answers "$work/answers.bad.json" || true)
+[[ "$(val ROUND_ERROR "$o")" == *"--answers needs"* ]] || fail "an answer with no text is refused: $o"
+round_cmd seed --dir "$dir" --pass items --items "$items" >/dev/null
+ok "seed --answers: the next pass's table opens with each question and its answer, quoted"
 
 # Deleting a row drops the item; a note on a row changes it.
 grep -v '^| 1 ' "$table" > "$table.tmp"; mv "$table.tmp" "$table"

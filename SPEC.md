@@ -795,6 +795,21 @@ ready.
   place for one, which posts as the user wrote it and posts nothing left as it
   was. A comment the author can't act on costs them the time to read it, under
   the user's name.
+- **[REVIEW-40]** When a review pass or batch closes with a note from the user
+  that asks something (a `?` ending a sentence anywhere in it, outside code),
+  the system shall treat it as a question for the agent,
+  whoever it seems addressed to, and answer it before acting on anything else
+  the pass returned: by checking the code or the fact rather than restating the
+  draft, saying where it can't be sure, and saying what the answer changed, if
+  anything. The answers shall reach the user in chat and in the next pass's
+  context file before that pass opens. A question shall not post to the forge,
+  become an item, or count as feedback on an item, and a pass whose only notes
+  are questions shall go on as approved once they're answered unless an answer
+  changed a fix. Where only the CR's author could answer it, the system may
+  offer to ask them, as a comment in the batch the user approves (REVIEW-09).
+  The user shouldn't have to decide who a question is for to ask it, and a
+  question on its way to the author under the user's name is a comment they
+  never meant to post.
 
 ### FEEDBACK — Resolve feedback
 

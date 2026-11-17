@@ -202,6 +202,20 @@ r=$(val BATCH_READ "$o")
 [[ "$(jq -r '.general[0]' "$r")" == "hold all of these until Monday" ]] || fail "general note"
 ok "read: an edited note or a note on a row changes an item, and a note off the rows is general"
 
+# A note that asks something is for the agent to answer: on an item or its row
+# it leaves the item as it was, and off the rows it isn't general (REVIEW-40).
+jq --argjson n "$row8" 'map(if .file == "issues/7.md" and (.body | startswith("🤖 #7 ")) then .body += "\nwhy this label?" else . end)
+    | map(select(.body != "say which release"))
+    + [{body:"is 8 still open?", target:"line", file:"(context).md", startLine:$n, endLine:$n, side:"new"},
+       {body:"should these wait for Monday?", target:"line", file:"(context).md", startLine:1, endLine:1, side:"new"}]' \
+  "$work/returned.2.json" > "$work/returned.asks.json"
+o=$(b read --dir "$dir" --returned "$work/returned.asks.json")
+[[ -z "$(val CHANGE "$o")" && "$(val GENERAL "$o")" == 0 && "$(val QUESTIONS "$o")" == 3 ]] || fail "questions are not feedback: $o"
+r=$(val BATCH_READ "$o")
+[[ "$(jq -c '[.questions[] | [.item, .body]]' "$r")" == '[["7","why this label?"],["8","is 8 still open?"],[null,"should these wait for Monday?"]]' ]] \
+  || fail "each question with its item: $(jq -c .questions "$r")"
+ok "read: a note that asks something is a question for the agent, not feedback"
+
 # A deleted seeded note is tidying, not feedback.
 cp "$work/8.proposed" "$root/issues/8.md"
 jq 'map(select(.file != "issues/7.md"))' "$work/returned.json" > "$work/returned.4.json"

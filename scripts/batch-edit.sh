@@ -357,10 +357,12 @@ read)
                      | $s | any(.file == $f and .line == $l and .b == $b)) | not)
            | . as $n
            | ($s | map(select(.file == $n.file and .line == ($n.startLine // null))) | first | .body // "") as $was
-           | {body, verdict:(.body | answer($was))}] as $answers
+           | {body, verdict:(.body | answer($was)), asked:(.body | said($was))}] as $answers
         | [$answers[] | select(.verdict == "change") | .body] as $notes
         | ($tnotes | map(select(.rowId == $i.id)) | map(.body)) as $rownotes
-        | {id:$i.id, file:$i.file, url:$i.url, new:$i.new, row:$now, notes:$notes, rowNotes:$rownotes,
+        | {id:$i.id, file:$i.file, url:$i.url, new:$i.new, row:$now, notes:$notes,
+           rowNotes:[$rownotes[] | select(asks | not)],
+           questions:([$answers[] | select(.verdict == "question") | .asked] + [$rownotes[] | select(asks)]),
            rowEdited:rowedited($was; $now),
            edited:$t.edited, fields:$t.fields, body:$t.body, fieldsError:$t.fieldsError}
         | .decision = if ($answers | any(.verdict == "drop")) then "drop" else decision(if $t.present then .row else null end;
@@ -368,10 +370,15 @@ read)
                                if .edited then "edited" else "keep" end) end],
        general: ([$tnotes[] | select(.rowId == null) | .body]
                  + [$all[] | .file as $f | select($f == null or (($f != $tname) and (($files | index($f)) == null))) | .body])}
+    # A question is for the agent to answer before anything goes on, never
+    # feedback on an item (REVIEW-40): `questions` lists each, with its item.
+    | .questions = ([.items[] | .id as $id | .questions[] | {item:$id, body:.}]
+                    + [.general[] | select(asks) | {item:null, body:.}])
+    | .general |= map(select(asks | not))
   ' > "$dir/read.json"
   echo "BATCH_READ=$dir/read.json"
   anchor_items_decisions "$dir/read.json" keep edited change drop
-  jq -r '"GENERAL=\(.general|length)"' "$dir/read.json"
+  jq -r '"GENERAL=\(.general|length)", "QUESTIONS=\(.questions|length)"' "$dir/read.json"
   ;;
 
 finish)
