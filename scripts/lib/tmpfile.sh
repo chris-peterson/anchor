@@ -45,6 +45,18 @@ anchor_tmpdir() {
   mktemp -d "${dir%/}/$1.XXXXXX"
 }
 
+# A fresh directory under a literal /tmp, for files the agent itself will edit.
+# Its Edit calls are prescribed text in effect: the permission check sees the
+# path, and a `$TMPDIR` dir lands under /var/folders/... on macOS, behind the
+# /var symlink, where no single grant reaches and Claude Code 2.1.327's stricter
+# path checks may refuse rather than ask. `Edit(//tmp/**)` plus
+# `Edit(//private/tmp/**)` covers this one.
+#
+#   anchor_edit_tmpdir anchor-review-tree -> /tmp/anchor-review-tree.a1B2c3/
+anchor_edit_tmpdir() {
+  mktemp -d "/tmp/$1.XXXXXX"
+}
+
 anchor_tmpfile() {
   local prefix="$1" ext="${2:-md}" dir="${TMPDIR:-/tmp}"
   dir="${dir%/}" # macOS TMPDIR carries a trailing slash; avoid a `//` in the path

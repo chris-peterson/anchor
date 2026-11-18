@@ -101,6 +101,12 @@ the analyzer does read — is not.
 
 **Prescribed text: a literal `/tmp`. Script internals: `$TMPDIR`.**
 
+One exception rides with the first half: a directory a script makes for the
+agent to edit in, such as `/anchor:review`'s worktree for someone else's CR. The
+script's `mktemp` is invisible, but every Edit the agent then makes there is a
+path the permission check reads, so it is prescribed text in effect.
+`anchor_edit_tmpdir` roots it at a literal `/tmp`.
+
 `tests/tmp-path-guidance.test.sh` holds both halves in place, and runs on the
 ubuntu / macOS / Windows matrix because the claims above are per-platform.
 

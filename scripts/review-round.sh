@@ -235,7 +235,7 @@ start)
   fi
   diff_base=$(git merge-base "$base" "$head") || die "no merge base between $base and $head"
   if [[ "$place" == worktree ]]; then
-    root="$(anchor_tmpdir anchor-review-tree)/tree"
+    root="$(anchor_edit_tmpdir anchor-review-tree)/tree"
     git worktree add --quiet --detach "$root" "$head" >/dev/null 2>&1 \
       || die "could not add a worktree at $head"
   else

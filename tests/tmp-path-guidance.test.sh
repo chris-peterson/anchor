@@ -54,6 +54,13 @@ for rel in "${prescribed[@]}"; do
 done
 ok "every prescribed mktemp uses the literal /tmp form"
 
+# A dir the agent edits in is prescribed text in effect: literal /tmp.
+grep -q 'mktemp -d "/tmp/' "$root/scripts/lib/tmpfile.sh" \
+  || fail "anchor_edit_tmpdir does not root its dir at a literal /tmp"
+grep -q 'anchor_edit_tmpdir anchor-review-tree' "$root/scripts/review-round.sh" \
+  || fail "review-round.sh roots the review worktree somewhere the agent's edits can't be granted"
+ok "the review worktree the agent edits in lives under a literal /tmp"
+
 # --- the guidance states its platform scope and pairs path with rule --------
 guide="$root/guides/temp-paths.md"
 grep -q 'POSIX shell' "$guide"          || fail "the guide does not state its shell assumption"
