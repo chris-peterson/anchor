@@ -36,13 +36,16 @@ saying why. The user drops one by deleting its note or replying no. There is no
 whole pass: the CR with someone else's fixes in it is not a change anyone will
 merge (REVIEW-22).
 
-**Every examination is the user's call** (REVIEW-38). A review spends tokens by
-the agent and by the round, so the quality agents run, and another round or
-pass opens, only on a yes to a question asked in this invocation: the `Agents`
-question in Step 3, asked once the read pass is open so reading never waits on
-it, the `Round` question in Step 7, the `Reopen` question after
-a whole pass that asked for changes. Don't infer a yes from an earlier review,
-an earlier round, or the user's having said "review" once.
+**Every examination after the first is the user's call** (REVIEW-38). A review
+spends tokens by the agent and by the round, so another round or pass opens only
+on a yes to a question asked in this invocation: the `Round` question in Step 7,
+the `Reopen` question after a whole pass that asked for changes. The quality
+agents are the one exception, and only once per head: the first time a CR head
+is put up for review in this repo, asking for the review is the yes, and they
+run alongside the read pass without a question, with a line telling the user
+they are (REVIEW-38a). Every later review of that head asks the `Agents`
+question in Step 3. Don't infer a yes from an earlier review, an earlier round,
+or the user's having said "review" once.
 
 A branch that has never had a CR (`HAS_CR=0`) is a self-review of its commits
 ahead of `BASE_BRANCH`: the default branch, or the branch of the open CR it is
@@ -247,7 +250,8 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-round.sh" start --base <REVIEW_BASE> 
 refuses a checkout that isn't on the CR head, has uncommitted changes, or has
 untracked files (`ROUND_ERROR`): say what it found and stop, since a round's
 edits have to be the only changes in the tree. Keep `ROUND_DIR`, `ROUND_ROOT`,
-`ROUND_BASE`, and `ROUND_HEAD`; every edit below happens under `ROUND_ROOT`.
+`ROUND_BASE`, `ROUND_HEAD`, and on a first round `ROUND_FIRST_REQUEST`; every
+edit below happens under `ROUND_ROOT`.
 
 **A later round you offered** (Step 7, item 4) skips Steps 1 and 2 and starts
 here with `--next-round` in place of `--base`:
@@ -293,7 +297,20 @@ leave a note on anything to change, then a single note in `(context).md` saying
 pass is open: the user is reading that tree, and an edit there would land in
 what they are reviewing.
 
-**Then, while it's open, ask whether to run the agents** (REVIEW-38), with
+**The first review of a head runs the agents unasked** (REVIEW-38a). When
+`start` printed `ROUND_FIRST_REQUEST=1`, this head has never been put up for
+review in this repo, so asking for the review is the yes: launch the agents
+right after the read pass opens, with no `Agents` question, and record the kind
+`agent-assisted`. Tell the user in the same message as the manifest, as its own
+line, so they can tell what is spending tokens and how to stop it: *First review
+of `<ROUND_HEAD short sha>`: the quality agents are examining it while you
+read. Say "no agents" to stop them.* A "no agents" before they finish stops
+them (`TaskStop`) and makes the review a `read-through`. An invocation that
+already chose (*I'll read it myself*, *just have the agents look*) wins over the
+first request, as it does over the question. `ROUND_FIRST_REQUEST=0` asks as
+below.
+
+**Otherwise, while it's open, ask whether to run the agents** (REVIEW-38), with
 `AskUserQuestion` (header `Agents`). The quality agents run one per quality and
 cost tokens accordingly, so they run only on a yes. The question names the
 range (the CR, and how many commits) and, when `REVIEW_STATUS_COMMITTED` is
@@ -322,7 +339,8 @@ examination.** It is the user's file: the qualities it lists are the review's
 scope, and its Output section is the bar a finding has to clear. Weigh every
 quality it lists and none it doesn't.
 
-**One agent per listed quality**, launched on a yes to `Agents`, so they run
+**One agent per listed quality**, launched on a first request or a yes to
+`Agents`, so they run
 while the user reads. Each gets the diff (`DIFF_PATH` on the first round; on a later
 one, `git diff <ROUND_BASE> <ROUND_HEAD>`), what Step 2 established the change is
 for, one quality's name and wording verbatim, the template's Output section, and

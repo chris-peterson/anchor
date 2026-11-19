@@ -647,4 +647,37 @@ round_cmd finish --dir "$ndir" >/dev/null
 [[ "$(jq -r '.rounds[1].head' "$nledger")" == "$n2" ]] || fail "round 2's head lands in the ledger: $(jq -c '.rounds[1]' "$nledger")"
 ok "next round: start --next-round reviews only the commit on top of the last round's head"
 
+# ============================ the first request ==========================
+
+# The first review started on a head runs the agents unasked; a second start on
+# the same head, even one whose review recorded nothing, asks again.
+fr="$work/first-request"
+git init --quiet -b main "$fr"
+git -C "$fr" config user.email t@example.com; git -C "$fr" config user.name T; git -C "$fr" config commit.gpgsign false
+printf 'one\n' > "$fr/x.txt"; git -C "$fr" add -A; git -C "$fr" commit --quiet -m base
+f0=$(git -C "$fr" rev-parse HEAD)
+printf 'two\n' > "$fr/x.txt"; git -C "$fr" commit --quiet -am change
+f1=$(git -C "$fr" rev-parse HEAD)
+o=$(round_cmd start --repo "$fr" --base "$f0" --head "$f1" --in-place)
+[[ "$(val ROUND_FIRST_REQUEST "$o")" == 1 ]] || fail "a head never reviewed here is a first request: $o"
+o=$(round_cmd finish --dir "$(val ROUND_DIR "$o")"); fledger=$(val ROUND_LEDGER "$o")
+o=$(round_cmd start --repo "$fr" --base "$f0" --head "$f1" --in-place)
+[[ "$(val ROUND_FIRST_REQUEST "$o")" == 0 ]] || fail "a head reviewed before is not a first request: $o"
+round_cmd finish --dir "$(val ROUND_DIR "$o")" >/dev/null
+o=$(round_cmd start --repo "$fr" --base "$f0" --head "$f1" --worktree)
+[[ "$(val ROUND_FIRST_REQUEST "$o")" == 0 ]] || fail "a worktree round reads the same record: $o"
+round_cmd finish --dir "$(val ROUND_DIR "$o")" >/dev/null
+printf 'three\n' > "$fr/x.txt"; git -C "$fr" commit --quiet -am more
+o=$(round_cmd start --repo "$fr" --next-round --ledger "$fledger" --head HEAD --in-place)
+[[ -z "$(val ROUND_FIRST_REQUEST "$o")" ]] || fail "a next round is the Round question's, not a first request: $o"
+round_cmd finish --dir "$(val ROUND_DIR "$o")" >/dev/null
+o=$(round_cmd start --repo "$fr" --base "$f0" --head HEAD --in-place)
+[[ "$(val ROUND_FIRST_REQUEST "$o")" == 1 ]] || fail "a new head is a first request: $o"
+round_cmd finish --dir "$(val ROUND_DIR "$o")" >/dev/null
+git -C "$fr" tag later; git -C "$fr" commit --quiet --allow-empty -m newer
+o=$(round_cmd start --repo "$fr" --base "$f0" --head later --in-place || true)
+[[ "$(val ROUND_ERROR "$o")" == *"not the CR head"* ]] || fail "a start off the head should be refused: $o"
+[[ "$(grep -c . "$fr/.git/anchor/review-requests")" == 2 ]] || fail "a refused start records nothing: $(cat "$fr/.git/anchor/review-requests")"
+ok "first request: the first review of a head is flagged, every later one isn't, and a next round says nothing"
+
 echo "# all checks passed"

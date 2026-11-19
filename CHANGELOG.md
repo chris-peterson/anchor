@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- **`/anchor:review` runs the agents on a change's first review without asking.** The first time you review a given commit, the quality agents now start while you read, and anchor says so in one line, with the commit and how to stop them ("no agents"). Reviewing the same commit again asks, as before, since the agents have already examined it. A choice you make in the request, such as *I'll read it myself*, still wins.
+
 ### Fixed
 
 - **A question you leave in a review is answered, not posted.** In `/anchor:review`, a note like `why not X?` on the agent's draft was read as a finding of your own, so on someone else's CR it was on its way to the author under your name. Now any note that asks something, with a `?` anywhere in it, is a question for the agent, whoever you meant it for: the agent checks the code or the facts and answers it before anything else, says so when it can't be sure, and says what the answer changed. The answers appear in chat and at the top of the next pass's `(context).md`. A question never posts, and a pass whose only notes were questions goes on as approved. Where only the author could know, the agent offers to ask them, as a comment you approve in the batch. Batch reviews in `/anchor:issue` and the other skills read questions the same way.

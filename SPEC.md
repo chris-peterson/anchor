@@ -778,15 +778,24 @@ ready.
   commits (REVIEW-36) from the same base. The predecessor's commits are under
   review in their own CR, and a self-review that covered them again would raise
   that CR's findings on this branch.
-- **[REVIEW-38]** Before the quality agents run, and before another round or
-  another pass over the same change opens, the system shall ask the user, in
-  this invocation, and shall run nothing the user didn't choose. The question
+- **[REVIEW-38]** Before the quality agents run, except on a head's first
+  review (REVIEW-38a), and before another round or another pass over the same
+  change opens, the system shall ask the user, in this invocation, and shall run
+  nothing the user didn't choose. The question
   about the agents shall be asked once the read pass (REVIEW-35) is open, so
   reading never waits on it, and shall offer running them while the user reads,
   running them in place of the read, or none; the offer of another round shall
   say that it runs the agents again. A review spends tokens by the agent and by
   the round, so a review that loops on its own spends more than the user meant
   to.
+- **[REVIEW-38a]** The first time a review is started on a given CR head in a
+  repository, the system shall run the quality agents alongside the read pass
+  without asking, and shall tell the user in the same message that it is doing
+  so, naming the head and how to stop them. Every later review started on that
+  head, whatever the earlier one recorded, shall ask as REVIEW-38 describes. A
+  choice the user's invocation already made shall take precedence. Asking for a
+  review of a change nobody has examined is the yes; asking again for the same
+  head is where the user may not want to spend the agents twice.
 - **[REVIEW-39]** The system shall post a comment only where it asks the author
   to change a line or to explain one, anchored to that line (REVIEW-08). It
   shall not draft or post a summary of the review, praise, agreement with

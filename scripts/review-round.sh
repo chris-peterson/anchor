@@ -47,6 +47,11 @@
 # `start --next-round` takes its base from the head the ledger's last round
 # reviewed, so the range is the commit(s) made on top of it (ROUND_BASE..ROUND_HEAD).
 #
+# A first round's `start` also says whether its head has been put up for review
+# in this repo before (ROUND_FIRST_REQUEST), from a list of heads kept in the git
+# common directory. The first time, the skill runs the quality agents without
+# asking; after that, the agents are a question again.
+#
 # Usage:
 #   review-round.sh start   --base <sha> --head <sha> (--worktree | --in-place) [--ledger <file>] [--repo <path>]
 #   review-round.sh start   --next-round --ledger <file> --head <sha> (--worktree | --in-place) [--repo <path>]
@@ -274,6 +279,21 @@ start)
   echo "ROUND_REJECTED=$(jq '.rejected // [] | length' "$ledger")"
   if [[ "$round_n" -gt 1 ]]; then
     echo "ROUND_PREVIOUS=$(jq -r '[.rounds[] | "\(.percent)%"] | join(", ")' "$ledger")"
+  fi
+  # A first round asks whether this head has been put up for review here before.
+  # The first time, the quality agents run without the question (REVIEW-38a).
+  # The record is local and holds every head a review started on, whatever the
+  # review went on to record, so a review the user stopped still counts.
+  if [[ -z "$next" ]]; then
+    requests="$(cd "$(git rev-parse --git-common-dir)" && pwd)/anchor/review-requests"
+    head_sha=$(git rev-parse "$head")
+    if [[ -f "$requests" ]] && grep -qxF "$head_sha" "$requests"; then
+      echo "ROUND_FIRST_REQUEST=0"
+    else
+      mkdir -p "${requests%/*}"
+      echo "$head_sha" >> "$requests"
+      echo "ROUND_FIRST_REQUEST=1"
+    fi
   fi
   ;;
 
