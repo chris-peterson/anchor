@@ -1030,7 +1030,7 @@ git -C "$repo" checkout --quiet -- a.txt
 git -C "$repo" reset --quiet --hard
 
 # ================== --local --from ======================================
-# The last look at a review's rounds shows the change since the review began:
+# A widened commit review shows the change since --from:
 # the commits on top of --from and the paths about to be committed. Only the
 # named paths are staged, and REVIEW_INDEX is theirs alone, so commit.sh still
 # checks exactly what lands (DIFF-50).

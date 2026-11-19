@@ -596,9 +596,16 @@ ready.
   untracked file, the kept items
   land as one commit per round through `/anchor:commit`, and nothing is posted to
   the forge.
-- **[REVIEW-18]** When a self-review ends, the system shall offer to mark the CR
-  ready and to request reviewers, and shall do neither without the user choosing
-  it.
+- **[REVIEW-18]** When a self-review ends, the system shall offer a final
+  sign-off, asked once with each step picked or not: a last look at the whole
+  change from the review's base, as it will land; refreshing the CR description;
+  marking the CR ready; and requesting reviewers, run in that order, and shall
+  run none the user didn't pick. A note left in the last look shall start
+  another round with the user's notes as its items, and a rejection of it shall
+  stop the sign-off there. With no CR, the sign-off shall offer the last look
+  and opening the CR. Each round's commit review shows only that round, so the
+  one look at the whole change belongs at the end, beside the steps that hand
+  the CR to its reviewers.
 - **[REVIEW-19]** When the findings are merged, the system shall group the
   findings one change resolves into one item, and give each item an id, a slug,
   a severity of critical or suggestion, and a status: applied, proposed, filed as
@@ -657,14 +664,13 @@ ready.
   the repository and the CR in full, say what the round fixed, and say what
   another round would do, so a user answering it after time away can decide
   without scrolling back. It shall recommend another round only when the round
-  kept a critical fix, and recommend stopping otherwise. The answer shall pick
-  what the round's commit review shows beside the drafted message: the round's
-  own fixes where another round follows, and where the user stops, either the
-  whole change as it will land, from the review's base (DIFF-50), or the round's
-  own fixes, the whole change being the default. The last look costs no review
-  of its own, since the commit review opens either way, and it comes once,
-  after the last round, where the message that describes the change sits beside
-  all of it. The next round's range shall run from the head the previous round
+  kept a critical fix, and recommend stopping otherwise. The round's commit
+  review shall show the round's own fixes beside the drafted message, whichever
+  the user answers, and the offer shall say so and ask only whether this is the
+  last round; the look at the whole change is the final sign-off's (REVIEW-18).
+  A question whose options chose what a review would show read as a question
+  about something else, and its default sent a user who wanted the small review
+  into the whole change. The next round's range shall run from the head the previous round
   reviewed to the new head.
 - **[REVIEW-25]** The system shall remove a round's table, its state, and any
   worktree it made when the round's edits are committed or posted, and when the

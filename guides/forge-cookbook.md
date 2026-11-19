@@ -374,7 +374,7 @@ glab api -X PUT projects/:fullpath/merge_requests/<iid> \
 
 ## Mark a CR ready, and request reviewers
 
-The handoff at the end of a self-review: the author is happy with their own
+The final sign-off of a self-review: the author is happy with their own
 change and wants eyes on it. Both halves are separate calls, and neither is
 implied by the other — marking a CR ready does not name who should look at it.
 

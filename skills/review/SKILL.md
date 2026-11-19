@@ -1,6 +1,6 @@
 ---
 name: review
-description: Review an open change request, or a branch that has no CR yet — open revdiff on the commits you haven't reviewed so you read them and leave notes while agents examine them against the qualities you've set, draft a fix for each note and finding, then show those drafts alone so you keep, change, or drop each one. On someone else's CR the kept findings post as suggestions and threads once the exact text is approved; on your own CR they land as one commit per round, the last one's review showing the whole change beside its message, and it ends by offering to mark the CR ready, or to open it. Use when reviewing a PR/MR, when a teammate sends a CR number or URL, or when reviewing your own change before handing it over, with or without a CR.
+description: Review an open change request, or a branch that has no CR yet — open revdiff on the commits you haven't reviewed so you read them and leave notes while agents examine them against the qualities you've set, draft a fix for each note and finding, then show those drafts alone so you keep, change, or drop each one. On someone else's CR the kept findings post as suggestions and threads once the exact text is approved; on your own CR they land as one commit per round, each reviewed on its own, and it ends in a final sign-off: one last look at the whole change, the CR description refreshed, and the CR marked ready with reviewers, each as the user picks, or the CR opened. Use when reviewing a PR/MR, when a teammate sends a CR number or URL, or when reviewing your own change before handing it over, with or without a CR.
 ---
 
 # Review
@@ -15,11 +15,12 @@ drafts a fix for each finding, and puts it in front of the user in revdiff:
 | **items** | the CR head → the round's tree: the drafts alone, a note on each | keeps, changes, or drops each item, without the CR's own change around it |
 
 On your own CR the round then lands through `/anchor:commit`, whose review shows
-the round's fixes beside the drafted message. After the last round, that review
-is the **last look**: the range's base → the round's tree, the change as it will
-land beside the message that describes it, unless the user asks for the round's
-fixes alone (REVIEW-24). No round re-shows a fix an earlier round's commit
-review approved, so from round 2 on each review is only what is new.
+the round's fixes beside the drafted message, and nothing else: no round
+re-shows a fix an earlier round's commit review approved, so each review is
+only what is new (REVIEW-24). After the last round comes the **final sign-off**
+(REVIEW-18): a last look at the whole change from the range's base, as it will
+land, then refreshing the CR description, marking it ready, and requesting
+reviewers, each one the user picks.
 
 The read pass opens at once, so the user is never waiting on agents: reading
 the change is the review's first step whether or not the agents find anything,
@@ -38,7 +39,7 @@ Authorship picks where the result goes:
 else.** The user has already read the change in the read pass, and a fix the
 agent drafted ships only if the author takes it. So the items pass diffs from
 the CR head: every line in it is a suggestion, as code, with a 💡 note on it
-saying why. The user drops one by deleting its note or replying no. There is no
+saying why. The user skips one by answering `skip` on its note. There is no
 last look: the CR with someone else's fixes in it is not a change anyone will
 merge (REVIEW-22).
 
@@ -107,8 +108,8 @@ flowchart TD
     Who -->|Mine| Again{Another round?}
     Again -->|Yes| Commit["Commit: this round's fixes"]
     Commit --> Next([Examine the round commit])
-    Again -->|No| Last["Commit: the whole change"]
-    Last --> Handoff([Offer to mark ready])
+    Again -->|No| Last["Commit: this round's fixes"]
+    Last --> Signoff([Final sign-off])
 ```
 
 ## Task tracking when orchestrated
@@ -419,7 +420,7 @@ and how many survived, so a short review reads as judged rather than shallow.
 **No findings and no notes is a finished review.** Say so in one line, with the
 risk score when the agents ran. Finish the round and record it as `approved`
 (Step 9). On someone else's CR nothing posts. In self-review, go straight to
-the handoff (Step 7, item 5).
+the final sign-off (Step 7, item 5).
 
 ## Step 4: Triage the findings into items, and act on the clear ones
 
@@ -599,32 +600,28 @@ project's tests over an in-place round.
 ### Your own CR: commit the round
 
 With nothing kept, the round has nothing to commit: finish it (Step 9) and go
-to the handoff (item 5 below).
+to the final sign-off (item 5 below).
 
-1. **Ask about another round first** (REVIEW-24), with `AskUserQuestion` (header
-   `Round <ROUND_N + 1>`), since the answer picks what the commit review shows.
-   The agents in Step 3 would examine only what this round changed. The user
-   may be answering after an hour on another tab, so the question carries its
-   own context: open with the repo and the CR in full (`<repo> #<n>: <CR
-   title>`), say in a sentence what this round fixed, by what the fixes were
-   rather than by item number, and say what another round would do in plain
-   words (*re-read only the lines this round changed, and open revdiff again if
-   anything turns up*). Show how much each round changed as the `preview` of
+1. **Ask whether this is the last round** (REVIEW-24), with `AskUserQuestion`
+   (header `Round <ROUND_N + 1>`). The agents in Step 3 would examine only what
+   this round changed. The user may be answering after an hour on another tab,
+   so the question carries its own context: open with the repo and the CR in
+   full (`<repo> #<n>: <CR title>`), say in a sentence what this round fixed, by
+   what the fixes were rather than by item number, that the fixes land as one
+   commit reviewed on its own, and end on the question itself: *Is this the last
+   round?* Show how much each round changed as the `preview` of
    each option: the bars `review-round.sh sizes --ledger <ROUND_LEDGER>` prints,
    verbatim, with this round's lines (`review-round.sh files` and
    `git diff --shortstat`) named above them, since the round isn't in the
    ledger until it finishes. Bars on one scale show at a glance whether the
    rounds are shrinking; that trend is the answer to whether another round is
-   worth it. The options:
+   worth it. The options, the commit review showing the round's fixes alone in
+   both:
 
-   - **Finish: show the whole change** *(default)*: the commit review is the
-     last look, `REVIEW_BASE` → the tree beside the drafted message, the one
-     time the change is shown as it will land.
-   - **Finish: just this round's fixes**: the commit review shows the round's
-     diff alone, for a user who approved every piece along the way.
-   - **Another round**: the commit review shows the round's diff alone, and the
-     next round starts once it lands. Say that it runs the quality agents
-     again, at their token cost.
+   - **Last round**: commit these fixes, then the final sign-off (item 5).
+   - **Another round**: commit these fixes, then the agents re-read only the
+     lines this round changed, and revdiff opens again if anything turns up.
+     Say that it runs the quality agents again, at their token cost.
 
    Recommend another round only when this one kept a `critical` fix, since a fix
    to a real bug can carry one of its own; otherwise recommend finishing, and
@@ -641,10 +638,7 @@ to the handoff (item 5 below).
    the tree as it now stands (the edits since the round may have moved it), its
    text the item's reason. `/anchor:commit` seeds those as its review's notes, so
    the reasons you read in the round are back on their lines in the diff that
-   lands. For the last look, also hand it `--from <REVIEW_BASE>`: its review then
-   shows the whole change while the commit still carries only the round's paths
-   (DIFF-50); if the launch refuses `--from` because the branch was rewritten
-   under it, review without it and say so in one line. It runs the tests, opens one review with its drafted message, and
+   lands. It runs the tests, opens one review with its drafted message, and
    commits and pushes on approval. Draft the message to name the items the round
    fixed; the notes carry why each one is the way it is. `/anchor:commit` marks
    the round's commit approved at commit; the user read it in full in the items
@@ -656,12 +650,24 @@ to the handoff (item 5 below).
    recorded `agents-only`. It starts at Step 3 with `start --next-round` and the
    same ledger, without re-running Step 1: every commit now has a round, so
    Step 1 would ask whether to re-review the whole CR, and the next round looks
-   only at this round's commit. On either **Finish**, go to the handoff.
-5. **Hand it off.** Ask (header `Handoff`):
+   only at this round's commit. On **Last round**, go to the final sign-off.
+5. **Final sign-off** (REVIEW-18). Ask once, with `AskUserQuestion`
+   (header `Sign-off`, `multiSelect: true`), opening with the repo and the CR in
+   full, and run what the user picks in this order:
 
-   - **Mark ready and request reviewers**: ask who, then do both.
-   - **Mark ready**: ready with no reviewer named.
-   - **Leave it a draft** *(default)*: a finished outcome; say so and stop.
+   - **Look at the whole change** *(pre-picked)*: revdiff on `REVIEW_BASE`
+     → `HEAD`, the change as it will land, launched as Step 6 launches a pass but
+     on that range, with no `--annotations`. `approved` goes on to the next pick.
+     `changes-requested` starts another round whose items are the user's notes,
+     each `"from": "you"`, no agents and no read pass, since the user just read
+     it, recorded `read-through`; sign-off is asked again after it. `rejected`
+     stops sign-off with nothing after it run.
+   - **Update the CR description** *(pre-picked)*: `/anchor:prepare-review`
+     refreshes it for what the rounds changed.
+   - **Mark ready**.
+   - **Request reviewers**: ask who.
+
+   Picking nothing leaves the CR a draft: a finished outcome; say so and stop.
 
    Clear the draft flag through the helper, which reads it fresh, covers both
    forges, and announces `cr.ready`:
@@ -673,10 +679,10 @@ to the handoff (item 5 below).
    `ALREADY_READY=1` means someone got there first; say that. Requesting
    reviewers is a separate call, in `${CLAUDE_PLUGIN_ROOT}/guides/forge-cookbook.md`.
 
-   With `HAS_CR=0` there is no CR to mark ready. Ask (header `Handoff`):
-   **Open the CR**, which hands off to `/anchor:prepare-review` (it carries the
-   local record's rounds into the description), or **Leave the branch**
-   *(default)*, a finished outcome.
+   With `HAS_CR=0` there is no CR to mark ready. Sign-off offers **Look at the
+   whole change** and **Open the CR**, which hands off to
+   `/anchor:prepare-review` (it carries the local record's rounds into the
+   description); picking neither leaves the branch, a finished outcome.
 
 ### Someone else's CR: build what will post
 
