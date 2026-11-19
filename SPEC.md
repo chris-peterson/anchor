@@ -405,7 +405,11 @@ check.
   rather than in the draft. It shall likewise read a placeholder in the bare form whose
   token holds a parenthesis as unresolved: the bare form ends at the first `)`, so the
   token is cut there, can still name one line, and its tail would land in the
-  description as text.
+  description as text. It shall read a placeholder in the angle form up to the `>)`
+  that closes it, so a token carrying a generic (`Task<int>`, `Map<K, V>`) resolves,
+  and shall read an escaped `\<` or `\>` in that token as the bracket it stands for.
+  It shall refuse to write a description that still holds a placeholder, naming it,
+  so a placeholder no check caught never reaches the forge as raw text.
 - ~~**[PREPARE-10b]** Once the CR exists, the system shall expand every placeholder into
   the forge's own line anchor before the description lands, and shall leave the draft
   unmodified where any placeholder is unresolved.~~
