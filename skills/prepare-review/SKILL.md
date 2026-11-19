@@ -299,7 +299,7 @@ Draft the description following the section template in `${CLAUDE_PLUGIN_ROOT}/t
 
 **Use these heading names verbatim** — Context / Review guide / Approach & trade-offs / Testing / Validation are canonical, not paraphrasable; reviewers scan for them. Omit a section that doesn't apply; never rename one. (The template spells out why.)
 
-**Ordering dependency (when Step 2 captured one).** Near the top of Context, add a bare, autolinking reference — `Depends on !<iid>` (GitLab) / `Depends on #<num>` (GitHub) — and a line that it must merge first. On GitHub, and on any GitLab fall-back (see Step 4), this prose is the *only* ordering signal, so say plainly that the forge won't enforce it.
+**Ordering dependency (when Step 2 captured one).** Near the top of Context, add a bare, autolinking reference — `Depends on !<iid>` (GitLab) / `Depends on #<num>` (GitHub) — and a line that it must merge first. A predecessor in another project needs its full reference, `<group>/<project>!<iid>` (or `<owner>/<repo>#<num>`), or its URL: a bare `!<iid>` links to that number in *this* project. **On GitLab, say nothing about enforcement here.** Whether GitLab will block the merge is known only once Step 4 tries the `/blocks` link, and a draft that guesses can publish "the forge won't enforce it" over a link that then succeeds. On GitHub the answer is known now, since no PR can block another: say plainly that GitHub won't enforce the order.
 
 **Deep-link construction (Review guide).** Always deep-link to the actual line, not just the file — reviewers should be one click away from the change. **Write a placeholder, not a URL:** `` [`<path>`](anchor:<path>#<token>) ``, where the token is a distinctive literal substring of the line you're pointing at (an identifier, a flag, a heading's text). Use the angle-bracket form — `` [`<path>`](<anchor:<path>#<token>>) `` — when the token carries spaces or parentheses, and drop the `#<token>` for a file-level link. Step 4 resolves each token to its line and writes the forge URL in.
 
@@ -428,6 +428,17 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/prepare-review.sh" --open --onto <BASE_BRANC
 
 It emits `CR_URL`, `CR_IID`, `CR_DRAFT`, `CR_CREATED=1`, `BASE_BRANCH`, and `DELETE_BRANCH_ON_MERGE` — act on that last one per "Branch deletion on merge". A `CR_CREATE_ERROR=` line is an auth or forge failure: surface it and stop, with the approved draft still in hand. On `CR_PREEXISTING=1` there is nothing to open; carry that CR's URL forward.
 
+**Then, on GitLab with a predecessor, set the ordering link** before the write below, since its outcome decides one sentence of the description. The invocation and the degrade ladder are in the cookbook's "Linking an ordering dependency between CRs":
+
+```bash
+glab api -X POST "projects/:fullpath/merge_requests/<CR_IID>/blocks" -F blocking_merge_request_iid=<predecessor-iid> [-F blocking_project_id=<id>]
+```
+
+Add `blocking_project_id` when the predecessor is in another project. **Detect by attempt, don't pre-probe:** `201` linked · `409` already linked (fine) · `404` the instance predates the API (< 17.5) · `403` not Premium/Ultimate or no permission.
+
+- **`201` / `409`:** GitLab now blocks the merge until the predecessor merges. The approved `Depends on` line stands as written; add nothing.
+- **`404` / `403`:** the prose is the only ordering signal, so the description should say so, and that sentence was not in the text the author approved. Show the `Depends on` line as it would read with `(not enforced by the forge)` appended, and ask with `AskUserQuestion` (header `Ordering`): **Add it** edits `DESC_DRAFT_PATH` to that line, **Write as approved** leaves it. Either way, tell the user the order isn't enforced, and that they can set it in the UI if the instance supports it.
+
 **2. Expand the deep links against the URL.** The placeholders can only become URLs once the CR has one:
 
 ```bash
@@ -494,14 +505,9 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill prepare-revi
 
 Call it whether or not this flow pushed. It gates on the runs already reported, so a CR opened on the commit `/anchor:commit` just pushed and reported comes back `PIPELINE_WATCH=skipped`, `already-reported`, and nobody is told twice about one pipeline. Two cases still report: a force-pushed rebase is a *new* commit, and where CI is gated on the CR (`on: pull_request`), the pipeline that opening it starts is one nobody has seen — the push-time watch found nothing to report.
 
-### Set the ordering dependency (when Step 2 captured one)
+### The ordering dependency (when Step 2 captured one)
 
-If this CR must land after a predecessor CR, record the ordering on the forge once the description is written — not just in the prose line from Step 3. The full invocation and the degrade ladder live in the cookbook's "Linking an ordering dependency between CRs"; in short:
-
-- **GitLab** — set the enforced dependency: `glab api -X POST "projects/:fullpath/merge_requests/<CR_IID>/blocks" -F blocking_merge_request_iid=<predecessor-iid>` (add `-F blocking_project_id=<id>` when the predecessor is in another project). **Detect by attempt, don't pre-probe:** `201` linked · `409` already linked (fine) · `404` the instance predates the API (< 17.5) · `403` not Premium/Ultimate or no permission. On `404`/`403`, fall back to prose — confirm the Step 3 `Depends on !<iid>` line is present and tell the user the ordering isn't enforced (they can set it in the UI if the instance supports it).
-- **GitHub** — no native cross-PR dependency exists; the Step 3 `Depends on #<num>` line is the only signal. State that GitHub won't block the merge on it.
-
-No predecessor captured (a single CR, or an independent one) → skip this entirely.
+On GitLab it is set in "Open the CR and write it", between opening the CR and writing its body, so the description says the order isn't enforced only where the link was refused. On GitHub there is nothing to set: the Step 3 `Depends on #<num>` line, which already says GitHub won't enforce it, is the only signal. No predecessor captured (a single CR, or an independent one) → skip this entirely.
 
 > **On GitHub, one web-UI step remains:** `gh` exposes no equivalent upload endpoint, so screenshots embedded in the description must be dragged into the forge editor. After **Yes (write)** lands the body, open the CR in the browser, drop each PNG, and re-save — GitHub rewrites the local paths to hosted URLs. **On GitLab this step doesn't exist** — the "Write it" step above already uploaded each screenshot through `glab api --form` and wrote the description with hosted URLs, so there's nothing left to drag in.
 
