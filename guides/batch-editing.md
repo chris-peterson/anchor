@@ -58,10 +58,10 @@ give the verdict for the whole batch.
 
 | To | Do this | What happens |
 | --- | --- | --- |
-| Send it as drafted | Leave it alone, or answer its note with `ok`, `lgtm`, or 👍 | It publishes as proposed |
+| Accept it | Leave it alone, or answer its note with `ok`, `lgtm`, or 👍 | It publishes as proposed |
 | Send your own text | Edit the item's file | Your text publishes as you saved it, without being redrafted |
-| Have it redrafted | Leave any other note on the file or its row | It's redrafted and comes back in the next round |
-| Drop it | Answer its note with `drop`, `no`, or `skip`, or delete its row in `(context).md` | Nothing publishes for it |
+| Edit it | Say what you want instead, on its note, the file, or its row | It's redrafted and comes back in the next round |
+| Skip it | Answer its note, or the file, with `skip` (or `drop`, `no`), or delete its row in `(context).md` | Nothing publishes for it |
 
 A note in `(context).md` that isn't on a row applies to the whole batch, and is
 acted on before anything publishes.
@@ -71,17 +71,16 @@ acted on before anything publishes.
 Note only what you have something to say about. An item you leave alone is sent
 as drafted, so a batch you agree with needs no notes at all.
 
-- **Nothing to say:** <kbd>Z</kbd><kbd>Z</kbd> sends every item and
-  <kbd>Z</kbd><kbd>Q</kbd> stops with nothing published. <kbd>q</kbd> asks the
-  same thing in the pane: Approve, Reject, or Go back.
-- **Some items need work:** leave your notes and quit. Nothing publishes yet;
-  the noted items are redrafted and the batch comes back for another look.
-- **Send the rest now:** add a note saying `approve` in `(context).md`, off the
-  rows, before you quit. The items you left alone publish, and only the noted
-  ones come back. `reject` there stops the whole batch.
+Quit with <kbd>q</kbd> when you're done, answered or not. The pane counts
+what your answers decide (accept, edit, skip) and asks you to confirm:
 
-A word like `approve` on an item's own note answers that item, not the batch,
-which is why the batch-wide one goes in `(context).md`.
+- <kbd>Z</kbd> or <kbd>Enter</kbd> confirms. The items you accepted publish,
+  and the ones you asked to edit are redrafted and come back as a new batch.
+- <kbd>Q</kbd> stops the whole batch, with nothing published.
+- <kbd>Esc</kbd> goes back into the review, with your answers kept.
+
+<kbd>Z</kbd><kbd>Z</kbd> and <kbd>Z</kbd><kbd>Q</kbd> are the quit and the
+answer typed together.
 
 ## After you approve
 

@@ -93,10 +93,10 @@ revdiff_context_slot() {
   printf '%s' "$top/$REVDIFF_CONTEXT_FILE"
 }
 
-# The context file this adapter writes: every review but one of items, whose
-# caller writes its own.
+# The context file this adapter writes: every review but one whose caller writes
+# its own (a review of items, or one given --own-context).
 revdiff_context_path() {
-  [[ -z "${review_items:-}" ]] || return 1
+  [[ -z "${review_items:-}" && -z "${review_own_context:-}" ]] || return 1
   revdiff_context_slot
 }
 
@@ -207,18 +207,6 @@ diff_tool_edited() {
   cp "$revdiff_draft_copy" "$revdiff_draft"
 }
 
-# The editor a relaunch would open, by the name its command starts with; empty
-# where the review carries no draft or no editor would open.
-revdiff_relaunch_editor() {
-  local ed
-  [[ -n "$revdiff_draft" || -n "${message_file:-}" ]] || return 0
-  anchor_editor_available || return 0
-  ed=$(anchor_editor_resolve)
-  [[ -n "$ed" ]] || return 0
-  ed=${ed%% *}
-  printf '%s' "${ed##*/}"
-}
-
 # The header as markdown, written for what revdiff colors in a .md file: the
 # title as a heading, then where the change sits (the repo and the base as
 # links) and its size, since how big a review is decides how to read it. Then
@@ -233,9 +221,8 @@ revdiff_relaunch_editor() {
 # stays plain text.
 # shellcheck disable=SC2016,SC2154
 revdiff_header() {
-  local repo="$1" repo_url="$2" path exclude body where line label value next sha url from
+  local repo="$1" repo_url="$2" path exclude body where line label value sha url from
   path=$(revdiff_context_path) || return 0
-  next=$(revdiff_detail next)
   exclude=$(git rev-parse --path-format=absolute --git-path info/exclude)
   mkdir -p "$(dirname "$exclude")"
   grep -qxF -- "/$REVDIFF_CONTEXT_FILE" "$exclude" 2>/dev/null \
@@ -275,7 +262,7 @@ revdiff_header() {
     revdiff_reply_lines=$(jq -c --argjson a "$from" --argjson b "$(awk 'END { print NR }' "$path")" '. + [[$a, $b]]' <<<"$revdiff_reply_lines")
   fi
   {
-    anchor_review_box "$review_tool" "${next:-approve this review}" "stop, and nothing this review gates happens" "$(revdiff_relaunch_editor)"
+    anchor_review_box diff "$review_tool" "done, approve" "done, reject"
     printf '\n'
     value=$(revdiff_detail commit)
     if [[ -n "$value" ]]; then
@@ -323,7 +310,8 @@ diff_tool_command() {
   local -a args=("--description-file=$desc_file")
   # Both are flags rather than REVDIFF_CONFIG entries: revdiff reads
   # --annotations from the command line only.
-  [[ -z "${review_annotations:-}" ]] || args+=("--annotations=$review_annotations")
+  # review_preload is the copy a review of items preloads from (../diff.sh).
+  [[ -z "${review_preload:-${review_annotations:-}}" ]] || args+=("--annotations=${review_preload:-$review_annotations}")
   [[ "${review_untracked:-0}" -ne 1 ]] || args+=(--untracked)
   # No global marker: each note anchor seeds opens with its own, 🤖 for the
   # agent describing its change and 💡 for an action it suggests
@@ -488,7 +476,6 @@ diff_tool_verdict() {
   case "$chosen" in
     accept)   printf 'approved' ;;
     reject)   printf 'rejected' ;;
-    relaunch) printf 'relaunch' ;;
     "")     if [[ "$(jq 'length' <<<"$comments")" -gt 0 ]]; then
               printf 'changes-requested'
             else

@@ -61,6 +61,7 @@
 #                           [--answers <answers.json>]
 #                           (--pass read takes no --items, and lists the CR's open review threads given --threads <OPEN_FEEDBACK_PATH>)
 #   review-round.sh read    --dir <round> --returned <notes.returned.json>
+#   review-round.sh tally   --dir <round> --returned <notes.returned.json>
 #   review-round.sh suggest --dir <round> --id <n> --forge <github|gitlab>
 #   review-round.sh files   --dir <round>
 #   review-round.sh finish  --dir <round>
@@ -116,11 +117,11 @@ TABLE="(context).md"
 die() { echo "ROUND_ERROR=$*"; exit 65; }
 
 cmd="${1:-}"
-[[ -n "$cmd" ]] || { echo "usage: review-round.sh <start|record|revert|seed|read|suggest|files|finish|trend|sizes> ..." >&2; exit 64; }
+[[ -n "$cmd" ]] || { echo "usage: review-round.sh <start|record|revert|seed|read|tally|suggest|files|finish|trend|sizes> ..." >&2; exit 64; }
 shift
 
 CTX_REPO=""
-dir="" base="" head="" place="" next="" id="" items="" returned="" forge="" title="" ledger="" cr_url="" pass="" threads="" answers=""
+dir="" base="" head="" place="" next="" id="" items="" returned="" forge="" title="" ledger="" cr_url="" pass="" threads="" answers="" dry=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --repo)      CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
@@ -140,6 +141,7 @@ while [[ $# -gt 0 ]]; do
     --pass)      pass="${2:?--pass needs read or items}"; shift 2 ;;
     --threads)   threads="${2:?--threads needs a file}"; shift 2 ;;
     --answers)   answers="${2:?--answers needs a file}"; shift 2 ;;
+    --dry)       dry=1; shift ;;
     *) echo "review-round.sh: unknown argument: $1" >&2; exit 64 ;;
   esac
 done
@@ -440,7 +442,7 @@ the items pass, which shows only the drafted fixes."
     [[ "$n_yours" == 0 ]] || yours=" ($n_yours from your notes)"
     about="**This diff is only the fixes \`/anchor:review\` suggests, not the change request itself.**
 It starts from the change request's head, so the author's change isn't shown again: every line
-here is a suggestion. Each has a 💡 note saying why. To drop one, delete its note or reply no.
+here is a suggestion. Each has a 💡 note saying why.
 $n_items item$plural for you$yours: $n_applied with a suggested fix, $(( n_items - n_applied )) without code.
 What you keep posts on the change request as a suggestion or a comment for its author to
 take or leave, and only once you approve the exact text."
@@ -456,13 +458,6 @@ Each item is a note in the diff and a row in the table below."
   n=$(state n)
   [[ "$n" == 1 ]] || about+="
 This is round $n: it looks only at what round $(( n - 1 ))'s commit changed."
-  if [[ "$pass" == read ]]; then
-    accept="the agent drafts a fix for each of your notes and each finding the quality agents confirm, then opens those drafts for you to decide"
-  elif [[ "$pass" == items && "$(state place)" == worktree ]]; then
-    accept="the agent writes what you kept as suggestions and comments on the change request, and posts nothing until you approve the text"
-  elif [[ "$pass" == items ]]; then
-    accept="the agent takes out what you dropped and makes the changes you asked for, then opens the commit for you to approve"
-  fi
   repo_url=$(cd "$root" && anchor_repo_web_url)
   where="\`$(basename "$(state repo)")\`"
   [[ -z "$repo_url" ]] || where="[$(basename "$(state repo)")]($repo_url)"
@@ -482,11 +477,10 @@ This file, \`(context).md\`, is the guide to the review; it leaves the tree when
 the review closes.
 $where
 
-$(anchor_review_box --answer "Leave a note on any line you'd change, or anywhere in this file for the change
-as a whole. Say what you want; you don't need to write the fix. A note that asks
-something is a question: the agent answers it before going on, and it never posts.
-Closing with no note besides \`approve\` means you found nothing to change." \
-  revdiff "$accept" "stop the review, and nothing is committed or posted")
+$(anchor_review_box \
+  --about "Note anything you'd change; you don't need to write the fix.
+Ask a question in a note." \
+  review-read revdiff "done, nothing to add" "done, stop the review")
 " > "$root/$TABLE"
     if [[ -n "$threads" ]] && [[ "$(jq length "$threads")" -gt 0 ]]; then
       jq -r '"## Open threads",
@@ -503,13 +497,7 @@ This file, \`(context).md\`, is the guide to the review; it leaves the tree when
 the review closes.
 $where
 
-$(anchor_review_box --answer "Answer each item on its note in the diff, or on its row:
-- **Keep it**: leave the note as it is.
-- **Change it**: write what you want instead.
-- **Drop it**: delete the note, or answer \`drop\`. A fix in the tree comes back out.
-- **Something new**: add a note of your own anywhere.
-- **Ask**: a note with a question in it is answered before going on, and never posts." \
-  revdiff "$accept" "stop the round, and nothing is committed or posted")
+$(anchor_items_box revdiff)
 " \
         "| # | slug | severity | proposal | finding |" > "$root/$TABLE"
   fi
@@ -536,6 +524,8 @@ $(anchor_review_box --answer "Answer each item on its note in the diff, or on it
   exclude=$(git -C "$root" rev-parse --path-format=absolute --git-path info/exclude)
   mkdir -p "$(dirname "$exclude")"
   grep -qxF -- "/$TABLE" "$exclude" 2>/dev/null || printf '/%s\n' "$TABLE" >> "$exclude"
+  # How the items pass's confirm dialog counts the answers (DIFF-51).
+  printf 'bash %q tally --dir %q\n' "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")" "$dir" > "$dir/notes.tally"
   echo "NOTES=$dir/notes.md"
   echo "TABLE=$root/$TABLE"
   echo "NOTE_COUNT=$(jq length "$dir/notes.json")"
@@ -638,8 +628,21 @@ read)
          "QUESTIONS=\(.questions|length)",
          "USER_EDITS=\(if .userEdits then 1 else 0 end)"' "$dir/read.json"
   # The reviewer's edit stays in the tree as theirs, so the next record holds
-  # only the agent's change and the next pass seeds over it.
-  set_state lastTree "$now"
+  # only the agent's change and the next pass seeds over it. A dry read (the
+  # tally's) leaves it for the read that follows.
+  [[ -n "$dry" ]] || set_state lastTree "$now"
+  ;;
+
+# What `read` would decide, counted for the items pass's confirm dialog
+# (DIFF-51): a kept item is accepted, a changed one edited, a dropped one
+# skipped, and a note of the reviewer's own off every item is something new.
+tally)
+  need_dir
+  bash "${BASH_SOURCE[0]}" read --dir "$dir" --returned "$returned" --dry >/dev/null
+  jq -r '"TALLY_ACCEPT=\([.items[] | select(.decision == "keep")] | length)",
+         "TALLY_EDIT=\([.items[] | select(.decision == "change")] | length)",
+         "TALLY_SKIP=\([.items[] | select(.decision == "drop")] | length)",
+         "TALLY_NEW=\((.added | length) + (.tableNotes | length))"' "$dir/read.json"
   ;;
 
 suggest)

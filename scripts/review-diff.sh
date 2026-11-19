@@ -104,6 +104,13 @@ set -euo pipefail
 #     reads, edits, and deletes them in place, and the set they leave comes back
 #     as the comments, plus REVIEW_RETURNED=<path> holding that set as JSON. A
 #     tool that can't preload notes refuses the review rather than dropping them.
+#     A review that preloads them as items (a batch, a review round's items
+#     pass) asks for its verdict in a confirm dialog that counts the answers,
+#     read by the command in `<file>` with `.md` replaced by `.tally` (DIFF-51).
+#   --own-context <slug>  the caller wrote the review's `(context).md` itself
+#     (a review round's read pass), so the tool's header doesn't replace it,
+#     and a note dismissing its Review box's hints sets anchor.<slug>.hints.
+#     A review of items owns its context file too, with the slug `items`.
 #   --untracked  show untracked files in the tree too (a working-tree review
 #     only), so a file the review writes for the reviewer to edit is in front of
 #     them. Refused the same way by a tool that can't show one.
@@ -177,6 +184,7 @@ review_skill=""
 mode_override=""
 tool_override=""
 review_annotations=""
+review_own_context=""
 review_notes=""
 review_seeded=""
 review_reply=""
@@ -203,6 +211,7 @@ while [[ $# -gt 0 ]]; do
     --path)     stage_paths+=("${2:?--path needs a path}"); shift 2 ;;
     --staged-path) staged_paths+=("${2:?--staged-path needs a path}"); shift 2 ;;
     --annotations) review_annotations="${2:?--annotations needs a file}"; shift 2 ;;
+    --own-context) review_own_context="${2:?--own-context needs the Review box slug}"; shift 2 ;;
     --notes)    review_notes="${2:?--notes needs a notes file}"; shift 2 ;;
     --from)     local_from="${2:?--from needs a commit}"; shift 2 ;;
     --reply)    review_reply="${2:?--reply needs the state dir review-reply.sh seeded}"; shift 2 ;;
@@ -838,6 +847,10 @@ fi
 # but ride with the tool's context file.
 review_items=""
 [[ -z "$review_annotations" || -n "$review_seeded" || -n "$review_reply" ]] || review_items=1
+# The Review box the context file holds, by the slug its hints are kept under
+# (CONFIG-21): the caller's where it wrote the file, else the tool's own `diff`.
+review_hints_slug="${review_own_context:-diff}"
+[[ -z "$review_items" ]] || review_hints_slug=items
 
 # One adapter per mode. Within `diff`, the tool's own half lives in
 # review/tools/<tool>.sh, which that adapter sources.
@@ -887,6 +900,7 @@ fi
 export review_subject review_mode review_tool
 export diff_range diff_staged diff_paths files_left files_right files_name review_title review_details_json
 export message_file review_skill review_annotations review_seeded review_reply review_items review_untracked
+export review_own_context review_hints_slug
 
 # Taken before the tool opens, so it names what the reviewer was shown.
 [[ -z "$review_index" ]] || echo "REVIEW_INDEX=$review_index"

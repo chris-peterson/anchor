@@ -295,10 +295,11 @@ seed and launch below leaves out `--cr-url` and `--detail CR=` where `HAS_CR=0`.
 whatever else happens, so the user never waits on a question or an agent to
 start. The read pass is the revdiff launch in Step 6, from `ROUND_FROM`, with no
 `--annotations` (`NOTE_COUNT=0`: the read pass has no notes until the user
-writes one). Its manifest says this is the change as written, which commits it
-covers (and how many were skipped as already reviewed), and how to answer:
-leave a note on anything to change, then a single note in `(context).md` saying
-`approve` to go on or `reject` to stop. Don't touch `ROUND_ROOT` while the read
+writes one) and with `--own-context review-read`, so revdiff shows the table
+the seed wrote rather than a header of its own. Its manifest says this is the
+change as written, which commits it covers (and how many were skipped as
+already reviewed), and how to answer: leave a note on anything to change, then
+quit with `q`; `ZZ` goes on with nothing to add, and `ZQ` stops. Don't touch `ROUND_ROOT` while the read
 pass is open: the user is reading that tree, and an edit there would land in
 what they are reviewing.
 
@@ -512,7 +513,8 @@ again.
 Launch it as `${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md` describes: in the
 background, with the manifest, and holding on chat feedback while it's open.
 Every pass launches the same way, each with the `ROUND_FROM` and `NOTES` its own
-seed printed, leaving out `--annotations` where it printed `NOTE_COUNT=0`. Probe
+seed printed, leaving out `--annotations` where it printed `NOTE_COUNT=0` and
+passing `--own-context review-read` in its place on the read pass. Probe
 each pass first with the launch's arguments, so each launch's release follows a
 request (DIFF-47):
 
@@ -524,7 +526,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill review --tool revdif
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill review --tool revdiff --mode diff \
-  --repo <ROUND_ROOT> <ROUND_FROM> --untracked [--annotations <NOTES>] \
+  --repo <ROUND_ROOT> <ROUND_FROM> --untracked [--annotations <NOTES> | --own-context review-read] \
   --title 'Review of <CR_REF>: <CR_TITLE>' [--detail CR=<CR_URL>] --detail author=<CR_AUTHOR> \
   [--detail 'earlier rounds=<ROUND_PREVIOUS> of the CR']
 ```
@@ -538,24 +540,23 @@ draft creates. On someone else's CR it is the same: only the suggested fixes.
 since a reviewer who can't tell the change from the agent's suggestion can't
 review either: on your own CR *this diff is only the agent's drafts*, on
 someone else's *this diff is only the fixes the agent
-suggests, not the CR itself; drop one by deleting its note or replying no*.
+suggests, not the CR itself; skip one by answering `skip` on its note*.
 Then the CR, the round number from round 2 on, its author, the items by status
 (`3 drafted, 2 without code`), and how to answer.
 From round 2 on, add the trend table `review-round.sh trend --ledger
 <ROUND_LEDGER>` prints, one row per finished round. Carry the answer
 key into the reply, since nobody should have to open the table to learn it:
 
-> Answer on each item's note. Leave it, or answer `ok` / 👍, to keep it.
-> Delete it, or answer `drop` / `no`, to drop it. Write anything else to change
-> it, and add a note of your own for anything new. A note on a file this pass
-> doesn't change is in `(context).md` instead; answer it on its row the same
-> way. Ask anything in a note: I answer a question before going on, and a
-> question never posts. Then leave a
-> single note in `(context).md`, off the rows, saying `approve` to go ahead or
-> `reject` to stop the round, and quit with `q`. With nothing to change, `ZZ`
-> goes ahead and `ZQ` stops the round.
+> Answer on each item's note: do nothing to accept it, say what you want
+> instead to edit it, or say `skip` to skip it. Note anywhere else for anything
+> new. A note on a file this pass doesn't change is in `(context).md` instead;
+> answer it on its row the same way. Ask anything in a note: I answer a question
+> before going on, and a question never posts. Then quit with `q`: the pane
+> counts what your answers decide, and `Z` confirms, `Q` stops the round, and
+> Esc goes back to the answers.
 
-When it closes, read `REVIEW_RETURNED` from its output. `approved` and
+When it closes, read `REVIEW_RETURNED` from its output. An items pass confirms
+in its pane (DIFF-51), so it closes `approved` or `rejected`. `approved` and
 `changes-requested` both mean the review ran; the returned notes are the answer,
 and both go on to Step 7, whose commit review (on your own CR) or batch of
 comments (on someone else's) is where the user sees the result again. `rejected` is the

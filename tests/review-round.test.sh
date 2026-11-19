@@ -134,13 +134,14 @@ grep -q 'has 3 items for you: 2 drafted' "$table" || fail "the table says what t
 grep -q "This diff holds only those drafts, from the change request's head" "$table" \
   || fail "the items pass says it shows only the drafts: $(cat "$table")"
 # shellcheck disable=SC2016
-boxed "$table" | grep -qF -- '- `approve`: the agent takes out what you dropped and makes the changes you asked for, then opens the commit for you to approve' \
-  || fail "the items pass says Accept leads to the commit: $(cat "$table")"
+boxed "$table" | grep -qF -- 'Answer each item on its note:' \
+  || fail "the items pass says how to answer an item: $(cat "$table")"
 [[ "$(val ROUND_FROM "$o")" == "$head" ]] || fail "the items pass diffs from the CR head: $o"
-sed -n '/^╭─ Review /,/^╰/p' "$table" | grep -qF 'Answer each item on its note in the diff, or on its row' \
-  || fail "the Review box says how to answer an item: $(cat "$table")"
 # shellcheck disable=SC2016
-boxed "$table" | grep -qF -- 'leave a single note here saying `approve` or `reject`' \
+sed -n '/^╭─ Review /,/^╰/p' "$table" | grep -qF -- '- skip it: say `skip`' \
+  || fail "the Review box says how to skip an item: $(cat "$table")"
+# shellcheck disable=SC2016
+boxed "$table" | grep -qF -- '`q` done, then confirm' \
   || fail "the Review box says how to finish: $(cat "$table")"
 grep -q "on \`$(git -C "$root" branch --show-current)\` · \[change request\](https://example.com/pr/7)" "$table" \
   || fail "the table names the branch and links the CR: $(cat "$table")"
@@ -258,8 +259,18 @@ o=$(round_cmd read --dir "$dir" --returned "$returned.2")
 [[ "$(jq -r '.tableNotes[0]' "$(val ROUND_READ "$o")")" == "fewer rounds, please" ]] || fail "a note off the rows: $(jq -c .tableNotes "$(val ROUND_READ "$o")")"
 ok "read: a deleted row drops its item, a note on a row changes it, and a note off the rows is kept"
 
+# The items pass's confirm dialog counts what read decides (DIFF-51), and seed
+# leaves the command that runs it beside the notes.
+o=$(round_cmd tally --dir "$dir" --returned "$returned.2")
+[[ "$(val TALLY_ACCEPT "$o") $(val TALLY_EDIT "$o") $(val TALLY_SKIP "$o") $(val TALLY_NEW "$o")" == "1 1 1 1" ]] \
+  || fail "tally: $o"
+grep -q "review-round.sh tally --dir" "$dir/notes.tally" || fail "seed leaves the tally command beside the notes: $(cat "$dir/notes.tally")"
+ok "tally: counts what read decides"
+
 # An edit the reviewer made from inside revdiff comes back as theirs.
 printf 'reviewer\n' >> "$root/c.txt"
+# A tally is a dry read: the read after it still finds the reviewer's edit.
+round_cmd tally --dir "$dir" --returned "$returned" >/dev/null
 o=$(round_cmd read --dir "$dir" --returned "$returned")
 [[ "$(val USER_EDITS "$o")" == 1 ]] || fail "a reviewer's own edit should be reported: $o"
 grep -q '^+reviewer' "$(jq -r .userEdits "$(val ROUND_READ "$o")")" || fail "user-edits patch"
@@ -341,12 +352,9 @@ jq -r .body <<<"$n2" | grep -q '^The rest are words\.' || fail "the note says wh
 jq -r '.[] | select(.id == 6) | .body' "$dir/notes.json" | head -1 | grep -q '^💡 #6 ask · suggestion · proposed$' \
   || fail "a proposal is headed 💡 too: $(cat "$dir/notes.json")"
 grep -q 'This diff is only the fixes' "$root/(context).md" || fail "the table says the diff is only the suggestions: $(cat "$root/(context).md")"
-grep -q 'delete its note or reply no' "$root/(context).md" || fail "the table says how to drop a suggestion: $(cat "$root/(context).md")"
 grep -q '| 2 | spell-out | suggestion | in the diff |' "$root/(context).md" || fail "the table marks a fix as in the diff: $(cat "$root/(context).md")"
 # shellcheck disable=SC2016
-boxed "$root/(context).md" | grep -qF -- '- `approve`: the agent writes what you kept as suggestions' \
-  || fail "a round on someone else's CR says Accept writes suggestions: $(cat "$root/(context).md")"
-grep -q 'posts nothing until you approve' "$root/(context).md" \
+grep -q 'only once you approve the exact text' "$root/(context).md" \
   || fail "a round on someone else's CR posts nothing unapproved: $(cat "$root/(context).md")"
 grep -q '← prev' "$root/(context).md" || fail "the round names the keys: $(cat "$root/(context).md")"
 GIT_CONFIG_GLOBAL="$work/hints-off" git config --global anchor.hints false

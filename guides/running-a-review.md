@@ -117,7 +117,7 @@ review closes gets the same short acknowledgement and joins the pile.
 A request to stop showing the keys a review lists ("hide hints", "hide diff
 hints", "dismiss the hints") isn't feedback on the change, and neither is a note
 the reviewer leaves on the Review box's own instructions ("hide this", "remove
-me", "close"), which comes back as `REVIEW_HIDE_HINTS=diff`: run
+me", "close"), which comes back as `REVIEW_HIDE_HINTS=<slug>`: run
 `git config --global anchor.hints false`, say so in a line, and leave the
 review open. A request naming one mode ("hide the revdiff hints") sets that
 mode's key, `anchor.diff.hints` or `anchor.edit.hints`, instead.
@@ -136,10 +136,11 @@ last lines carry:
 
 - `REVIEW_VERDICT`: `approved`, `changes-requested`, `rejected`,
   `incomplete`, or `no-verdict`.
-- `REVIEW_HIDE_HINTS=diff`, only where the reviewer left a note on the Review
-  box's instructions. It is neither a comment nor a choice: run
-  `git config --global anchor.diff.hints false`, say so in a line, and act on
-  the verdict as if the note weren't there.
+- `REVIEW_HIDE_HINTS=<slug>`, only where the reviewer left a note on the Review
+  box's instructions, naming that box: `diff`, `review-read` (a review round's
+  read pass), or `items` (a batch, or a round's items pass). It is neither a
+  comment nor a choice: run `git config --global anchor.<slug>.hints false`, say
+  so in a line, and act on the verdict as if the note weren't there.
 - `REVIEW_OUTPUT`: compact JSON carrying `verdict`, `mode`, `tool`,
   `comments[]`, `editedFields[]`, `approveIntent`, `capabilities`, and `raw` (the
   DIFF contract in `SPEC.md`). Each comment is `{body, target, file?, startLine?, endLine?,

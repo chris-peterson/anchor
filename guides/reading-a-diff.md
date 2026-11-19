@@ -58,16 +58,17 @@ looked, with an answer to each of your notes.
 > focus on Approve, so <kbd>Enter</kbd> approves. You can click a button too.
 > <kbd>Q</kbd> does nothing.
 
-**End the review with a chord or a note.** With nothing to say,
-<kbd>Z</kbd><kbd>Z</kbd> approves and <kbd>Z</kbd><kbd>Q</kbd> rejects, in
-revdiff as in Helix or Vim. A single note saying `approve` or `reject` in
-`(context).md` decides it too.
+**End the review by quitting.** With nothing to say, <kbd>q</kbd> asks you to
+approve or reject, and <kbd>Z</kbd><kbd>Z</kbd> and <kbd>Z</kbd><kbd>Q</kbd>
+answer it in one go, in revdiff as in Helix or Vim. Any note sends the draft
+back for another look. In a batch, or the items pass of `/anchor:review`,
+<kbd>q</kbd> always asks you to confirm, with what your answers decide counted.
 
 ## In your editor instead
 
 In an editor review, <kbd>Z</kbd><kbd>D</kbd> switches to revdiff, and exit 1,
 Vim's `:cq`, rejects. Quitting with `:q!` makes the agent ask whether to accept,
-reject, or reopen. revdiff can relaunch the review in your editor.
+reject, or reopen.
 
 Editor reviews work in Git Bash with an editor that waits, such as Notepad or
 `code --wait`.

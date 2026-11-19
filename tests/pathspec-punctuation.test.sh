@@ -31,7 +31,7 @@ mkdir -p "$TMPDIR"
 
 # --- a review host that approves --------------------------------------------
 # review-diff.sh hands revdiff's command string to ANCHOR_HOST_RUNNER. This one
-# leaves a note on the context file's `approve` line, as a reviewer choosing it
+# leaves a note on the context file's `ZZ` row, as a reviewer choosing it
 # does.
 bin="$work/bin"; mkdir -p "$bin"
 cat > "$bin/approve-runner.sh" <<'EOF'
@@ -42,7 +42,7 @@ while [[ "$1" == REVDIFF_*=* ]]; do shift; done
 shift
 out=""
 for a in "$@"; do case "$a" in --output=*) out="${a#*=}" ;; esac; done
-n=$(grep -n -F -- '- `approve`:' "$(git rev-parse --show-toplevel)/(context).md" | head -1 | cut -d: -f1)
+n=$(grep -n -F -- '│ `ZZ`' "$(git rev-parse --show-toplevel)/(context).md" | head -1 | cut -d: -f1)
 [ -n "$n" ] || exit 1
 printf '## (context).md:%s (+)\naccept' "$n" > "$out"
 exit 10
