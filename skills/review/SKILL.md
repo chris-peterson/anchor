@@ -1,6 +1,6 @@
 ---
 name: review
-description: Review an open change request, or a branch that has no CR yet — open revdiff on the commits you haven't reviewed so you read them and leave notes while agents examine them against the qualities you've set, draft a fix for each note and finding, then show those drafts alone so you keep, change, or drop each one, then the whole change with the kept fixes in it. On someone else's CR the kept findings post as suggestions and threads once the exact text is approved; on your own CR they land as one commit per round, and it ends by offering to mark the CR ready, or to open it. Use when reviewing a PR/MR, when a teammate sends a CR number or URL, or when reviewing your own change before handing it over, with or without a CR.
+description: Review an open change request, or a branch that has no CR yet — open revdiff on the commits you haven't reviewed so you read them and leave notes while agents examine them against the qualities you've set, draft a fix for each note and finding, then show those drafts alone so you keep, change, or drop each one. On someone else's CR the kept findings post as suggestions and threads once the exact text is approved; on your own CR they land as one commit per round, the last one's review showing the whole change beside its message, and it ends by offering to mark the CR ready, or to open it. Use when reviewing a PR/MR, when a teammate sends a CR number or URL, or when reviewing your own change before handing it over, with or without a CR.
 ---
 
 # Review
@@ -13,7 +13,13 @@ drafts a fix for each finding, and puts it in front of the user in revdiff:
 |---|---|---|
 | **read** | the range's base → the CR head: the change as written | reads it and leaves notes of their own, while the quality agents examine the same range |
 | **items** | the CR head → the round's tree: the drafts alone, a note on each | keeps, changes, or drops each item, without the CR's own change around it |
-| **whole** | the range's base → the round's tree: the CR with the kept fixes in it | decides whether the change, as it will land, is right |
+
+On your own CR the round then lands through `/anchor:commit`, whose review shows
+the round's fixes beside the drafted message. After the last round, that review
+is the **last look**: the range's base → the round's tree, the change as it will
+land beside the message that describes it, unless the user asks for the round's
+fixes alone (REVIEW-24). No round re-shows a fix an earlier round's commit
+review approved, so from round 2 on each review is only what is new.
 
 The read pass opens at once, so the user is never waiting on agents: reading
 the change is the review's first step whether or not the agents find anything,
@@ -33,13 +39,13 @@ else.** The user has already read the change in the read pass, and a fix the
 agent drafted ships only if the author takes it. So the items pass diffs from
 the CR head: every line in it is a suggestion, as code, with a 💡 note on it
 saying why. The user drops one by deleting its note or replying no. There is no
-whole pass: the CR with someone else's fixes in it is not a change anyone will
+last look: the CR with someone else's fixes in it is not a change anyone will
 merge (REVIEW-22).
 
 **Every examination after the first is the user's call** (REVIEW-38). A review
 spends tokens by the agent and by the round, so another round or pass opens only
-on a yes to a question asked in this invocation: the `Round` question in Step 7,
-the `Reopen` question after a whole pass that asked for changes. The quality
+on a yes to a question asked in this invocation: the `Round` question in Step 7.
+The quality
 agents are the one exception, and only once per head: the first time a CR head
 is put up for review in this repo, asking for the review is the yes, and they
 run alongside the read pass without a question, with a line telling the user
@@ -94,15 +100,15 @@ flowchart TD
     Any -->|Some| Triage["Group into items, draft each fix"]
     Triage --> Items["Items pass: the drafts alone"]
     Items --> Read["Read back: keep, change, drop, new"]
-    Read --> Whole["Whole pass: the CR with the kept fixes"]
-    Whole --> Who{Whose CR?}
+    Read --> Who{Whose CR?}
     Who -->|Theirs| Gate{Approve the batch?}
     Gate -->|Approve| Post([Post suggestions and threads])
     Gate -->|Reject| Local([Review stays local])
-    Who -->|Mine| Commit["Record and commit the round"]
-    Commit --> Again{Another round?}
-    Again -->|Yes| Next([Examine the round commit])
-    Again -->|No| Handoff([Offer to mark ready])
+    Who -->|Mine| Again{Another round?}
+    Again -->|Yes| Commit["Commit: this round's fixes"]
+    Commit --> Next([Examine the round commit])
+    Again -->|No| Last["Commit: the whole change"]
+    Last --> Handoff([Offer to mark ready])
 ```
 
 ## Task tracking when orchestrated
@@ -115,7 +121,6 @@ orchestrator, enumerate:
 - `Read the change in revdiff`
 - `Examine the diff against each quality`
 - `Decide each item in revdiff`
-- `Review the whole change in revdiff`
 - `Commit the round` *(own CR)* or `Post the approved findings` *(someone else's)*
 
 ## Step 1: Resolve and fetch the change request
@@ -253,7 +258,7 @@ edits have to be the only changes in the tree. Keep `ROUND_DIR`, `ROUND_ROOT`,
 `ROUND_BASE`, `ROUND_HEAD`, and on a first round `ROUND_FIRST_REQUEST`; every
 edit below happens under `ROUND_ROOT`.
 
-**A later round you offered** (Step 7, item 4) skips Steps 1 and 2 and starts
+**A later round you offered** (Step 7, item 1) skips Steps 1 and 2 and starts
 here with `--next-round` in place of `--base`:
 
 ```bash
@@ -274,8 +279,8 @@ first round is just *the review*; numbering it makes the reader ask what a round
 is before they know what they're looking at.
 
 **Seed the read pass** (the first round only; a later round, offered in Step 7,
-item 4, is agents only, since its range is the previous round's commit, which
-the user just read line by line in the whole pass):
+item 1, is agents only, since its range is the previous round's commit, which
+the user just read in the items pass and its commit review):
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-round.sh" seed --dir <ROUND_DIR> --pass read \
@@ -446,7 +451,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-round.sh" record --dir <ROUND_DIR> --
 
 The recorded patch is what lets one item be reverted later without touching the
 others, and what turns a fix on someone else's CR into a suggestion. Run the
-project's tests over the kept items before the whole pass (Step 7), not over
+project's tests over the kept items before the round's commit (Step 7), not over
 every draft.
 
 Commit to each fix: draft the change you would make, not a note about a change
@@ -466,7 +471,7 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-round.sh" seed --dir <ROUND_DIR> --pa
 ```
 
 Keep `ROUND_FROM`: it is the base the pass's revdiff opens on (the CR head for
-this pass, the merge base for the whole pass).
+this pass, the merge base for the read pass).
 
 On someone else's CR the pass is the same diff from the CR head (REVIEW-22):
 the drafts in the worktree, each applied item's 💡 note on its drafted lines,
@@ -531,8 +536,8 @@ draft creates. On someone else's CR it is the same: only the suggested fixes.
 
 **The manifest** opens by saying which of the two the diff is, in those words,
 since a reviewer who can't tell the change from the agent's suggestion can't
-review either: on your own CR *this diff is only the agent's drafts; the whole
-change follows*, on someone else's *this diff is only the fixes the agent
+review either: on your own CR *this diff is only the agent's drafts*, on
+someone else's *this diff is only the fixes the agent
 suggests, not the CR itself; drop one by deleting its note or replying no*.
 Then the CR, the round number from round 2 on, its author, the items by status
 (`3 drafted, 2 without code`), and how to answer.
@@ -552,8 +557,8 @@ key into the reply, since nobody should have to open the table to learn it:
 
 When it closes, read `REVIEW_RETURNED` from its output. `approved` and
 `changes-requested` both mean the review ran; the returned notes are the answer,
-and both go on to Step 7, whose whole pass (on your own CR) or batch of comments
-(on someone else's) is where the user sees the result again. `rejected` is the
+and both go on to Step 7, whose commit review (on your own CR) or batch of
+comments (on someone else's) is where the user sees the result again. `rejected` is the
 user stopping the round: finish it (Step 9) so the tree is left as it was, with
 no error banner. `no-verdict` with `raw.exitCode` `undecided` means they quit
 without choosing: ask with `AskUserQuestion` whether to accept, reject, or
@@ -590,79 +595,67 @@ each; on someone else's, a kept proposal stays a note and posts as a thread. An
 added note that is a fix is drafted and recorded under a new id. Then run the
 project's tests over an in-place round.
 
-### Review the whole change (your own CR)
-
-On someone else's CR there is no whole pass: go to "build what will post"
-below, whose batch is where the user reads the exact text of each comment.
-
-Write the kept items (and the added ones) to a new items file, each site
-numbered in the tree as it now stands, and seed the whole pass:
-
-```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-round.sh" seed --dir <ROUND_DIR> --pass whole --items <kept.json> \
-  --title 'Review of <CR_REF>: <CR_TITLE>' [--cr-url <CR_URL>]
-```
-
-`ROUND_FROM` is now `REVIEW_BASE`, so the diff holds the range under review with
-the kept fixes in it, as it will land. Launch it as in Step 6, with a manifest
-saying this is the whole change and how many items were kept and dropped. Read
-it back with `review-round.sh read` as above and act on what it says the same
-way: a note dropped here reverts its fix, and a changed one is reworked.
-`approved` goes on below. `changes-requested` applies the answers, then asks
-before opening anything again (REVIEW-38), with `AskUserQuestion` (header
-`Reopen`), naming what the answers changed: **Go on to the commit** *(default)*,
-whose review shows the round's exact diff once more, or **Reopen the whole
-change**, which seeds and opens this pass again on the result. `rejected` and the undecided and
-failed cases are handled as in Step 6. With nothing kept, skip this pass: the round has nothing to
-commit, so go to the handoff (item 5 below).
-
 ### Your own CR: commit the round
 
-1. File each `issue` item through `/anchor:issue`, seeded with its reason.
-2. List the round's files, then finish the round (Step 9), which takes
+With nothing kept, the round has nothing to commit: finish it (Step 9) and go
+to the handoff (item 5 below).
+
+1. **Ask about another round first** (REVIEW-24), with `AskUserQuestion` (header
+   `Round <ROUND_N + 1>`), since the answer picks what the commit review shows.
+   The agents in Step 3 would examine only what this round changed. The user
+   may be answering after an hour on another tab, so the question carries its
+   own context: open with the repo and the CR in full (`<repo> #<n>: <CR
+   title>`), say in a sentence what this round fixed, by what the fixes were
+   rather than by item number, and say what another round would do in plain
+   words (*re-read only the lines this round changed, and open revdiff again if
+   anything turns up*). Show how much each round changed as the `preview` of
+   each option: the bars `review-round.sh sizes --ledger <ROUND_LEDGER>` prints,
+   verbatim, with this round's lines (`review-round.sh files` and
+   `git diff --shortstat`) named above them, since the round isn't in the
+   ledger until it finishes. Bars on one scale show at a glance whether the
+   rounds are shrinking; that trend is the answer to whether another round is
+   worth it. The options:
+
+   - **Finish: show the whole change** *(default)*: the commit review is the
+     last look, `REVIEW_BASE` → the tree beside the drafted message, the one
+     time the change is shown as it will land.
+   - **Finish: just this round's fixes**: the commit review shows the round's
+     diff alone, for a user who approved every piece along the way.
+   - **Another round**: the commit review shows the round's diff alone, and the
+     next round starts once it lands. Say that it runs the quality agents
+     again, at their token cost.
+
+   Recommend another round only when this one kept a `critical` fix, since a fix
+   to a real bug can carry one of its own; otherwise recommend finishing, and
+   say so plainly when the percent didn't fall from the round before.
+   Suggestions polish, and a round of polish is the next round's diff. Never
+   start a round the user didn't choose here.
+2. File each `issue` item through `/anchor:issue`, seeded with its reason.
+3. List the round's files, then finish the round (Step 9), which takes
    `(context).md` out of the tree and records the round in the ledger:
    `review-round.sh files --dir <ROUND_DIR>` prints one `ROUND_FILE=` per path.
-3. Hand those paths to `/anchor:commit` as `--path` arguments, with each kept
+4. Hand those paths to `/anchor:commit` as `--path` arguments, with each kept
    item's reason as its note (REVIEW-30): a notes file in the shape
    `review-diff.sh --notes` reads, one note per item on its first site, numbered in
    the tree as it now stands (the edits since the round may have moved it), its
    text the item's reason. `/anchor:commit` seeds those as its review's notes, so
    the reasons you read in the round are back on their lines in the diff that
-   lands. It runs the tests, opens one review of the round's exact diff with its
-   drafted message, and commits and pushes on approval. The whole pass approved
-   the code; this review approves the message that lands with it, over the
-   round's own diff. Draft the message to name the items the round fixed; the notes carry
-   why each one is the way it is. `/anchor:commit` marks the round's commit
-   approved at commit; the whole pass was a review the user set out to make, so
-   once it lands also record a round on it, `--kind read-through`, from
-   `ROUND_HEAD` to the new `HEAD` (Step 9's call), so the next review doesn't ask
-   about a commit the user just read in full.
-4. **Offer another round** with `AskUserQuestion` (header `Round <ROUND_N + 1>`),
-   scoped to the round commit's diff: the agents in Step 3 examine only what
-   this round changed. The user may be answering after an hour on another tab,
-   so the question carries its own context: open with the repo and the CR in
-   full (`sextant #23: Number a refinement after the requirement it refines`),
-   say in a sentence what this round fixed, by what the fixes were rather than
-   by item number, and say what another round would do in plain words (*re-read
-   only the lines this round changed, and open revdiff again if anything turns
-   up*). Show how much each round changed as the `preview` of both options:
-   the bars `review-round.sh sizes --ledger <ROUND_LEDGER>` prints, each round's,
-   newest first, over the CR's, verbatim. The question text renders a markdown table as
-   raw pipes and a percent per round has to be read and held in the head, where
-   bars on one scale show at a glance whether the rounds are shrinking; that
-   trend is the answer to whether another round is worth it. The
-   same opening goes on the `Handoff` question below. Recommend another
-   round only when this one kept a `critical` fix, since a fix to a real bug
-   can carry one of its own; otherwise recommend stopping, and say so plainly
-   when the percent didn't fall from the round before. The default is to stop:
-   suggestions polish, and a round of polish is the next round's diff. Say in
-   the question that another round runs the quality agents again, at their token
-   cost. Declining ends the review, and so does any answer that isn't a yes:
-   never start a round the user didn't choose here. A later round is agents
-   only, and recorded `agents-only`. It starts at Step 3 with `start --next-round` and the
+   lands. For the last look, also hand it `--from <REVIEW_BASE>`: its review then
+   shows the whole change while the commit still carries only the round's paths
+   (DIFF-50); if the launch refuses `--from` because the branch was rewritten
+   under it, review without it and say so in one line. It runs the tests, opens one review with its drafted message, and
+   commits and pushes on approval. Draft the message to name the items the round
+   fixed; the notes carry why each one is the way it is. `/anchor:commit` marks
+   the round's commit approved at commit; the user read it in full in the items
+   pass and again in that review, so once it lands also record a round on it,
+   `--kind read-through`, from `ROUND_HEAD` to the new `HEAD` (Step 9's call), so
+   the next review doesn't ask about a commit the user just read.
+
+   On **Another round**, start it once the commit lands: agents only, and
+   recorded `agents-only`. It starts at Step 3 with `start --next-round` and the
    same ledger, without re-running Step 1: every commit now has a round, so
    Step 1 would ask whether to re-review the whole CR, and the next round looks
-   only at this round's commit.
+   only at this round's commit. On either **Finish**, go to the handoff.
 5. **Hand it off.** Ask (header `Handoff`):
 
    - **Mark ready and request reviewers**: ask who, then do both.
@@ -869,7 +862,7 @@ saying what they decided in a few words (*declined to split the parser*), so a
 later review, in this session or another, holds it as settled (REVIEW-34). Name
 people by bare login, never with `@`: the note lands in the description, where a
 mention notifies. On your own CR, the round's commit is recorded once it lands
-(Step 7, item 3). A `STATUS_ERROR` leaves the round's
+(Step 7, item 4). A `STATUS_ERROR` leaves the round's
 work as it is: say what it reported in one line and go on.
 
 ## Step 10: Report
@@ -886,13 +879,21 @@ Comments posted. Recording a verdict is yours:
   glab mr approve <iid>
 ```
 
-**After a self-review.** The trend table, then one line per round: the commit
-and the items it fixed. Then the CR's review status as the last record wrote
-it, as a table of commit, rounds, reviewed by, latest result, and its kind (`STATUS_ROWS_PATH`;
-`not reviewed` where a commit has no rounds, `approved at commit` where its
-only look was `/anchor:commit`'s). Then the dropped items, the issues filed, the CR's state
-(still a draft, or ready with whoever was requested), and the CR URL; with no
-CR, the branch, and that its rounds are in the local record until the CR opens.
+**After a self-review.** The user watched every round happen, so report only
+what they couldn't see (REVIEW-41), in at most three lines:
+
+- what landed: the commit and the push, and the pipeline's result if it has
+  settled (`Committed <sha>, pushed; pipeline passed`).
+- the CR's state and URL (`<CR_REF> is still a draft; /anchor:ready marks it
+  ready`), or with no CR, the branch and that its rounds are in the local
+  record until the CR opens.
+- what this review left for the user to act on, only where there is some: an
+  issue filed (its link), a `leave` item.
+
+Don't restate what the review already showed: no trend table, no recap per
+round, no Review status table (it is in the CR's description), and nothing that
+didn't happen (*nothing was dropped*, *no issues filed*). A slip in the local
+record that needs nothing from the user isn't news either.
 
 ## Related
 

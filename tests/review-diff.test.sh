@@ -984,6 +984,47 @@ ok "--local: REVIEW_INDEX changes when the reviewed path's index entry does"
 git -C "$repo" checkout --quiet -- a.txt
 git -C "$repo" reset --quiet --hard
 
+# ================== --local --from ======================================
+# The last look at a review's rounds shows the change since the review began:
+# the commits on top of --from and the paths about to be committed. Only the
+# named paths are staged, and REVIEW_INDEX is theirs alone, so commit.sh still
+# checks exactly what lands (DIFF-50).
+from=$(git -C "$repo" rev-parse HEAD)
+printf 'earlier round\n' > "$repo/round1.txt"
+git -C "$repo" add round1.txt; git -C "$repo" commit --quiet -m "round 1"
+printf 'this round\n' >> "$repo/a.txt"
+o=$(run --local --path a.txt)
+plain_index=$(sed -n 's/^REVIEW_INDEX=//p' <<<"$o")
+git -C "$repo" reset --quiet
+export REVDIFF_ARGS_FILE="$work/from-args.txt" REVDIFF_DESC_CAPTURE="$work/from-desc.md"
+export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
+o=$(run --local --from "$from" --path a.txt)
+[ "$(verdict_of "$o")" = approved ] || fail "--from verdict: $o"
+grep -qx -- "$from" "$REVDIFF_ARGS_FILE" || fail "revdiff should diff from --from: $(cat "$REVDIFF_ARGS_FILE")"
+grep -qx -- '--only=a.txt' "$REVDIFF_ARGS_FILE" || fail "--from should show the named path: $(cat "$REVDIFF_ARGS_FILE")"
+grep -qx -- '--only=round1.txt' "$REVDIFF_ARGS_FILE" || fail "--from should show the commits since it: $(cat "$REVDIFF_ARGS_FILE")"
+[ "$(sed -n 's/^REVIEW_INDEX=//p' <<<"$o")" = "$plain_index" ] || fail "--from must not change REVIEW_INDEX: $o"
+[ "$(git -C "$repo" diff --cached --name-only)" = a.txt ] || fail "--from should stage only --path: $(git -C "$repo" diff --cached --name-only)"
+grep -q 'since' "$REVDIFF_DESC_CAPTURE" || fail "the header should say what the diff is since: $(cat "$REVDIFF_DESC_CAPTURE")"
+unset REVDIFF_ARGS_FILE REVDIFF_DESC_CAPTURE
+ok "--local --from: shows the commits since it with the named paths, and stages and digests only those"
+
+git -C "$repo" reset --quiet
+rc=0; out=$(run --local --from no-such-rev --path a.txt 2>&1) || rc=$?
+[ "$rc" -eq 65 ] || fail "--from an unknown rev -> want 65, got $rc: $out"
+side=$(git -C "$repo" commit-tree "$(git -C "$repo" rev-parse 'HEAD^{tree}')" -m side)
+rc=0; out=$(run --local --from "$side" --path a.txt 2>&1) || rc=$?
+[ "$rc" -eq 65 ] || fail "--from off HEAD's history -> want 65, got $rc: $out"
+rc=0; out=$(run --previous --from "$from" 2>&1) || rc=$?
+[ "$rc" -eq 64 ] || fail "--from outside --local -> want 64, got $rc: $out"
+rc=0; out=$(run --files a.txt a.txt --from "$from" 2>&1) || rc=$?
+[ "$rc" -eq 64 ] || fail "--from with --files -> want 64, got $rc: $out"
+git -C "$repo" add a.txt
+rc=0; out=$(run --local --from "$from" --staged-path a.txt 2>&1) || rc=$?
+[ "$rc" -eq 64 ] || fail "--from with --staged-path -> want 64, got $rc: $out"
+ok "--local --from: refuses an unknown or unrelated base, and any mode but a working-tree --local"
+git -C "$repo" reset --quiet --hard "$from"
+
 # ================== empty range ==========================================
 # Nothing to show means nothing was reviewed, and a viewer quit on an empty diff
 # is indistinguishable from an approval — so the dispatcher never launches one.

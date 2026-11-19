@@ -232,17 +232,18 @@ Run it as the review loop in `${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md` 
 **Notes on your changes** (COMMIT-23). Before the launch, write a note for each hunk a reader would stop and ask about, by the bar in `${CLAUDE_PLUGIN_ROOT}/guides/review-notes.md`: one per hunk at most, none on a mechanical change, and none at all for a changeset with nothing to ask about. When the caller handed you notes (`/anchor:review` hands each kept item's reason), seed those and add your own only for hunks they leave unexplained. Write them to a unique temp file as `{"notes": [{"file": "<path>", "line": <n>, "note": "<text>"}]}` (a line numbered in the working tree; no `line` for a note on the whole file) and pass it to the launch as `--notes`. With no notes, leave `--notes` off.
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill commit --probe --local
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill commit --probe --local [--from <sha>]
 ```
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill commit --mode <REVIEW_MODE> --local --message-file <commit-msg-path> --path <p> [--path <p>...] [--staged-path <p>...] [--notes <notes.json>]
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill commit --mode <REVIEW_MODE> --local --message-file <commit-msg-path> --path <p> [--path <p>...] [--staged-path <p>...] [--notes <notes.json>] [--from <sha>]
 ```
 
 The notes are context the review carries, not a step of their own: write the file without comment. When the launch exits 65 with `NOTES_ERROR` lines instead of a verdict, nothing opened. Each names a note the review has nowhere to show: move it onto the change it explains, or drop it, and launch again.
 
 - **The manifest** is the table in `${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`: **Repo** is `CR_REF` linked to `CR_URL` (the repo and branch when there's no CR), **Size** is Step 1's `STAT`, and **What's next** is the commit and push, the commit alone when the user asked to hold the push, or, when the push rewrites the branch, the `Force-push` question before the commit (Step 6). When the probe reports `REVIEW_MODE=diff`, print the message itself verbatim under the table in a fenced block (`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`): revdiff shows it in a `(context).md` file the reviewer can approve without opening.
 - **Notes the tool can't show.** When the probe reports `REVIEW_PRELOADS=0`, the review opens without them: list them in the manifest, one line each, `file:line` and the note.
+- **A base the caller hands you.** `/anchor:review` hands `--from <sha>` for its last look, the commit review after a review's last round (REVIEW-24). Add it to the probe and the launch: the diff then runs from that commit, holding the commits on top of it as well as the paths about to land, and the header says what it is since (DIFF-50). It widens what the user reads and nothing else: staging, `REVIEW_INDEX`, and the commit still cover only the `--path` list. Size in the manifest is the round's own `STAT`, then *shown since `<sha>`*. A reply to it (`changes-requested`) drops `--from`, since it shows only what changed in answer.
 - **The same `--path` and `--staged-path` lists** you gave the Step 1 pre-flight. The review and the commit have to cover the same set of files, or the user grades a changeset that isn't the one that lands. A `--staged-path` review shows the index, which revdiff reads with `--staged`.
 - **Push-existing** (Step 1 found nothing staged, unpushed commits to push) has no drafted message; review those commits instead of the working tree: `review-diff.sh --skill commit --commit`, probed with `--commit` in place of `--local`. That path is a diff with no drafted artifact, so it always resolves to `diff`; a `--mode edit` there returns `no-verdict` naming `--mode diff`. Report that rather than pushing unreviewed.
 
