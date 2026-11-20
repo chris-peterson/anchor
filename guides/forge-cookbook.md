@@ -114,9 +114,13 @@ enforce. (GitHub has "blocked by" for issues, not PRs.)
 
 **The prose reference (both forges, always when a dependency exists).** Add a line
 to the description: `Depends on !<iid>` (GitLab) / `Depends on #<num>` (GitHub) —
-bare, so it autolinks — and say it must merge first. On GitLab this *complements*
-the enforced block; on GitHub (or a GitLab fall-back) it's the only signal, so say
-plainly that ordering isn't enforced.
+bare, so it autolinks — and say it must merge first. A predecessor in another
+project takes its full reference (`<group>/<project>!<iid>`) or its URL, since a
+bare `!<iid>` links to that number in the current project. On GitLab this
+*complements* the enforced block; on GitHub (or a GitLab fall-back) it's the only
+signal, so say plainly that ordering isn't enforced. On GitLab, write that
+sentence only after the `/blocks` attempt has returned `403` or `404`: drafted
+earlier, it guesses, and publishes "won't enforce" over a link that then succeeds.
 
 ## Linking a stack of CRs
 
@@ -370,7 +374,7 @@ glab api -X PUT projects/:fullpath/merge_requests/<iid> \
 
 ## Mark a CR ready, and request reviewers
 
-The handoff at the end of a self-review: the author is happy with their own
+The final sign-off of a self-review: the author is happy with their own
 change and wants eyes on it. Both halves are separate calls, and neither is
 implied by the other — marking a CR ready does not name who should look at it.
 
@@ -929,18 +933,23 @@ glab api "projects/:fullpath/merge_requests/<iid>/discussions?per_page=100" \
 ```
 
 Each discussion carries `id` (needed for replies/resolution), `notes[]`
-(`author.username`, `body`), and — for line-anchored `DiffNote`s — a
-`position` (`new_path`, `new_line`, `old_line`).
+(`id`, `author.username`, `body`), and — for line-anchored `DiffNote`s — a
+`position` (`new_path`, `new_line`, `old_line`). A note has no URL field; its
+page is the MR's `web_url` plus `#note_<notes[0].id>`, which opens the MR with
+the thread in view.
 
 ```bash
 # GitHub — review threads with resolution state (REST doesn't expose it; use GraphQL)
 gh api graphql -f query='query($owner:String!,$repo:String!,$pr:Int!){
   repository(owner:$owner,name:$repo){pullRequest(number:$pr){
     reviewThreads(first:100){nodes{id isResolved path line
-      comments(first:50){nodes{author{login} body databaseId}}}}}}}' \
+      comments(first:50){nodes{author{login} body databaseId url}}}}}}}' \
   -f owner=<owner> -f repo=<repo> -F pr=<num> \
   | jq '.data.repository.pullRequest.reviewThreads.nodes | map(select(.isResolved | not))'
 ```
+
+A comment's `url` is its thread on the PR's Files tab
+(`…/pull/<num>#discussion_r<databaseId>`); the first comment's is the thread's.
 
 ## Reply to a review thread
 

@@ -405,7 +405,11 @@ check.
   rather than in the draft. It shall likewise read a placeholder in the bare form whose
   token holds a parenthesis as unresolved: the bare form ends at the first `)`, so the
   token is cut there, can still name one line, and its tail would land in the
-  description as text.
+  description as text. It shall read a placeholder in the angle form up to the `>)`
+  that closes it, so a token carrying a generic (`Task<int>`, `Map<K, V>`) resolves,
+  and shall read an escaped `\<` or `\>` in that token as the bracket it stands for.
+  It shall refuse to write a description that still holds a placeholder, naming it,
+  so a placeholder no check caught never reaches the forge as raw text.
 - ~~**[PREPARE-10b]** Once the CR exists, the system shall expand every placeholder into
   the forge's own line anchor before the description lands, and shall leave the draft
   unmodified where any placeholder is unresolved.~~
@@ -415,7 +419,13 @@ check.
 - **[PREPARE-11]** If a claim about prior workflow or current state lacks a citable
   source, then the system shall omit it from the description.
 - **[PREPARE-12]** Where a predecessor CR was captured, the system shall record the
-  ordering dependency in the description and, on GitLab, on the forge.
+  ordering dependency in the description, by the predecessor's full reference
+  where it is in another project, and, on GitLab, on the forge. The description
+  shall say the forge doesn't enforce the order only where that is known: on
+  GitHub, which can't, and on GitLab once the link was tried and refused, and
+  then only after the author approves that sentence. Drafted before the link is
+  tried, the sentence is a guess, and it publishes "won't enforce" over a link
+  that then succeeds.
 - **[PREPARE-13]** When a drafted description is ready, the system shall present it
   to the user in a visual review (the current description vs. the draft, via the
   review wrapper) before any write prompt, and shall write it to the CR on a clean
@@ -586,9 +596,23 @@ ready.
   untracked file, the kept items
   land as one commit per round through `/anchor:commit`, and nothing is posted to
   the forge.
-- **[REVIEW-18]** When a self-review ends, the system shall offer to mark the CR
-  ready and to request reviewers, and shall do neither without the user choosing
-  it.
+- **[REVIEW-18]** When a self-review ends, the system shall offer a final
+  sign-off, asked once with each step picked or not: a last look at the whole
+  change from the review's base, as it will land; refreshing the CR description;
+  marking the CR ready; and requesting reviewers, run in that order, and shall
+  run none the user didn't pick. A note left in the last look shall start
+  another round with the user's notes as its items, and a rejection of it shall
+  stop the sign-off there. With no CR, the sign-off shall offer the last look
+  and opening the CR. Each round's commit review shows only that round, so the
+  one look at the whole change belongs at the end, beside the steps that hand
+  the CR to its reviewers. The sign-off, and each ask of whether a round is
+  the last (REVIEW-24), shall open with a clipboard drawn from the rounds: each
+  finished round checked off with the fixes it made and the lines it changed,
+  then the round in progress marked, a row for the rounds that may follow, and
+  the sign-off still to come, or, at the sign-off, the sign-off marked. After a
+  long scroll of tables, verdicts, and commits, the step at hand has to read as
+  a fresh page rather than one more line in that scroll, and seeing the rounds
+  done beside the step ahead is how a user paces whether another is worth it.
 - **[REVIEW-19]** When the findings are merged, the system shall group the
   findings one change resolves into one item, and give each item an id, a slug,
   a severity of critical or suggestion, and a status: applied, proposed, filed as
@@ -602,15 +626,17 @@ ready.
   for an unapplied item, its status, and shall write a table of the items beside
   the diff that is never committed. It shall refuse to open a review over a note
   revdiff would drop, so that a missing note always means the user removed it.
-  The round shall be reviewed in up to three passes: on the first round, the
+  The round shall be reviewed in up to two passes: on the first round, the
   read pass (REVIEW-35); then the items pass, a diff from
   the CR head to the round's tree holding the drafts alone, where the user keeps,
-  changes, or drops each item; then, with the dropped drafts reverted and the
-  changes made, the whole pass, a diff from the range's base holding the CR with
-  the kept fixes in it, seeded with a note per kept item. On someone else's CR
-  the items pass is the CR as written instead, and there is no whole pass
-  (REVIEW-22). Each pass's table shall open by saying whether its diff is the
-  change as written, the agent's drafts alone, or the change as it will land. An item drafted from a
+  changes, or drops each item. On the user's own CR the round's kept fixes are
+  then shown once more in its commit review (REVIEW-24), and the change as it
+  will land is shown only there, once the user stops the rounds. A round never
+  re-shows a fix an earlier round's commit review approved: from the second
+  round on that is most of a diff from the review's base, and the user would
+  read it again to find the two lines this round changed. Each pass's table
+  shall open by saying whether its diff is the
+  change as written or the agent's drafts alone. An item drafted from a
   note the user left in the read pass shall say so in its note. A draft read inside a
   large CR's diff is hard to tell from the change it comments on, so each item is
   decided before the change is judged as it will land. A note on a line of a file
@@ -629,8 +655,8 @@ ready.
   as a suggestion and any other kept item as a thread, each anchored to the line
   it maps to in the CR head. The items pass shall diff from the CR head, so it
   shows the drafted fixes as code and none of the CR's own change, each with
-  its item's note headed 💡 on its drafted lines, and the round shall have no
-  whole pass. The user has read the change in the read pass, so showing it
+  its item's note headed 💡 on its drafted lines, and the review shall not
+  show the change with the fixes in it. The user has read the change in the read pass, so showing it
   again buries the suggestions, and a note revdiff places on a line the diff
   doesn't change is one the reviewer can pass without seeing; a fix ships only
   if the author takes it, so the CR with the fixes in it is not a change anyone
@@ -638,14 +664,21 @@ ready.
 - **[REVIEW-23]** When no finding clears the review-qualities template's bar and
   the user left no note in the read pass, the system shall say so in one line and treat the review as complete: nothing posts
   on someone else's CR, and a self-review goes straight to the handoff.
-- **[REVIEW-24]** When a self-review round is committed, the system shall offer
-  another round scoped to that round's commit, showing how much each round so far
-  changed, and shall end the review when the user declines. The offer shall name
+- **[REVIEW-24]** Once a self-review round's items are decided, and before its
+  commit, the system shall offer another round scoped to that round's commit,
+  showing how much each round so far changed, and shall end the review after the
+  commit when the user declines. The offer shall name
   the repository and the CR in full, say what the round fixed, and say what
   another round would do, so a user answering it after time away can decide
   without scrolling back. It shall recommend another round only when the round
-  kept a critical fix, and recommend stopping otherwise. The next round's range
-  shall run from the head the previous round reviewed to the new head.
+  kept a critical fix, and recommend stopping otherwise. The round's commit
+  review shall show the round's own fixes beside the drafted message, whichever
+  the user answers, and the offer shall say so and ask only whether this is the
+  last round; the look at the whole change is the final sign-off's (REVIEW-18).
+  A question whose options chose what a review would show read as a question
+  about something else, and its default sent a user who wanted the small review
+  into the whole change. The next round's range shall run from the head the previous round
+  reviewed to the new head.
 - **[REVIEW-25]** The system shall remove a round's table, its state, and any
   worktree it made when the round's edits are committed or posted, and when the
   review stops after the round began.
@@ -664,7 +697,7 @@ ready.
   system shall name a round by its number from the second round on, and present
   the first as the review itself. The first round's read pass shall draw the
   CR's own size alone, coloured: no fix exists yet, so a bar for one would report
-  a round that has not happened. Its items and whole passes draw the round's
+  a round that has not happened. Its items pass draws the round's
   drafts over the CR, coloured as the current round.
 - **[REVIEW-28]** Before any finding becomes an item, the system shall judge the
   examination's candidates once, as a whole: drop one it can't confirm or that
@@ -723,7 +756,7 @@ ready.
   A read-through counts as a review; its kind keeps it from passing for one the
   agents examined. Where a self-review round's fixes land as a commit, that
   commit shall get a `read-through` round: the user read it in full in the
-  whole pass. A round the user stops records nothing. On someone else's CR it
+  items pass and again in its commit review. A round the user stops records nothing. On someone else's CR it
   shall record only where the description already has the section and the CR is
   out of draft: keeping the section is the author opting in, and a draft is the
   author saying the change isn't ready for review.
@@ -819,6 +852,15 @@ ready.
   The user shouldn't have to decide who a question is for to ask it, and a
   question on its way to the author under the user's name is a comment they
   never meant to post.
+- **[REVIEW-41]** When a self-review ends, the system shall report only what
+  the user could not see during it: what landed, with the pipeline's result
+  where it has settled; the CR's state and URL, or the branch where there is no
+  CR; and anything the review left for the user to act on. It shall not restate
+  what the review already showed (the size of each round, what each round
+  fixed, the Review status the CR's description carries) or list what did not
+  happen. The user read every round as it happened, and a recap of it buries
+  the one line they need: where it landed and what is still theirs.
+
 
 ### FEEDBACK — Resolve feedback
 
@@ -832,7 +874,10 @@ ready.
 - **[FEEDBACK-03]** If local state does not match the CR head, then the system shall
   surface the mismatch and stop.
 - **[FEEDBACK-04]** When feedback exists, the system shall present all threads with
-  proposed dispositions and confirm with the author before acting.
+  proposed dispositions and confirm with the author before acting. Each thread's
+  location shall be a terminal hyperlink to the thread on the forge, since the
+  summarized ask is lossy and the author deciding its disposition often needs the
+  thread in context.
 - **[FEEDBACK-05]** The system shall land review fixes as new commits and shall never
   amend commits the reviewer has seen.
 - **[FEEDBACK-06]** When committing fixes, the system shall run the test suite first
@@ -1660,6 +1705,29 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   nothing to say is usually leaving the pane, and a question asked in chat
   arrives after they have; asked in the pane, it reaches them before the pane
   closes.
+- **[DIFF-50]** Where a local review is given a base other than HEAD, the
+  system shall show the change from that base to the paths about to be
+  committed, covering the files the commits since the base changed as well as
+  those paths, and say in the header what the diff is since; it shall still
+  stage only the named paths and digest only their index entries, and shall
+  refuse a base that is not an ancestor of HEAD, a base on a review of the
+  index, and a base on a reply. The base widens what the reviewer reads, not
+  what lands: a commit review that shows a whole change still lets through
+  only the commit it was asked to approve.
+- **[DIFF-51]** When a review of items (a batch, a review round's items pass)
+  closes, answered or not, the system shall confirm in the same pane before it
+  closes: a box centered in the pane titled "Confirm", counting what the answers
+  decide (accept, edit, skip, and new, a count of zero left out) by the item
+  script's own reading of them, and offering Confirm, Stop, and Go back, taking
+  `Z`, `z`, or Enter as Confirm, `Q` or `q` as Stop, and Esc as Go back, the box
+  drawn and clicked as DIFF-49's. Confirm shall read as `approved` with the
+  answers riding along, and Stop as `rejected`, over any choice a note made;
+  Go back shall reopen the review on the answers given so far rather than on the
+  notes as seeded. Where the answers can't be counted, the box shall say so and
+  still confirm. In a review of items a note is an answer to one item, not a
+  request to revise the whole set, so a quit with answers in it is the reviewer
+  finishing, and reading it as a revision would send the batch back unpublished;
+  the counts let them check what they are confirming before anything publishes.
 - **[DIFF-30]** The system shall move the input focus to the split it opens. A
   split opened through the terminal's scripting interface is created without
   being selected, so the review draws in a pane the keyboard does not reach and
@@ -1765,35 +1833,48 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   `approveIntent` true (CONFIRM-08).
   revdiff shows that review in a scratch repo, whose copy of the draft is
   removed when the review closes, so the edit has to be carried out before then.
-- **[DIFF-46]** Where a revdiff review carries a draft (a `--files` review, or a
+- ~~**[DIFF-46]** Where a revdiff review carries a draft (a `--files` review, or a
   commit message) and an `edit` review could open, the system shall offer a
   third choice in the Review box that relaunches the review in the user's editor, named by
   its command, and when chosen shall start the review over in `edit` mode on the
   draft as it stands, carrying the reviewer's other notes into the buffer's
   context. The choice names a relaunch of the review rather than an edit, so it
   doesn't read as editing the commit message, and it is the way back from the
-  viewer that `ZD` (DIFF-44) is the way into it.
+  viewer that `ZD` (DIFF-44) is the way into it.~~
+
+  _Retired 2026-11-19: the choice took a row of every draft review's Review box
+  for a path almost nobody took, and revdiff's own `e` already edits a file in
+  place (DIFF-45)._
 - **[DIFF-40]** Where a `diff` review's context file states what quitting does,
   the system shall put where the change sits (the repo and the base, as links;
   the repo named as `origin` names it, else for the main checkout, never for a
   linked worktree's directory, which is named for the worktree)
   and the change's size directly under the title, the base as `@` and its
   link; then the instructions, in one Review box drawn in solid lines with its
-  name in the top edge and a blank line on either side: one key for each of the
-  viewer's actions for the previous and next change, on one row, and for
-  annotating a line and a file, read from the viewer's own bindings; how to
-  finish, by a single note saying `approve` or `reject`; the choices (DIFF-42);
-  what other notes do; and last, how to hide the hints, which shrinks the box to
-  the choices. The commit, the caller's own details, and the body follow every
-  instruction. A review round's and a batch's table shall carry the same box,
-  with how to answer an item (keep, change, drop) in place of what other notes
-  do. A reply review (DIFF-37) shall put its table of replies between the size
-  and the box.
+  name in the top edge and a blank line on either side, in three sections of
+  keys, read from the viewer's own bindings: the previous and next change on
+  one row, the arrows cueing the direction; then noting a line and a file, one
+  key to a row in a column; then being done, `q` (done), `ZZ` (done, approve),
+  and `ZQ` (done, reject) in the same column (DIFF-42); and last, how to dismiss
+  the hints, which leaves the box holding the done rows. The box says only what
+  the reviewer does in this step, never what follows it. The commit, the
+  caller's own details, and the body follow every instruction. A review
+  round's read pass shall carry the same box in the table it writes, saying
+  after the note keys that the reviewer need not write the fix and may ask a
+  question in a note, its `ZZ` done with nothing to add and its `ZQ` stopping
+  the review. A review of items (a batch, a round's items pass) shall carry
+  one box for both kinds: after the note keys, answer each item on its note
+  (accept it by doing nothing, edit it by saying what they want instead, skip
+  it by saying `skip`) and note anywhere else to add something new; and `q`
+  alone in the done section, done then confirm (DIFF-51), since the confirm
+  dialog asks. A reply review (DIFF-37) shall put its table of replies between
+  the size and the box.
   Every terminal draws solid box lines joined. A reviewer coming back to a
   review cold reads what and how big it is first, a reviewer who knows how a
-  review works skips the box, the hide line sits in the one box it shrinks, and
-  what each way of ending the review does has to stand apart from the prose
-  around it. Where a reviewer's note sits on the context file, the system shall
+  review works skips the box, the dismiss line sits in the one box it empties,
+  and what each way of ending the review does has to stand apart from the prose
+  around it. A batch and an items pass answer the same way, so a reviewer who
+  learned one has learned the other. Where a reviewer's note sits on the context file, the system shall
   return it with its line and that line's text, since the file is gone once the
   review closes and a note on the keys or the size is not about the message.
 - **[DIFF-41]** Where a review carries the agent's notes on its own changes
@@ -1808,9 +1889,11 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
 - **[DIFF-42]** Where a `diff` review's tool quits with the same status for a
   reviewer with nothing to say as for one who discarded what they said, the
   system shall put a Review box in the review's context file, or in the
-  caller's table where it writes its own: an `approve` line naming what
-  approving does next, and a `reject` line saying nothing the review gates
-  happens. A note on the `approve` line shall read as `approved` where the
+  caller's table where it writes its own: a `ZZ` row for approving and a `ZQ`
+  row for rejecting, those keys being the quit and the pane's answer typed
+  together (DIFF-49). A note on a row reads as that choice: the `ZZ` row as the
+  `approve` line, and the `ZQ` row as the `reject` line, below. A review of
+  items carries neither row and confirms in its pane instead (DIFF-51). A note on the `approve` line shall read as `approved` where the
   reviewer's other notes are at most a plain yes (`ok`, `lgtm`, 👍), and
   otherwise as `changes-requested` with `approveIntent` true and the choosing
   note left out of `comments`, so the caller applies the notes and re-reviews
@@ -1995,19 +2078,23 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   the spelling that would be read, since the setting is otherwise inert and looks
   set.
 - **[CONFIG-21]** The system shall read `anchor.hints` as a boolean,
-  defaulting to `true`, with `anchor.diff.hints` and `anchor.edit.hints`
-  overriding it for their mode (CONFIG-17). Where the value read for a mode is
-  `false`, the system shall leave the review tool's keys out of every context
-  that mode's review shows: a `diff` review's context file, a review round's and
-  a batch's table (DIFF-40), and the editor keys in an `edit` review's buffer
-  (DIFF-39); and in a `diff` review, leave the Review box (DIFF-40) holding its
-  choices (DIFF-42) alone, since the choices are how the review ends and the
-  prose around them explains what the reviewer already knows. The keys and that
+  defaulting to `true`, with `anchor.edit.hints` overriding it for an `edit`
+  review and, for a `diff` review, the key of the Review box it shows:
+  `anchor.diff.hints` for the tool's own box, `anchor.review-read.hints` for a
+  review round's read pass, and `anchor.items.hints` for a review of items
+  (CONFIG-17). Where the value read is `false`, the system shall leave the
+  review tool's keys out of that context: the Review box (DIFF-40), and the
+  editor keys in an `edit` review's buffer (DIFF-39); and leave the Review box
+  holding its done rows (DIFF-42) alone, or for a review of items its `q` row,
+  since those are how the review ends and the prose around them explains what
+  the reviewer already knows. Each box says different things, so dismissing
+  one leaves the others showing. The keys and that
   prose help a
   reviewer new to the tool and repeat themselves on every review after that.
   Where the reviewer leaves a note on the Review box's own text in a `diff`
   review, other than on a choice, the system shall read it as a request to hide
-  the hints for that mode, report it apart from the comments and the verdict,
+  that box's hints, report it apart from the comments and the verdict, naming
+  the box's key,
   and say so in the box's last line, since a note is how a reviewer marks any
   other text in the diff they want gone.
 

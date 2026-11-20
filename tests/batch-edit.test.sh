@@ -145,10 +145,12 @@ grep -q 'is the guide to the' "$table" || fail "the table says it is the guide, 
 # shellcheck disable=SC2016
 grep -qE '^│ `\[` ← prev +next → `\]` │$' "$table" || fail "the table names the keys: $(cat "$table")"
 # shellcheck disable=SC2016
-grep -qF -- '- `approve`: every item goes out as you left or answered it' "$table" || fail "Accept says what publishes: $(cat "$table")"
+grep -qF -- '- skip it: say `skip`' "$table" || fail "the box says how to skip an item: $(cat "$table")"
+sed -n '/^╭─ Review /,/^╰/p' "$table" | grep -qF "Answer each item on its note:" || fail "the box says how to answer an item: $(cat "$table")"
 # shellcheck disable=SC2016
-grep -qF -- '- `reject`: stop, and nothing publishes' "$table" || fail "Reject says nothing publishes: $(cat "$table")"
-sed -n '/^╭─ Review /,/^╰/p' "$table" | grep -qF "Answer each item on its note or its row" || fail "the box says how to answer an item, apart from the verdict: $(cat "$table")"
+sed -n '/^╭─ Review /,/^╰/p' "$table" | grep -qF '`q`   done, then confirm' || fail "the box says the dialog confirms: $(cat "$table")"
+# shellcheck disable=SC2016
+! grep -qF '`ZZ`' "$table" || fail "a batch's box has no verdict table, since the dialog confirms: $(cat "$table")"
 grep -qxF '| 7 | issues/7.md | Retitle \| relabel, add the fix | [link](https://example.com/issues/7) |' "$table" || fail "row 7: $(cat "$table")"
 grep -qxF '| r1 | replies/1.md | new: Reply on deploy.sh:42 |  |' "$table" || fail "row r1: $(cat "$table")"
 [[ "$(grep '^## ' "$table" | tr '\n' ,)" == "## Issues,## Replies," ]] || fail "rows group under their kind's heading: $(cat "$table")"
@@ -186,6 +188,17 @@ r=$(val BATCH_READ "$o")
 [[ "$(jq -r '.items[0].notes[0]' "$r")" == "say which release" ]] || fail "a new note is the feedback"
 [[ "$(jq -r '.items[1].fields.reason' "$r")" == "completed" ]] || fail "an edited file's fields come back as edited"
 ok "read: a new note changes an item, an edited file is the reviewer's text, and a deleted row drops"
+
+# The confirm dialog's tally counts what read decides (DIFF-51): an edited file
+# goes out as it stands, a note is redrafted, a deleted row is skipped. start
+# leaves the command that runs it beside the notes.
+o=$(b tally --dir "$dir" --returned "$work/returned.2.json")
+[[ "$(val TALLY_ACCEPT "$o") $(val TALLY_EDIT "$o") $(val TALLY_SKIP "$o") $(val TALLY_NEW "$o")" == "1 1 1 0" ]] \
+  || fail "tally: $o"
+grep -q "batch-edit.sh tally --dir" "$dir/notes.tally" || fail "start leaves the tally command beside the notes: $(cat "$dir/notes.tally")"
+o=$(eval "$(cat "$dir/notes.tally") --returned $(printf %q "$work/returned.json")")
+[[ "$(val TALLY_ACCEPT "$o")" == 2 ]] || fail "the tally command runs as written: $o"
+ok "tally: counts what read decides, from the command start leaves beside the notes"
 
 # An edited seeded note, a note on a row, and a note off the rows.
 row8=$(grep -n '^| 8 ' "$table" | cut -d: -f1)

@@ -135,7 +135,6 @@ Quit without saving, and you're asked what to do."
   printf '%s\n' "$review_title"
   jq -r '.[] | select(.label != "body" and .label != "opened by" and .label != "next")
     | "  \(.label): \(.value)"' <<<"$review_details_json"
-  [[ -z "${review_carried_notes:-}" ]] || printf '\nYour notes from the review you relaunched:\n%s\n' "$review_carried_notes"
 }
 
 editor_emit() {

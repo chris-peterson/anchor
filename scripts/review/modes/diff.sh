@@ -92,21 +92,6 @@ diff_tool_file() {
   [[ ! -r "$tool_file" ]] || printf '%s' "$tool_file"
 }
 
-# Start this review over in `edit` mode, on the draft as it now stands, and
-# relay that mode's result: the reviewer chose to finish it in their editor.
-# Notes they left besides the choice go into the editor's context, so none is
-# dropped on the way.
-# shellcheck disable=SC2034
-diff_relaunch() {
-  review_carried_notes=$(jq -r '.[] | "  \(.file // "the review")\(if .startLine then ":\(.startLine)" else "" end): \(.body)"' <<<"$1")
-  review_mode="edit"
-  review_tool=$(anchor_editor_resolve)
-  # edit.sh sources this file for its own switch, so shellcheck is not sent round the loop.
-  # shellcheck source=/dev/null
-  source "$(dirname "${BASH_SOURCE[0]}")/edit.sh"
-  emit_review
-}
-
 # Consumes the review-request variables the dispatcher exports before sourcing
 # this adapter; shellcheck can't follow that cross-file.
 # shellcheck disable=SC2154
@@ -163,7 +148,17 @@ emit_review() {
 
   ! declare -F diff_tool_before >/dev/null || diff_tool_before
 
-  local rc=0 cmd after=""
+  # A review of items confirms in the pane every time it closes, counting the
+  # answers with the command its caller left beside the notes (DIFF-51). It
+  # preloads from a copy of the notes, so going back from the dialog reopens
+  # the review on the answers given so far rather than on the notes as seeded.
+  local rc=0 cmd after="" tally=""
+  review_preload="${review_annotations:-}"
+  if [[ -n "${review_items:-}" ]]; then
+    [[ ! -r "${review_annotations%.md}.tally" ]] || tally=$(cat "${review_annotations%.md}.tally")
+    review_preload=$(mktemp "${TMPDIR:-/tmp}/anchor-review-preload.XXXXXX")
+    cp "$review_annotations" "$review_preload"
+  fi
   cmd=$(diff_tool_command "$bin" "$out_file" "$err_file" "$desc_file")
   if declare -F diff_tool_untouched >/dev/null; then
     if declare -F diff_tool_palette >/dev/null && ! diff_tool_palette "$bin" > "$palette_file"; then
@@ -171,6 +166,7 @@ emit_review() {
     fi
     after="bash $(anchor_host_sq "$(dirname "${BASH_SOURCE[0]}")/../verdict-ask.sh") $(anchor_host_sq "$review_tool")"
     after+=" $(anchor_host_sq "$out_file") $(anchor_host_sq "${review_annotations:-}") $(anchor_host_sq "$choice_file") $(anchor_host_sq "$palette_file")"
+    after+=" $(anchor_host_sq "$tally") $(anchor_host_sq "${review_items:+$review_preload}")"
   fi
   anchor_host_run "$cmd" diff "" "$after" || rc=$?
 
@@ -189,6 +185,7 @@ emit_review() {
       diff_unavailable "the review pane could not be opened" no-pane
     fi
     rm -f "$out_file" "$err_file" "$desc_file" "$choice_file" "$palette_file"
+    [[ -z "${review_items:-}" ]] || rm -f "$review_preload"
     ! declare -F diff_tool_cleanup >/dev/null || diff_tool_cleanup
     return
   fi
@@ -251,14 +248,17 @@ emit_review() {
   returned=$(jq -c --argjson m "$marks" "$mark" <<<"$returned")
   verdict=$(diff_tool_verdict "$rc" "$answered")
   # Asked in the pane after an undecided close, the reviewer's answer is the
-  # Review box choice it names (DIFF-49).
+  # Review box choice it names (DIFF-49). A review of items is asked every time
+  # it closes, answers or not, and the confirm dialog's answer decides over any
+  # choice a note made (DIFF-51).
   local asked=""
   [[ ! -s "$choice_file" ]] || asked=$(cat "$choice_file")
-  if [[ "$verdict" == undecided && ( "$asked" == approve || "$asked" == reject ) ]]; then
+  if [[ ( "$verdict" == undecided || "$items" == true ) && ( "$asked" == approve || "$asked" == reject ) ]]; then
     local choice=accept
     [[ "$asked" == approve ]] || choice=reject
-    echo "review-diff.sh: the review closed with no verdict chosen; the reviewer chose $asked when the pane asked" >&2
-    answered=$(jq -c --arg c "$choice" '. + [{body:$c, target:"verdict", file:null, startLine:null, endLine:null, side:null, raw:$c, choice:$c}]' <<<"$answered")
+    echo "review-diff.sh: the reviewer chose $asked when the pane asked" >&2
+    answered=$(jq -c --arg c "$choice" 'map(select(.target != "verdict")) + [{body:$c, target:"verdict", file:null, startLine:null, endLine:null, side:null, raw:$c, choice:$c}]' <<<"$answered")
+    returned=$(jq -c 'map(select(.target != "verdict"))' <<<"$returned")
     verdict=$(diff_tool_verdict "$rc" "$answered")
   fi
   # An approval covers the text as drafted only when nothing came with it but a
@@ -296,12 +296,6 @@ emit_review() {
   [[ -z "${review_seeded:-}" && -z "${review_reply:-}" ]] \
     || comments=$(jq -c 'map(.body |= sub("^🤖\\s*"; "") | if .raw then .raw |= sub("^🤖\\s*"; "") else . end)' <<<"$answered")
   [[ "$approve_intent" == false ]] || comments=$(jq -c 'map(select(.target != "verdict"))' <<<"$comments")
-  if [[ "$verdict" == relaunch ]]; then
-    rm -f "$out_file" "$err_file" "$desc_file" "$choice_file" "$palette_file"
-    ! declare -F diff_tool_cleanup >/dev/null || diff_tool_cleanup
-    diff_relaunch "$(jq -c 'map(select(.target != "verdict"))' <<<"$answered")"
-    return
-  fi
   if [[ "$verdict" == undecided ]]; then
     echo "review-diff.sh: the review closed with no verdict chosen; ask the reviewer whether to accept, reject, or reopen it" >&2
     verdict=no-verdict exit_name=undecided
@@ -334,6 +328,7 @@ emit_review() {
     }')
 
   rm -f "$out_file" "$err_file" "$desc_file" "$choice_file" "$palette_file"
+  [[ -z "${review_items:-}" ]] || rm -f "$review_preload"
   ! declare -F diff_tool_cleanup >/dev/null || diff_tool_cleanup
   # The set of notes the reviewer left, kept beside the ones that were preloaded
   # so a caller compares the two from files rather than from this output line.
@@ -342,7 +337,7 @@ emit_review() {
     printf '%s\n' "$returned" > "$returned_file"
     echo "REVIEW_RETURNED=$returned_file"
   fi
-  [[ "$hide_hints" != true ]] || echo "REVIEW_HIDE_HINTS=diff"
+  [[ "$hide_hints" != true ]] || echo "REVIEW_HIDE_HINTS=${review_hints_slug:-diff}"
   echo "REVIEW_VERDICT=$verdict"
   echo "REVIEW_OUTPUT=$out"
 }

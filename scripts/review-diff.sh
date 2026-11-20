@@ -23,6 +23,11 @@
 #       also seeds the drafted commit message (subject as headline, body as prose)
 #       into the review, so the reviewer reviews the message with the diff and can
 #       edit it in-tool; the edit comes back as editedFields (see SPEC.md "DIFF").
+#     bash review-diff.sh --local --from <rev> --path <p> [--path <p>...]
+#       shows the change since <rev> rather than since HEAD: the commits on top
+#       of <rev> and the paths about to be committed, as they will land. Display
+#       only: what is staged, and the REVIEW_INDEX commit.sh checks, are still
+#       the --path list (DIFF-50).
 #   --previous   previous changeset — the last commit vs its parent:
 #     bash review-diff.sh --previous    -> HEAD~1...HEAD
 #   --full       full diff — the whole branch vs the default branch, the way a
@@ -99,6 +104,13 @@ set -euo pipefail
 #     reads, edits, and deletes them in place, and the set they leave comes back
 #     as the comments, plus REVIEW_RETURNED=<path> holding that set as JSON. A
 #     tool that can't preload notes refuses the review rather than dropping them.
+#     A review that preloads them as items (a batch, a review round's items
+#     pass) asks for its verdict in a confirm dialog that counts the answers,
+#     read by the command in `<file>` with `.md` replaced by `.tally` (DIFF-51).
+#   --own-context <slug>  the caller wrote the review's `(context).md` itself
+#     (a review round's read pass), so the tool's header doesn't replace it,
+#     and a note dismissing its Review box's hints sets anchor.<slug>.hints.
+#     A review of items owns its context file too, with the slug `items`.
 #   --untracked  show untracked files in the tree too (a working-tree review
 #     only), so a file the review writes for the reviewer to edit is in front of
 #     them. Refused the same way by a tool that can't show one.
@@ -172,11 +184,13 @@ review_skill=""
 mode_override=""
 tool_override=""
 review_annotations=""
+review_own_context=""
 review_notes=""
 review_seeded=""
 review_reply=""
 review_untracked=0
 local_base=HEAD
+local_from=""
 probe_only=0
 stage_paths=()
 staged_paths=()
@@ -197,7 +211,9 @@ while [[ $# -gt 0 ]]; do
     --path)     stage_paths+=("${2:?--path needs a path}"); shift 2 ;;
     --staged-path) staged_paths+=("${2:?--staged-path needs a path}"); shift 2 ;;
     --annotations) review_annotations="${2:?--annotations needs a file}"; shift 2 ;;
+    --own-context) review_own_context="${2:?--own-context needs the Review box slug}"; shift 2 ;;
     --notes)    review_notes="${2:?--notes needs a notes file}"; shift 2 ;;
+    --from)     local_from="${2:?--from needs a commit}"; shift 2 ;;
     --reply)    review_reply="${2:?--reply needs the state dir review-reply.sh seeded}"; shift 2 ;;
     --untracked) review_untracked=1; shift ;;
     --probe)    probe_only=1; shift ;;
@@ -530,6 +546,7 @@ message_file=""
 
 if [[ "${1:-}" == "--files" ]]; then
   review_subject="files"
+  [[ -z "$local_from" ]] || { echo "review-diff.sh: --from sets the base of a --local review" >&2; exit 64; }
   shift
   files_left="${1:?Usage: review-diff.sh --files <left> <right> [--title <t>] [--detail label=value]...}"
   files_right="${2:?Usage: review-diff.sh --files <left> <right> [--title <t>] [--detail label=value]...}"
@@ -576,6 +593,8 @@ else
     esac
   done
   set -- "${args[@]+"${args[@]}"}"
+  [[ -z "$local_from" || "${1:-}" == --local ]] || {
+    echo "review-diff.sh: --from sets the base of a --local review" >&2; exit 64; }
 
   # Each git-range mode takes exactly one token (--local optionally a
   # --message-file pair). Anything past that was meant to do something, and
@@ -597,6 +616,14 @@ else
     expect_consumed "${@:2}"
   elif [[ "${1:-}" == "--local" ]]; then
     local_base=$(anchor_local_base)
+    if [[ -n "$local_from" ]]; then
+      [[ -z "$review_reply" && ${#staged_paths[@]} -eq 0 ]] || {
+        echo "review-diff.sh: --from widens a working-tree review; it doesn't combine with --reply or --staged-path" >&2; exit 64; }
+      local_base=$(git rev-parse --verify --quiet "$local_from^{commit}") || {
+        echo "review-diff.sh: --from names no commit here: $local_from" >&2; exit 65; }
+      git merge-base --is-ancestor "$local_base" HEAD || {
+        echo "review-diff.sh: --from $local_from is not an ancestor of HEAD, so the diff would mix in what HEAD doesn't carry" >&2; exit 65; }
+    fi
     diff_range="$local_base"
     header_mode="local"
     if [[ -n "$review_reply" ]]; then
@@ -607,6 +634,8 @@ else
         echo "review-diff.sh: --reply diffs the working tree against the last review, and a --staged-path review shows the index" >&2; exit 64; }
       diff_range=$(cat "$review_reply/reviewed")
       review_annotations="$review_reply/notes.md"
+      # A reply to a --from review measures the original change from that base.
+      [[ ! -s "$review_reply/from" ]] || local_base=$(cat "$review_reply/from")
     fi
     # --message-file seeds the drafted commit message into the review so the
     # reviewer reviews it alongside the diff (and can edit it in-tool).
@@ -636,6 +665,14 @@ else
     for named_path in "${review_paths[@]+"${review_paths[@]}"}"; do
       diff_paths+="$named_path"$'\n'
     done
+    # --from shows what the commits since it changed as well; the digest above
+    # stays the named paths', since those are all the commit carries.
+    if [[ -n "$local_from" ]]; then
+      while IFS= read -r named_path; do
+        [[ -n "$named_path" ]] && diff_paths+="$named_path"$'\n'
+      done < <(git -c core.quotePath=false diff --name-only --no-renames "$local_base" HEAD)
+      diff_paths=$(printf '%s' "$diff_paths" | awk 'NF && !seen[$0]++')$'\n'
+    fi
   elif [[ "${1:-}" == "--previous" ]]; then
     git rev-parse --verify --quiet HEAD~1 >/dev/null || {
       echo "review-diff.sh: HEAD has no parent commit to compare against" >&2
@@ -684,8 +721,11 @@ else
           | anchor_size_row "original change"
       } > "$review_reply/sizes.tsv"
     fi
-    base=""
+    base="" base_label="on top of"
     [[ "$local_base" != HEAD ]] || base=$(git log -1 --format='%h %s' HEAD)
+    if [[ -n "$local_from" ]]; then
+      base=$(git log -1 --format='%h %s' "$local_base") base_label="since"
+    fi
     if [[ -n "$message_file" ]]; then
       # Seed the drafted message: subject is the review's headline, the body row
       # is the message prose the tool renders, so message + diff are reviewed
@@ -693,16 +733,16 @@ else
       review_title=$(head -1 "$message_file")
       msg_body=$(tail -n +3 "$message_file")
       review_details_json=$(jq -n \
-        --arg repo "$repo" --arg br "$branch" --arg base "$base" --arg s "$stat" --arg body "$msg_body" \
+        --arg repo "$repo" --arg br "$branch" --arg bl "$base_label" --arg base "$base" --arg s "$stat" --arg body "$msg_body" \
         '[{label:"repo",value:$repo},{label:"branch",value:$br},
-          {label:"on top of",value:$base},{label:"summary",value:$s}]
+          {label:$bl,value:$base},{label:"summary",value:$s}]
          + (if $body == "" then [] else [{label:"body",value:$body}] end)')
     else
       review_title="Local changes vs HEAD"
       review_details_json=$(jq -n \
-        --arg repo "$repo" --arg br "$branch" --arg base "$base" --arg s "$stat" \
+        --arg repo "$repo" --arg br "$branch" --arg bl "$base_label" --arg base "$base" --arg s "$stat" \
         '[{label:"repo",value:$repo},{label:"branch",value:$br},
-          {label:"on top of",value:$base},{label:"summary",value:$s}]')
+          {label:$bl,value:$base},{label:"summary",value:$s}]')
     fi
   elif [[ "$header_mode" == "full" ]]; then
     base_ref="${diff_range%%...*}"
@@ -807,6 +847,10 @@ fi
 # but ride with the tool's context file.
 review_items=""
 [[ -z "$review_annotations" || -n "$review_seeded" || -n "$review_reply" ]] || review_items=1
+# The Review box the context file holds, by the slug its hints are kept under
+# (CONFIG-21): the caller's where it wrote the file, else the tool's own `diff`.
+review_hints_slug="${review_own_context:-diff}"
+[[ -z "$review_items" ]] || review_hints_slug=items
 
 # One adapter per mode. Within `diff`, the tool's own half lives in
 # review/tools/<tool>.sh, which that adapter sources.
@@ -856,6 +900,7 @@ fi
 export review_subject review_mode review_tool
 export diff_range diff_staged diff_paths files_left files_right files_name review_title review_details_json
 export message_file review_skill review_annotations review_seeded review_reply review_items review_untracked
+export review_own_context review_hints_slug
 
 # Taken before the tool opens, so it names what the reviewer was shown.
 [[ -z "$review_index" ]] || echo "REVIEW_INDEX=$review_index"
@@ -869,6 +914,11 @@ review_state_save() {
   dir=$(anchor_tmpdir anchor-review-state)
   anchor_review_snapshot "${review_paths[@]+"${review_paths[@]}"}" > "$dir/reviewed"
   printf '%s\n' "$1" > "$dir/comments.json"
+  if [[ -n "$local_from" ]]; then
+    printf '%s\n' "$local_base" > "$dir/from"
+  elif [[ -n "$review_reply" && -s "$review_reply/from" ]]; then
+    cp "$review_reply/from" "$dir/from"
+  fi
   if [[ -n "$review_reply" ]]; then
     { [[ ! -f "$review_reply/earlier" ]] || cat "$review_reply/earlier"; cat "$review_reply/reviewed"; } > "$dir/earlier"
   fi

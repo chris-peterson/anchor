@@ -175,17 +175,23 @@ git config --global anchor.hints false
 ```
 
 A review names the keys that work it, in a box in its context:
-in revdiff, the keys that step through the changes and add an annotation, read
+in revdiff, the keys that step through the changes and leave a note, read
 from revdiff's own bindings so a key you remapped is named as remapped; in
 Helix or Vim, the chords that approve, reject, and switch to revdiff
 ([Ending a review](#ending-a-review)). Once you know them, `false` drops those rows, or tell the agent "hide
 hints" and it sets this for you. In revdiff, the keys share one Review box with
-the choices that end the review, and hiding the hints shrinks it to those
-choices.
+the `q`, `ZZ`, and `ZQ` rows that finish the review, and dismissing the hints
+leaves only those rows. A note on the box's last line dismisses them.
 
-To keep the hints in one mode only, qualify the key with it:
-`anchor.diff.hints` for revdiff, `anchor.edit.hints` for the editor. The
-qualified key wins over `anchor.hints`.
+Each kind of review says different things, so each keeps its hints under its
+own key, and the qualified key wins over `anchor.hints`:
+
+| Key | Hides the hints in |
+| --- | --- |
+| `anchor.edit.hints` | an editor review |
+| `anchor.diff.hints` | a revdiff review of a commit, CR description, issue, or release notes |
+| `anchor.review-read.hints` | the first pass of `/anchor:review`, where you read the change |
+| `anchor.items.hints` | a batch edit, and the items pass of `/anchor:review` |
 
 ### `anchor.reviewBudgetMins` :id=key-reviewbudgetmins
 
@@ -356,15 +362,16 @@ text and a status, so you choose with a save or a chord.
 
 | You want to | `diff` (revdiff) | `edit` in Helix or Vim | `edit` in another editor |
 | --- | --- | --- | --- |
-| **Approve** | `ZZ` with no notes of your own, or a single note saying `approve`, then `q`; to keep other notes as comments, put it on the `approve` line in `(context).md` | `ZZ` | Save and quit |
-| **Reject**: nothing the review gates happens | `ZQ` with no notes of your own, or a single note saying `reject`, then `q` | `ZQ`, or `:cq` | Quit with exit code 1, or save an empty buffer |
-| **Ask for changes** | Notes where they apply, with neither chosen, then `q` | `ZD`: saves and reopens the draft in revdiff to annotate | Save, then quit with exit code 3 |
-| **Leave without choosing** | Notes on both the `approve` and `reject` lines, then `q`; with no note, `q` asks for a verdict, and Esc goes back into the review | Quit without saving | Quit without saving |
-| **Switch tools** | A note on **Relaunch in `<editor>`**, then `q`: the review starts over in your editor | `ZD`, as above | Exit code 3, as above |
+| **Approve** | `ZZ` with no notes of your own, or `q` and Approve; to keep other notes as comments, put a note on the `ZZ` row in `(context).md` | `ZZ` | Save and quit |
+| **Reject**: nothing the review gates happens | `ZQ` with no notes of your own, or `q` and Reject | `ZQ`, or `:cq` | Quit with exit code 1, or save an empty buffer |
+| **Ask for changes** | Notes where they apply, then `q` | `ZD`: saves and reopens the draft in revdiff to annotate | Save, then quit with exit code 3 |
+| **Leave without choosing** | `q` with no note, then Esc to go back into the review | Quit without saving | Quit without saving |
+| **Switch tools** | — | `ZD`, as above | Exit code 3, as above |
 
-**Relaunch** is offered where the review carries a draft (a commit message, a
-CR description, an issue body, release notes) and your editor can open. Any
-notes you left beside it go into the editor's context, so none is lost.
+A batch edit and the items pass of `/anchor:review` end differently, since a
+note there answers one item rather than asking for changes: `q` always opens a
+Confirm box counting what your answers decide, where `Z` confirms, `Q` stops,
+and Esc goes back with your answers kept.
 
 In revdiff, `e` opens the file under the cursor in `$EDITOR`. On a
 description, issue body, or release notes, what you save becomes the draft, and
@@ -382,9 +389,8 @@ The verdict words are `lgtm`, `ship it`, `approve`, and `accept`, and `reject`,
 `stop`, `abort`, and `cancel`, with case and a trailing `.` or `!` ignored. A
 word counts only alone: beside other notes it is one more note, and `lgtm, but
 rename it` asks for the rename. In a batch or an `/anchor:review` round, a word
-on an item's note or row answers that item (`reject` drops it), so the word that
-decides the whole review goes in `(context).md`, off the rows; answers on the
-items don't count against it.
+on an item's note or row answers that item (`reject` drops it), and the whole
+review is decided in the Confirm box `q` opens.
 
 The chords are `anchor`'s, for the review alone: Helix reads them from a
 workspace `.helix/config.toml` in the buffer's directory and merges them over
@@ -516,10 +522,10 @@ can miss the one `anchor` opens. `REVDIFF_CONFIG` is the exception: `anchor`
 reads it and passes the path through as `--config`. See
 [revdiff's options](https://revdiff.com/docs.html#options) for the full list.
 
-**How a revdiff review ends.** `(context).md` has a Review box: leave a single
-note saying `approve` or `reject`, then quit with `q`. With no notes of your
-own, `ZZ` approves and `ZQ` rejects: `Z` quits revdiff, and the second key
-answers the box that asks for a verdict. The rest, and how it compares with an editor review, is in [Ending a
+**How a revdiff review ends.** Quit with `q`. With no notes of your own, the
+pane asks you to approve or reject; any note sends the draft back for another
+look. `ZZ` approves and `ZQ` rejects in one go: `Z` quits revdiff, and the second
+key answers the box that asks for a verdict. The rest, and how it compares with an editor review, is in [Ending a
 review](#ending-a-review). A review of one drafted file (a CR description, an
 issue body, release notes) opens the same way, in a scratch repo that holds the
 draft and `(context).md`.

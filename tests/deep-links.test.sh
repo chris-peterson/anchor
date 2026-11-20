@@ -46,9 +46,10 @@ printf 'two\n' > "$repo/docs.md"
 # a changed blank line, and untouched lines — one file covering every verdict.
 # Lines 6-8 add a token on three changed lines (ambiguous), one on a single
 # changed line (unique), and a section heading with spaces and parentheses. The
-# last line carries a backslash, which is what an escape-processing assignment
-# eats on the way into awk.
-printf 'a1\nsettled\nchanged\n\na5\nFILE_LINKS one\nFILE_LINKS two\n## Deep-link construction (Review guide)\nsolitary\nesc [][\\.*^$]\n' \
+# line after carries a backslash, which is what an escape-processing assignment
+# eats on the way into awk, and the last two carry generic signatures, whose `>`
+# sits inside an angle-form token.
+printf 'a1\nsettled\nchanged\n\na5\nFILE_LINKS one\nFILE_LINKS two\n## Deep-link construction (Review guide)\nsolitary\nesc [][\\.*^$]\nprivate async Task<int> AuthenticateCallerAsync()\nMap<K, V> Lookup(List<Foo> items)\n' \
   > "$repo/app.txt"
 git -C "$repo" add -A
 git -C "$repo" commit --quiet -m change
@@ -221,6 +222,21 @@ EOF
 o=$(run --expand "$draft" --forge github --cr-url '' --base main 2>/dev/null) \
   && fail "--expand with no CR URL must not silently drop the links: $o"
 ok "--expand refuses to finish placeholders without a CR URL"
+
+# A generic signature carries `>` inside the angle form's token, which a match
+# stopping at the first `>` never found, so the raw placeholder published.
+cat > "$draft" <<'EOF'
+- [`a`](<anchor:app.txt#private async Task<int> AuthenticateCallerAsync>) — a generic return
+- [`b`](<anchor:app.txt#Map<K, V> Lookup(List<Foo> items)>) — generics and a parenthesis
+- [`c`](<anchor:app.txt#Task\<int\> AuthenticateCallerAsync>) — the escaped form
+EOF
+o=$(gh --expand "$draft") || fail "generic tokens should resolve: $o"
+[ "$(val EXPANDED "$o")" = 3 ] || fail "expected 3 expansions; got: $o"
+grep -qF "(${gh_app}R11) — a generic return" "$draft" || fail "Task<int> should resolve to line 11: $(cat "$draft")"
+grep -qF "(${gh_app}R12) — generics" "$draft" || fail "Map<K, V> should resolve to line 12: $(cat "$draft")"
+grep -qF "(${gh_app}R11) — the escaped form" "$draft" || fail "Task\\<int\\> should resolve to line 11: $(cat "$draft")"
+grep -q 'anchor:' "$draft" && fail "no generic placeholder should survive: $(cat "$draft")"
+ok "--expand resolves a token carrying generics, escaped or not"
 
 # --- --verify: the backstop for links written without a placeholder -----------
 verify() { ( cd "$repo" && bash "$links" --verify "$draft" --forge "$1" --cr-url "$2" --base main ); }

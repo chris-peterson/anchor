@@ -117,7 +117,7 @@ review closes gets the same short acknowledgement and joins the pile.
 A request to stop showing the keys a review lists ("hide hints", "hide diff
 hints", "dismiss the hints") isn't feedback on the change, and neither is a note
 the reviewer leaves on the Review box's own instructions ("hide this", "remove
-me", "close"), which comes back as `REVIEW_HIDE_HINTS=diff`: run
+me", "close"), which comes back as `REVIEW_HIDE_HINTS=<slug>`: run
 `git config --global anchor.hints false`, say so in a line, and leave the
 review open. A request naming one mode ("hide the revdiff hints") sets that
 mode's key, `anchor.diff.hints` or `anchor.edit.hints`, instead.
@@ -136,10 +136,11 @@ last lines carry:
 
 - `REVIEW_VERDICT`: `approved`, `changes-requested`, `rejected`,
   `incomplete`, or `no-verdict`.
-- `REVIEW_HIDE_HINTS=diff`, only where the reviewer left a note on the Review
-  box's instructions. It is neither a comment nor a choice: run
-  `git config --global anchor.diff.hints false`, say so in a line, and act on
-  the verdict as if the note weren't there.
+- `REVIEW_HIDE_HINTS=<slug>`, only where the reviewer left a note on the Review
+  box's instructions, naming that box: `diff`, `review-read` (a review round's
+  read pass), or `items` (a batch, or a round's items pass). It is neither a
+  comment nor a choice: run `git config --global anchor.<slug>.hints false`, say
+  so in a line, and act on the verdict as if the note weren't there.
 - `REVIEW_OUTPUT`: compact JSON carrying `verdict`, `mode`, `tool`,
   `comments[]`, `editedFields[]`, `approveIntent`, `capabilities`, and `raw` (the
   DIFF contract in `SPEC.md`). Each comment is `{body, target, file?, startLine?, endLine?,
@@ -190,6 +191,14 @@ to find yours. Once the fixes are in and the tests pass:
    | `answered` | a question; nothing to change | the answer |
    | `done` | you made the change it asked for | what you changed, in a line |
    | `different` | you changed something else, or nothing | what you did instead, and why |
+
+   **A reply is a sentence, rarely two.** The reviewer reads it on the line it
+   answers, with the change beside it, so the diff carries the *how*: what
+   moved where, what calls what, what a dry run printed. *"Folded `foo` into
+   `bar`'s shared base"* answers a request to drop `foo`; a walk through
+   everything that touched restates the diff. The file is also drawn in the
+   conversation as it is written, so every extra sentence is shown twice
+   before the review opens.
 
    Give `sites` (the lines the reply is about, as the tree now stands, each
    with its `line`) for a change; leave them out for an answer, and it sits

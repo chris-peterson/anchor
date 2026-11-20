@@ -298,9 +298,24 @@ why_for() {
 # The angle form is what carries a token with spaces or parentheses; the bare
 # form ends at the first `)`. The two patterns are disjoint — `](anchor:` cannot
 # match inside `](<anchor:`.
+#
+# The angle form runs to the first `>)` after it opens, not the first `>`: a
+# generic signature (`Task<int> Run`, `Map<K, V>`) carries `>` inside the token,
+# and a `[^>]*` match stopped there, matched nothing, and left the raw
+# placeholder to publish. CommonMark wants `<` and `>` escaped inside `<…>`, so
+# the escaped form (`Task\<int\>`) is accepted too, and spec_of unescapes it.
 placeholders() {
   {
-    grep -o '](<anchor:[^>]*>)' "$1" || true
+    awk '{
+      s = $0
+      while ((p = index(s, "](<anchor:")) > 0) {
+        s = substr(s, p)
+        q = index(s, ">)")
+        if (q == 0) break
+        print substr(s, 1, q + 1)
+        s = substr(s, q + 2)
+      }
+    }' "$1"
     grep -o '](anchor:[^)]*)'   "$1" || true
   } | sort -u
 }
@@ -333,11 +348,16 @@ spec_token() {
   esac
 }
 
-# Strip the markdown wrapper off a matched placeholder, leaving the spec.
+# Strip the markdown wrapper off a matched placeholder, leaving the spec, with
+# an escaped `\<` or `\>` in an angle-form token read as the bracket it stands
+# for.
 spec_of() {
   local m="$1"
   m="${m#](}"; m="${m%)}"
-  m="${m#<}";  m="${m%>}"
+  if [[ "$m" == "<"* ]]; then
+    m="${m#<}";  m="${m%>}"
+    m="${m//\\</<}"; m="${m//\\>/>}"
+  fi
   printf '%s' "$m"
 }
 

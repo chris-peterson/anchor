@@ -115,12 +115,12 @@ grep -qxF '❓ why uppercase?' "$state/notes.md" || fail "an answer opens with t
 grep -qxF 'You asked: rename b1 to beta' "$state/notes.md" || fail "a reply to a request opens with what was asked: $(cat "$state/notes.md")"
 grep -qxF '## b.txt:1 (+)' "$state/notes.md" || fail "a reply about a changed line sits on it: $(cat "$state/notes.md")"
 grep -qxF '🤖 #2 · 🏁 as asked' "$state/notes.md" || fail "a reply is headed with what became of the note: $(cat "$state/notes.md")"
-grep -qF '| 3 | shorter subject | ⚠️ done differently | end of file |' "$state/reply-head.md" || fail "the reply table: $(cat "$state/reply-head.md")"
+grep -qF '| 3 | shorter subject | ⚠️ done differently | [below](#reply-3) |' "$state/reply-head.md" || fail "the reply table: $(cat "$state/reply-head.md")"
 grep -qxF 'Kept it; the body says the rest.' "$state/reply.md" || fail "a reply with no line is written out in full: $(cat "$state/reply.md")"
 ok "review-reply.sh anchors each reply and writes the table"
 
 ! grep -q '^## c.txt' "$state/notes.md" || fail "a reply in a file unchanged since the review is not a note: $(cat "$state/notes.md")"
-grep -qF "| 4 | what is c5 for? | answered | end of file, \`c.txt:5\` |" "$state/reply-head.md" || fail "the table points to the end of the file: $(cat "$state/reply-head.md")"
+grep -qF "| 4 | what is c5 for? | answered | [below](#reply-4), \`c.txt:5\` |" "$state/reply-head.md" || fail "the table points below: $(cat "$state/reply-head.md")"
 grep -qxF "\`c.txt:5\`, unchanged since your review:" "$state/reply.md" || fail "the quoted reply names its line: $(cat "$state/reply.md")"
 grep -qxF '>    5  c5' "$state/reply.md" || fail "the excerpt marks the line asked about: $(cat "$state/reply.md")"
 { grep -qxF '     2  c2' "$state/reply.md" && grep -qxF '     8  c8' "$state/reply.md"; } || fail "the excerpt carries three lines either side: $(cat "$state/reply.md")"
@@ -161,7 +161,7 @@ s=$( cd "$repo" && bash "$seed" --state "$state" --replies "$work/order.json" --
 [ "$(sed -n '/^## a.txt:2 /{n;p;}' "$state/notes.md")" = '🤖 #1 · 🏁 as asked' ] || fail "the first line in the diff is #1: $(cat "$state/notes.md")"
 [ "$(grep -o '^| [0-9]* | [^|]*' "$state/reply-head.md")" = "$(printf '%s\n' '| 1 | rename b1 to beta ' '| 2 | why uppercase? ' '| 3 | shorter subject ' '| 4 | what is c5 for? ')" ] \
   || fail "the table runs in the notes' order: $(cat "$state/reply-head.md")"
-[ "$(grep '^## #' "$state/reply.md")" = "$(printf '%s\n' '## #3 · ⚠️ done differently' '## #4 · answered')" ] || fail "the off-diff replies carry their numbers: $(cat "$state/reply.md")"
+[ "$(grep '^## Reply #' "$state/reply.md")" = "$(printf '%s\n' '## Reply #3' '## Reply #4')" ] || fail "the off-diff replies carry their numbers: $(cat "$state/reply.md")"
 [ "$(wc -l < "$state/reply-head.md" | tr -d ' ')" = 7 ] || fail "the head is a title, one line of instructions, and the table: $(cat "$state/reply-head.md")"
 s=$( cd "$repo" && bash "$seed" --state "$state" --replies "$work/replies.json" --path a.txt --path b.txt --path c.txt )
 ok "review-reply.sh numbers the replies in the order the diff shows them"
@@ -235,7 +235,7 @@ msg_at=$(grep -n '^Why b exists' "$work/context" | cut -d: -f1)
 REVDIFF_STUB_OUTPUT=$(printf '## (context).md:%s ( )\nsay why in full' "$msg_at")
 o=$(run --reply "$state"); j=$(key REVIEW_OUTPUT "$o")
 [ "$(jq -r '.comments[0].target' <<<"$j")" = commit-message ] || fail "a note on the message under the reply table is about the message: $j"
-off_at=$(grep -n '^## #4 ' "$work/context" | cut -d: -f1)
+off_at=$(grep -n '^## Reply #4$' "$work/context" | cut -d: -f1)
 REVDIFF_STUB_OUTPUT=$(printf '## (context).md:%s ( )\nwhy c5?' "$off_at")
 o=$(run --reply "$state"); j=$(key REVIEW_OUTPUT "$o")
 [ "$(jq -r '.comments[0].target' <<<"$j")" = changeset ] || fail "a note on an off-diff reply answers the reply: $j"
