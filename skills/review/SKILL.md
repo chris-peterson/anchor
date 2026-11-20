@@ -602,8 +602,16 @@ project's tests over an in-place round.
 With nothing kept, the round has nothing to commit: finish it (Step 9) and go
 to the final sign-off (item 5 below).
 
-1. **Ask whether this is the last round** (REVIEW-24), with `AskUserQuestion`
-   (header `Round <ROUND_N + 1>`). The agents in Step 3 would examine only what
+1. **Ask whether this is the last round** (REVIEW-24). Open the reply that asks
+   with the clipboard, verbatim in a fenced block: the rounds done checked off,
+   this one marked in progress, and the sign-off still ahead, so the user can
+   pace themselves before choosing another:
+
+   ```bash
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-round.sh" progress --ledger <ROUND_LEDGER> --dir <ROUND_DIR>
+   ```
+
+   Then ask with `AskUserQuestion` (header `Round <ROUND_N + 1>`). The agents in Step 3 would examine only what
    this round changed. The user may be answering after an hour on another tab,
    so the question carries its own context: open with the repo and the CR in
    full (`<repo> #<n>: <CR title>`), say in a sentence what this round fixed, by
@@ -651,11 +659,12 @@ to the final sign-off (item 5 below).
    same ledger, without re-running Step 1: every commit now has a round, so
    Step 1 would ask whether to re-review the whole CR, and the next round looks
    only at this round's commit. On **Last round**, go to the final sign-off.
-5. **Final sign-off** (REVIEW-18). **Open it with the clipboard.** Draw it
-   from the round ledger, a checked row per round and the sign-off left open:
+5. **Final sign-off** (REVIEW-18). **Open it with the clipboard**, drawn as
+   item 1 draws it but with no round in progress: every round checked off and
+   the sign-off marked as the step at hand:
 
    ```bash
-   bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-round.sh" signoff --ledger <ROUND_LEDGER>
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-round.sh" progress --ledger <ROUND_LEDGER>
    ```
 
    The reply that asks holds its output, verbatim in a fenced block, and under
@@ -663,8 +672,8 @@ to the final sign-off (item 5 below).
    a long scroll of tables, verdicts, and commits, and this is the one point in
    the review where the user decides how the change leaves their hands; the
    clipboard's height pushes that scroll off the screen, so the sign-off reads
-   as a fresh page, with what the rounds did checked off above the one step
-   left.
+   as a fresh page, with what the rounds did checked off above the step at
+   hand.
 
    Draw it again each time sign-off is asked, after another round too. Then ask
    once, with `AskUserQuestion` (header `Sign-off`,

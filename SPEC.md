@@ -605,11 +605,14 @@ ready.
   stop the sign-off there. With no CR, the sign-off shall offer the last look
   and opening the CR. Each round's commit review shows only that round, so the
   one look at the whole change belongs at the end, beside the steps that hand
-  the CR to its reviewers. The sign-off shall open with a clipboard drawn
-  from the rounds, each checked off with the fixes it made and the lines it
-  changed, and the sign-off the one row left open: after a long scroll of
-  tables, verdicts, and commits, the step that hands the change over has to
-  read as a fresh page rather than one more line in that scroll.
+  the CR to its reviewers. The sign-off, and each ask of whether a round is
+  the last (REVIEW-24), shall open with a clipboard drawn from the rounds: each
+  finished round checked off with the fixes it made and the lines it changed,
+  then the round in progress marked, a row for the rounds that may follow, and
+  the sign-off still to come, or, at the sign-off, the sign-off marked. After a
+  long scroll of tables, verdicts, and commits, the step at hand has to read as
+  a fresh page rather than one more line in that scroll, and seeing the rounds
+  done beside the step ahead is how a user paces whether another is worth it.
 - **[REVIEW-19]** When the findings are merged, the system shall group the
   findings one change resolves into one item, and give each item an id, a slug,
   a severity of critical or suggestion, and a status: applied, proposed, filed as
