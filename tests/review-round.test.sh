@@ -319,6 +319,13 @@ t=$(round_cmd sizes --ledger "$ledger")
   || fail "sizes stacks each round, newest first, over the CR: $t"
 ok "start: a ledger makes the next round round 2, and trend tabulates both"
 
+b=$(round_cmd signoff --ledger "$ledger")
+[[ "$(grep -o '\[.\]  [^│]*[^ │]' <<<"$b")" == "$(printf '%s\n' '[x]  Round 1 · 2 fixes · +1 −0' '[x]  Round 2 · 0 fixes · +0 −0' '[ ]  Sign-off')" ]] \
+  || fail "the clipboard checks off each round and leaves the sign-off open: $b"
+[[ "$(tail -n +2 <<<"$b" | jq -R length | sort -u | wc -l | tr -d ' ')" == 1 ]] \
+  || fail "every row of the clipboard below its clip is one width: $b"
+ok "signoff: a clipboard of the rounds, the sign-off left open, its edges in line"
+
 # ============================ someone else's CR ==========================
 
 o=$(round_cmd start --repo "$repo" --base "$base" --head "$head" --worktree)

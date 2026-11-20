@@ -194,20 +194,23 @@ order=$(jq -c --slurpfile n "$state/notes.json" '
 
 # The context file's half. The table goes at its head (reply-head.md), so the
 # numbers are in view as it opens; the replies the diff has no line for go at its
-# end (reply.md), each quoting the lines it is about where it has some.
+# end (reply.md), each quoting the lines it is about where it has some. The table
+# links each of those to its heading, for a reviewer who opens the file rendered:
+# `## Reply #N` slugs to `reply-n` in every renderer, where a status or an emoji
+# in the heading would slug differently from one to the next.
 jq -r --slurpfile n "$state/notes.json" --slurpfile c "$comments" --slurpfile q "$quoted" --argjson o "$order" '
   def outcome: {answered:"answered", done:"🏁 as asked", different:"⚠️ done differently"}[.];
   def cell: gsub("\n"; " ") | gsub("\\|"; "\\|");
   (.replies | sort_by($o[.comment | tostring])) as $rs
   | ([$rs[] | .comment as $i | select([$n[0][] | select(.id == $i)] | length == 0)] | length) as $off
   | "# Reply to your review",
-    "What I did with each of your notes; each reply is on its line in the diff\(if $off > 0 then ", or at the end of this file" else "" end). Leave a note on one to answer it.",
+    "What I did with each of your notes; each reply is on its line in the diff\(if $off > 0 then ", or written out below" else "" end). Leave a note on one to answer it.",
     "| # | you asked | what I did | where |",
     ($rs[] | . as $x
       | ([$n[0][] | select(.id == $x.comment)] | first) as $note
       | ($note.where // null) as $w
       | ([$q[] | select(.id == $x.comment)] | first | .where // null) as $qw
-      | "| \($o[$x.comment | tostring]) | \($c[0][$x.comment - 1].body | split("\n")[0] | cell) | \($x.status | outcome) | \(if $w then ([$w] + ($note.also // []) | map("`\(.)`") | join(", ")) elif $qw then "end of file, `\($qw)`" else "end of file" end) |")
+      | "| \($o[$x.comment | tostring]) | \($c[0][$x.comment - 1].body | split("\n")[0] | cell) | \($x.status | outcome) | \(if $w then ([$w] + ($note.also // []) | map("`\(.)`") | join(", ")) else "[below](#reply-\($o[$x.comment | tostring]))" + (if $qw then ", `\($qw)`" else "" end) end) |")
 ' "$replies" > "$state/reply-head.md"
 jq -r --slurpfile n "$state/notes.json" --slurpfile c "$comments" --slurpfile q "$quoted" --argjson o "$order" '
   def outcome: {answered:"answered", done:"🏁 as asked", different:"⚠️ done differently"}[.];
@@ -216,7 +219,7 @@ jq -r --slurpfile n "$state/notes.json" --slurpfile c "$comments" --slurpfile q 
       "# Replies with no line in the diff",
       ($off[] | . as $x
         | ([$q[] | select(.id == $x.comment)] | first) as $qx
-        | "## #\($o[$x.comment | tostring]) · \($x.status | outcome)",
+        | "## Reply #\($o[$x.comment | tostring])", "", ($x.status | outcome),
           (if $qx then "`\($qx.where)`, unchanged since your review:" else empty end),
           (if $qx.excerpt then ($qx.excerpt | rtrimstr("\n")) else empty end),
           (if $x.status == "answered" then "❓ " else "You asked: " end) + $c[0][$x.comment - 1].body, "", $x.reply)

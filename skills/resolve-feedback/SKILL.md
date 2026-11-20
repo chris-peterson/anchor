@@ -119,17 +119,21 @@ unresolved review threads"); in short:
 
 - **GitLab** — `glab api "projects/:fullpath/merge_requests/<iid>/discussions?per_page=100"`,
   filtered to non-system discussions with at least one `resolvable` note that
-  isn't `resolved`. Keep each discussion's `id`, authors, bodies, and
-  `position` (`new_path`, `new_line`) when line-anchored.
+  isn't `resolved`. Keep each discussion's `id`, authors, bodies, its URL
+  (the MR's `web_url` plus `#note_<first note id>`), and `position`
+  (`new_path`, `new_line`) when line-anchored.
 - **GitHub** — the GraphQL `reviewThreads` query (REST doesn't expose
   resolution state), filtered to `isResolved: false`. Keep the thread `id`,
-  `path`/`line`, and each comment's `databaseId`, author, body.
+  `path`/`line`, its URL (the first comment's `url`), and each comment's
+  `databaseId`, author, body.
 
 Also fetch top-level CR comments that ask for changes without anchoring to a
 line (GitLab: `notes` with `system == false` not already part of a
 discussion; GitHub: `gh pr view --json comments,reviews` review bodies with
 `CHANGES_REQUESTED` or non-empty text). Reviewers often put the biggest asks
-there.
+there. Keep each one's URL too: GitLab's is the MR's `web_url` plus
+`#note_<id>`, GitHub's a comment's `url`, and a review body with none links the
+CR itself.
 
 If there is no unresolved feedback, report that and stop.
 
@@ -140,8 +144,15 @@ Present every thread in one table, ordered by file/line, each with a
 
 | # | Where | Reviewer | Ask (summarized) | Proposed |
 |---|-------|----------|------------------|----------|
-| 1 | `src/deploy.sh:42` | @reviewer | rename flag for clarity | **fix + reply + resolve** |
-| 2 | `taskdef.yml:7` | @reviewer | why not Fargate? | **reply only** |
+| 1 | [`src/deploy.sh:42`](https://github.com/acme/app/pull/7#discussion_r101) | @reviewer | rename flag for clarity | **fix + reply + resolve** |
+| 2 | [`taskdef.yml:7`](https://github.com/acme/app/pull/7#discussion_r102) | @reviewer | why not Fargate? | **reply only** |
+
+**Each *Where* is a link to its thread on the forge**, written as a markdown
+link so the terminal renders it as an OSC 8 hyperlink: the location stays the
+text, and a cmd+click opens the thread with the code and the conversation around
+it. A summarized ask is a lossy read of the thread, and the author judging the
+disposition often needs the original. A thread on no line takes `CR comment` as
+its text.
 
 Disposition vocabulary:
 
@@ -266,7 +277,7 @@ will appear on the thread, not a paraphrase of it.
 
 | # | Where | Reply |
 |---|-------|-------|
-| 1 | `src/deploy.sh:42` | addressed in <url> |
+| 1 | [`src/deploy.sh:42`](https://github.com/acme/app/pull/7#discussion_r101) | addressed in <url> |
 
 Then ask with `AskUserQuestion` (header `Replies`): **Post as drafted** /
 **Edit** (they say what to change; redraft and show it again) / **Skip

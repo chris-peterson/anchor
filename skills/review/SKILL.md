@@ -651,9 +651,25 @@ to the final sign-off (item 5 below).
    same ledger, without re-running Step 1: every commit now has a round, so
    Step 1 would ask whether to re-review the whole CR, and the next round looks
    only at this round's commit. On **Last round**, go to the final sign-off.
-5. **Final sign-off** (REVIEW-18). Ask once, with `AskUserQuestion`
-   (header `Sign-off`, `multiSelect: true`), opening with the repo and the CR in
-   full, and run what the user picks in this order:
+5. **Final sign-off** (REVIEW-18). **Open it with the clipboard.** Draw it
+   from the round ledger, a checked row per round and the sign-off left open:
+
+   ```bash
+   bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-round.sh" signoff --ledger <ROUND_LEDGER>
+   ```
+
+   The reply that asks holds its output, verbatim in a fenced block, and under
+   it the repo and the CR in full, and nothing else. The rounds before it leave
+   a long scroll of tables, verdicts, and commits, and this is the one point in
+   the review where the user decides how the change leaves their hands; the
+   clipboard's height pushes that scroll off the screen, so the sign-off reads
+   as a fresh page, with what the rounds did checked off above the one step
+   left.
+
+   Draw it again each time sign-off is asked, after another round too. Then ask
+   once, with `AskUserQuestion` (header `Sign-off`,
+   `multiSelect: true`), opening with the repo and the CR in full, and run what
+   the user picks in this order:
 
    - **Look at the whole change** *(pre-picked)*: revdiff on `REVIEW_BASE`
      → `HEAD`, the change as it will land, launched as Step 6 launches a pass but

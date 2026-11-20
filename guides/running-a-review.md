@@ -192,6 +192,14 @@ to find yours. Once the fixes are in and the tests pass:
    | `done` | you made the change it asked for | what you changed, in a line |
    | `different` | you changed something else, or nothing | what you did instead, and why |
 
+   **A reply is a sentence, rarely two.** The reviewer reads it on the line it
+   answers, with the change beside it, so the diff carries the *how*: what
+   moved where, what calls what, what a dry run printed. *"Folded `foo` into
+   `bar`'s shared base"* answers a request to drop `foo`; a walk through
+   everything that touched restates the diff. The file is also drawn in the
+   conversation as it is written, so every extra sentence is shown twice
+   before the review opens.
+
    Give `sites` (the lines the reply is about, as the tree now stands, each
    with its `line`) for a change; leave them out for an answer, and it sits
    under the line the comment was on. A reply with several sites is one note,

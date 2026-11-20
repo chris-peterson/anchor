@@ -933,18 +933,23 @@ glab api "projects/:fullpath/merge_requests/<iid>/discussions?per_page=100" \
 ```
 
 Each discussion carries `id` (needed for replies/resolution), `notes[]`
-(`author.username`, `body`), and — for line-anchored `DiffNote`s — a
-`position` (`new_path`, `new_line`, `old_line`).
+(`id`, `author.username`, `body`), and — for line-anchored `DiffNote`s — a
+`position` (`new_path`, `new_line`, `old_line`). A note has no URL field; its
+page is the MR's `web_url` plus `#note_<notes[0].id>`, which opens the MR with
+the thread in view.
 
 ```bash
 # GitHub — review threads with resolution state (REST doesn't expose it; use GraphQL)
 gh api graphql -f query='query($owner:String!,$repo:String!,$pr:Int!){
   repository(owner:$owner,name:$repo){pullRequest(number:$pr){
     reviewThreads(first:100){nodes{id isResolved path line
-      comments(first:50){nodes{author{login} body databaseId}}}}}}}' \
+      comments(first:50){nodes{author{login} body databaseId url}}}}}}}' \
   -f owner=<owner> -f repo=<repo> -F pr=<num> \
   | jq '.data.repository.pullRequest.reviewThreads.nodes | map(select(.isResolved | not))'
 ```
+
+A comment's `url` is its thread on the PR's Files tab
+(`…/pull/<num>#discussion_r<databaseId>`); the first comment's is the thread's.
 
 ## Reply to a review thread
 

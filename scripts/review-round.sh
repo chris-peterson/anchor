@@ -67,6 +67,7 @@
 #   review-round.sh finish  --dir <round>
 #   review-round.sh trend   --ledger <file>
 #   review-round.sh sizes   --ledger <file>
+#   review-round.sh signoff --ledger <file>
 #
 # The items file `seed` reads, written by the skill:
 #   {"items": [{"id": 1, "slug": "<kebab-case>", "severity": "critical|suggestion",
@@ -204,6 +205,27 @@ trend_table() {
       + " | +\(.edits.added) −\(.edits.removed) in \(.edits.files) files | \(.percent)% |")' "$1"
 }
 
+# The banner that opens the final sign-off (REVIEW-18): a clipboard with a
+# checked row per finished round and the sign-off itself left open. It is drawn
+# here, not by the skill, because its edges line up only when every row is
+# padded to the longest one. Every character in it is one column wide, so jq's
+# codepoint length is the width.
+signoff_banner() {
+  jq -r '
+    def fill(c; n): reduce range(0; ([n, 0] | max)) as $_ (""; . + c);
+    def plural(n; w): "\(n) \(w)\(if n == 1 then "" else "es" end)";
+    ([.rounds[] | "[x]  Round \(.n) · \(plural(.items.applied; "fix")) · +\(.edits.added) −\(.edits.removed)"]
+      + ["[ ]  Sign-off"]) as $rows
+    | ([$rows[] | length + 6] + [28] | max) as $w
+    | (($w - 12) / 2 | floor) as $k | ($w - 12 - $k) as $k2
+    | fill(" "; $k + 1) + "╭──────────╮",
+      "┌" + fill("─"; $k) + "┤ ▄▄▄▄▄▄▄▄ ├" + fill("─"; $k2) + "┐",
+      "│" + fill(" "; $k) + "╰──────────╯" + fill(" "; $k2) + "│",
+      ($rows[] | "│" + fill(" "; $w) + "│", "│   " + . + fill(" "; $w - 3 - length) + "│"),
+      "│" + fill(" "; $w) + "│",
+      "└" + fill("─"; $w) + "┘"' "$1"
+}
+
 # Each finished round, newest first, then the CR as the first round found it, as
 # size-stack rows.
 size_rows() {
@@ -221,6 +243,11 @@ sizes)
 trend)
   [[ -n "$ledger" && -f "$ledger" ]] || { echo "review-round.sh trend needs the --ledger start printed" >&2; exit 64; }
   trend_table "$ledger"
+  ;;
+
+signoff)
+  [[ -n "$ledger" && -f "$ledger" ]] || { echo "review-round.sh signoff needs the --ledger start printed" >&2; exit 64; }
+  signoff_banner "$ledger"
   ;;
 
 start)

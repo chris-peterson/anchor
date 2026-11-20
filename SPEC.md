@@ -605,7 +605,11 @@ ready.
   stop the sign-off there. With no CR, the sign-off shall offer the last look
   and opening the CR. Each round's commit review shows only that round, so the
   one look at the whole change belongs at the end, beside the steps that hand
-  the CR to its reviewers.
+  the CR to its reviewers. The sign-off shall open with a clipboard drawn
+  from the rounds, each checked off with the fixes it made and the lines it
+  changed, and the sign-off the one row left open: after a long scroll of
+  tables, verdicts, and commits, the step that hands the change over has to
+  read as a fresh page rather than one more line in that scroll.
 - **[REVIEW-19]** When the findings are merged, the system shall group the
   findings one change resolves into one item, and give each item an id, a slug,
   a severity of critical or suggestion, and a status: applied, proposed, filed as
@@ -867,7 +871,10 @@ ready.
 - **[FEEDBACK-03]** If local state does not match the CR head, then the system shall
   surface the mismatch and stop.
 - **[FEEDBACK-04]** When feedback exists, the system shall present all threads with
-  proposed dispositions and confirm with the author before acting.
+  proposed dispositions and confirm with the author before acting. Each thread's
+  location shall be a terminal hyperlink to the thread on the forge, since the
+  summarized ask is lossy and the author deciding its disposition often needs the
+  thread in context.
 - **[FEEDBACK-05]** The system shall land review fixes as new commits and shall never
   amend commits the reviewer has seen.
 - **[FEEDBACK-06]** When committing fixes, the system shall run the test suite first
