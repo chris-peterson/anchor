@@ -36,7 +36,7 @@ anchor_change_notes_place() {
   now=$(anchor_review_snapshot "$@")
   for p in "$@"; do specs+=(":(top,literal)$p"); done
   lines="$dir/changed.tsv"
-  anchor_items_changed_lines "$root" "$(anchor_local_base)" "$now" "${specs[@]+"${specs[@]}"}" > "$lines"
+  anchor_items_changed_lines "$root" "${local_base:-$(anchor_local_base)}" "$now" "${specs[@]+"${specs[@]}"}" > "$lines"
 
   anchors="$dir/anchors.tsv"; : > "$anchors"
   quoted="$dir/quoted.jsonl"; : > "$quoted"

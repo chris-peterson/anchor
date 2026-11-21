@@ -82,13 +82,13 @@ bash "${CLAUDE_PLUGIN_ROOT}/scripts/review-diff.sh" --skill <skill> --tool revdi
 link to it on the web, and says how to answer. Put the answer key in the reply, so nobody has to open the table to
 learn it:
 
-> Each item is a file: current text on the left, proposed on the right. Edit a
-> file to change it yourself, or leave a note on it to have it redrafted. Answer
-> `drop` on an item's note (or `no`, `skip`) to drop it. When you're done, leave a
-> single note in `(context).md`, off the rows, saying `approve` to send the items
-> as you left them or `reject` to stop with nothing published, then quit with `q`.
-> With nothing to change, `ZZ` sends the items as they are and `ZQ` stops.
+> Each item is a file: current text on the left, proposed on the right, with a
+> note on it. Answer on its note: do nothing to accept it, say what you want
+> instead to have it redrafted, or say `skip` to skip it. When you're done, quit
+> with `q`: the pane counts what your answers decide, and `Z` confirms, `Q`
+> stops with nothing published, and Esc goes back to your answers.
 
+A batch confirms in its pane (DIFF-51), so it closes `approved` or `rejected`.
 `rejected` publishes nothing: finish the batch and say so, with no error banner.
 `no-verdict` with `raw.exitCode` `undecided` means the reviewer quit without
 choosing: ask, with `AskUserQuestion`, whether to send the items as they left

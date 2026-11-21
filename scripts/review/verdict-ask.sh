@@ -2,13 +2,20 @@
 # Ask for the verdict a `diff` review closed without, in the pane the review ran
 # in (DIFF-49). The launch script runs this once the tool exits:
 #
-#   verdict-ask.sh <tool> <out_file> <preload_file> <choice_file> <palette_file> <rc>
+#   verdict-ask.sh <tool> <out_file> <preload_file> <choice_file> <palette_file> <tally> <live_file> <rc>
 #
 # Where the tool's adapter reads the review as untouched (`diff_tool_untouched`),
 # a centered box offers Approve, Reject, and Go back, and the answer goes to
 # <choice_file> as `approve` or `reject`, for the mode adapter
 # to read as the Review box choice it stands for. Exits 0 for Go back, which
 # the launch script reads as "run the review again", and 1 otherwise.
+#
+# A review of items (a batch, a review round's items pass) passes <live_file>,
+# the copy of the notes it preloads from, and confirms every time it closes,
+# answers or not (DIFF-51): the box counts what the answers decide, by running
+# <tally> with `--returned <notes.json>`, and offers Confirm, Stop, and Go back.
+# Going back writes the answers over <live_file> first, so the review reopens on
+# them rather than on the notes as seeded.
 #
 # <palette_file> holds the tool's resolved colors as `key = #rrggbb` lines
 # (revdiff's --dump-theme), so the box draws in the theme the review just did.
@@ -24,11 +31,36 @@
 # chooses nothing.
 set -u
 
-tool="$1" out_file="$2" preload_file="$3" choice_file="$4" palette_file="$5" rc="$6"
+tool="$1" out_file="$2" preload_file="$3" choice_file="$4" palette_file="$5" tally="$6" live_file="$7" rc="$8"
 
 # shellcheck source=tools/revdiff.sh
 source "$(dirname "${BASH_SOURCE[0]}")/tools/$tool.sh"
-diff_tool_untouched "$rc" "$out_file" "$preload_file" || exit 1
+
+# What the answers decide, as `<label>\t<count>` rows with a count above zero,
+# or one row saying they couldn't be counted.
+tally_rows() {
+  local notes out
+  notes=$(mktemp "${TMPDIR:-/tmp}/anchor-review-tally.XXXXXX")
+  review_items=1 diff_tool_comments "$out_file" "" > "$notes" 2>/dev/null
+  if [[ -n "$tally" ]] && out=$(eval "$tally --returned $(printf '%q' "$notes")" 2>/dev/null); then
+    awk -F= '/^TALLY_[A-Z]+=[0-9]+$/ && $2 > 0 { l = tolower(substr($1, 7)); printf "%s\t%s\n", l, $2 }' <<<"$out"
+  else
+    printf "couldn't count the answers\t\n"
+  fi
+  rm -f "$notes"
+}
+
+count_rows=()
+if [[ -n "$live_file" ]]; then
+  [[ "$rc" -eq 0 || "$rc" -eq 10 ]] || exit 1
+  while IFS= read -r row; do count_rows+=("$row"); done < <(tally_rows)
+  box_title="Confirm"
+  labels=("Confirm" "Stop" "Go back")
+else
+  diff_tool_untouched "$rc" "$out_file" "$preload_file" || exit 1
+  box_title="Approve this change?"
+  labels=("Approve" "Reject" "Go back")
+fi
 
 ESC=$'\e'
 RESET="${ESC}[0m"
@@ -75,11 +107,13 @@ c_sel="$(sgr 38 "$(color color-selected-fg)")$(sgr 48 "$(color color-selected-bg
 c_chip="$(sgr 38 "$(color color-normal)")$(sgr 48 "$(color color-border)")"
 base="${RESET}${c_panel}"
 
-labels=("Approve" "Reject" "Go back")
 keys=(Z Q Esc)
 values=(approve reject rereview)
 focus=0
-w=60 h=9
+# The count rows sit between the title and the buttons, with a blank row under
+# them.
+w=60 h=$(( 9 + ${#count_rows[@]} + (${#count_rows[@]} > 0 ? 1 : 0) ))
+btn_y=$(( 4 + ${#count_rows[@]} + (${#count_rows[@]} > 0 ? 1 : 0) ))
 # Each button's first and last screen column (1-based, as the mouse reports
 # them) and the row they sit on, set by draw for a click to be matched against.
 bx0=() bx1=() by=0 pressed=""
@@ -98,7 +132,7 @@ button() {
 }
 
 draw() {
-  local rows cols top left i inner=$((w - 2)) hr blank btns hint title
+  local rows cols top left i inner=$((w - 2)) hr blank btns hint
   rows=$(tput lines) cols=$(tput cols)
   top=$(( (rows - h) / 2 )) left=$(( (cols - w) / 2 ))
   (( top >= 0 )) || top=0
@@ -113,22 +147,29 @@ draw() {
   done
   at $((top + h - 1)) "$left" "${base}${c_accent}╰${hr}╯"
 
-  title="Approve this change?"
-  at $((top + 2)) $((left + (w - ${#title}) / 2)) "${base}${c_accent}${ESC}[1m${title}${base}"
+  at $((top + 2)) $((left + (w - ${#box_title}) / 2)) "${base}${c_accent}${ESC}[1m${box_title}${base}"
 
-  local x=$((left + (w - 40) / 2)) n
-  btns="" by=$((top + 4))
+  local label count
+  for i in ${count_rows[@]+"${!count_rows[@]}"}; do
+    label="${count_rows[$i]%%$'\t'*}" count="${count_rows[$i]#*$'\t'}"
+    at $((top + 4 + i)) $((left + (w - 12) / 2)) "${base}${c_normal}$(printf '%-8s' "$label")${c_accent}${ESC}[1m$(printf '%4s' "$count")${base}"
+  done
+
+  local span=6 x n
+  for i in 0 1 2; do span=$((span + ${#keys[$i]} + ${#labels[$i]} + 3)); done
+  x=$((left + (w - span) / 2))
+  btns="" by=$((top + btn_y))
   for i in 0 1 2; do
     btns+="$(button "$i")   "
     n=$((${#keys[$i]} + ${#labels[$i]} + 3))
     bx0[i]=$((x + 1)) bx1[i]=$((x + n))
     x=$((x + n + 3))
   done
-  at "$by" $((left + (w - 40) / 2)) "$btns"
+  at "$by" $((left + (w - span) / 2)) "$btns"
   by=$((by + 1))
 
   hint="${c_key}←→${c_muted} move  ${c_key}enter${c_muted} choose"
-  at $((top + 6)) $((left + (w - 21) / 2)) "${base}${hint}"
+  at $((top + btn_y + 2)) $((left + (w - 21) / 2)) "${base}${hint}"
 }
 
 # The button under the mouse report <col> <row>, or nothing.
@@ -162,6 +203,7 @@ mouse() {
 finish() {
   if [[ "$1" == rereview ]]; then
     rm -f "$choice_file"
+    [[ -z "$live_file" || ! -s "$out_file" ]] || cp "$out_file" "$live_file"
     exit 0
   fi
   printf '%s\n' "$1" > "$choice_file"

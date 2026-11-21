@@ -185,7 +185,7 @@ suite:
       rebase: Rebase the current branch on its base branch (the CR's target, or the branch it's stacked on), or a whole stack bottom-up, resolve conflicts, and force-push what was already pushed.
       release: Cut a release for what has landed — recommend a semver bump, draft the notes, and drive the repo's own publish path.
       resolve-feedback: Fetch an open CR's review feedback and drive each thread to resolution — fix, reply, resolve.
-      review: Review an open change request, or a branch that has no CR yet — open revdiff on the commits you haven't reviewed so you read them and leave notes while agents examine them against the qualities you've set, draft a fix for each note and finding, then show those drafts alone so you keep, change, or drop each one, then the whole change with the kept fixes in it.
+      review: Review an open change request, or a branch that has no CR yet — open revdiff on the commits you haven't reviewed so you read them and leave notes while agents examine them against the qualities you've set, draft a fix for each note and finding, then show those drafts alone so you keep, change, or drop each one.
       stack: Work with a stack of change requests, each built on the one below.
     rules:
       omit-attribution-trailers: Omit AI attribution trailers

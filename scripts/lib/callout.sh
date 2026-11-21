@@ -7,10 +7,14 @@
 #   anchor_box <text> [<title>]
 #                       the text wrapped and outlined, <title> set into the
 #                       top edge
+#   anchor_box_key <key> <text>
+#                       a row naming a key and what it does, the text set in
+#                       a column so a run of these rows lines up
 #
 # A blank line in <text> separates paragraphs, and a tab splits a row, its
 # right part set against the box's right edge. A line opening with `- ` is a
-# list item, its wrapped rows indented under its text. Inline code is never split
+# list item, its wrapped rows indented under its text. A key row
+# (anchor_box_key) is kept as it is: never wrapped, its padding kept. Inline code is never split
 # across rows, since a span broken by the wrap loses its highlighting. The right
 # edge stays straight only when every character is one terminal cell wide
 # (guides/review-palette.md), so the text holds no emoji. The outline is the
@@ -30,6 +34,7 @@ anchor_box() {
   local para word line indent top rule="" w=0 i lw ww h='─' v='│' tl='╭' tr='╮' bl='╰' br='╯' _cols
   local -a words box_rows=()
   while IFS= read -r para; do
+    if [[ "$para" == $'\035'* ]]; then box_rows+=("${para#?}"); continue; fi
     para=$(awk '{ o = ""; c = 0
       for (i = 1; i <= length($0); i++) { ch = substr($0, i, 1)
         if (ch == "`") c = !c; else if (c && ch == " ") ch = "\037"; else if (ch == "\t") ch = "\036"
@@ -66,4 +71,13 @@ anchor_box() {
     fi | sed $'s/\x1f/ /g'
   done
   printf '%s%s%s\n' "$bl" "$rule" "$br"
+}
+
+# The key in its inline code, padded to the width of a two-letter key, so `a`
+# and `ZZ` rows line up. The leading group separator marks the row for
+# anchor_box to keep as written.
+anchor_box_key() {
+  local key="\`$1\`" _cols
+  anchor_box_cols "$key"
+  printf '\035%s%*s%s\n' "$key" $(( _cols < 4 ? 6 - _cols : 2 )) '' "$2"
 }

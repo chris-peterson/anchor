@@ -14,6 +14,7 @@
 # Usage:
 #   batch-edit.sh start  --items <items.json> [--title <text>]
 #   batch-edit.sh read   --dir <batch> --returned <notes.returned.json>
+#   batch-edit.sh tally  --dir <batch> --returned <notes.returned.json>
 #   batch-edit.sh finish --dir <batch>
 #
 # The items file `start` reads, written by the skill:
@@ -80,7 +81,7 @@ kind_heading() {
 die() { echo "BATCH_ERROR=$*"; exit 65; }
 
 cmd="${1:-}"
-[[ -n "$cmd" ]] || { echo "usage: batch-edit.sh <start|read|finish> ..." >&2; exit 64; }
+[[ -n "$cmd" ]] || { echo "usage: batch-edit.sh <start|read|tally|finish> ..." >&2; exit 64; }
 shift
 
 dir="" items="" returned="" title=""
@@ -270,11 +271,7 @@ Each row is one item, and each item is a file in this tree: its current text on
 the left, the proposed text on the right. Notes in the diff are context for this
 review and go nowhere else.
 
-$(anchor_review_box --answer "Answer each item on its note or its row:
-- **Keep it**: leave it as it is.
-- **Change it**: edit its file, or leave a note saying what to change.
-- **Drop it**: answer \`drop\`, or delete its row." \
-  revdiff "every item goes out as you left or answered it, and one you asked to change is redrafted for another batch" "stop, and nothing publishes")
+$(anchor_items_box revdiff)
 "
     for kind in "${KINDS[@]}"; do
       rows=$(jq -r --arg k "$kind" "$KINDS_JQ"'.items[] | select(.file | kind_of == $k)
@@ -289,6 +286,8 @@ $(anchor_review_box --answer "Answer each item on its note or its row:
   jq -n --arg base "$base" --argjson headers "$headers" --slurpfile it "$items" \
     '{base:$base, headers:$headers, items:[$it[0].items[] | {id:(.id|tostring), file, url:(.url // null), new:(.current == null or .current == "")}]}' \
     > "$dir/batch.json"
+  # How the review's confirm dialog counts the answers (DIFF-51).
+  printf 'bash %q tally --dir %q\n' "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")" "$dir" > "$dir/notes.tally"
   trap - ERR
   echo "BATCH_DIR=$dir"
   echo "BATCH_ROOT=$root"
@@ -379,6 +378,19 @@ read)
   echo "BATCH_READ=$dir/read.json"
   anchor_items_decisions "$dir/read.json" keep edited change drop
   jq -r '"GENERAL=\(.general|length)", "QUESTIONS=\(.questions|length)"' "$dir/read.json"
+  ;;
+
+# What `read` would decide, counted for the review's confirm dialog (DIFF-51):
+# an item kept or edited in its file goes out as it stands (accept), one with
+# feedback is redrafted (edit), a dropped one is skipped, and a note off every
+# item is something new. `read` writes only what a later `read` writes over.
+tally)
+  need_dir
+  bash "${BASH_SOURCE[0]}" read --dir "$dir" --returned "$returned" >/dev/null
+  jq -r '"TALLY_ACCEPT=\([.items[] | select(.decision == "keep" or .decision == "edited")] | length)",
+         "TALLY_EDIT=\([.items[] | select(.decision == "change")] | length)",
+         "TALLY_SKIP=\([.items[] | select(.decision == "drop")] | length)",
+         "TALLY_NEW=\(.general | length)"' "$dir/read.json"
   ;;
 
 finish)

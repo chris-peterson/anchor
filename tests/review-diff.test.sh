@@ -38,7 +38,7 @@ mkdir -p "$bin"
 # adapter deletes on return) to $REVDIFF_DESC_CAPTURE, writes
 # $REVDIFF_STUB_OUTPUT to the --output file the adapter named, and exits
 # $REVDIFF_STUB_RC. It also adds a note on the line of (context).md's Review
-# box that REVDIFF_STUB_CHOOSE names (accept, reject, both, or empty for
+# box that REVDIFF_STUB_CHOOSE names (accept, reject, both, hide, or empty for
 # none; accept when unset), as a reviewer choosing does, exiting 10 for it.
 # With $REVDIFF_STUB_EDIT, it writes that text over each file it shows but the
 # context file, as `e` in revdiff does. With $REVDIFF_STUB_KEYS set, it runs the
@@ -70,10 +70,10 @@ done
 body="${REVDIFF_STUB_OUTPUT:-}" rc="${REVDIFF_STUB_RC:-0}"
 for c in ${REVDIFF_STUB_CHOOSE-accept}; do
   case "$c" in
-    accept) pat='- `approve`:' ;;
-    reject) pat='- `reject`:' ;;
-    hide) pat='Leave a note on this line to shrink' ;;
-    *) pat="- **$(printf '%s' "${c:0:1}" | tr '[:lower:]' '[:upper:]')${c:1}" ;;
+    accept) pat='│ `ZZ`' ;;
+    reject) pat='│ `ZQ`' ;;
+    hide) pat='Add a note on this line to dismiss' ;;
+    *) continue ;;
   esac
   n=$(grep -n -F -- "$pat" "(context).md" 2>/dev/null | head -1 | cut -d: -f1)
   [ -n "$n" ] || continue
@@ -192,6 +192,37 @@ if [[ -x /bin/bash ]] && [[ "$(/bin/bash -c 'echo "${BASH_VERSINFO[0]}"')" == 3 
   ok "revdiff: under bash 3.2, an arrow key and a click still choose, and Esc still goes back"
 fi
 
+# DIFF-51: a review of items confirms in its pane however it closed, counting
+# what the answers decide with the caller's tally. A count of zero is left out,
+# Z confirms, Q stops, and going back writes the answers over the live preload
+# so the review reopens on them.
+ask="$here/../scripts/review/verdict-ask.sh"
+printf '## a.txt:2 (+)\nseeded\nskip\n' > "$work/items-out.md"
+printf '## a.txt:2 (+)\nseeded\n' > "$work/items-live.md"
+: > "$work/items-palette"
+tally="printf 'TALLY_ACCEPT=2\\nTALLY_EDIT=0\\nTALLY_SKIP=1\\nTALLY_NEW=0\\n' #"
+screen=$(cd "$repo" && printf Z | TERM=xterm LINES=24 COLUMNS=80 bash "$ask" revdiff "$work/items-out.md" "" \
+  "$work/items-choice" "$work/items-palette" "$tally" "$work/items-live.md" 10 2>/dev/null) || true
+[ "$(cat "$work/items-choice" 2>/dev/null)" = approve ] || fail "Z in the confirm dialog confirms: $(cat "$work/items-choice" 2>/dev/null)"
+grep -q 'Confirm' <<<"$screen" || fail "the dialog is titled Confirm"
+grep -q 'accept' <<<"$screen" || fail "the dialog counts the accepted items"
+grep -q 'skip' <<<"$screen" || fail "the dialog counts the skipped items"
+! grep -q 'edit ' <<<"$screen" || fail "a count of zero is left out"
+grep -q 'Stop' <<<"$screen" || fail "the dialog offers Stop"
+rm -f "$work/items-choice"
+(cd "$repo" && printf Q | TERM=xterm bash "$ask" revdiff "$work/items-out.md" "" \
+  "$work/items-choice" "$work/items-palette" "$tally" "$work/items-live.md" 10 >/dev/null 2>&1) || true
+[ "$(cat "$work/items-choice" 2>/dev/null)" = reject ] || fail "Q in the confirm dialog stops"
+rm -f "$work/items-choice"
+rc=0; (cd "$repo" && printf '\e' | TERM=xterm bash "$ask" revdiff "$work/items-out.md" "" \
+  "$work/items-choice" "$work/items-palette" "$tally" "$work/items-live.md" 10 >/dev/null 2>&1) || rc=$?
+[ "$rc" = 0 ] || fail "Esc in the confirm dialog goes back: rc $rc"
+cmp -s "$work/items-out.md" "$work/items-live.md" || fail "going back reopens on the answers given: $(cat "$work/items-live.md")"
+screen=$(cd "$repo" && printf Z | TERM=xterm bash "$ask" revdiff "$work/items-out.md" "" \
+  "$work/items-choice" "$work/items-palette" "false" "$work/items-live.md" 10 2>/dev/null) || true
+grep -q "couldn't count the answers" <<<"$screen" || fail "a tally that fails says so, and the dialog still confirms"
+ok "revdiff: a review of items confirms in its pane with the answers counted; Z confirms, Q stops, Esc goes back on the answers"
+
 # rc 10 with a line annotation and a file-level annotation
 md=$'## a.txt:2 (+)\nuse a constant here\n\n## a.txt (file-level)\nsplit this file'
 export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT="$md"; o=$(REVDIFF_STUB_CHOOSE="" run --previous); j=$(json_of "$o")
@@ -278,7 +309,7 @@ source "$here/../scripts/lib/callout.sh"
 source "$here/../scripts/lib/hints.sh"
 # shellcheck source=../scripts/lib/verdict.sh
 source "$here/../scripts/lib/verdict.sh"
-{ printf '# Batch\n'; anchor_review_box revdiff "publish" "stop"; printf '| # | slug |\n|---|---|\n| 1 | one |\n'; } > "$work/batch-table.md"
+{ printf '# Batch\n'; anchor_items_box revdiff; printf '| # | slug |\n|---|---|\n| 1 | one |\n'; } > "$work/batch-table.md"
 REVDIFF_STUB_OUTPUT=$'## a.txt:2 (+)\n#1 seeded\n\n## a.txt:1 (+)\nabort'
 o=$(run --previous --annotations "$work/one-note.md")
 [ "$(verdict_of "$o")" = changes-requested ] || fail "in a review of items, a lone abort on an item's file is a note: $o"
@@ -313,6 +344,27 @@ REVDIFF_STUB_CHOOSE="accept"; o=$(run --previous)
 unset REVDIFF_STUB_CHOOSE; REVDIFF_STUB_OUTPUT=""
 ok "revdiff: a note on the Review box's instructions hides the hints, and is neither feedback nor a verdict"
 
+# --own-context keeps the caller's (context).md, and a dismissal names its box's
+# slug (CONFIG-21); a review of items names `items`.
+anchor_review_box review-read revdiff "done, nothing to add" "done, stop" > "$repo/(context).md"
+export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT=""
+o=$(REVDIFF_TREE_CAPTURE="$work/own" REVDIFF_STUB_CHOOSE="hide accept" run --previous --own-context review-read)
+grep -q 'done, nothing to add' "$work/own.context" || fail "--own-context keeps the caller's context file: $(cat "$work/own.context")"
+[ "$(verdict_of "$o")" = approved ] || fail "the caller's ZZ row chooses: $o"
+[ "$(sed -n 's/^REVIEW_HIDE_HINTS=//p' <<<"$o")" = review-read ] || fail "a dismissal names the caller's slug: $o"
+anchor_items_box revdiff > "$repo/(context).md"
+o=$(REVDIFF_STUB_CHOOSE="hide" REVDIFF_STUB_OUTPUT=$'## a.txt:2 (+)\nseeded' run --previous --annotations "$work/one-note.md" 2>/dev/null)
+[ "$(sed -n 's/^REVIEW_HIDE_HINTS=//p' <<<"$o")" = items ] || fail "a dismissal in a review of items names items: $o"
+rm -f "$repo/(context).md"
+git -C "$repo" config anchor.review-read.hints false
+(cd "$repo" && anchor_review_box review-read revdiff "done, nothing to add" "done, stop") > "$work/read-off.md"
+! grep -q '← prev' "$work/read-off.md" || fail "anchor.review-read.hints=false hides the read pass's hints: $(cat "$work/read-off.md")"
+(cd "$repo" && anchor_review_box diff revdiff "done, approve" "done, reject") > "$work/diff-on.md"
+grep -q '← prev' "$work/diff-on.md" || fail "each box keeps its own hints key: $(cat "$work/diff-on.md")"
+git -C "$repo" config --unset anchor.review-read.hints
+unset REVDIFF_STUB_CHOOSE; REVDIFF_STUB_OUTPUT=""
+ok "revdiff: --own-context keeps the caller's context file, and each Review box dismisses under its own slug"
+
 # removed-side marker (-)
 md=$'## a.txt:2 (-)\nthis deletion looks wrong'
 export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT="$md"; o=$(run --previous); j=$(json_of "$o")
@@ -338,11 +390,11 @@ head -1 "$cap.context" | grep -q '^# '                 || fail "(context).md sho
 grep -qE -- '^│ `\[` ← prev +next → `>` │$' "$cap.context" \
   || fail "(context).md should name prev and next on one row: $(cat "$cap.context")"
 # shellcheck disable=SC2016
-grep -qF -- '│ `a` to the current line' "$cap.context" || fail "(context).md should name one key to annotate a line: $(cat "$cap.context")"
+grep -qE -- '^│ `a`   note this line +│$' "$cap.context" || fail "(context).md should name the line-note key: $(cat "$cap.context")"
 # shellcheck disable=SC2016
-grep -qF -- '│ `A` to the current file' "$cap.context" || fail "(context).md should name one key to annotate a file: $(cat "$cap.context")"
+grep -qE -- '^│ `A`   note this file +│$' "$cap.context" || fail "(context).md should name the file-note key: $(cat "$cap.context")"
 # shellcheck disable=SC2016
-[ "$(sed -n '/^╭─ Review /,/^╰/p' "$cap.context" | grep '^│' | tail -1 | sed 's/ *│$//')" = '│ *Leave a note on this line to shrink this box to its choices.*' ] \
+[ "$(sed -n '/^╭─ Review /,/^╰/p' "$cap.context" | grep '^│' | tail -1 | sed 's/ *│$//')" = '│ *Add a note on this line to dismiss these hints.*' ] \
   || fail "(context).md should say how to hide the keys: $(cat "$cap.context")"
 # shellcheck disable=SC2016
 grep -qxF -- '`repo` on `main`' "$cap.context"         || fail "(context).md should say where the change sits: $(cat "$cap.context")"
@@ -391,15 +443,25 @@ o=$(REVDIFF_STUB_CHOOSE="" run --previous --annotations "$work/preload.md" 2>/de
 [ "$(jq -r .raw.exitCode <<<"$j")" = undecided ] || fail "a batch returned as seeded, nothing chosen, is undecided: $o"
 o=$(REVDIFF_STUB_CHOOSE="" REVDIFF_STUB_KEYS=Z run --previous --annotations "$work/preload.md" 2>/dev/null)
 [ "$(verdict_of "$o")" = approved ] || fail "a batch returned as seeded asks in the pane, and Approve approves it: $o"
+# Answered, a batch still confirms in the pane (DIFF-51): Z confirms with the
+# answers riding along, Q stops, and a confirm outranks a word a note chose.
+export REVDIFF_STUB_OUTPUT=$'## a.txt:2 (+)\nseeded\nskip'
 cp "$work/batch-table.md" "$repo/(context).md"
-o=$(run --previous --annotations "$work/preload.md"); returned=$(sed -n 's/^REVIEW_RETURNED=//p' <<<"$o")
-[ "$(verdict_of "$o")" = approved ] || fail "Accept on a batch's table approves: $o"
-[ "$(jq -c 'map(.target)' "$returned")" = '["line"]' ] || fail "the choice stays out of the returned notes: $(cat "$returned")"
+o=$(REVDIFF_STUB_CHOOSE="" REVDIFF_STUB_KEYS=Z run --previous --annotations "$work/preload.md" 2>/dev/null); returned=$(sed -n 's/^REVIEW_RETURNED=//p' <<<"$o")
+[ "$(verdict_of "$o")" = approved ] || fail "an answered batch confirms in the pane: $o"
+[ "$(jq -c 'map(.target)' "$returned")" = '["line"]' ] || fail "the answers ride with the confirm, and the choice stays out of them: $(cat "$returned")"
 cp "$work/batch-table.md" "$repo/(context).md"
-o=$(REVDIFF_STUB_CHOOSE=reject run --previous --annotations "$work/preload.md")
-[ "$(verdict_of "$o")" = rejected ] || fail "Reject on a batch's table rejects: $o"
+o=$(REVDIFF_STUB_CHOOSE="" REVDIFF_STUB_KEYS=Q run --previous --annotations "$work/preload.md" 2>/dev/null)
+[ "$(verdict_of "$o")" = rejected ] || fail "Q in the confirm dialog stops an answered batch: $o"
+cp "$work/batch-table.md" "$repo/(context).md"
+o=$(REVDIFF_STUB_CHOOSE="" REVDIFF_STUB_OUTPUT=$'## a.txt:2 (+)\nseeded\nskip\n\n## (context).md:1 (+)\nlgtm' REVDIFF_STUB_KEYS=Q \
+    run --previous --annotations "$work/preload.md" 2>/dev/null)
+[ "$(verdict_of "$o")" = rejected ] || fail "the confirm dialog's answer outranks a word on the table: $o"
+o=$(REVDIFF_STUB_CHOOSE="" run --previous --annotations "$work/preload.md" 2>/dev/null)
+[ "$(verdict_of "$o")" = changes-requested ] || fail "an answered batch closed without the dialog is sent back, not approved: $o"
 rm -f "$repo/(context).md"
-ok "revdiff: a caller's table chooses the same way, and the choice isn't one of its notes"
+export REVDIFF_STUB_OUTPUT=$'## a.txt:2 (+)\nseeded'
+ok "revdiff: a batch confirms in the pane, answered or not, and the dialog's choice isn't one of its notes"
 unset REVDIFF_TREE_CAPTURE REVDIFF_ARGS_FILE
 
 # unchanged-line marker ( ) -> a line comment on the new side, not a changeset one
@@ -416,7 +478,9 @@ notes="$work/notes.md"; printf '## a.txt:2 (+)\n#1 seeded\n' > "$notes"
 export REVDIFF_ARGS_FILE="$work/args.txt"
 export REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT=$'## a.txt:2 (+)\n#1 seeded, edited'
 o=$(run --previous --annotations "$notes")
-grep -qx -- "--annotations=$notes" "$REVDIFF_ARGS_FILE" || fail "--annotations not passed: $(cat "$REVDIFF_ARGS_FILE")"
+# A review of items preloads from a copy of the notes, which going back from
+# the confirm dialog writes the answers over (DIFF-51).
+grep -q -- "^--annotations=.*/anchor-review-preload\." "$REVDIFF_ARGS_FILE" || fail "--annotations not passed as the preload copy: $(cat "$REVDIFF_ARGS_FILE")"
 returned=$(sed -n 's/^REVIEW_RETURNED=//p' <<<"$o")
 [ "$returned" = "$work/notes.returned.json" ] || fail "REVIEW_RETURNED path: $o"
 [ "$(jq -r '.[0].body' "$returned")" = "#1 seeded, edited" ] || fail "returned notes: $(cat "$returned")"
@@ -541,28 +605,6 @@ o=$(run --skill issue --mode diff --files "$work/current.md" "$work/edit-draft.m
 [ "$(jq -r '"\(.verdict) \(.editedFields | length)"' <<<"$j")" = "approved 0" ] || fail "an unedited accept is approved: $j"
 ok "revdiff: a draft edited with e is kept, and comes back for approval as edited"
 
-# A draft review offers to start over in the editor, and choosing it does, with
-# the reviewer's other notes in the editor's context.
-cat > "$bin/stub-editor.sh" <<'STUB'
-#!/usr/bin/env bash
-cp "$1" "$EDITOR_BUFFER_CAPTURE"
-touch "$1"
-STUB
-chmod +x "$bin/stub-editor.sh"
-REVDIFF_STUB_RC=10 REVDIFF_STUB_OUTPUT=$'## acme#7.md:1 (+)\nsay why'
-o=$(GIT_EDITOR=hx ANCHOR_EDITOR_LAUNCHER="$bin/stub-editor.sh" EDITOR_BUFFER_CAPTURE="$work/relaunch.buffer" \
-    REVDIFF_TREE_CAPTURE="$work/relaunch" REVDIFF_STUB_CHOOSE=relaunch \
-    run --skill issue --mode diff --files "$work/current.md" "$work/edit-draft.md" --name 'acme#7'); j=$(json_of "$o")
-sed -n 's/^│ \(.*\)│$/\1/p' "$work/relaunch.context" | tr -s ' \n' ' ' \
-  | grep -qF -- '- **Relaunch in hx**: leave a note on this line to quit revdiff and start this review over in hx' \
-  || fail "the Review box should offer the relaunch: $(cat "$work/relaunch.context")"
-[ "$(jq -r '"\(.mode) \(.verdict)"' <<<"$j")" = "edit approved" ] || fail "the relaunch should end as the editor review: $j"
-grep -qF 'acme#7.md:1: say why' "$work/relaunch.buffer" || fail "the note should ride into the editor: $(cat "$work/relaunch.buffer")"
-REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
-REVDIFF_TREE_CAPTURE="$work/plain" run --skill commit --previous >/dev/null
-! grep -qF 'Relaunch in' "$work/plain.context" || fail "a review with no draft offers no relaunch: $(cat "$work/plain.context")"
-ok "revdiff: a draft review relaunches in the editor, carrying the other notes"
-
 # The host is selected after the scratch repo is entered, so a dispatcher run by
 # a relative path still finds its hosts. A stub tmux runs the popup's script in
 # place, and the stub revdiff exits 0 with nothing chosen: undecided, which a
@@ -674,14 +716,17 @@ ok "revdiff: (context).md keeps the commit message's paragraphs"
 o=$(REVDIFF_TREE_CAPTURE="$work/cta" run --local --skill commit --message-file "$pmsg")
 grep -q -- '^╭─ Review ─' "$work/cta.context" || fail "(context).md should carry the Review box: $(cat "$work/cta.context")"
 # shellcheck disable=SC2016
-grep -qE -- '^│ - `approve`: commit this change and push it +│$' "$work/cta.context" \
-  || fail "Accept should say what approving does next: $(cat "$work/cta.context")"
+grep -qE -- '^│ `ZZ`  done, approve +│$' "$work/cta.context" \
+  || fail "the box should name ZZ as approving: $(cat "$work/cta.context")"
 # shellcheck disable=SC2016
-grep -qF -- '- `reject`: stop' "$work/cta.context" || fail "Reject should say what it does: $(cat "$work/cta.context")"
+grep -qF -- '`ZQ`  done, reject' "$work/cta.context" || fail "the box should name ZQ as rejecting: $(cat "$work/cta.context")"
+# shellcheck disable=SC2016
+grep -qF -- '`q`   done' "$work/cta.context" || fail "the box should name q as done: $(cat "$work/cta.context")"
+! grep -q 'commit this change\|nothing else happens' "$work/cta.context" || fail "the box says what to do, not what happens next: $(cat "$work/cta.context")"
 ! grep -q 'q with' "$work/cta.context" || fail "the box no longer carries the quit lines: $(cat "$work/cta.context")"
 ! grep -q 'anchor:commit\|Claude' "$work/cta.context" || fail "(context).md names neither the skill nor the model: $(cat "$work/cta.context")"
 # shellcheck disable=SC2016
-[ "$(grep -n '← prev' "$work/cta.context" | cut -d: -f1)" -lt "$(grep -n '│ - `approve`:' "$work/cta.context" | cut -d: -f1)" ] \
+[ "$(grep -n '← prev' "$work/cta.context" | cut -d: -f1)" -lt "$(grep -n '│ `ZZ`' "$work/cta.context" | cut -d: -f1)" ] \
   || fail "the keys come before the choices, in one box: $(cat "$work/cta.context")"
 [ "$(grep -c '^╭' "$work/cta.context")" = 1 ] || fail "the instructions sit in one box: $(cat "$work/cta.context")"
 # shellcheck disable=SC2016
@@ -693,11 +738,11 @@ ok "revdiff: (context).md boxes the keys, then says what each verdict does"
 
 git -C "$repo" config anchor.hints false
 o=$(REVDIFF_TREE_CAPTURE="$work/nohints" run --local --skill commit --message-file "$pmsg")
-! grep -q '← prev\|To add an annotation\|hide hints\|When you are done' "$work/nohints.context" || fail "anchor.hints=false hides the keys and how to choose: $(cat "$work/nohints.context")"
-[ "$(sed -n '/^╭─ Review /,/^╰/p' "$work/nohints.context" | sed -n 's/^│ \(.*\)│$/\1/p' | grep -cv '^- \|^  ')" = 0 ] \
-  || fail "anchor.hints=false leaves the Review box holding only the choices: $(cat "$work/nohints.context")"
+! grep -q '← prev\|note this line\|dismiss' "$work/nohints.context" || fail "anchor.hints=false hides the keys and how to choose: $(cat "$work/nohints.context")"
+[ "$(sed -n '/^╭─ Review /,/^╰/p' "$work/nohints.context" | sed -n 's/^│ \(.*\)│$/\1/p' | grep -cv '^`')" = 0 ] \
+  || fail "anchor.hints=false leaves the Review box holding only the done rows: $(cat "$work/nohints.context")"
 # shellcheck disable=SC2016
-grep -q '^│ - `approve`:' "$work/nohints.context" || fail "anchor.hints=false keeps the choices: $(cat "$work/nohints.context")"
+grep -q '^│ `ZZ`' "$work/nohints.context" || fail "anchor.hints=false keeps the choices: $(cat "$work/nohints.context")"
 git -C "$repo" config anchor.diff.hints true
 o=$(REVDIFF_TREE_CAPTURE="$work/diffhints" run --local --skill commit --message-file "$pmsg")
 grep -q '← prev' "$work/diffhints.context" || fail "anchor.diff.hints=true outranks anchor.hints=false: $(cat "$work/diffhints.context")"
@@ -707,7 +752,7 @@ o=$(REVDIFF_TREE_CAPTURE="$work/nodiffhints" run --local --skill commit --messag
 ! grep -q '← prev' "$work/nodiffhints.context" || fail "anchor.diff.hints=false hides the keys: $(cat "$work/nodiffhints.context")"
 git -C "$repo" config --unset anchor.diff.hints
 o=$(REVDIFF_STUB_NO_KEYS=1 REVDIFF_TREE_CAPTURE="$work/nokeys" run --local --message-file "$pmsg")
-! grep -q '← prev\|To add an annotation' "$work/nokeys.context" || fail "a revdiff mapping none of the actions gets no key line: $(cat "$work/nokeys.context")"
+! grep -q '← prev\|note this line' "$work/nokeys.context" || fail "a revdiff mapping none of the actions gets no key line: $(cat "$work/nokeys.context")"
 ok "revdiff: anchor.hints=false hides the key line, anchor.diff.hints outranks it, and an unmapped action is left out"
 
 # a note on (context).md is the reviewer writing on the message: it must never
@@ -983,6 +1028,47 @@ ok "--local: REVIEW_INDEX changes when the reviewed path's index entry does"
 
 git -C "$repo" checkout --quiet -- a.txt
 git -C "$repo" reset --quiet --hard
+
+# ================== --local --from ======================================
+# A widened commit review shows the change since --from:
+# the commits on top of --from and the paths about to be committed. Only the
+# named paths are staged, and REVIEW_INDEX is theirs alone, so commit.sh still
+# checks exactly what lands (DIFF-50).
+from=$(git -C "$repo" rev-parse HEAD)
+printf 'earlier round\n' > "$repo/round1.txt"
+git -C "$repo" add round1.txt; git -C "$repo" commit --quiet -m "round 1"
+printf 'this round\n' >> "$repo/a.txt"
+o=$(run --local --path a.txt)
+plain_index=$(sed -n 's/^REVIEW_INDEX=//p' <<<"$o")
+git -C "$repo" reset --quiet
+export REVDIFF_ARGS_FILE="$work/from-args.txt" REVDIFF_DESC_CAPTURE="$work/from-desc.md"
+export REVDIFF_STUB_RC=0 REVDIFF_STUB_OUTPUT=""
+o=$(run --local --from "$from" --path a.txt)
+[ "$(verdict_of "$o")" = approved ] || fail "--from verdict: $o"
+grep -qx -- "$from" "$REVDIFF_ARGS_FILE" || fail "revdiff should diff from --from: $(cat "$REVDIFF_ARGS_FILE")"
+grep -qx -- '--only=a.txt' "$REVDIFF_ARGS_FILE" || fail "--from should show the named path: $(cat "$REVDIFF_ARGS_FILE")"
+grep -qx -- '--only=round1.txt' "$REVDIFF_ARGS_FILE" || fail "--from should show the commits since it: $(cat "$REVDIFF_ARGS_FILE")"
+[ "$(sed -n 's/^REVIEW_INDEX=//p' <<<"$o")" = "$plain_index" ] || fail "--from must not change REVIEW_INDEX: $o"
+[ "$(git -C "$repo" diff --cached --name-only)" = a.txt ] || fail "--from should stage only --path: $(git -C "$repo" diff --cached --name-only)"
+grep -q 'since' "$REVDIFF_DESC_CAPTURE" || fail "the header should say what the diff is since: $(cat "$REVDIFF_DESC_CAPTURE")"
+unset REVDIFF_ARGS_FILE REVDIFF_DESC_CAPTURE
+ok "--local --from: shows the commits since it with the named paths, and stages and digests only those"
+
+git -C "$repo" reset --quiet
+rc=0; out=$(run --local --from no-such-rev --path a.txt 2>&1) || rc=$?
+[ "$rc" -eq 65 ] || fail "--from an unknown rev -> want 65, got $rc: $out"
+side=$(git -C "$repo" commit-tree "$(git -C "$repo" rev-parse 'HEAD^{tree}')" -m side)
+rc=0; out=$(run --local --from "$side" --path a.txt 2>&1) || rc=$?
+[ "$rc" -eq 65 ] || fail "--from off HEAD's history -> want 65, got $rc: $out"
+rc=0; out=$(run --previous --from "$from" 2>&1) || rc=$?
+[ "$rc" -eq 64 ] || fail "--from outside --local -> want 64, got $rc: $out"
+rc=0; out=$(run --files a.txt a.txt --from "$from" 2>&1) || rc=$?
+[ "$rc" -eq 64 ] || fail "--from with --files -> want 64, got $rc: $out"
+git -C "$repo" add a.txt
+rc=0; out=$(run --local --from "$from" --staged-path a.txt 2>&1) || rc=$?
+[ "$rc" -eq 64 ] || fail "--from with --staged-path -> want 64, got $rc: $out"
+ok "--local --from: refuses an unknown or unrelated base, and any mode but a working-tree --local"
+git -C "$repo" reset --quiet --hard "$from"
 
 # ================== empty range ==========================================
 # Nothing to show means nothing was reviewed, and a viewer quit on an empty diff

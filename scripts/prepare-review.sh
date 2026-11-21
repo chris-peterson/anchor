@@ -462,6 +462,14 @@ if [[ "$do_write" -eq 1 ]]; then
     echo "CR_WRITE_ERROR=$cr_url is from branch '${cr_branch:-<unknown>}', not '$branch'; refusing to write another branch's CR"
     exit 1
   fi
+  # A deep-link placeholder still in the body is one deep-links.sh --expand
+  # didn't finish, and written as it stands it publishes as raw `anchor:` text.
+  # `/anchor:<skill>` is prose naming a skill, never a link destination.
+  unexpanded=$(grep -oE '\]\(<?anchor:[^)]*\)?' "$open_body" 2>/dev/null | sort -u | paste -sd ' ' - || true)
+  if [[ -n "$unexpanded" ]]; then
+    echo "CR_WRITE_ERROR=the body still holds deep-link placeholders deep-links.sh --expand didn't finish, so nothing was written: $unexpanded"
+    exit 1
+  fi
   backup_path=$(anchor_backup_path "cr-$cr_iid" md)
   printf '%s' "$cr_desc" > "$backup_path"
   fresh_desc="$(anchor_tmpfile cr-desc-fresh md)"

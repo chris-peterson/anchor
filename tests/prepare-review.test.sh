@@ -666,6 +666,18 @@ grep -qF 'glab api -X PUT projects/:fullpath/merge_requests/7 ' "$CALL_LOG" \
 [[ "$(tail -n 3 "$WRITTEN_BODY" | head -n 1)" == '"k": {"rounds":1,"result":"approved"}' ]] || fail "GitLab's write carries the section: $(cat "$WRITTEN_BODY")"
 ok "--write lands the description on GitLab through the API"
 
+# A placeholder deep-links.sh --expand didn't finish never reaches the forge:
+# the write stops naming it, and the CR keeps the body it had.
+# shellcheck disable=SC2016
+printf -- '- [`a`](<anchor:app.txt#private async Task<int> Run>) — unexpanded\n\nUsed by /anchor:review.\n' > "$work/unexpanded.md"
+: > "$CALL_LOG"
+written=$(bash "$prepare_review_sh" --repo "$repo" --write --body-file "$work/unexpanded.md" \
+  --status-section "$(key "$out" CR_REVIEW_STATUS_PATH)" --cr 7) && fail "--write should refuse an unexpanded placeholder: $written"
+[[ "$(key "$written" CR_WRITE_ERROR)" == *'](<anchor:app.txt#private async Task<int> Run>)'* ]] \
+  || fail "the refusal should name the placeholder: $written"
+! grep -qF 'merge_requests/7 ' "$CALL_LOG" || fail "nothing should be written: $(cat "$CALL_LOG")"
+ok "--write refuses a body still holding a deep-link placeholder, and names it"
+
 # A write lands only on the CR the checkout's branch backs. CR numbers are shared
 # across a project, so a number taken from anywhere but this branch's own CR (a
 # guess made before `--open` returned, a stale value from an earlier run) names

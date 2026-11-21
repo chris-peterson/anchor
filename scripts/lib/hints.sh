@@ -5,7 +5,10 @@
 # Sourced only.
 #
 #   anchor_hints_on <qualifier>   whether the hints are wanted: anchor.<qualifier>.hints,
-#                                 else anchor.hints, else true (CONFIG-21)
+#                                 else anchor.hints, else true (CONFIG-21). The
+#                                 qualifier is `edit` for an editor review, and
+#                                 for a diff review the Review box's own slug:
+#                                 `diff`, `review-read`, or `items`
 #   anchor_revdiff_hints <bin>    revdiff's keys for stepping and annotating, read
 #                                 from the bindings <bin> has
 #   anchor_hints_off              how to hide the hints, last in an editor
@@ -29,25 +32,23 @@ anchor_revdiff_key() {
 
 # Read from the bindings this revdiff actually has, so a remapped key is named
 # as remapped: the hunk keys on one row, back on the left and on on the right,
-# then one key for each kind of annotation. A row whose action has no key is
-# left out. The tab splits a row across the box (lib/callout.sh).
+# where the arrows cue the direction, then, after a blank row, one key row
+# (lib/callout.sh's anchor_box_key) for each kind of note. A key whose action
+# has none is left out, and a row with neither. The tab splits the hunk row
+# across the box.
 anchor_revdiff_hints() {
   local keys
   keys=$("$1" --dump-keys) || {
     echo "$1 --dump-keys failed, so (context).md names no keys" >&2
     return 0
   }
-  local next prev line_note file_note out=""
+  local next prev line_note file_note out="" notes=""
   next=$(anchor_revdiff_key next_hunk <<<"$keys"); prev=$(anchor_revdiff_key prev_hunk <<<"$keys")
   line_note=$(anchor_revdiff_key confirm <<<"$keys"); file_note=$(anchor_revdiff_key annotate_file <<<"$keys")
-  if [[ -n "$prev$next" ]]; then
-    out="${prev:+$prev ← prev}"$'\t'"${next:+next → $next}"$'\n\n'
-  fi
-  if [[ -n "$line_note$file_note" ]]; then
-    out+="To add an annotation:"$'\n'
-    [[ -z "$line_note" ]] || out+="$line_note to the current line"$'\n'
-    [[ -z "$file_note" ]] || out+="$file_note to the current file"$'\n'
-  fi
+  [[ -z "$prev$next" ]] || out="${prev:+$prev ← prev}"$'\t'"${next:+next → $next}"$'\n'
+  [[ -z "$line_note" ]] || notes+=$(anchor_box_key "${line_note//\`/}" "note this line")$'\n'
+  [[ -z "$file_note" ]] || notes+=$(anchor_box_key "${file_note//\`/}" "note this file")$'\n'
+  [[ -z "$notes" ]] || out+="${out:+$'\n'}$notes"
   printf '%s' "$out"
 }
 
