@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 2.1.0
 
 [What's new in 2.1](https://chris-peterson.github.io/anchor/#/whats-new-2.1) walks through the changes to review rounds and notes.
 
