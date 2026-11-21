@@ -1,5 +1,6 @@
 - [Home](/)
 - [Getting started](/getting-started)
+- [What's new in 2.1](/whats-new-2.1)
 - [SPEC](/spec)
 - Skills
   - [commit](/skills/commit)

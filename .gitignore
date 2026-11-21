@@ -3,6 +3,7 @@
 docs/*
 !docs/README.md
 !docs/getting-started.md
+!docs/whats-new-2.1.md
 !docs/_sidebar.md
 !docs/ambient-rules.md
 !docs/guides.md
