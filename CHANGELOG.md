@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **`/anchor:backlog` puts work already in flight first.** Each issue is now checked against the open CRs and branches carrying it, and the table shows that CR or branch beside the issue. Issues with an open CR rank first, then issues with an active branch, then the rest by due date. Every open CR is read for whether it is still a draft and whether you have run `/anchor:review` on its latest commit. The recommended next step is the CR waiting on you (an unreviewed CR of yours, a reviewed draft to mark ready, or a teammate's CR you haven't reviewed) before any new issue. Before, an issue with a draft PR open against it ranked as if nobody had started it.
+- **`/anchor:backlog` flags stale issues.** These are issues a merged CR closed that are still open, duplicates by title, issues past their due date, issues nobody has touched in 60 days (`--stale-days` changes the cutoff), and issues whose branch has gone quiet. It also names issues the code already satisfies, citing the file or commit. It proposes an edit for each and offers to hand the ones you choose to `/anchor:issue` as one batch, where you approve each before it's written. `/anchor:backlog` itself still writes nothing.
+
 ## 2.1.0
 
 [What's new in 2.1](https://chris-peterson.github.io/anchor/#/whats-new-2.1) walks through the changes to review rounds and notes.

@@ -149,7 +149,7 @@ Requirement: RULE-02 in [SPEC](/spec).
 | [`/anchor:resolve-feedback`](/skills/resolve-feedback) | Work a CR's review threads to done, one by one |
 | [`/anchor:merge`](/skills/merge) | Check the merge gates, wait on the pipeline, then land the CR and clean up |
 | [`/anchor:release`](/skills/release) | Work out what's shipping, recommend a version, draft the notes, publish |
-| [`/anchor:backlog`](/skills/backlog) | Rank the forge issues assigned to you so you can pick what to work on next |
+| [`/anchor:backlog`](/skills/backlog) | Rank your issues with work already in flight first, and flag stale ones |
 | [`/anchor:issue`](/skills/issue) | File a new forge issue that leads with why the work is needed |
 | [`/anchor:pipeline`](/skills/pipeline) | Report a commit's forge pipeline state, or watch until it settles |
 

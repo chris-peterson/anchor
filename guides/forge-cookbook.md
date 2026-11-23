@@ -633,8 +633,9 @@ most likely to be announced as an empty string without anyone noticing.
 
 ## Issue list
 
-Listing/ranking issues (the `backlog` skill). Fetch as JSON and rank client-side —
-neither CLI sorts by two keys in one pass.
+Listing/ranking issues. The `backlog` skill does this through
+`scripts/backlog.sh`, which also ties each issue to its CRs and branches (below).
+Fetch as JSON and rank client-side: neither CLI sorts by two keys in one pass.
 
 ```bash
 # GitHub — assigned to me, open
@@ -668,6 +669,19 @@ Known gaps:
   `jq 'sort_by(.updatedAt) | reverse | sort_by(.milestone.dueOn // "9999-12-31")'`
   (GitHub) / `jq 'sort_by(.updated_at) | reverse | sort_by(.due_date // "9999-12-31")'`
   (GitLab). The far-future sentinel sorts undated issues last.
+
+Tying an issue to the CRs that carry it:
+
+| | GitHub | GitLab |
+|--|--------|--------|
+| **Closing links** | `gh pr list --json closingIssuesReferences`, which an older `gh` rejects as an unknown field | not in `glab mr list` output; per MR it is `merge_requests/:iid/closes_issues`, one call each, so `backlog.sh` reads closing keywords from the description instead |
+| **Head commit** | `headRefOid` | `sha` |
+| **Draft** | `isDraft` | `draft` (`work_in_progress` on older servers) |
+| **Merged CRs** | `gh pr list --state merged` | `glab mr list --merged` |
+
+A closing keyword closes nothing when the CR merges into a branch other than the
+default, on either forge, which is how an issue ends up open after the CR that
+closes it has merged.
 
 ## Issue create
 

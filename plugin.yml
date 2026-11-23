@@ -175,7 +175,7 @@ suite:
   describe:
     skills:
       amend: Fold the staged changes into the last commit — commit's flow with the amend already chosen, so tests and the review still run before it amends and pushes.
-      backlog: List and rank the forge issues assigned to you so you can pick what to work on next — ranked by soonest due date, then most recently updated.
+      backlog: List and rank the forge issues assigned to you, work already in flight first, so you can pick what to work on next — each issue is checked against the open CRs and branches carrying it, each CR for its draft state and whether you've run /anchor:review on it, and stale issues are flagged for an /anchor:issue batch.
       commit: Stage changes, run tests, review the diff and drafted commit message with the user, then commit and push once they approve.
       issue: File a new forge issue (or update an existing one) that leads with WHY the work is needed, or review edits to several issues as one batch.
       merge: Merge an approved change request once its gates are green — waiting on the pipeline if needed — then clean up the branch.

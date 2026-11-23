@@ -1217,24 +1217,53 @@ Working the backlog it lands in is the `backlog` skill's half, in BACKLOG below.
 
 The backlog as a body of work — grooming it, planning against it, sequencing it,
 and picking what to work on next (the `backlog` skill). The requirements below
-cover the survey: listing and ranking what is filed, recommending a next pick,
-and writing nothing.
+cover the survey: listing what is filed against what is already in flight,
+ranking it, recommending a next step, and flagging stale issues.
 
 - **[BACKLOG-01]** The system shall list forge issues for a target repo, defaulting
   to the issues assigned to the invoking user in the open state.
 - **[BACKLOG-02]** The system shall interpret the invocation query to refine scope
   (assignee, label, state), keeping the default view when the query does not call
   for something else.
-- **[BACKLOG-03]** The system shall rank the listed issues by soonest due date first,
-  then by most recently updated, with issues lacking a due date sorted after those
-  with one.
+- **[BACKLOG-03]** The system shall rank the listed issues by stage first: an
+  open CR carries it, then a branch committed to within the staleness cutoff
+  carries it, then neither, then a merged CR closed it while it stayed open. Within
+  a stage it shall rank by soonest due date first, issues lacking a due date after
+  those with one, then by most recently updated. Within the first stage, an issue
+  whose CR needs the invoking user's action shall rank ahead of one whose CR waits
+  on someone else.
 - **[BACKLOG-04]** Where the forge has no per-issue due date (GitHub), the system
   shall use the issue's milestone due date as its due date, and treat it as absent
-  otherwise.
-- **[BACKLOG-05]** The system shall present the ranked issues and recommend the
-  top-ranked one as the next to work on, offering to open it for viewing.
+  otherwise. Where a GitLab issue has no due date of its own, the system shall use
+  its milestone's.
+- **[BACKLOG-05]** The system shall present the ranked issues and recommend one
+  next step, chosen by a script: a CR waiting on the invoking user's action where
+  there is one, else a branch in progress, else the top-ranked issue, offering to
+  open that issue for viewing. Where an issue with nothing in flight is overdue, the system shall say
+  so alongside a recommendation of in-flight work.
 - **[BACKLOG-06]** The system shall not write to the forge; its output is limited to
-  listing, ranking, and opening an issue for viewing.
+  listing, ranking, opening an issue for viewing, and handing proposed edits to the
+  `issue` skill (BACKLOG-10).
+- **[BACKLOG-07]** The system shall tie each listed issue to the open CRs carrying
+  it, by a closing reference, a reference keyword, a bare `#N` in the CR title, or
+  the CR's branch name, and to the branches carrying it by name, and shall show
+  that CR or branch beside the issue. A merged CR shall tie to an issue only by a
+  closing reference. The tying shall be done by a script, the same on both forges.
+- **[BACKLOG-08]** For each open CR tied to a listed issue, and each open CR the
+  invoking user authored, the system shall report its draft state, whether an
+  `/anchor:review` round recorded in its description covers its head commit (on
+  someone else's CR, a round by the invoking user), and the step it waits on:
+  review, marking ready, or someone else.
+- **[BACKLOG-09]** The system shall flag a listed issue as stale where a
+  merged CR closed it while it stayed open, where an issue with a lower number has
+  the same title, where its due date has passed, where nothing carries it and it
+  has gone untouched past a staleness cutoff the invocation can set, or where the
+  only branch carrying it has gone quiet past that cutoff. The system shall also
+  name an issue whose ask the repo already satisfies, citing the file or commit
+  that shows it.
+- **[BACKLOG-10]** Where any listed issue is stale, the system shall propose
+  an edit for each, and offer to hand the ones the user chooses to the `issue`
+  skill as one batch, where each edit is approved before it is written.
 
 ### CI — Pipeline
 
