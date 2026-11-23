@@ -1238,12 +1238,13 @@ ranking it, recommending a next step, and flagging stale issues.
   its milestone's.
 - **[BACKLOG-05]** The system shall present the ranked issues and recommend one
   next step, chosen by a script: a CR waiting on the invoking user's action where
-  there is one, else a branch in progress, else the top-ranked issue, offering to
-  open that issue for viewing. Where an issue with nothing in flight is overdue, the system shall say
-  so alongside a recommendation of in-flight work.
+  there is one, else a branch in progress, else the top-ranked issue, summarizing
+  what that issue asks and what done looks like. Where an issue with nothing in
+  flight is overdue, the system shall say so alongside a recommendation of
+  in-flight work.
 - **[BACKLOG-06]** The system shall not write to the forge; its output is limited to
-  listing, ranking, opening an issue for viewing, and handing proposed edits to the
-  `issue` skill (BACKLOG-10).
+  listing, ranking, summarizing issues, and handing proposed edits to the `issue`
+  skill (BACKLOG-10).
 - **[BACKLOG-07]** The system shall tie each listed issue to the open CRs carrying
   it, by a closing reference, a reference keyword, a bare `#N` in the CR title, or
   the CR's branch name, and to the branches carrying it by name, and shall show
@@ -1264,6 +1265,16 @@ ranking it, recommending a next step, and flagging stale issues.
 - **[BACKLOG-10]** Where any listed issue is stale, the system shall propose
   an edit for each, and offer to hand the ones the user chooses to the `issue`
   skill as one batch, where each edit is approved before it is written.
+- **[BACKLOG-11]** The system shall present, beside each of the top-ranked
+  issues, a summary of what it asks drawn from its description, without the
+  user asking to view it. The descriptions shall be gathered by the script, from
+  the same issue list call that ranks them, so no issue needs a view call of its
+  own. The number of issues summarized and the length read from each shall be
+  bounded, with the count settable by the invocation, so a long backlog does
+  not fill the session's context.
+- **[BACKLOG-12]** The system shall report what the survey found and nothing
+  about what it did not find: where no issue is stale, or a search for an ask
+  the repo already satisfies finds none, the system shall say nothing about it.
 
 ### CI — Pipeline
 

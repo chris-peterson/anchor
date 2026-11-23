@@ -636,6 +636,9 @@ most likely to be announced as an empty string without anyone noticing.
 Listing/ranking issues. The `backlog` skill does this through
 `scripts/backlog.sh`, which also ties each issue to its CRs and branches (below).
 Fetch as JSON and rank client-side: neither CLI sorts by two keys in one pass.
+The description comes back in the same call (`body` on GitHub, which `--json`
+has to name; `description` on GitLab, always present), so a summary of each
+issue needs no `issue view` per issue.
 
 ```bash
 # GitHub — assigned to me, open

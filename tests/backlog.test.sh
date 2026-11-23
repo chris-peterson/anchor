@@ -43,7 +43,7 @@ echo "gh $*" >> "$CALL_LOG"
 [[ -z "${FAIL_AUTH:-}" ]] || { echo "HTTP 401: Bad credentials" >&2; exit 1; }
 case "$*" in
   "api user") echo '{"login":"me"}' ;;
-  "issue list"*) cat "$FX/gh-issues.json" ;;
+  "issue list"*) if [[ -n "${NO_ISSUES:-}" ]]; then echo '[]'; else cat "$FX/gh-issues.json"; fi ;;
   "pr list"*)
     if [[ -n "${OLD_GH:-}" && "$*" == *closingIssuesReferences* ]]; then
       echo 'Unknown JSON field: "closingIssuesReferences"' >&2; exit 1
@@ -81,7 +81,7 @@ export PATH FX CALL_LOG ANCHOR_TODAY
 cat > "$FX/gh-issues.json" <<'EOF'
 [
   {"number":10,"title":"Closed by a draft PR","url":"u/10","state":"OPEN","updatedAt":"2026-05-01T00:00:00Z","milestone":null,"assignees":[]},
-  {"number":11,"title":"Referenced by an open PR","url":"u/11","state":"OPEN","updatedAt":"2026-05-02T00:00:00Z","milestone":null,"assignees":[]},
+  {"number":11,"title":"Referenced by an open PR","url":"u/11","state":"OPEN","updatedAt":"2026-05-02T00:00:00Z","milestone":null,"assignees":[],"body":" \n "},
   {"number":12,"title":"Has a fresh branch","url":"u/12","state":"OPEN","updatedAt":"2026-05-03T00:00:00Z","milestone":null,"assignees":[]},
   {"number":13,"title":"Has an old branch","url":"u/13","state":"OPEN","updatedAt":"2026-05-20T00:00:00Z","milestone":null,"assignees":[]},
   {"number":14,"title":"Closed by a merged PR","url":"u/14","state":"OPEN","updatedAt":"2026-05-04T00:00:00Z","milestone":null,"assignees":[]},
@@ -92,10 +92,15 @@ cat > "$FX/gh-issues.json" <<'EOF'
   {"number":2,"title":"Not the release branch","url":"u/2","state":"OPEN","updatedAt":"2026-05-08T00:00:00Z","milestone":null,"assignees":[]},
   {"number":19,"title":"Not closed by a prefix","url":"u/19","state":"OPEN","updatedAt":"2026-05-09T00:00:00Z","milestone":{"title":"1.1","dueOn":"2026-07-01T00:00:00Z"},"assignees":[]},
   {"number":30,"title":"My reviewed draft","url":"u/30","state":"OPEN","updatedAt":"2026-05-11T00:00:00Z","milestone":null,"assignees":[]},
-  {"number":31,"title":"Their CR, reviewed before a push","url":"u/31","state":"OPEN","updatedAt":"2026-05-12T00:00:00Z","milestone":null,"assignees":[]},
+  {"number":31,"title":"Their CR, reviewed before a push","url":"u/31","state":"OPEN","updatedAt":"2026-05-12T00:00:00Z","milestone":null,"assignees":[],
+   "body":"Users lose drafts when the session times out.\n\n- [ ] Save on blur"},
   {"number":32,"title":"Their CR, reviewed at head","url":"u/32","state":"OPEN","updatedAt":"2026-05-13T00:00:00Z","milestone":null,"assignees":[]}
 ]
 EOF
+
+# A description past the 1500-character cap.
+jq '(.[] | select(.number == 17) | .body) = ("x" * 1600)' "$FX/gh-issues.json" > "$FX/tmp.json"
+mv "$FX/tmp.json" "$FX/gh-issues.json"
 
 # Review status sections (scripts/lib/review-status.sh): a round on the head
 # commit is `reviewed`; one on an earlier commit only is `partial`.
@@ -133,7 +138,8 @@ EOF
 
 cat > "$FX/gl-issues.json" <<'EOF'
 [
-  {"iid":5,"title":"Closed by a draft MR","web_url":"g/5","state":"opened","updated_at":"2026-05-01T00:00:00.000Z","due_date":null,"milestone":null,"assignees":[{"username":"me"}]},
+  {"iid":5,"title":"Closed by a draft MR","web_url":"g/5","state":"opened","updated_at":"2026-05-01T00:00:00.000Z","due_date":null,"milestone":null,"assignees":[{"username":"me"}],
+   "description":"The MR list ignores the draft flag."},
   {"iid":6,"title":"MR from the issue's branch","web_url":"g/6","state":"opened","updated_at":"2026-05-02T00:00:00.000Z","due_date":null,"milestone":null,"assignees":[]},
   {"iid":8,"title":"Merged, still open","web_url":"g/8","state":"opened","updated_at":"2026-05-03T00:00:00.000Z","due_date":null,"milestone":{"due_date":"2026-05-20"},"assignees":[{"username":"me"}]},
   {"iid":9,"title":"Due soon, unstarted","web_url":"g/9","state":"opened","updated_at":"2026-05-04T00:00:00.000Z","due_date":"2026-06-10","milestone":null,"assignees":[{"username":"me"}]}
@@ -190,6 +196,14 @@ run() {
   out=""; err=""; status=0
   out="$(cd "$repo" && bash "$backlog_sh" "$@" 2>"$work/err.txt")" || status=$?
   err="$(cat "$work/err.txt")"
+  # The details file lands under a literal /tmp; keep a copy and clean it up.
+  rm -f "$work/details.md"
+  local d
+  d=$(sed -n 's/^DETAILS=//p' <<<"$out")
+  if [[ -n "$d" ]]; then
+    cp "$d" "$work/details.md"
+    rm -rf "$(dirname "$d")"
+  fi
 }
 issue_line() { grep -E "^ISSUE=[0-9]+ #$1 " <<<"$out" || true; }
 field()      { issue_line "$1" | cut -d' ' -f"$2"; }
@@ -267,6 +281,30 @@ expect "next" "$(grep '^NEXT=' <<<"$out")" "NEXT=review #27 theirs:partial"
 expect "overdue" "$(grep '^OVERDUE=' <<<"$out")" "OVERDUE=#16"
 ok "github: the next step is the first CR waiting on the viewer, with overdue unstarted issues named beside it"
 
+[[ -f "$work/details.md" ]] || fail "details: no DETAILS file"$'\n'"$out"
+sections=$(grep '^## #' "$work/details.md" | cut -d' ' -f2 | tr '\n' ' ')
+expect "details order" "$sections" "$order"
+section() { awk -v h="## #$1 " 'index($0, h) == 1 {f=1; next} /^## #/ {f=0} f' "$work/details.md"; }
+grep -q '^## #31 Their CR, reviewed before a push$' "$work/details.md" || fail "details: #31 heading"
+section 31 | grep -q '^Users lose drafts when the session times out.$' || fail "details: #31 body"
+section 31 | grep -q '^- \[ \] Save on blur$' || fail "details: #31 body kept its markdown"
+section 11 | grep -q '^_No description._$' || fail "details: a blank body reads as no description"
+section 17 | grep -q '^_Truncated' || fail "details: a long body is truncated with a note"
+expect "details cap" "$(section 17 | tr -cd 'x' | wc -c | tr -d ' ')" 1500
+expect "details count" "$(grep '^DETAILS_COUNT=' <<<"$out")" "DETAILS_COUNT=14"
+ok "github: each listed issue's description lands in DETAILS, in rank order, blank and long ones marked"
+
+run "$gh_repo" --details 3
+expect "bounded details" "$(grep '^## #' "$work/details.md" | cut -d' ' -f2 | tr '\n' ' ')" "#31 #11 #10 "
+expect "bounded count" "$(grep '^DETAILS_COUNT=' <<<"$out")" "DETAILS_COUNT=3"
+expect "bounded list" "$(grep '^ISSUE_COUNT=' <<<"$out")" "ISSUE_COUNT=14"
+ok "github: --details bounds DETAILS to the top-ranked issues, not the list"
+
+NO_ISSUES=1 run "$gh_repo"
+expect "empty exit" "$status" 0
+grep -q '^DETAILS=' <<<"$out" && fail "details: an empty list writes no DETAILS"
+ok "github: with no issue listed there is no DETAILS"
+
 # With no CR open, the next step falls to the branch in progress.
 NO_CRS=1 run "$gh_repo"
 expect "next without CRs" "$(grep '^NEXT=' <<<"$out")" "NEXT=branch #12 cp/12-fresh"
@@ -336,6 +374,10 @@ ok "gitlab: an MR needing review before one waiting, both before an unstarted is
 expect "gitlab next" "$(grep '^NEXT=' <<<"$out")" "NEXT=review !7 own:none"
 grep -q '^OVERDUE=' <<<"$out" && fail "gitlab: #8 is landed, not unstarted, so nothing is OVERDUE"
 ok "gitlab: the next step is your own unreviewed MR; a landed issue isn't counted overdue"
+
+section 5 | grep -q '^The MR list ignores the draft flag.$' || fail "gitlab details: description"
+section 5 | grep -q '^g/5$' || fail "gitlab details: web_url"
+ok "gitlab: DETAILS reads each issue's description"
 
 run "$gl_repo" --assignee none --label a --label b --state closed
 grep -q -- 'glab issue list --output json --per-page 50 --closed --label a,b' "$CALL_LOG" \

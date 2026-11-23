@@ -7,7 +7,7 @@ description: List and rank the forge issues assigned to you, work already in fli
 
 Survey what is filed and what is already in flight, and point at the next thing to do. "What's next?" is rarely "which issue to start": a CR waiting on your review, or a reviewed draft waiting to be marked ready, is usually the cheapest step toward shipping something. `scripts/backlog.sh` gathers the facts and ranks them. This skill reads the scope from the query, presents what the script found, and proposes edits for stale issues. It writes nothing to the forge.
 
-**Don't narrate your work** (`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`). Surface a question you need answered, the survey, and the next step.
+**Don't narrate your work** (`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`). Surface a question you need answered, the survey, and the next step. Report what you found, never what you didn't: no line saying an issue isn't stale, that a search for shipped work came up empty, or that there are no edits to propose. When there's nothing to say about a step, say nothing.
 
 ```mermaid
 %%{ init: { 'look': 'handDrawn' } }%%
@@ -42,7 +42,7 @@ If the user names another repo, resolve it with `bash "${CLAUDE_PLUGIN_ROOT}/scr
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/backlog.sh" [flags] [--repo <path> | --project <repo>]
 ```
 
-Its header documents every key. `ISSUE=` lines arrive ranked, `CR=` lines arrive with those waiting on you first, and `NEXT=` is the recommended step. Take the order, the links, and `NEXT` as given rather than re-deriving them. If a link looks wrong, say so in a note under the table. On `BACKLOG_AUTH=1`, ask the user to refresh their credentials: an auth failure is not an empty backlog.
+Its header documents every key. `ISSUE=` lines arrive ranked, `CR=` lines arrive with those waiting on you first, and `NEXT=` is the recommended step. Take the order, the links, and `NEXT` as given rather than re-deriving them. `DETAILS=` names a file holding the descriptions of the top-ranked issues (20 unless the user asks to summarize more, `--details <n>`): read it before presenting, since the summaries in Step 3 come from it. Don't view issues one at a time to get what it already holds, or to fill in the ones past it. If a link looks wrong, say so in a note under the table. On `BACKLOG_AUTH=1`, ask the user to refresh their credentials: an auth failure is not an empty backlog.
 
 ## Step 3: Present and recommend
 
@@ -50,7 +50,7 @@ Open with one line naming the scope (`Assigned to you · open`).
 
 **In flight**, when there are `CR=` lines, gets one row per CR: the CR linked to its URL with its title, draft or ready, its `/anchor:review` state, its issues, and what it waits on, in words: *run `/anchor:review`*, *mark ready*, or *waiting on reviewers*, *on the author*, *on merge*.
 
-**Issues** gets the ranked table: **#**, **Title**, **In flight** (the CR and what it needs, the branch, or `—`), **Due**, **Updated** (relative). Add **Labels** only where any are set.
+**Issues** gets the ranked table: **#**, **Title**, **Summary**, **In flight** (the CR and what it needs, the branch, or `—`), **Due**, **Updated** (relative). Add **Labels** only where any are set. **Summary** is what the issue asks for, from its description in `DETAILS`, in a phrase of about ten words that says something the title doesn't. Where the description is `_No description._`, or the issue is past the ones `DETAILS` holds, write `—`.
 
 Then the next step, from `NEXT`, with its one-line reason:
 
@@ -61,14 +61,14 @@ Then the next step, from `NEXT`, with its one-line reason:
 | `review <cr> theirs:…` | `/anchor:review <cr>`: a teammate's ready CR you haven't reviewed |
 | `ready <cr> own` | `/anchor:ready <cr>`: reviewed and still a draft |
 | `branch <#n> <branch>` | pick `<branch>` back up |
-| `issue <#n> -` | start `<#n>`, offering its detail (`gh issue view` / `glab issue view`) |
+| `issue <#n> -` | start `<#n>`, followed by two or three sentences from its description: the problem, and what done looks like |
 | `none` | nothing open in scope; offer the obvious widening |
 
 When `OVERDUE=` is present, name those issues in the same line, since they may outrank the work in flight, and let the user choose. Recommend only: run the next skill only when the user says to.
 
 ## Step 4: Propose edits for stale issues
 
-An issue is stale when its flags or stage say so. Propose one edit for each:
+An issue is stale when its flags or stage say so. Where none is, and the search below finds nothing, end at the next step: this step adds no output. Otherwise propose one edit for each:
 
 | Flag or stage | Proposed edit |
 |---------------|---------------|

@@ -88,6 +88,13 @@
 #       none   - -                                nothing open in scope
 #   OVERDUE=<#n>[,<#n>...]   unstarted issues past their due date; absent when
 #                            there are none
+#   DETAILS=<path>           the descriptions of the top --details ranked
+#                            issues (default 20), in rank order, as one markdown
+#                            section per issue (`## #<n> <title>`, its URL, then
+#                            the body, capped at 1500 characters), so the skill
+#                            can summarize what each asks without a view call
+#                            per issue; absent when no issue is listed
+#   DETAILS_COUNT=<n>        how many issues DETAILS holds
 #
 # Errors: BACKLOG_ERROR=<message> on stderr, plus BACKLOG_AUTH=1 when the forge
 # refused the credentials.
@@ -98,6 +105,7 @@
 #   backlog.sh                                   # assigned to me, open
 #   backlog.sh --assignee any --label bug
 #   backlog.sh --assignee none --state all --limit 100
+#   backlog.sh --details 50                      # summarize more of a long list
 #   backlog.sh --project owner/repo              # a repo with no checkout here
 #   backlog.sh --repo /path/to/checkout
 
@@ -107,6 +115,8 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
 # shellcheck source=lib/forge-url.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/forge-url.sh"
+# shellcheck source=lib/tmpfile.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib/tmpfile.sh"
 
 CTX_REPO=""
 forge=""
@@ -115,6 +125,7 @@ assignee=me
 state=open
 limit=50
 stale_days=60
+details_max=20
 labels=()
 
 usage() { echo "BACKLOG_ERROR=$*" >&2; exit 64; }
@@ -129,6 +140,7 @@ while [[ $# -gt 0 ]]; do
     --state)      state="${2:-}"; shift 2 ;;
     --limit)      limit="${2:-}"; shift 2 ;;
     --stale-days) stale_days="${2:-}"; shift 2 ;;
+    --details)    details_max="${2:-}"; shift 2 ;;
     *) usage "unrecognized argument: $1" ;;
   esac
 done
@@ -137,6 +149,7 @@ case "$state" in open|closed|all) ;; *) usage "--state must be open, closed, or 
 case "$forge" in github|gitlab|"") ;; *) usage "--forge must be github or gitlab, got: $forge" ;; esac
 [[ "$limit" =~ ^[1-9][0-9]*$ ]] || usage "--limit must be a positive integer, got: $limit"
 [[ "$stale_days" =~ ^[1-9][0-9]*$ ]] || usage "--stale-days must be a positive integer, got: $stale_days"
+[[ "$details_max" =~ ^[0-9]+$ ]] || usage "--details must be a non-negative integer, got: $details_max"
 
 ctx_resolve_repo
 
@@ -174,7 +187,7 @@ repo_flag=()
 
 if [[ "$forge" == github ]]; then
   args=(issue list --state "$state" --limit "$limit"
-        --json "number,title,url,state,updatedAt,milestone,assignees")
+        --json "number,title,url,state,updatedAt,milestone,assignees,body")
   case "$assignee" in
     me)   args+=(--assignee "@me") ;;
     none) args+=(--search "no:assignee") ;;
@@ -388,10 +401,40 @@ def norm_cr:
        | select(length > 0) | "OVERDUE=\(join(","))"))
 '
 
-if ! jq -n -r \
+if ! report=$(jq -n -r \
      --arg forge "$forge" --arg today "$today" --arg viewer "$viewer" \
      --argjson stale "$stale_days" \
      --argjson issues "$issues" --argjson open "$open_crs" --argjson merged "$merged_crs" \
-     --argjson branches "$branches" "$program"; then
+     --argjson branches "$branches" "$program"); then
   fail "could not read the forge's JSON"
+fi
+printf '%s\n' "$report"
+
+# Details. The issue list already carried each description, so the skill gets
+# them here rather than viewing each issue on its own: a summary of what an
+# issue asks is what makes the table worth reading, and one view call per issue
+# is a prompt per issue. A literal /tmp, since the agent reads the file.
+#
+# Bounded twice, because the agent reads the whole file into its context: the
+# top --details issues only, since a summary matters most for the issues near
+# the top and a long list reads poorly as a table anyway, and 1500 characters
+# of each, which holds the problem statement a summary is drawn from.
+order=$({ grep '^ISSUE=' <<<"$report" || true; } | cut -d' ' -f2 | tr -d '#' \
+          | jq -R -s -c --argjson max "$details_max" \
+              'split("\n") | map(select(length > 0) | tonumber) | .[0:$max]')
+if [[ "$order" != "[]" ]]; then
+  details="$(anchor_edit_tmpdir anchor-backlog)/issues.md"
+  # shellcheck disable=SC2016 # a jq program, not shell
+  jq -n -r --arg forge "$forge" --argjson issues "$issues" --argjson order "$order" '
+    ($issues | map(if $forge == "github"
+                   then {n: .number, title, url, body: (.body // "")}
+                   else {n: .iid, title, url: .web_url, body: (.description // "")} end)) as $all
+    | $order[] as $n | $all[] | select(.n == $n)
+    | "## #\(.n) \(.title | gsub("[\r\n]+"; " "))\n\n\(.url)\n\n"
+      + (if (.body | gsub("\\s"; "")) == "" then "_No description._"
+         elif (.body | length) > 1500 then .body[0:1500] + "\n\n_Truncated; the full description is at the URL above._"
+         else .body end)
+      + "\n"' > "$details" || fail "could not write the issue details"
+  echo "DETAILS=$details"
+  echo "DETAILS_COUNT=$(jq length <<<"$order")"
 fi
