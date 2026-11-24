@@ -137,11 +137,13 @@ version_at_ref() {
 }
 
 # --- The version manifest -----------------------------------------------------
-# First match wins. A Claude plugin manifest outranks an auxiliary package.json:
-# Claude Code keys plugin updates off its version, so it is the one that ships.
+# First match wins. A plugin manifest outranks an auxiliary package.json: the
+# host keys plugin updates off its version, so it is the one that ships. A plugin
+# built for Codex alone carries `.codex-plugin/plugin.json`; one that ships both
+# keeps the two in step, and the Claude one is read first.
 find_manifest() {
   local c
-  for c in .claude-plugin/plugin.json package.json pyproject.toml Cargo.toml \
+  for c in .claude-plugin/plugin.json .codex-plugin/plugin.json package.json pyproject.toml Cargo.toml \
            setup.cfg VERSION version.txt; do
     [[ -f "$c" ]] && { echo "$c"; return; }
   done
@@ -155,7 +157,10 @@ find_manifest() {
 # commit. Treat a root descriptor carrying its own `version:` as that source.
 find_manifest_source() {
   local manifest="$1" c
-  [[ "$manifest" == ".claude-plugin/plugin.json" ]] || return 0
+  case "$manifest" in
+    .claude-plugin/plugin.json|.codex-plugin/plugin.json) ;;
+    *) return 0 ;;
+  esac
   for c in plugin.yml plugin.yaml; do
     [[ -f "$c" ]] || continue
     [[ -n "$(version_in_tree "$c")" ]] && { echo "$c"; return; }

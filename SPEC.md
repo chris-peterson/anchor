@@ -1149,7 +1149,10 @@ established before anything is proposed or written.
   returning once the run is queued shall not be reported as a release.
 - **[RELEASE-16]** Where the version manifest is generated from a canonical
   descriptor, the system shall bump the descriptor and regenerate rather than edit
-  the manifest.
+  the manifest. A plugin manifest for either host (`.claude-plugin/plugin.json`,
+  `.codex-plugin/plugin.json`) shall be read as the version manifest ahead of an
+  auxiliary package manifest, since the host keys the plugin's updates off it,
+  and either one shall defer to a descriptor carrying its own version.
 - **[RELEASE-17]** Where the release model is `bump-commit`, the system shall shape
   the bump commit to the repo's prior convention and land it through
   `/anchor:commit` rather than running git commit and push itself.
