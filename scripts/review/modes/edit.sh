@@ -452,7 +452,8 @@ emit_review() {
       editor_emit no-verdict no-host "no way to open the editor"
       return ;;
     "$anchor_host_rc_no_pane")
-      editor_emit no-verdict no-pane "the review pane could not be opened"
+      echo "review-diff.sh: $(anchor_host_no_pane_reason)" >&2
+      editor_emit no-verdict "$(anchor_host_no_pane_cause)" "$(anchor_host_no_pane_reason)"
       return ;;
     "$anchor_host_rc_no_result")
       # The pane went away before the editor could report its status. What the

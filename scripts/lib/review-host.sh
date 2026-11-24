@@ -38,6 +38,26 @@
 anchor_host_rc_no_result=124   # the host went away before the command reported
 anchor_host_rc_no_pane=125     # the host could not be opened, so nothing ran
 
+# A pane that would not open names one of two causes. Inside an agent's command
+# sandbox the host is reachable but the sandbox refuses the call that opens it
+# (Codex's seatbelt keeps `osascript` from resolving iTerm2, and the tmux socket
+# sits outside the writable roots), so the remedy is the same command run outside
+# the sandbox rather than the fallback ladder. Codex marks a sandboxed command
+# with CODEX_SANDBOX.
+anchor_host_sandbox() { printf '%s' "${CODEX_SANDBOX:-}"; }
+
+anchor_host_no_pane_cause() {
+  if [[ -n "$(anchor_host_sandbox)" ]]; then printf sandboxed; else printf no-pane; fi
+}
+
+anchor_host_no_pane_reason() {
+  if [[ -n "$(anchor_host_sandbox)" ]]; then
+    printf 'the review pane could not be opened from inside the agent sandbox (CODEX_SANDBOX=%s); run the same command again outside the sandbox' "$(anchor_host_sandbox)"
+  else
+    printf 'the review pane could not be opened'
+  fi
+}
+
 # Where the hosts are listed for a user, named by every no-host message rather
 # than a list of its own that drifts from the set.
 anchor_review_hosts_doc='https://chris-peterson.github.io/anchor/#/guides/configuring?id=review-hosts'

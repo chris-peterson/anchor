@@ -16,6 +16,7 @@
 ### Fixed
 
 - **Editing a GitHub milestone is no longer refused at its backup.** Before anchor edits a milestone, it saves a copy and checks that the copy is the milestone you approved. On GitHub that check compared the milestone's API address with its web page, so it never matched, and every milestone edit in an `/anchor:issue` batch stopped with a `BACKUP_ERROR`. The check now compares the web page. Issues, CRs, and GitLab milestones were unaffected.
+- **A review that Codex's sandbox kept from opening says so.** Under Codex, the revdiff pane is opened with AppleScript (iTerm2) or the tmux socket, which the command sandbox refuses, so the review reported only that its pane couldn't be opened and fell back to a review in chat. It now reports `sandboxed` and tells the agent to run the same command again outside the sandbox, which opens the review where you'd expect it.
 
 ## 2.1.0
 
