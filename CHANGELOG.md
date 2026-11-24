@@ -4,9 +4,14 @@
 
 ### Changed
 
+- **A raw CR create or description rewrite is blocked and sent to `/anchor:prepare-review`.** If the agent runs `gh pr create`, `glab mr create`, `gh pr edit --body`, `glab mr update --description`, or the API calls that do the same, a hook stops the command and tells it to use the skill instead. That's how the skill's checks get applied: it stops if the branch has uncommitted or unpushed work, opens the CR as a draft, and writes the description only after you approve the text. Before, only the ambient rule asked for this, and a description could be rewritten to describe edits that were never committed. Changing a CR's title, labels, milestone, base branch, reviewers, or draft flag directly is not affected.
 - **`/anchor:backlog` puts work already in flight first.** Each issue is now checked against the open CRs and branches carrying it, and the table shows that CR or branch beside the issue. Issues with an open CR rank first, then issues with an active branch, then the rest by due date. Every open CR is read for whether it is still a draft and whether you have run `/anchor:review` on its latest commit. The recommended next step is the CR waiting on you (an unreviewed CR of yours, a reviewed draft to mark ready, or a teammate's CR you haven't reviewed) before any new issue. Before, an issue with a draft PR open against it ranked as if nobody had started it.
 - **`/anchor:backlog` flags stale issues.** These are issues a merged CR closed that are still open, duplicates by title, issues past their due date, issues nobody has touched in 60 days (`--stale-days` changes the cutoff), and issues whose branch has gone quiet. It also names issues the code already satisfies, citing the file or commit. It proposes an edit for each and offers to hand the ones you choose to `/anchor:issue` as one batch, where you approve each before it's written. `/anchor:backlog` itself still writes nothing.
 - **`/anchor:backlog` summarizes each issue.** The table has a Summary column saying what each issue asks for, taken from its description, for the top 20 issues (`--details` changes how many), and the recommended issue comes with a short summary of the problem and what done looks like. Before, you saw titles only and were offered `gh issue view` to find out more. The survey also no longer reports what it didn't find: no lines saying nothing is stale or there are no edits to propose.
+
+### Fixed
+
+- **The release guard blocks what it should, and only that.** A heredoc whose text merely mentioned a command, like a commit message or a doc saying "`gh workflow run` on a release workflow", was blocked as if it ran the command. A `gh api` release call split across lines with `\` got through, because the guard didn't see its fields on the next line. And on a machine without `jq`, nothing was ever blocked. All three now behave like the single-line case, for the new CR guard too.
 
 ## 2.1.0
 
