@@ -1,3 +1,7 @@
+---
+trigger: always_on
+---
+
 # Drive forge operations through `gh` / `glab`
 
 When the user shares a forge URL or asks about a change request, issue, or

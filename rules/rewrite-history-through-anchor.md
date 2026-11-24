@@ -1,3 +1,7 @@
+---
+trigger: always_on
+---
+
 # Route history rewrites through `anchor`
 
 When you're about to rewrite git history — `commit --amend`, a squash, a

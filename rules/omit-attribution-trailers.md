@@ -1,3 +1,7 @@
+---
+trigger: always_on
+---
+
 # Omit AI attribution trailers
 
 Don't add AI or tooling attribution to anything you commit or open on a

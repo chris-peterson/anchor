@@ -15,6 +15,7 @@ RULES_DIR="$PLUGIN_ROOT/rules"
 printf '# Ambient rules from the anchor plugin\n\n'
 for f in "$RULES_DIR"/*.md; do
   [ -e "$f" ] || break
-  sed "s|\${CLAUDE_PLUGIN_ROOT}|$PLUGIN_ROOT|g" "$f"
+  awk 'NR == 1 && /^---$/ { fm = 1; next } fm && /^---$/ { fm = 0; next } !fm && (body || NF) { body = 1; print }' "$f" \
+    | sed "s|\${CLAUDE_PLUGIN_ROOT}|$PLUGIN_ROOT|g"
   printf '\n'
 done
