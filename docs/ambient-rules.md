@@ -12,9 +12,18 @@ anchor adds to your sessions.
 
 A rule only asks. Where an agent ignoring one would publish something under your
 name, a `PreToolUse` hook also blocks the command and names the skill to use
-instead. So far that covers publishing a release: a direct `gh release create`,
-`glab release create`, or release-workflow dispatch is blocked and redirected to
-`/anchor:release`, which runs the same publish after you confirm it.
+instead. So far that covers two operations:
+
+- **Publishing a release.** A direct `gh release create`, `glab release create`,
+  or release-workflow dispatch is blocked and redirected to `/anchor:release`,
+  which runs the same publish after you confirm it.
+- **Opening a CR or rewriting its description.** A direct `gh pr create`,
+  `glab mr create`, `gh pr edit --body`, or `glab mr update --description` is
+  blocked and redirected to `/anchor:prepare-review`. It stops if the branch has
+  uncommitted or unpushed work, so the description matches the code the CR
+  carries, and it writes the text only after you approve it. Changing a CR's
+  title, labels, milestone, base branch, reviewers, or draft flag directly still
+  works.
 
 ---
 

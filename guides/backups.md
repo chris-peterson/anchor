@@ -61,7 +61,9 @@ cd "$(git rev-parse --git-common-dir)/anchor/backups"
 ls -t cr-<n>-*                     # newest first
 ```
 
-A **CR description** saved as `.md` goes back as it is:
+A **CR description** saved as `.md` goes back as it is. Run these in your own
+shell: in a Claude Code session, anchor's guard denies a raw description write
+and points at `/anchor:prepare-review`.
 
 ```bash
 # GitHub

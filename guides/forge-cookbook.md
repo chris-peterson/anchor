@@ -363,6 +363,12 @@ those writes. A label or milestone edit after `--write` still does.
 
 Editing the body of an existing CR. Back it up first (see above).
 
+This is what `prepare-review.sh --write` runs, recorded for the gaps between the
+forms. A session doesn't run it directly: anchor's `PreToolUse` guard denies a
+raw description write (and a raw `gh pr create` / `glab mr create`) as
+`[anchor:route-cr]` and sends it to `/anchor:prepare-review`, which checks the
+branch carries the code the description describes before it writes.
+
 ```bash
 # GitHub
 gh pr edit <num> --body-file /tmp/cr-body.aB3xKp.md

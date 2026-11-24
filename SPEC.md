@@ -2266,11 +2266,18 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
 - **[RULE-06]** When a Bash call is about to run a raw forge mutation that an
   `anchor` skill owns, the system shall deny it through a `PreToolUse` hook with a
   reason that opens with a stable per-rule marker and names the skill and the
-  script that skill publishes through. The script's own call shall pass, as
-  shall read-only calls and mutations no skill owns. Covered so far: a release
-  publish — `gh` / `glab release create`, `gh workflow run` on a release workflow
-  (named as one, or passed a semver level), and the API writes that do either —
-  routed to `/anchor:release`. The remaining mutations are #142.
+  script that skill writes through. The script's own call shall pass, as shall
+  read-only calls, mutations no skill owns, and text that only names a command
+  (the body of a quoted heredoc); a `\`-continued command shall be read as one
+  command. Covered so far: a release publish — `gh` / `glab release create`,
+  `gh workflow run` on a release workflow (named as one, or passed a semver
+  level), and the API writes that do either — routed to `/anchor:release`; and a
+  CR create or description write — `gh pr create` / `glab mr create`,
+  `gh pr edit` with a body flag, `glab mr update` with a description flag
+  (`--attach` and `--fill` included), and the REST and GraphQL writes that do
+  either — routed to `/anchor:prepare-review`, whatever state the working tree is
+  in. A CR's title, labels, milestone, base, reviewers, and draft flag stay
+  editable directly. The remaining mutations are #142.
 
 ### UX — Interaction discipline
 

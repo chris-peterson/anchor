@@ -9,4 +9,4 @@ hooks:
   - event: PreToolUse
     matcher: Bash
     command: 'bash "${CLAUDE_PLUGIN_ROOT}/hooks/route-to-skill.sh"'
-    description: Denies a raw forge mutation an anchor skill owns and names the skill, starting with a release publish.
+    description: Denies a raw forge mutation an anchor skill owns and names the skill — a release publish, and a CR create or description write.
