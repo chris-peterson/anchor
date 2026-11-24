@@ -44,15 +44,13 @@ anchor_host_rc_no_pane=125     # the host could not be opened, so nothing ran
 # sits outside the writable roots), so the remedy is the same command run outside
 # the sandbox rather than the fallback ladder. Codex marks a sandboxed command
 # with CODEX_SANDBOX.
-anchor_host_sandbox() { printf '%s' "${CODEX_SANDBOX:-}"; }
-
 anchor_host_no_pane_cause() {
-  if [[ -n "$(anchor_host_sandbox)" ]]; then printf sandboxed; else printf no-pane; fi
+  if [[ -n "${CODEX_SANDBOX:-}" ]]; then printf sandboxed; else printf no-pane; fi
 }
 
 anchor_host_no_pane_reason() {
-  if [[ -n "$(anchor_host_sandbox)" ]]; then
-    printf 'the review pane could not be opened from inside the agent sandbox (CODEX_SANDBOX=%s); run the same command again outside the sandbox' "$(anchor_host_sandbox)"
+  if [[ -n "${CODEX_SANDBOX:-}" ]]; then
+    printf 'the review pane could not be opened from inside the agent sandbox (CODEX_SANDBOX=%s); run the same command again outside the sandbox' "$CODEX_SANDBOX"
   else
     printf 'the review pane could not be opened'
   fi
