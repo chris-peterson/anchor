@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **A self-review no longer stops on ignored build output.** `/anchor:review` on your own CR refuses a checkout with untracked files, but it counted an untracked directory holding only ignored files, such as a Terraform `artifacts/` directory of `.zip` files matched by `.gitignore`, as untracked. Ignored files no longer count, wherever they are.
+
 ### Changed
 
 - **`/anchor:backlog` puts work already in flight first.** Each issue is now checked against the open CRs and branches carrying it, and the table shows that CR or branch beside the issue. Issues with an open CR rank first, then issues with an active branch, then the rest by due date. Every open CR is read for whether it is still a draft and whether you have run `/anchor:review` on its latest commit. The recommended next step is the CR waiting on you (an unreviewed CR of yours, a reviewed draft to mark ready, or a teammate's CR you haven't reviewed) before any new issue. Before, an issue with a draft PR open against it ranked as if nobody had started it.

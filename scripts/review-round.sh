@@ -284,7 +284,9 @@ start)
       || die "this checkout is at $(git rev-parse --short HEAD), not the CR head $(git rev-parse --short "$head"); switch to the CR's branch and pull first"
     git diff --quiet HEAD -- || die "this checkout has uncommitted changes; commit or stash them first, so a round's edits are the only changes in it"
     [[ ! -e "$root/$TABLE" ]] || die "$TABLE already exists in $root; a previous round didn't finish (review-round.sh finish)"
-    untracked=$(git -C "$root" -c core.quotePath=false ls-files --others --exclude-standard --directory | paste -sd, - | sed 's/,/, /g')
+    # --no-empty-directory looks inside an untracked directory, so one holding
+    # only ignored files (build output under an ignore pattern) isn't reported
+    untracked=$(git -C "$root" -c core.quotePath=false ls-files --others --exclude-standard --directory --no-empty-directory | paste -sd, - | sed 's/,/, /g')
     [[ -z "$untracked" ]] || die "this checkout has untracked files ($untracked); commit, stash, or remove them first, so a round's edits are the only changes in it"
   fi
   if [[ -z "$ledger" ]]; then

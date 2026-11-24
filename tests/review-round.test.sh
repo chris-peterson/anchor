@@ -69,7 +69,12 @@ printf 'stray\n' > "$repo/stray.txt"
 o=$(round_cmd start --repo "$repo" --base "$base" --head "$head" --in-place) || fail "an ignored file is not the round's: $o"
 round_cmd finish --dir "$(val ROUND_DIR "$o")" >/dev/null
 rm -f "$repo/stray.txt"
-ok "start: an in-place round refuses untracked files, naming them, and lets ignored ones be"
+printf 'index.zip\n' >> "$repo/.git/info/exclude"
+mkdir -p "$repo/artifacts/lambda"; printf 'zip\n' > "$repo/artifacts/lambda/index.zip"
+o=$(round_cmd start --repo "$repo" --base "$base" --head "$head" --in-place) || fail "a directory holding only ignored files is not the round's: $o"
+round_cmd finish --dir "$(val ROUND_DIR "$o")" >/dev/null
+rm -rf "$repo/artifacts"
+ok "start: an in-place round refuses untracked files, naming them, and lets ignored ones be, in an untracked directory too"
 
 git -C "$repo" switch --quiet main
 o=$(round_cmd start --repo "$repo" --base "$base" --head "$head" --in-place || true)

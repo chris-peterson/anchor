@@ -593,7 +593,8 @@ ready.
 - **[REVIEW-17]** Where the resolved CR was written by the invoking user, the
   system shall run a self-review: the round's edits are made in the user's
   checkout, which shall be on the CR head with nothing uncommitted and no
-  untracked file, the kept items
+  untracked file (an ignored file, including one in an otherwise untracked
+  directory, is not one), the kept items
   land as one commit per round through `/anchor:commit`, and nothing is posted to
   the forge.
 - **[REVIEW-18]** When a self-review ends, the system shall offer a final
