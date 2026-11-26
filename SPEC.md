@@ -421,11 +421,10 @@ check.
 - **[PREPARE-12]** Where a predecessor CR was captured, the system shall record the
   ordering dependency in the description, by the predecessor's full reference
   where it is in another project, and, on GitLab, on the forge. The description
-  shall say the forge doesn't enforce the order only where that is known: on
-  GitHub, which can't, and on GitLab once the link was tried and refused, and
-  then only after the author approves that sentence. Drafted before the link is
-  tried, the sentence is a guess, and it publishes "won't enforce" over a link
-  that then succeeds.
+  shall state the dependency as a bare reference and shall not say whether the
+  forge enforces the order; where it doesn't (GitHub, or a GitLab link that was
+  refused), the system shall tell the author in the session instead. That is a
+  limitation of the tooling, not something a reviewer reads the description for.
 - **[PREPARE-13]** When a drafted description is ready, the system shall present it
   to the user in a visual review (the current description vs. the draft, via the
   review wrapper) before any write prompt, and shall write it to the CR on a clean

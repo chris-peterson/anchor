@@ -114,13 +114,13 @@ enforce. (GitHub has "blocked by" for issues, not PRs.)
 
 **The prose reference (both forges, always when a dependency exists).** Add a line
 to the description: `Depends on !<iid>` (GitLab) / `Depends on #<num>` (GitHub) —
-bare, so it autolinks — and say it must merge first. A predecessor in another
-project takes its full reference (`<group>/<project>!<iid>`) or its URL, since a
-bare `!<iid>` links to that number in the current project. On GitLab this
-*complements* the enforced block; on GitHub (or a GitLab fall-back) it's the only
-signal, so say plainly that ordering isn't enforced. On GitLab, write that
-sentence only after the `/blocks` attempt has returned `403` or `404`: drafted
-earlier, it guesses, and publishes "won't enforce" over a link that then succeeds.
+bare, so it autolinks — and nothing more. A predecessor in another project takes
+its full reference (`<group>/<project>!<iid>`) or its URL, since a bare `!<iid>`
+links to that number in the current project. On GitLab this *complements* the
+enforced block; on GitHub (or a GitLab fall-back) it's the only signal. Either
+way, don't narrate whether the forge enforces the order: that's a tooling
+limitation, not something the reviewer needs from the description. Where it
+matters, tell the author in the session instead.
 
 ## Linking a stack of CRs
 
