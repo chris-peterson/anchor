@@ -36,7 +36,7 @@ flowchart TD
     end
 
     subgraph watch["Watch"]
-        Mode -->|Yes| Watch["pipeline-status.sh --watch in background"]
+        Mode -->|Yes| Probe["pipeline-status.sh --probe"] --> Watch["pipeline-status.sh --watch in background"]
         Watch --> Settle{Terminal state?}
         Settle --> ReportB["Report verdict on settle"]
     end
@@ -107,12 +107,14 @@ foreground and read the result:
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh"
 ```
 
-**Watch** — add `--watch`, and run it as
-`${CLAUDE_PLUGIN_ROOT}/guides/watching-a-pipeline.md` describes: background
-launch, stopping an older watch this one supersedes, reading the verdict:
+**Watch** — probe in the foreground, then launch with `--watch` in the
+background, as `${CLAUDE_PLUGIN_ROOT}/guides/watching-a-pipeline.md` describes:
+the probe announces the watch to sibling plugins, then the launch, stopping an
+older watch this one supersedes, reading the verdict:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --watch
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --probe --skill pipeline   # foreground
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --watch                     # background
 ```
 
 To target a commit other than the current HEAD (e.g. an orchestrator that pushed
@@ -147,7 +149,8 @@ When you already have a pipeline id (e.g. from a URL the user pasted), pass
 `--pipeline <id>` to skip commit→pipeline resolution:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --job cand-usw2-plan --watch
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --job cand-usw2-plan --probe --skill pipeline   # foreground
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --job cand-usw2-plan --watch                     # background
 bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --pipeline 3435505 --job cand-usw2-plan
 ```
 

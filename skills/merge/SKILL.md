@@ -156,7 +156,8 @@ and `CR_TITLE`. Then act on `GATE_BLOCKING`:
     describes, then run `merge-gates.sh` again so every gate is read fresh:
 
     ```bash
-    bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --single-run --watch --sha <CR_HEAD_SHA> [--repo <checkout>]
+    bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --single-run --probe --skill merge --sha <CR_HEAD_SHA> [--repo <checkout>]   # foreground
+    bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-status.sh" --single-run --watch --sha <CR_HEAD_SHA> [--repo <checkout>]                  # background
     ```
 
     A watch that hit its ceiling (`PIPELINE_TIMEOUT=1`) never merges on the
@@ -252,7 +253,8 @@ supersedes the CR branch's pipeline, so a watch still running on that branch
 stops here:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill merge --sha <MERGE_SHA> [--repo <checkout>]
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill merge --probe --sha <MERGE_SHA> [--repo <checkout>]   # foreground
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill merge --sha <MERGE_SHA> [--repo <checkout>]           # background, on PIPELINE_WATCH=launch
 ```
 
 Pass `MERGE_SHA` rather than letting the helper take HEAD: a squash lands a commit

@@ -119,7 +119,8 @@ When a `RESULT` line says `pushed`, report the pipeline the new head starts, as
 `${CLAUDE_PLUGIN_ROOT}/guides/watching-a-pipeline.md` describes:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill rebase [--repo <checkout>]
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill rebase --probe [--repo <checkout>]   # foreground
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill rebase [--repo <checkout>]           # background, on PIPELINE_WATCH=launch
 ```
 
 Then one line per `RESULT` (`<branch>:<rebased|unchanged>:<push>`), and the

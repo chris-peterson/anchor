@@ -312,10 +312,11 @@ On someone else's CR it writes only where the description already has the sectio
 
 The push is what starts CI, so this flow is holding the answer to whether the commit went green — don't leave the branch pushed-but-unverified and make the user think to ask. Reached only on a successful push (`PUSHED=ok`); a rejected push has no pipeline to watch.
 
-Launch the watch immediately after reporting the commit, and run it as `${CLAUDE_PLUGIN_ROOT}/guides/watching-a-pipeline.md` describes — background launch, superseding an older watch, reading the verdict:
+Launch the watch immediately after reporting the commit, and run it as `${CLAUDE_PLUGIN_ROOT}/guides/watching-a-pipeline.md` describes — the foreground probe, the background launch, superseding an older watch, reading the verdict:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill commit
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill commit --probe   # foreground
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill commit           # background, on PIPELINE_WATCH=launch
 ```
 
 Retarget it the way you retargeted `commit.sh` (`--repo`). The commit is already reported, so this never holds the flow open — the pipeline report lands when the watch settles.

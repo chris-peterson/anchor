@@ -6,17 +6,39 @@ template's shape. This guide is that watch. Each skill supplies what is its own:
 which helper it calls, the arguments (`--skill`, `--sha`, `--workflow`), and
 where in its flow the report lands.
 
-## Launch in the background
+## Probe, then launch in the background
 
-Both helpers block while they poll, so launch them as a **background** Bash call
-(`run_in_background: true`). A foreground call holds the turn open until the
-Bash timeout, and the flow the watch belongs to has already reported its own
-result by then.
+A watch is two calls with the same arguments:
 
-| Helper | Used for |
-| --- | --- |
-| `pipeline-after-push.sh --skill <skill>` | The pipeline a push or a merge just started (CI-13). It decides whether to watch at all: a config key can turn it off, and runs already reported are skipped (CI-14) |
-| `pipeline-status.sh --watch` | Any other watch: `/anchor:pipeline`, a merge gate waiting on the CR's pipeline, a release run |
+1. **The probe, in the foreground.** It makes one read and announces
+   `pipeline.watched` for sibling plugins (EVENTS-18). Output from a background
+   call reaches no hook until the call ends, so the announcement has to come from
+   this foreground step. The probe returns at once.
+2. **The launch, in the background** (`run_in_background: true`). Both helpers
+   block while they poll. A foreground call would hold the turn open until the
+   Bash timeout, and by then the flow the watch belongs to has already reported
+   its own result.
+
+| Helper | Probe | Launch | Used for |
+| --- | --- | --- | --- |
+| `pipeline-after-push.sh` | `--skill <skill> --probe` | `--skill <skill>` | The pipeline a push or a merge just started (CI-13). It decides whether to watch at all: a config key can turn it off, and runs already reported are skipped (CI-14) |
+| `pipeline-status.sh` | `--probe --skill <skill>` | `--watch` | Any other watch: `/anchor:pipeline`, a merge gate waiting on the CR's pipeline, a release run |
+
+Read the probe before launching:
+
+- **`PIPELINE_WATCH=skipped`** (`pipeline-after-push.sh` only):
+  `PIPELINE_WATCH_REASON` is `config-off` or `already-reported`. Launch nothing
+  and say nothing.
+- **`PIPELINE_STATE=unreachable`**: the forge CLI failed. Report it as
+  [Read the result](#read-the-result) says and launch nothing, since the watch
+  would end the same way at once.
+- **Anything else**: launch. Pass the probe's other arguments (`--sha`,
+  `--workflow`, `--job`, `--repo`, `--single-run`) to the launch unchanged.
+
+Once it is running, the watch announces `pipeline.updated` each time the
+pipeline's state changes, and once early if a job fails while the pipeline is
+still running (EVENTS-19). Those lines land in the watch's own output, ahead of
+the `PIPELINE_*` verdict. They are for subscribers, not for the report.
 
 Pass `--sha` whenever the commit is not HEAD, such as a squash-merged commit or a
 dispatched run on a commit you already pushed. A short sha is fine; the helper
@@ -44,9 +66,11 @@ it running.
 When the background call completes, read its stdout with the **BashOutput
 tool**, not `tail` or `$(...)`, which trip the command-substitution gate.
 
-- **`PIPELINE_WATCH=skipped`** (`pipeline-after-push.sh` only):
-  `PIPELINE_WATCH_REASON` is `config-off` or `already-reported`. There is
-  nothing to report; say nothing.
+- **`PIPELINE_WATCH=skipped`** (`pipeline-after-push.sh` only): the gates
+  turned against the watch between the probe and the launch. There is nothing to
+  report; say nothing.
+- **`codes.bridgeai.anchor/pipeline.updated` lines** are announcements for
+  sibling plugins. Leave them out of the report.
 - **`PIPELINE_WATCH=ran`**, or any `pipeline-status.sh` output: report the
   `PIPELINE_*` lines following `templates/pipeline-report.md`, including its
   "After a push" notes where a push started the pipeline.

@@ -20,6 +20,8 @@ The events, each linkable on its own:
 - [`issue.created`](#issue-created)
 - [`attention.requested`](#attention-requested)
 - [`attention.released`](#attention-released)
+- [`pipeline.watched`](#pipeline-watched)
+- [`pipeline.updated`](#pipeline-updated)
 - [`release.created`](#release-created)
 
 ## `cr.created` :id=cr-created
@@ -138,6 +140,46 @@ codes.bridgeai.anchor/attention.released
 a review launch ended, on every way out of it: a verdict, a refusal, or a killed dispatcher. Read with the verdict, by whichever tool the agent reads it with.
 
 Emitted by `scripts/review-diff.sh`.
+
+## `pipeline.watched` :id=pipeline-watched
+
+```text
+codes.bridgeai.anchor/pipeline.watched
+```
+
+a skill is about to watch a commit's pipeline in the background: after a push, a rebase, or a merge, on a merge gate waiting for green, or on an explicit /anchor:pipeline watch. Announced from the foreground probe that precedes the launch, because a background call's output reaches no hook while it runs; a subscriber hears it before the watch starts polling. A watch the after-push gate skips (turned off by config, or every run already reported) announces nothing, and neither does a probe whose forge read failed. No pipeline yet still announces, with `uri` empty: the watch waits for one to appear.
+
+| Field | Value | Meaning |
+|---|---|---|
+| `uri` | may be empty | the pipeline's web page; on GitHub, the run the commit's verdict currently comes from. Present and empty when no pipeline exists for the commit yet. |
+| `sha` | always set | the commit watched, in full |
+| `branch` | always set | the ref the commit was resolved from |
+| `workflow` | may be empty | the GitHub workflow the watch is scoped to, as the caller named it. Present and empty for an unscoped watch, and always on GitLab. |
+| `job` | may be empty | the one job the watch tracks, where it tracks one |
+| `skill` | may be empty | the skill watching, as passed to `--skill` |
+
+Emitted by `scripts/pipeline-status.sh`.
+
+## `pipeline.updated` :id=pipeline-updated
+
+```text
+codes.bridgeai.anchor/pipeline.updated
+```
+
+a watched pipeline changed in a way a subscriber can act on: its state moved (the first sight of it, in flight to settled, pending to running), or, once per watch, a job failed while the pipeline was still in flight. Not every poll: a state already announced is not announced again, and neither "no pipeline yet" nor a failed forge read is a state. Printed by the background watch as it happens, so a subscriber reads it from the finished task's output file, not from a hook on the launch. The last one a watch announces is where the pipeline settled, unless the watch hit its ceiling first.
+
+| Field | Value | Meaning |
+|---|---|---|
+| `uri` | always set | the pipeline's web page; on GitHub, the run the verdict came from |
+| `sha` | always set | the commit watched, in full |
+| `workflow` | may be empty | the GitHub workflow the verdict came from. Present and empty on GitLab. |
+| `job` | may be empty | the tracked job, in a watch of one job; `state` and `previous` are then that job's |
+| `state` | always set | the normalized state now: running, pending, success, failed, canceled, skipped, or manual |
+| `previous` | always set | the state last announced by this watch, `none` before the first. Equal to `state` on a job failure, which changes no state. |
+| `failed_job` | may be empty | the job that failed, on the early-failure announcement only |
+| `failed_job_url` | may be empty | that job's web page, on the early-failure announcement only |
+
+Emitted by `scripts/pipeline-status.sh`.
 
 ## `release.created` :id=release-created
 

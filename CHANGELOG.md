@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- **Sibling plugins hear when anchor watches a pipeline and how it goes.** Before a pipeline watch starts, anchor announces `pipeline.watched` with the commit, the branch, any workflow or job it is scoped to, and the skill watching. While the watch runs, it announces `pipeline.updated` each time the pipeline's state changes, and once early when a job fails while the pipeline is still running, naming that job. The watch runs in the background, so a subscriber hears `pipeline.updated` from the finished watch's output, not live. A watch skipped by `anchor.watchPipelineAfterPush` or because the run was already reported announces nothing.
+
 ### Changed
 
 - **A stacked CR's description says only `Depends on #<num>`.** `/anchor:prepare-review` used to follow it with a sentence that the predecessor must merge first and that GitHub won't enforce the order (or, on GitLab, offered to append "not enforced by the forge"). That is a limitation of the forge, not something a reviewer needs, so it now tells you in the session instead and leaves the description to name the dependency.

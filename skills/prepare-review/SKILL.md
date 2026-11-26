@@ -502,7 +502,8 @@ Retarget the listing and these calls per "Operating against a non-cwd repo" (`-R
 Run this once the description has landed, as `${CLAUDE_PLUGIN_ROOT}/guides/watching-a-pipeline.md` describes, with `--repo <path>` when operating against a non-cwd repo:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill prepare-review
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill prepare-review --probe   # foreground
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill prepare-review           # background, on PIPELINE_WATCH=launch
 ```
 
 Call it whether or not this flow pushed. It gates on the runs already reported, so a CR opened on the commit `/anchor:commit` just pushed and reported comes back `PIPELINE_WATCH=skipped`, `already-reported`, and nobody is told twice about one pipeline. Two cases still report: a force-pushed rebase is a *new* commit, and where CI is gated on the CR (`on: pull_request`), the pipeline that opening it starts is one nobody has seen — the push-time watch found nothing to report.

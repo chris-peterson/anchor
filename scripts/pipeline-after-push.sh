@@ -21,13 +21,21 @@
 #   anchor.watchPipelineAfterPush           every caller of this script
 #
 # Output lines (KEY=value, read from stdout):
-#   PIPELINE_WATCH=ran|skipped
+#   PIPELINE_WATCH=ran|launch|skipped
 #   PIPELINE_WATCH_REASON=<why>   (skipped only) `config-off` — a config key
 #                                 turned it off; `already-reported` — every run
 #                                 for this commit has been reported already
 #   …then, when it ran, every line pipeline-status.sh emits, unchanged.
 #
+# --probe is the foreground half (EVENTS-18): the same two gates, then, where
+# they pass, `PIPELINE_WATCH=launch` and pipeline-status.sh's probe, which
+# announces `pipeline.watched`. The caller launches the background watch only
+# after a `launch`, so a skipped watch launches nothing and announces nothing.
+# The launch reads both gates again; nothing records a run between the two calls,
+# so they agree.
+#
 # Usage:
+#   pipeline-after-push.sh --skill commit --probe     (foreground, then:)
 #   pipeline-after-push.sh --skill commit
 #   pipeline-after-push.sh --skill prepare-review --sha <sha> --timeout 600
 #   pipeline-after-push.sh --skill merge --sha <landed sha>
@@ -44,11 +52,13 @@ source "$here/lib/resolve-context.sh"
 
 skill=""
 sha=""
+probe=""
 CTX_REPO=""
 passthrough=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --skill)    skill="${2:?--skill needs a name}"; shift 2 ;;
+    --probe)    probe=1; shift ;;
     --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
     --sha)      sha="${2:?--sha needs a value}"; shift 2 ;;
     --branch|--workflow|--interval|--timeout)
@@ -114,9 +124,19 @@ if [[ -n "$ids" ]] && [[ -f "$ledger" ]]; then
   fi
 fi
 
+if [[ -n "$probe" ]]; then
+  echo "PIPELINE_WATCH=launch"
+  status --probe --skill "$skill"
+  exit 0
+fi
+
 echo "PIPELINE_WATCH=ran"
-out=$(status --watch)
-printf '%s\n' "$out"
+# Streamed rather than captured and replayed, so the watch's own announcements
+# reach the task's output file as they happen; the copy is what the ledger reads.
+watch_out=$(mktemp "${TMPDIR:-/tmp}/anchor-pipeline-watch.XXXXXX")
+trap 'rm -f "$watch_out"' EXIT
+status --watch | tee "$watch_out"
+out=$(cat "$watch_out")
 
 # Recorded from the settled result, so a run only counts as reported once it has
 # actually been reported.

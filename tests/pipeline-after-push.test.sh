@@ -153,6 +153,44 @@ o=$(gate_run --skill prepare-review)
   || fail "the named skill's key should turn that skill off: $o"
 ok "a per-skill key silences only the skill it names"
 
+# ===================== --probe: the foreground half (EVENTS-18) ==============
+# The probe answers the gates the launch will ask, so a skipped watch is known
+# before anything goes to the background, and announces only a watch that will
+# run.
+announced() { grep "^codes\.bridgeai\.anchor/$1 " <<<"$2" || true; }
+
+forget; unset_keys
+one_run 4004 "$sha"
+o=$(gate_run --skill commit --probe)
+[ "$(val PIPELINE_WATCH "$o")" = "launch" ] || fail "a probe that passes both gates says launch: $o"
+line=$(announced pipeline.watched "$o")
+[ -n "$line" ] || fail "a probe that passes announces pipeline.watched: $o"
+[ "$(jq -r '.skill' <<<"${line#* }")" = "commit" ] || fail "the watching skill is carried: $line"
+[ "$(jq -r '.uri' <<<"${line#* }")" = "https://github.com/acme/widget/actions/runs/4004" ] \
+  || fail "the run being watched is carried: $line"
+[ -f "$ledger" ] && fail "a probe reports nothing, so it records nothing"
+[ -z "$(val PIPELINE_RUNS "$o")" ] || fail "a probe reads once, without the breakdown: $o"
+ok "--probe says launch and announces pipeline.watched with the skill"
+
+git -C "$repo" config anchor.watchPipelineAfterPush false
+o=$(gate_run --skill commit --probe)
+[ "$(val PIPELINE_WATCH "$o")" = "skipped" ] || fail "a probe answers the config gate: $o"
+[ -z "$(announced pipeline.watched "$o")" ] || fail "a skipped watch announces nothing: $o"
+unset_keys
+gate_run --skill commit >/dev/null
+o=$(gate_run --skill commit --probe)
+[ "$(val PIPELINE_WATCH_REASON "$o")" = "already-reported" ] || fail "a probe answers the ledger gate: $o"
+[ -z "$(announced pipeline.watched "$o")" ] || fail "an already-reported watch announces nothing: $o"
+ok "--probe on a skipped watch says why and announces nothing"
+
+# The launch streams the watch's own announcements ahead of the verdict.
+forget
+o=$(gate_run --skill commit)
+line=$(announced pipeline.updated "$o")
+[ "$(jq -r '.state' <<<"${line#* }")" = "success" ] || fail "the launch carries the watch's pipeline.updated: $o"
+[ -z "$(announced pipeline.watched "$o")" ] || fail "the launch leaves pipeline.watched to the probe: $o"
+ok "the launch carries pipeline.updated and not pipeline.watched"
+
 # ===================== a missing --skill is an error =========================
 if bash "$gate" --repo "$repo" >/dev/null 2>&1; then
   fail "--skill decides which config key applies, so it can't be optional"

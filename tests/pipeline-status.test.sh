@@ -94,17 +94,32 @@ chmod +x "$bin/gh"
 
 # --- stub glab: serves $GLAB_PIPES, honoring whichever of ref= / sha= the
 # caller put in the query — the same narrowing the pipelines API applies.
+# GLAB_SEQ=<dir> plays a watch forward: the nth pipelines read serves
+# <dir>/pipes-<n>.json, and a jobs read serves the jobs-<n>.json of the poll it
+# belongs to; past the last file the last one stands.
 cat > "$bin/glab" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 [ -n "${GLAB_ARGS_FILE:-}" ] && printf '%s\n' "$*" >> "$GLAB_ARGS_FILE"
 path="${2:-}"
+seq_file() {  # <prefix> — the sequenced fixture for the current poll
+  local n; n=$(cat "$GLAB_SEQ/poll" 2>/dev/null || echo 1)
+  while [ "$n" -gt 1 ] && [ ! -f "$GLAB_SEQ/$1-$n.json" ]; do n=$((n - 1)); done
+  echo "$GLAB_SEQ/$1-$n.json"
+}
 case "$path" in
   */jobs*)
     if [ -n "${GLAB_JOBS_FAIL:-}" ]; then echo "$GLAB_JOBS_FAIL" >&2; exit 1; fi
+    if [ -n "${GLAB_SEQ:-}" ]; then jq -c '.' "$(seq_file jobs)"; exit 0; fi
     jq -c '.' "$GLAB_JOBS"
     ;;
   *pipelines*)
+    if [ -n "${GLAB_SEQ:-}" ]; then
+      n=$(( $(cat "$GLAB_SEQ/poll" 2>/dev/null || echo 0) + 1 ))
+      echo "$n" > "$GLAB_SEQ/poll"
+      jq -c '.' "$(seq_file pipes)"
+      exit 0
+    fi
     ref=""; sha=""
     case "$path" in *ref=*) ref="${path##*ref=}"; ref="${ref%%&*}" ;; esac
     case "$path" in *sha=*) sha="${path##*sha=}"; sha="${sha%%&*}" ;; esac
@@ -467,5 +482,97 @@ o=$(GH_FAIL="HTTP 401: Bad credentials" PIPELINE_POLL_INTERVAL=1 PIPELINE_APPEAR
 [ "$(val PIPELINE_STATE "$o")" = unreachable ] || fail "watch on a failed read should end unreachable: $o"
 [ $(( $(date +%s) - start )) -lt 10 ] || fail "unreachable should end the watch at once, not wait out the appear window"
 ok "unreachable ends a watch at once instead of polling"
+
+# ===================== announcements (EVENTS-18, 19) =========================
+announced() { grep "^codes\.bridgeai\.anchor/$1 " <<<"$2" || true; }
+body()      { printf '%s' "${1#* }"; }
+
+# A one-shot read is nobody watching.
+o=$(run)
+[ -z "$(announced 'pipeline\.[a-z]*' "$o")" ] || fail "a one-shot read announces nothing: $o"
+ok "a one-shot read announces nothing"
+
+# The probe: one read, no breakdown, then pipeline.watched.
+runs_fixture "$(release_run)"
+o=$(run --probe --skill pipeline --workflow release.yml)
+line=$(announced pipeline.watched "$o")
+[ -n "$line" ] || fail "a probe announces pipeline.watched: $o"
+[ "$(body "$line" | jq -r '.sha')" = "$sha" ] || fail "the full sha is carried: $line"
+[ "$(body "$line" | jq -r '.workflow')" = "release.yml" ] || fail "the scope the caller named is carried: $line"
+[ "$(body "$line" | jq -r '.skill')" = "pipeline" ] || fail "the skill is carried: $line"
+[ "$(body "$line" | jq -r 'has("job")')" = "false" ] || fail "a whole-pipeline watch carries no job: $line"
+[ -z "$(val PIPELINE_RUNS "$o")" ] || fail "a probe reads once, without the breakdown: $o"
+[ -z "$(announced pipeline.updated "$o")" ] || fail "a probe watches nothing, so nothing updates: $o"
+ok "--probe announces pipeline.watched with the sha, scope, and skill"
+
+runs_fixture '[]'
+o=$(run --probe)
+line=$(announced pipeline.watched "$o")
+[ -n "$line" ] && [ "$(body "$line" | jq -r '.uri')" = "" ] \
+  || fail "no pipeline yet is still a watch, with an empty uri: $o"
+ok "--probe before any pipeline exists still announces, uri empty"
+
+o=$(GH_FAIL="HTTP 401: Bad credentials" run --probe)
+[ "$(val PIPELINE_STATE "$o")" = unreachable ] || fail "a failed probe reports unreachable: $o"
+[ -z "$(announced pipeline.watched "$o")" ] || fail "a failed read heralds no watch: $o"
+ok "--probe on a failed read announces nothing"
+
+o=$(bash "$status" --repo "$(new_repo elsewhere "https://example.com/acme/x.git")" --probe)
+[ -z "$(announced pipeline.watched "$o")" ] || fail "no forge, no watch: $o"
+ok "--probe on an unrecognized forge announces nothing"
+
+# A watch that finds the pipeline already settled announces where it settled.
+runs_fixture "$(release_run)"
+o=$(PIPELINE_POLL_INTERVAL=0 run --watch)
+lines=$(announced pipeline.updated "$o")
+[ "$(grep -c . <<<"$lines")" = "1" ] || fail "one change, one announcement: $o"
+[ "$(body "$lines" | jq -r '[.state, .previous, .workflow, .uri] | join(" ")')" \
+  = "success none Release https://github.com/acme/widget/actions/runs/3040" ] \
+  || fail "the settled state, from none, with the verdict's workflow and run: $lines"
+ok "a watch on a settled GitHub run announces none → success once"
+
+# GitLab, played forward: pending, running, a job goes red mid-run, running
+# again (no news), then failed.
+seq="$work/seq"; mkdir -p "$seq"
+gl_pipe() {
+  printf '[ { "id": 790, "sha": "%s", "ref": "main", "status": "%s",
+             "web_url": "https://gitlab.example.com/acme/gadget/-/pipelines/790" } ]' "$gl_sha" "$1"
+}
+gl_pipe pending > "$seq/pipes-1.json"; printf '[]' > "$seq/jobs-1.json"
+gl_pipe running > "$seq/pipes-2.json"
+printf '[ { "name": "lint", "stage": "test", "status": "running", "web_url": "https://gitlab.example.com/acme/gadget/-/jobs/8" } ]' > "$seq/jobs-2.json"
+gl_pipe running > "$seq/pipes-3.json"
+printf '[ { "name": "unit", "stage": "test", "status": "failed", "web_url": "https://gitlab.example.com/acme/gadget/-/jobs/9" },
+          { "name": "lint", "stage": "test", "status": "running", "web_url": "https://gitlab.example.com/acme/gadget/-/jobs/8" } ]' > "$seq/jobs-3.json"
+gl_pipe running > "$seq/pipes-4.json"
+gl_pipe failed > "$seq/pipes-5.json"
+printf '[ { "name": "unit", "stage": "test", "status": "failed", "web_url": "https://gitlab.example.com/acme/gadget/-/jobs/9" },
+          { "name": "lint", "stage": "test", "status": "success", "web_url": "https://gitlab.example.com/acme/gadget/-/jobs/8" } ]' > "$seq/jobs-5.json"
+
+o=$(GLAB_SEQ="$seq" PIPELINE_POLL_INTERVAL=0 bash "$status" --repo "$gl_repo" --watch)
+[ "$(val PIPELINE_STATE "$o")" = failed ] || fail "the played-forward watch settles failed: $o"
+got=$(announced pipeline.updated "$o" | while IFS= read -r l; do
+        body "$l" | jq -r '[.previous, .state, (.failed_job // "-")] | join(">")'
+      done | paste -sd ' ' -)
+[ "$got" = "none>pending>- pending>running>- running>running>unit running>failed>-" ] \
+  || fail "expected each change once, the early failure once, in order; got: $got"
+line=$(announced pipeline.updated "$o" | grep failed_job)
+[ "$(body "$line" | jq -r '.failed_job_url')" = "https://gitlab.example.com/acme/gadget/-/jobs/9" ] \
+  || fail "the early failure links the job: $line"
+tail -1 <<<"$o" | grep -q '^PIPELINE_' || fail "announcements precede the verdict lines: $o"
+ok "a GitLab watch announces each change, the first job failure once, and no repeats"
+
+# A watch of one job announces that job's changes, named.
+rm -f "$seq"/*
+gl_pipe running > "$seq/pipes-1.json"
+printf '[ { "name": "plan", "stage": "plan", "status": "running", "web_url": "https://gitlab.example.com/acme/gadget/-/jobs/5" } ]' > "$seq/jobs-1.json"
+gl_pipe running > "$seq/pipes-2.json"
+printf '[ { "name": "plan", "stage": "plan", "status": "success", "web_url": "https://gitlab.example.com/acme/gadget/-/jobs/5" } ]' > "$seq/jobs-2.json"
+o=$(GLAB_SEQ="$seq" PIPELINE_POLL_INTERVAL=0 bash "$status" --repo "$gl_repo" --job plan --watch)
+got=$(announced pipeline.updated "$o" | while IFS= read -r l; do
+        body "$l" | jq -r '[.job, .previous, .state] | join(">")'
+      done | paste -sd ' ' -)
+[ "$got" = "plan>none>running plan>running>success" ] || fail "a job watch announces the job's changes: $got"
+ok "a job watch announces the tracked job's changes, naming it"
 
 echo "all pipeline-status tests passed"

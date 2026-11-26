@@ -234,7 +234,8 @@ feedback is addressed reads differently if it went red. Launch the watch as
 on with 3c through 3e:
 
 ```bash
-bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill resolve-feedback
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill resolve-feedback --probe   # foreground
+bash "${CLAUDE_PLUGIN_ROOT}/scripts/pipeline-after-push.sh" --skill resolve-feedback           # background, on PIPELINE_WATCH=launch
 ```
 
 Its verdict belongs in Step 4's summary; read it there.

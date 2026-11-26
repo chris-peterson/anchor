@@ -135,6 +135,75 @@ events:
         reads it with.
       emitted_by: scripts/review-diff.sh
       fields: {}
+    - key: pipeline.watched
+      when: >-
+        a skill is about to watch a commit's pipeline in the background: after a
+        push, a rebase, or a merge, on a merge gate waiting for green, or on an
+        explicit /anchor:pipeline watch. Announced from the foreground probe that
+        precedes the launch, because a background call's output reaches no hook
+        while it runs; a subscriber hears it before the watch starts polling. A
+        watch the after-push gate skips (turned off by config, or every run
+        already reported) announces nothing, and neither does a probe whose
+        forge read failed. No pipeline yet still announces, with `uri` empty:
+        the watch waits for one to appear.
+      emitted_by: scripts/pipeline-status.sh
+      fields:
+        uri:
+          describe: >-
+            the pipeline's web page; on GitHub, the run the commit's verdict
+            currently comes from. Present and empty when no pipeline exists for
+            the commit yet.
+          optional: true
+        sha: the commit watched, in full
+        branch: the ref the commit was resolved from
+        workflow:
+          describe: >-
+            the GitHub workflow the watch is scoped to, as the caller named it.
+            Present and empty for an unscoped watch, and always on GitLab.
+          optional: true
+        job:
+          describe: the one job the watch tracks, where it tracks one
+          optional: true
+        skill:
+          describe: the skill watching, as passed to `--skill`
+          optional: true
+    - key: pipeline.updated
+      when: >-
+        a watched pipeline changed in a way a subscriber can act on: its state
+        moved (the first sight of it, in flight to settled, pending to running),
+        or, once per watch, a job failed while the pipeline was still in flight.
+        Not every poll: a state already announced is not announced again, and
+        neither "no pipeline yet" nor a failed forge read is a state. Printed by
+        the background watch as it happens, so a subscriber reads it from the
+        finished task's output file, not from a hook on the launch. The last one
+        a watch announces is where the pipeline settled, unless the watch hit
+        its ceiling first.
+      emitted_by: scripts/pipeline-status.sh
+      fields:
+        uri: the pipeline's web page; on GitHub, the run the verdict came from
+        sha: the commit watched, in full
+        workflow:
+          describe: >-
+            the GitHub workflow the verdict came from. Present and empty on
+            GitLab.
+          optional: true
+        job:
+          describe: >-
+            the tracked job, in a watch of one job; `state` and `previous` are
+            then that job's
+          optional: true
+        state: >-
+          the normalized state now: running, pending, success, failed, canceled,
+          skipped, or manual
+        previous: >-
+          the state last announced by this watch, `none` before the first. Equal
+          to `state` on a job failure, which changes no state.
+        failed_job:
+          describe: the job that failed, on the early-failure announcement only
+          optional: true
+        failed_job_url:
+          describe: that job's web page, on the early-failure announcement only
+          optional: true
     - key: release.created
       when: >-
         release published a release, once the forge reports it exists. A repo

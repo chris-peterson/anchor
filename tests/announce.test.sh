@@ -108,6 +108,54 @@ done
 [[ "$launches_checked" -gt 0 ]] || fail "no skill launches review-diff.sh in a fenced block — did the call sites move?"
 ok "every skill that launches a review probes it with the launch's --title and --detail CR="
 
+# --- pipeline.watched comes from a probe before every watch (EVENTS-18) ------
+#
+# A background watch's output reaches no hook while it runs, so a skill that
+# launches one without probing it first watches a pipeline no subscriber hears
+# about. The probe has to carry the launch's own arguments, or it announces a
+# different commit, scope, or job than the one being watched.
+
+watch_commands() {
+  awk '
+    /^[[:space:]]*```/ { fenced = !fenced; cmd = ""; next }
+    fenced {
+      line = $0; sub(/^[[:space:]]+/, "", line); sub(/[[:space:]]+#.*$/, "", line)
+      cont = (line ~ /\\$/); sub(/[[:space:]]*\\$/, "", line)
+      cmd = (cmd == "" ? line : cmd " " line)
+      if (!cont) { if (cmd ~ /scripts\/pipeline-(after-push|status)\.sh/) print cmd; cmd = "" }
+    }' "$1"
+}
+
+watches_checked=0
+for skill_md in "$root"/skills/*/SKILL.md; do
+  skill=$(basename "$(dirname "$skill_md")")
+  commands=$(watch_commands "$skill_md")
+  [[ -n "$commands" ]] || continue
+  probes=$(grep -e '--probe' <<<"$commands" || true)
+  launches=$(grep -v -e '--probe' <<<"$commands" \
+    | grep -e 'pipeline-after-push\.sh' -e 'pipeline-status\.sh.*--watch' || true)
+  [[ -n "$launches" ]] || continue
+  while IFS= read -r launch; do
+    watches_checked=$((watches_checked + 1))
+    script=$(grep -oE 'pipeline-(after-push|status)\.sh' <<<"$launch")
+    args=$(sed -E 's/.*pipeline-(after-push|status)\.sh"? *//; s/--watch//' <<<"$launch" | tr -s ' ')
+    found=""
+    while IFS= read -r probe; do
+      [[ -n "$probe" && "$probe" == *"$script"* ]] || continue
+      [[ "$probe" == *"--skill $skill"* ]] || continue
+      missing=""
+      read -r -a words <<<"$args"
+      for word in "${words[@]}"; do
+        [[ " $probe " == *" $word "* ]] || { missing=$word; break; }
+      done
+      [[ -z "$missing" ]] && { found=1; break; }
+    done <<<"$probes"
+    [[ -n "$found" ]] || fail "$skill launches a watch with no probe carrying --skill $skill and its arguments: $launch"
+  done <<<"$launches"
+done
+[[ "$watches_checked" -gt 0 ]] || fail "no skill launches a pipeline watch in a fenced block — did the call sites move?"
+ok "every skill that launches a pipeline watch probes it first, with the launch's arguments"
+
 # --- the publisher ------------------------------------------------------------
 
 if ! command -v jq >/dev/null 2>&1; then

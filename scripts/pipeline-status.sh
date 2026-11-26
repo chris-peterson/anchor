@@ -53,8 +53,24 @@
 #                              that name in the pipeline yet
 #   PIPELINE_JOB_URL=<web url> the job's web page (may be empty)
 #
+# Announcements (EVENTS-18, 19). A watch runs as a background call, and a
+# background call's output reaches no PostToolUse hook while it runs, so the two
+# halves of a watch announce from different places:
+#
+#   --probe   the foreground step before the background launch: one read, then
+#             `pipeline.watched`. It is what a subscriber hears live, so the
+#             caller runs it in the foreground and launches the watch after it.
+#   --watch   `pipeline.updated` on each change of the watched state, and once,
+#             early, when a job fails while the pipeline is still in flight.
+#             These land in the watch's own output, which a subscriber reads
+#             from the finished task's output file.
+#
+# A one-shot read announces nothing: nobody is watching.
+#
 # Modes:
 #   pipeline-status.sh                 one-shot status for the commit at HEAD
+#   pipeline-status.sh --probe         announce the watch about to launch, report
+#                                      what the read found, and return
 #   pipeline-status.sh --watch         poll until terminal (or the ceiling), then emit
 #   pipeline-status.sh --repo <path>              target a checkout other than the cwd repo
 #   pipeline-status.sh --branch <b> --sha <sha>   target an explicit ref/commit
@@ -66,6 +82,8 @@
 #   pipeline-status.sh --job <name> --watch       poll that job until it settles
 #   pipeline-status.sh --pipeline <id> --job <name>   target a pipeline by id directly
 #                                              (skips commit→pipeline resolution)
+#   pipeline-status.sh --skill <name>             the skill watching, carried in
+#                                              `pipeline.watched` (probe only)
 #
 # Tunables (flags override env, env overrides default):
 #   --interval <s>  / PIPELINE_POLL_INTERVAL   poll cadence            (default 15)
@@ -75,6 +93,9 @@
 
 set -euo pipefail
 
+# Absolute, because --repo moves the process into the target checkout.
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Where a forge call's stderr lands, so a failed read can say why.
 forge_err=$(mktemp "${TMPDIR:-/tmp}/anchor-pipeline-err.XXXXXX")
 trap 'rm -f "$forge_err"' EXIT
@@ -82,7 +103,7 @@ trap 'rm -f "$forge_err"' EXIT
 unreachable() { jq -cn --arg e "$(head -1 "$forge_err")" '{state:"unreachable", error:$e}'; }
 
 # shellcheck source=lib/resolve-context.sh
-source "$(dirname "${BASH_SOURCE[0]}")/lib/resolve-context.sh"
+source "$here/lib/resolve-context.sh"
 
 POLL_INTERVAL="${PIPELINE_POLL_INTERVAL:-15}"
 WATCH_TIMEOUT="${PIPELINE_WATCH_TIMEOUT:-1800}"
@@ -95,10 +116,13 @@ job=""
 workflow=""
 single_run=""
 pipeline_id=""
+skill=""
 CTX_REPO=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --watch)    mode="watch"; shift ;;
+    --watch)    [[ "$mode" == probe ]] || mode="watch"; shift ;;
+    --probe)    mode="probe"; shift ;;
+    --skill)    skill="${2:?--skill needs a name}"; shift 2 ;;
     --repo)     CTX_REPO="${2:?--repo needs a path}"; shift 2 ;;
     --branch)   branch="${2:?--branch needs a value}"; shift 2 ;;
     --sha)      sha="${2:?--sha needs a value}"; shift 2 ;;
@@ -398,12 +422,78 @@ emit_job() {
   if [[ -n "$timed_out" ]]; then echo "PIPELINE_TIMEOUT=1"; fi
 }
 
+# --- announcements (EVENTS-18, 19) --------------------------------------------
+#
+# A watch announces what it saw change, not every poll: a state it already
+# announced is not news. It starts from `none`, so the first sight of a pipeline
+# is a change too, and a pipeline already settled when the watch begins still
+# announces where it settled. `none` and `unreachable` are not pipeline states a
+# subscriber can act on (no pipeline yet; nothing known), so neither announces.
+last_announced=none
+job_failure_announced=""
+
+announce_change() {
+  local state="$1" url="$2" wf="$3" tracked_job="${4:-}"
+  case "$state" in none|unreachable) return 0 ;; esac
+  [[ "$state" != "$last_announced" ]] || return 0
+  bash "$here/announce.sh" pipeline.updated "uri=$url" "sha=$sha" "workflow=$wf" \
+    ${tracked_job:+"job=$tracked_job"} "state=$state" "previous=$last_announced" || true
+  last_announced="$state"
+}
+
+# The first failed job of a pipeline still in flight, announced once per watch.
+# A pipeline whose first job went red can run for a long while before its state
+# says so — GitLab holds `running` until the last stage, and the GitHub fold
+# holds it while any workflow still runs — and a subscriber reacting to the red
+# shouldn't wait that out. Read from the same breakdown the report draws, and a
+# read that fails is skipped: an announcement never turns a watch unreachable.
+announce_first_failure() {
+  local state="$1" url="$2" id="$3" wf="$4" breakdown failed
+  [[ -z "$job_failure_announced" && -n "$id" ]] || return 0
+  case "$state" in running|pending) ;; *) return 0 ;; esac
+  breakdown=$(runs_breakdown "$id" "$state" "$url" 2>/dev/null) || return 0
+  failed=$(jq -c 'first(.[].jobs[] | select(.state == "failed")) // empty' <<<"$breakdown" 2>/dev/null) || return 0
+  [[ -n "$failed" ]] || return 0
+  bash "$here/announce.sh" pipeline.updated "uri=$url" "sha=$sha" "workflow=$wf" \
+    "state=$state" "previous=$last_announced" \
+    "failed_job=$(jq -r '.name' <<<"$failed")" "failed_job_url=$(jq -r '.url // ""' <<<"$failed")" || true
+  job_failure_announced=1
+}
+
 forge=$(detect_forge)
 if [[ -z "$forge" ]]; then
   echo "PIPELINE_FORGE=none"
   echo "PIPELINE_STATE=absent"
   echo "PIPELINE_SHA=$sha"
   echo "PIPELINE_BRANCH=$branch"
+  exit 0
+fi
+
+# Probe: the foreground half of a watch. One read, reported like a one-shot
+# without the breakdown, then `pipeline.watched` — unless the read failed, since
+# the watch it heralds will end unreachable at once rather than watch anything.
+# No pipeline yet is still a watch: the launch waits for one to appear.
+if [[ "$mode" == "probe" ]]; then
+  if [[ -n "$pipeline_id" ]]; then
+    rec=$(jq -cn --arg id "$pipeline_id" '{state:"", id:$id}')
+  else
+    rec=$(probe)
+  fi
+  state=$(jq -r '.state' <<<"$rec")
+  url=$(jq -r '.url // ""' <<<"$rec")
+  echo "PIPELINE_FORGE=$forge"
+  echo "PIPELINE_STATE=$state"
+  echo "PIPELINE_URL=$url"
+  echo "PIPELINE_ID=$(jq -r '.id // ""' <<<"$rec")"
+  echo "PIPELINE_SHA=$sha"
+  echo "PIPELINE_BRANCH=$branch"
+  echo "PIPELINE_WORKFLOW=$(jq -r '.workflow // ""' <<<"$rec")"
+  if [[ "$state" == unreachable ]]; then
+    echo "PIPELINE_ERROR=$(jq -r '.error // ""' <<<"$rec")"
+    exit 0
+  fi
+  bash "$here/announce.sh" pipeline.watched "uri=$url" "sha=$sha" "branch=$branch" \
+    "workflow=$workflow" ${job:+"job=$job"} ${skill:+"skill=$skill"} || true
   exit 0
 fi
 
@@ -437,6 +527,7 @@ if [[ -n "$job" ]]; then
     jurl=$(jq -r '.url // ""' <<<"$jrec")
 
     [[ "$mode" == "status" ]] && break
+    announce_change "$jstate" "$purl" "$pwf" "$job"
 
     if [[ "$jstate" == "none" ]]; then
       # No job by this name yet — earlier stages may still be running, or the
@@ -483,6 +574,8 @@ while :; do
   url=$(jq -r '.url // ""' <<<"$rec")
   id=$(jq -r '.id // ""' <<<"$rec")
   wf=$(jq -r '.workflow // ""' <<<"$rec")
+  announce_change "$state" "$url" "$wf"
+  announce_first_failure "$state" "$url" "$id" "$wf"
 
   if [[ "$state" == "none" ]]; then
     # No pipeline for this commit yet. Give CI a bounded window to create one

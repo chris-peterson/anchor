@@ -2236,6 +2236,19 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   system shall announce nothing for the release.
 - **[EVENTS-17]** The system shall announce `issue.created` on a create only,
   not on an update to an issue that already existed.
+- **[EVENTS-18]** When the system is about to watch a pipeline in the
+  background, it shall announce `pipeline.watched` from a foreground probe made
+  before the launch, because a background call's output reaches no hook while it
+  runs. Every skill that launches a watch shall probe it first, with the launch's
+  own arguments. Where the after-push gate skips the watch, or the probe's forge
+  read fails, the system shall announce nothing and launch nothing.
+- **[EVENTS-19]** While watching a pipeline, the system shall announce
+  `pipeline.updated` each time the watched state changes, starting from `none`
+  so that the first sight of a pipeline counts as a change, and shall announce
+  it once more, early, when a job fails while the pipeline is still in flight.
+  It shall not announce a state it has already announced, and shall treat
+  neither "no pipeline yet" nor a failed forge read as a state. A one-shot read
+  shall announce nothing.
 
 ### RULE — Ambient rules
 
