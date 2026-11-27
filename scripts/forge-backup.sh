@@ -107,7 +107,10 @@ if ! path=$(anchor_backup_path "$name" json); then
 fi
 printf '%s\n' "$json" > "$path"
 
-url=$(jq -r '.url // .html_url // .web_url // empty' <<<"$json")
+# The item's web page, the url the user approved. GitHub's REST objects (a
+# milestone) carry that as `html_url` beside an API-endpoint `url`, so `url` is
+# read last: it is the page only on `gh … view` output, which has nothing else.
+url=$(jq -r '.html_url // .web_url // .url // empty' <<<"$json")
 if [[ -z "$url" || "$url" != "$expect_url" ]]; then
   title=$(jq -r '.title // empty' <<<"$json")
   echo "BACKUP_ERROR=the backup saved ${url:-a $kind with no url}${title:+ ($title)}, not $expect_url, the item about to be written; refusing the write (saved copy: $path)"

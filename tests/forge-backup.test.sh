@@ -62,11 +62,12 @@ fixture() { printf '%s\n' "$2" > "$FIXTURES/${1//\//_}.json"; }
 repo="$(make_repo github.com gh-repo)"
 fixture issue-12 '{"number":12,"title":"An issue","body":"issue text","url":"https://github.com/example/gh-repo/issues/12"}'
 fixture pr-7 '{"number":7,"title":"A PR","body":"pr text","url":"https://github.com/example/gh-repo/pull/7"}'
-fixture 'repos/{owner}/{repo}/milestones/3' '{"number":3,"title":"v2","description":"m text","html_url":"https://github.com/example/gh-repo/milestone/3"}'
+# The REST API's `url` is the API endpoint; the page the user approved is `html_url`.
+fixture 'repos/{owner}/{repo}/milestones/3' '{"number":3,"title":"v2","description":"m text","url":"https://api.github.com/repos/example/gh-repo/milestones/3","html_url":"https://github.com/example/gh-repo/milestone/3"}'
 
 for kind_url in issue:12:issues/12 cr:7:pull/7 milestone:3:milestone/3; do
   IFS=: read -r kind id tail <<<"$kind_url"
-  out=$(bash "$backup_sh" --repo "$repo" --kind "$kind" --id "$id" --expect-url "https://github.com/example/gh-repo/$tail")
+  out=$(bash "$backup_sh" --repo "$repo" --kind "$kind" --id "$id" --expect-url "https://github.com/example/gh-repo/$tail") || true
   [[ "$(key "$out" BACKUP_SAVED)" == 1 ]] || fail "github $kind: not saved: $out"
   [[ -f "$(newest "$repo" "$kind-$id")" ]] || fail "github $kind: no backup file under the git dir: $out"
   ! grep -q "$repo/.git" <<<"$out" || fail "github $kind: a save that succeeds should not report its path: $out"

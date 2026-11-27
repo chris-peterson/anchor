@@ -13,6 +13,10 @@
 - **`/anchor:backlog` flags stale issues.** These are issues a merged CR closed that are still open, duplicates by title, issues past their due date, issues nobody has touched in 60 days (`--stale-days` changes the cutoff), and issues whose branch has gone quiet. It also names issues the code already satisfies, citing the file or commit. It proposes an edit for each and offers to hand the ones you choose to `/anchor:issue` as one batch, where you approve each before it's written. `/anchor:backlog` itself still writes nothing.
 - **`/anchor:backlog` summarizes each issue.** The table has a Summary column saying what each issue asks for, taken from its description, for the top 20 issues (`--details` changes how many), and the recommended issue comes with a short summary of the problem and what done looks like. Before, you saw titles only and were offered `gh issue view` to find out more. The survey also no longer reports what it didn't find: no lines saying nothing is stale or there are no edits to propose.
 
+### Fixed
+
+- **Editing a GitHub milestone is no longer refused at its backup.** Before anchor edits a milestone, it saves a copy and checks that the copy is the milestone you approved. On GitHub that check compared the milestone's API address with its web page, so it never matched, and every milestone edit in an `/anchor:issue` batch stopped with a `BACKUP_ERROR`. The check now compares the web page. Issues, CRs, and GitLab milestones were unaffected.
+
 ## 2.1.0
 
 [What's new in 2.1](https://chris-peterson.github.io/anchor/#/whats-new-2.1) walks through the changes to review rounds and notes.
