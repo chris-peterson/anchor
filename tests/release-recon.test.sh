@@ -116,6 +116,30 @@ o=$(run "$repo")
 [ "$(val RELEASE_COMMITS "$o")" = "1" ] || fail "expected 1 commit since the tag: $o"
 ok "a version tag outranks manifest history as the anchor"
 
+# A Codex plugin manifest is the version artifact, as a Claude one is.
+repo=$(new_repo codex-plugin)
+mkdir -p "$repo/.codex-plugin"
+printf '{\n  "name": "codex",\n  "version": "0.8.0"\n}\n' > "$repo/.codex-plugin/plugin.json"
+printf '{\n  "name": "support-package",\n  "version": "9.9.9"\n}\n' > "$repo/package.json"
+git -C "$repo" add -A
+git -C "$repo" commit --quiet -m "add codex plugin"
+o=$(run "$repo")
+[ "$(val RELEASE_MANIFEST "$o")" = ".codex-plugin/plugin.json" ] || fail "Codex manifest should win: $o"
+[ "$(val RELEASE_VERSION "$o")" = "0.8.0" ] || fail "Codex version wrong: $o"
+ok "a Codex plugin manifest outranks package.json"
+
+# Generated from a descriptor, the Codex manifest defers to it as a Claude one does.
+repo=$(new_repo codex-source)
+mkdir -p "$repo/.codex-plugin"
+printf '{\n  "name": "codex-source",\n  "version": "1.1.0"\n}\n' > "$repo/.codex-plugin/plugin.json"
+printf 'name: codex-source\nversion: 1.2.0\n' > "$repo/plugin.yml"
+git -C "$repo" add -A
+git -C "$repo" commit --quiet -m "add version source"
+o=$(run "$repo")
+[ "$(val RELEASE_MANIFEST_SOURCE "$o")" = "plugin.yml" ] || fail "descriptor source wrong: $o"
+[ "$(val RELEASE_VERSION "$o")" = "1.2.0" ] || fail "descriptor version wrong: $o"
+ok "a Codex manifest reads its descriptor as the version source"
+
 # --- release-triggered: CI owns the bump, so never hand-edit the manifest -----
 # The workflow also has a *job* named `release`, at the same indent the trigger
 # would sit at. Distinguishing them is the reason this is a script.

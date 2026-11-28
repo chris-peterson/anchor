@@ -182,7 +182,7 @@ emit_review() {
     if [[ "$rc" -eq "$anchor_host_rc_no_result" ]]; then
       diff_unavailable "quit the review to finish it — closing its pane or tab takes $review_tool with it before it can report. Nothing was graded; re-run to review again." pane-closed
     else
-      diff_unavailable "the review pane could not be opened" no-pane
+      diff_unavailable "$(anchor_host_no_pane_reason)" "$(anchor_host_no_pane_cause)"
     fi
     rm -f "$out_file" "$err_file" "$desc_file" "$choice_file" "$palette_file"
     [[ -z "${review_items:-}" ]] || rm -f "$review_preload"

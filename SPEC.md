@@ -1149,7 +1149,10 @@ established before anything is proposed or written.
   returning once the run is queued shall not be reported as a release.
 - **[RELEASE-16]** Where the version manifest is generated from a canonical
   descriptor, the system shall bump the descriptor and regenerate rather than edit
-  the manifest.
+  the manifest. A plugin manifest for either host (`.claude-plugin/plugin.json`,
+  `.codex-plugin/plugin.json`) shall be read as the version manifest ahead of an
+  auxiliary package manifest, since the host keys the plugin's updates off it,
+  and either one shall defer to a descriptor carrying its own version.
 - **[RELEASE-17]** Where the release model is `bump-commit`, the system shall shape
   the bump commit to the repo's prior convention and land it through
   `/anchor:commit` rather than running git commit and push itself.
@@ -1677,7 +1680,13 @@ changes there is exit 3, which reopens the review in `diff` (DIFF-39).
   through another plugin's launcher, and shall report `no-verdict` naming the
   missing piece where the viewer is absent or the session cannot be split.
   Reaching into a sibling plugin's file layout couples the review to a path that
-  plugin is free to change.
+  plugin is free to change. Where the split was refused inside an agent's
+  command sandbox (Codex marks one with `CODEX_SANDBOX`), the system shall
+  report `raw.exitCode` `sandboxed` and name the remedy, running the same
+  command outside the sandbox, in both modes. The host is there and the tool
+  never ran, so walking the fallback ladder trades a review the user could have
+  had for a worse one, and the sandbox's own error (an AppleScript lookup that
+  fails, a socket it can't reach) names neither cause.
 - **[DIFF-28]** The system shall wait on an open review for as long as the
   reviewer takes, and shall end the wait early only on evidence that no result is
   coming — the pane closing without reporting one. A review is read and typed

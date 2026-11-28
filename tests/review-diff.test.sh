@@ -638,6 +638,18 @@ o=$(run --previous 2>"$work/err.txt"); j=$(json_of "$o")
 grep -q 'quit the review to finish it' "$work/err.txt"       || fail "the remedy should reach stderr"
 ok "revdiff: a closed review pane -> no-verdict, cause named rather than numbered"
 
+# The pane would not open. Inside an agent's command sandbox that is the sandbox
+# refusing the call, not a session with no terminal, so the cause says so and
+# names the remedy: the same command, outside the sandbox.
+export REVDIFF_STUB_RC=125 REVDIFF_STUB_OUTPUT=""
+o=$(CODEX_SANDBOX='' run --previous 2>/dev/null); j=$(json_of "$o")
+[ "$(jq -r .raw.exitCode <<<"$j")" = no-pane ]               || fail "an unopened pane outside a sandbox is no-pane, got $(jq -c .raw <<<"$j")"
+o=$(CODEX_SANDBOX=seatbelt run --previous 2>"$work/err.txt"); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = no-verdict ]                        || fail "a sandboxed pane -> want no-verdict"
+[ "$(jq -r .raw.exitCode <<<"$j")" = sandboxed ]             || fail "raw.exitCode should name the sandbox, got $(jq -c .raw <<<"$j")"
+grep -q 'outside the sandbox' "$work/err.txt"                || fail "the remedy should reach stderr"
+ok "revdiff: a pane the agent sandbox kept from opening -> no-verdict, sandboxed, remedy named"
+
 # nowhere to open a pane -> no-verdict, producesVerdict false. revdiff is a TUI,
 # so a session that cannot put a terminal on screen has no review to show, and
 # saying so beats launching into a host error.

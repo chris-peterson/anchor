@@ -305,6 +305,16 @@ grep -q 'before anything was saved' "$work/err.txt"  || fail "the remedy should 
 untouched "a pane closed before a save"
 ok "edit: a closed review pane -> no-verdict, cause named rather than numbered, the draft file untouched"
 
+# A pane the agent's sandbox kept from opening is named as that, so the caller
+# re-runs outside the sandbox rather than walking the fallback ladder.
+export EDITOR_STUB_MODE=quit EDITOR_STUB_RC=125
+o=$(CODEX_SANDBOX=seatbelt run --skill prepare-review --mode edit --files "$prior" "$draft" 2>"$work/err.txt"); j=$(json_of "$o")
+[ "$(verdict_of "$o")" = no-verdict ]               || fail "a sandboxed pane -> want no-verdict"
+[ "$(jq -r .raw.exitCode <<<"$j")" = sandboxed ]    || fail "raw.exitCode should name the sandbox, got $(jq -c .raw <<<"$j")"
+grep -q 'outside the sandbox' "$work/err.txt"       || fail "the remedy should reach stderr"
+untouched "a pane the sandbox kept from opening"
+ok "edit: a pane the agent sandbox kept from opening -> no-verdict, sandboxed, the draft file untouched"
+
 # But the pane closing after a save is not that case: the reviewer answered and
 # the answer is on disk, so it is graded like any other save rather than thrown
 # away with the terminal that was drawing it.

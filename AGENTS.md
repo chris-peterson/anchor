@@ -18,8 +18,9 @@ just generate       # project source into plugin.json, hooks.json, describe, and
 just docs           # render the docs site and serve it locally
 
 just test           # every suite this platform runs, via tests/run-all.sh
+just codex-pin      # run this checkout under Codex (codex-unpin restores the release)
 bash tests/<name>.test.sh                                  # one suite
-shellcheck hooks/*.sh scripts/*.sh scripts/review/*.sh scripts/review/modes/*.sh scripts/review/tools/*.sh scripts/review/hosts/*.sh tests/*.sh
+shellcheck hooks/*.sh scripts/*.sh scripts/review/*.sh scripts/review/modes/*.sh scripts/review/tools/*.sh scripts/review/hosts/*.sh dev/*.sh tests/*.sh
 ```
 
 `tests/run-all.sh` discovers `tests/*.test.sh`, so a new suite needs no wiring in
@@ -43,6 +44,7 @@ scripts/review/tools/     the tool-specific half of a diff mode review, one file
 scripts/review/hosts/     where a review is put on screen, one file per terminal host
 guides/                   reference the skills and rules read at runtime
 templates/                the output shapes the skills produce, read at runtime
+dev/                      developer tooling, not shipped behavior (Codex pinning)
 tests/                    bash suites, one per script under test
 SPEC.md / STATUS.md       requirements and their coverage
 docs/                     docsify site; only README, _sidebar, ambient-rules, guides are source

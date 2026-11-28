@@ -281,7 +281,7 @@ What each verdict leads to here: `approved` moves on to the publish
 confirmation below with `<RELEASE_NOTES_PATH>`, which an approved review leaves
 holding the approved notes, the reviewer's edit included;
 `changes-requested` folds the comments in and re-opens; `rejected` publishes
-nothing and stops, with no fallback; `no-verdict` with `raw.exitCode` `undecided` asks Accept, Reject, or Reopen and acts on the answer (`${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md`); `incomplete`,
+nothing and stops, with no fallback; `no-verdict` with `raw.exitCode` `undecided` asks Accept, Reject, or Reopen and acts on the answer (`${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md`); `sandboxed` runs the identical launch again outside the agent's sandbox, with no error banner; `incomplete`,
 any other `no-verdict`, a missing verdict line, and a probe reporting nothing installed
 take the ladder in `${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md` with the
 drafted notes as the artifact.

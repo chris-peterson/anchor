@@ -152,6 +152,11 @@ The exception is a tool that was never tried: where the probe named a
 substitute because the configured tool is absent, launching the substitute is a
 first attempt, not a retry.
 
+**`raw.exitCode: "sandboxed"` is a first attempt still owed, not a failed
+one**: the agent's command sandbox refused to open the pane, and the tool never
+ran. Run the identical command again outside the sandbox (in Codex, with
+escalated permissions), without the error banner.
+
 **`raw.exitCode: "unsaved"`, `"pane-closed"`, and `"undecided"` are neither
 this case nor a step here**: all three are re-openable, and DIFF-14 and DIFF-42
 treat them that way. The tool worked. On `undecided` the reviewer quit without

@@ -55,7 +55,7 @@
 # afterwards — so a draft saved into a pane that was then closed is still the
 # reviewer's answer, where the exit status alone would have thrown it away.
 # Where nothing was saved, the causes ride out as named `raw.exitCode` values —
-# `unsaved`, `pane-closed`, `no-pane`, `no-host` — so a consumer can say what
+# `unsaved`, `pane-closed`, `no-pane`, `sandboxed`, `no-host` — so a consumer can say what
 # happened rather than quote a status the editor never returned.
 #
 # An editor carries one artifact, so a review with no drafted artifact (a
@@ -452,7 +452,10 @@ emit_review() {
       editor_emit no-verdict no-host "no way to open the editor"
       return ;;
     "$anchor_host_rc_no_pane")
-      editor_emit no-verdict no-pane "the review pane could not be opened"
+      local reason
+      reason=$(anchor_host_no_pane_reason)
+      echo "review-diff.sh: $reason" >&2
+      editor_emit no-verdict "$(anchor_host_no_pane_cause)" "$reason"
       return ;;
     "$anchor_host_rc_no_result")
       # The pane went away before the editor could report its status. What the

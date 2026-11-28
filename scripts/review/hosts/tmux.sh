@@ -13,6 +13,9 @@ review_host_available() {
   [[ -n "${TMUX:-}" ]] && command -v tmux >/dev/null 2>&1
 }
 
+# Reads the reserved statuses the dispatcher defines; shellcheck lints a host
+# standalone, since the dispatcher builds its path at run time.
+# shellcheck disable=SC2154
 review_host_run() {
   local cmd="$1" sentinel launch rc=0
   sentinel=$(mktemp "${TMPDIR:-/tmp}/anchor-host-rc.XXXXXX")
@@ -20,6 +23,14 @@ review_host_run() {
 
   anchor_host_launch_script "$cmd" > "$launch"
   chmod +x "$launch"
+
+  # A server this shell can't reach (an agent sandbox keeps the tmux socket out
+  # of its writable roots) is a pane that never opened, not one that closed:
+  # display-popup's own failure is swallowed below, and would read as the latter.
+  if ! tmux display-message -p '' >/dev/null 2>&1; then
+    rm -f "$sentinel" "$launch"
+    return "$anchor_host_rc_no_pane"
+  fi
 
   # The paths reach the script as argv, so neither has to survive a second round
   # of quoting inside the popup's own shell.
