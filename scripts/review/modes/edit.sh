@@ -55,7 +55,7 @@
 # afterwards — so a draft saved into a pane that was then closed is still the
 # reviewer's answer, where the exit status alone would have thrown it away.
 # Where nothing was saved, the causes ride out as named `raw.exitCode` values —
-# `unsaved`, `pane-closed`, `no-pane`, `no-host` — so a consumer can say what
+# `unsaved`, `pane-closed`, `no-pane`, `sandboxed`, `no-host` — so a consumer can say what
 # happened rather than quote a status the editor never returned.
 #
 # An editor carries one artifact, so a review with no drafted artifact (a

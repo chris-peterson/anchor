@@ -642,7 +642,7 @@ ok "revdiff: a closed review pane -> no-verdict, cause named rather than numbere
 # refusing the call, not a session with no terminal, so the cause says so and
 # names the remedy: the same command, outside the sandbox.
 export REVDIFF_STUB_RC=125 REVDIFF_STUB_OUTPUT=""
-o=$(run --previous 2>/dev/null); j=$(json_of "$o")
+o=$(CODEX_SANDBOX='' run --previous 2>/dev/null); j=$(json_of "$o")
 [ "$(jq -r .raw.exitCode <<<"$j")" = no-pane ]               || fail "an unopened pane outside a sandbox is no-pane, got $(jq -c .raw <<<"$j")"
 o=$(CODEX_SANDBOX=seatbelt run --previous 2>"$work/err.txt"); j=$(json_of "$o")
 [ "$(verdict_of "$o")" = no-verdict ]                        || fail "a sandboxed pane -> want no-verdict"

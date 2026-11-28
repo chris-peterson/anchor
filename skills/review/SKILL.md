@@ -564,7 +564,9 @@ comments (on someone else's) is where the user sees the result again. `rejected`
 user stopping the round: finish it (Step 9) so the tree is left as it was, with
 no error banner. `no-verdict` with `raw.exitCode` `undecided` means they quit
 without choosing: ask with `AskUserQuestion` whether to accept, reject, or
-reopen the round, and act on the answer as that verdict. Any other
+reopen the round, and act on the answer as that verdict. `sandboxed` means
+the agent's sandbox kept the pane from opening: launch the same pass again
+outside the sandbox, with no error banner. Any other
 `no-verdict`, or no `REVIEW_RETURNED` line, means it didn't run: open and close
 the reply with the error banner, say what `raw.exitCode` names, and ask whether
 to open it again or stop. Nothing about the round is lost by stopping; finish it

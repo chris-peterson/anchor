@@ -51,15 +51,19 @@ guard_market_root() {
 }
 
 pin() {
-  local snapshot recorded="" id
+  local snapshot recorded="" id ids
   guard_market_root
+  # Each listing is captured in this shell rather than read through a pipe or
+  # a process substitution, so a failed one stops the script before it changes
+  # anything: `fail` inside `< <(…)` would end only the subshell.
+  ids=$(installed_anchors)
   # Re-pinning after an edit keeps the record from the first pin: by then the
   # only anchor installed is the local one.
   [[ ! -f "$marker" ]] || recorded=$(cat "$marker")
   while IFS= read -r id; do
     [[ -n "$id" && "$id" != "$local_id" ]] || continue
     recorded+="${recorded:+$'\n'}$id"
-  done < <(installed_anchors)
+  done <<<"$ids"
 
   snapshot=$(mktemp -d "$codex_home/anchor-local-marketplace.XXXXXX")
   mkdir -p "$snapshot/.agents/plugins" "$snapshot/plugins/anchor"
@@ -80,21 +84,23 @@ pin() {
   rm -rf "$market_root"
   mv "$snapshot" "$market_root"
 
+  ids=$(installed_anchors)
   while IFS= read -r id; do
     [[ -n "$id" ]] || continue
     codex plugin remove "$id"
-  done < <(installed_anchors)
+  done <<<"$ids"
   codex plugin marketplace add "$market_root"
   codex plugin add "$local_id"
   echo "Codex runs anchor from a snapshot of $repo_root ($local_id). Run pin again after an edit, and start a new Codex session."
 }
 
 unpin() {
-  local id market restored=""
+  local id market restored="" ids
   guard_market_root
   [[ -e "$market_root" ]] || { echo "Codex isn't pinned to a local anchor; nothing to undo."; return 0; }
 
-  ! installed_anchors | grep -qx "$local_id" || codex plugin remove "$local_id"
+  ids=$(installed_anchors)
+  ! grep -qx "$local_id" <<<"$ids" || codex plugin remove "$local_id"
   ! local_marketplace_configured || codex plugin marketplace remove "$local_marketplace"
 
   while IFS= read -r id; do

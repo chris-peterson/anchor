@@ -222,7 +222,8 @@ not these words or these lines:
    mode, the message verbatim (`${CLAUDE_PLUGIN_ROOT}/guides/execute-quietly.md`).
 4. Act on the verdict as the commit skill's "Review the pending changeset"
    section does: only `approved` commits; `rejected` stops with nothing
-   committed; `undecided` is asked about; any other `no-verdict` walks the
+   committed; `undecided` is asked about; `sandboxed` runs again outside the
+   agent's sandbox; any other `no-verdict` walks the
    fallback ladder with the message printed in the reply.
 5. Commit and push with `commit.sh --mode new --message-file <path>
    --reviewed-index <REVIEW_INDEX> --path <p>...` (plain push, since the branch

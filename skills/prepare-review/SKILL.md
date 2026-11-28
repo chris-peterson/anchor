@@ -396,6 +396,7 @@ What each verdict leads to here:
 - **`changes-requested`** — fold in the comments and re-open on the revised draft, with the previous draft as the left-hand side rather than `CURRENT_DESC_PATH`: the description the forge holds is the comparison the first pass already answered.
 - **`rejected`** — nothing is written to the CR, and nothing falls back; say so and stop.
 - **`no-verdict`** with `raw.exitCode` `undecided` — ask Accept, Reject, or Reopen, and act on the answer as that verdict (`${CLAUDE_PLUGIN_ROOT}/guides/running-a-review.md`).
+- **`no-verdict`** with `raw.exitCode` `sandboxed` — the agent's sandbox kept the pane from opening: run the identical launch again outside the sandbox, with no error banner (`${CLAUDE_PLUGIN_ROOT}/guides/review-fallback.md`).
 - **`incomplete`**, any other **`no-verdict`**, or no verdict line at all — nothing is written to the CR; take the fallback below.
 
 ### When the review didn't grade it (or there's no CR yet)
