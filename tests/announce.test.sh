@@ -145,7 +145,7 @@ for skill_md in "$root"/skills/*/SKILL.md; do
       [[ "$probe" == *"--skill $skill"* ]] || continue
       missing=""
       read -r -a words <<<"$args"
-      for word in "${words[@]}"; do
+      for word in ${words[@]+"${words[@]}"}; do
         [[ " $probe " == *" $word "* ]] || { missing=$word; break; }
       done
       [[ -z "$missing" ]] && { found=1; break; }
